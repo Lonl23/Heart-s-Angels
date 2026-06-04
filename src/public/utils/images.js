@@ -1,0 +1,45 @@
+export const IMG = {
+  logo:        'https://www.heartsangels.be/wp-content/uploads/2026/03/cropped-logo-hearts-angels-vectorise-scaled-1.png',
+  logoWhite:   'https://www.heartsangels.be/wp-content/uploads/2026/03/logo-hearts-angels-vectorise-scaled.png',
+  favicon:     'https://www.heartsangels.be/wp-content/uploads/2026/03/cropped-logo-hearts-angels-vectorise-scaled-2-270x270.png',
+  hero1:       'https://www.heartsangels.be/wp-content/uploads/2026/04/DSC_0975-scaled.jpg',
+  hero2:       'https://www.heartsangels.be/wp-content/uploads/2024/06/448340450_848408590653269_3974634456659016404_n.jpg',
+  donImg:      'https://www.heartsangels.be/wp-content/uploads/2026/03/FAIRE-UN-DON-1024x1024.png',
+  chiquesImg:  'https://www.heartsangels.be/wp-content/uploads/2026/03/OPERATION-LINGOT-DE-CHIQUES.png',
+  activitesImg:'https://www.heartsangels.be/wp-content/uploads/2026/03/ACTIVITES-1024x1024.png',
+  ludovic:     'https://www.heartsangels.be/wp-content/uploads/2023/06/ludovic_whenham-1.jpg',
+  carine:      'https://www.heartsangels.be/wp-content/uploads/2023/06/carine_carlier-1.jpg',
+  veronique:   'https://www.heartsangels.be/wp-content/uploads/2023/06/veronique_cloes-1.jpg',
+  fernand:     'https://www.heartsangels.be/wp-content/uploads/2023/06/fernand_hanssen-1.jpg',
+  christine:   'https://www.heartsangels.be/wp-content/uploads/2023/06/Christine_Laurent-1.jpg',
+  luc:         'https://www.heartsangels.be/wp-content/uploads/2023/06/luc_kessel-1.jpg',
+  olivier:     'https://www.heartsangels.be/wp-content/uploads/2019/12/Olivier-Schoonejans.jpg',
+  nady:        'https://www.heartsangels.be/wp-content/uploads/2024/06/448340450_848408590653269_3974634456659016404_n.jpg',
+  isabelle:    'https://www.heartsangels.be/wp-content/uploads/2023/05/ISABELLESTIERNON.png',
+  danielle:    'https://www.heartsangels.be/wp-content/uploads/2023/08/67619839_1166249026894459_8802576039118110720_n.jpg',
+  familleTemo: 'https://www.heartsangels.be/wp-content/uploads/2024/02/423194226_775502387943890_4753465545900779820_n.jpg',
+  baladeMoto:  'https://www.heartsangels.be/wp-content/uploads/2019/07/DSC_0043-1024x683.jpg',
+  marche:      'https://www.heartsangels.be/wp-content/uploads/2022/11/marche.jpg',
+}
+
+export const ALBUMS_STATIC = [
+  { id:'mer26',    titre_fr:"Souhait : Aller à la mer - 30-05-2026", categorie:'souhaits', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/462157048_1036736461592785_4068621283474085614_n.jpg' },
+  { id:'pairi26',  titre_fr:"Souhait : Un voyage à Pairi Daiza", categorie:'souhaits', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/464012012_1040249547908143_4660481131897741610_n.jpg' },
+  { id:'10ans',    titre_fr:"10 ans — Une décennie d'émotions (21-03-2026)", categorie:'evenements', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/476831437_1096540589279038_8483905148748547052_n.jpg' },
+  { id:'marche25', titre_fr:"Marche ADEPS 2025", categorie:'evenements', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/472065555_1079453984321032_9205601614127628428_n.jpg' },
+  { id:'spa25',    titre_fr:"Souhait : Circuit de Spa-Francorchamps (2025)", categorie:'souhaits', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/453416742_1003044648295299_6571975987685754499_n.jpg' },
+  { id:'roche25',  titre_fr:"Souhait : La Roche-en-Ardenne (2025)", categorie:'souhaits', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/475285374_1090001206266310_8174714581462753584_n.jpg' },
+  { id:'balade25', titre_fr:"Balade motos 2025", categorie:'evenements', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/449350601_987946093138488_2735285162700963254_n.jpg' },
+  { id:'balade24', titre_fr:"Balade motos 2024", categorie:'evenements', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/448908668_848408497319945_1025490183671848960_n.jpg' },
+  { id:'disney23', titre_fr:"Souhait : Disneyland Paris (2023)", categorie:'souhaits', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/400049427_786700723157390_5665248365698691497_n.jpg' },
+  { id:'balade23', titre_fr:"Balade motos & souhait (2023)", categorie:'evenements', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/356259073_721614896666053_2023427024869793382_n.jpg' },
+  { id:'mariage23',titre_fr:"Souhait Mariage Caroline & Alex (2023)", categorie:'souhaits', thumb:'https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/352327025_718534866974056_3266069975688327701_n.jpg' },
+]
+
+export const TEMOS_STATIC = [
+  { img:'https://www.heartsangels.be/wp-content/uploads/2019/12/Olivier-Schoonejans.jpg', nom:'Olivier Schoonejans', role_fr:'Journaliste & présentateur RTL-TVI', texte_fr:"C'est avec beaucoup de fierté et de plaisir que je soutiens l'ASBL Heart's Angels. Bravo aux bénévoles qui s'investissent pour le respect et le bien-être des personnes en fin de vie. Les Heart's Angels nous apprennent à avoir du cœur !" },
+  { img:'https://www.heartsangels.be/wp-content/uploads/2024/06/448340450_848408590653269_3974634456659016404_n.jpg', nom:'Nady Marie', role_fr:'Fille du bénéficiaire', texte_fr:"Un énorme merci à vous tous... Mon papa m'a dit qu'il n'oubliera jamais cette journée, car il n'avait jamais été à Banneux, et grâce à l'ASBL, son souhait a été réalisé. Mille merci." },
+  { img:'https://www.heartsangels.be/wp-content/uploads/2023/05/ISABELLESTIERNON.png', nom:'Isabelle Stienon', role_fr:"Petite-fille d'une bénéficiaire", texte_fr:"Elle a pu une dernière fois apprécier son jardin. C'est important que des gens puissent compter sur des associations comme Heart's Angels pour leur permettre de vivre de tels instants." },
+  { img:'https://www.heartsangels.be/wp-content/uploads/2023/08/67619839_1166249026894459_8802576039118110720_n.jpg', nom:'Fillée Danielle', role_fr:'Bénéficiaire', texte_fr:"Merci d'exister car sans vous, mon dernier souhait n'aurait sans doute jamais pu devenir réel. J'ai passé une journée formidable. Entre émotions, rires, bonheur et discussions, j'en garderai un merveilleux souvenir." },
+  { img:'https://www.heartsangels.be/wp-content/uploads/2024/02/423194226_775502387943890_4753465545900779820_n.jpg', nom:'Petite-fille d\'une bénéficiaire', role_fr:'Famille d\'un bénéficiaire', texte_fr:"Un immense merci pour cette magnifique journée. Ma maman était épanouie et tellement heureuse de ce moment hors du temps. Ce soir, ma maman s'est endormie épanouie." },
+]

@@ -1,0 +1,393 @@
+/* ============================================================
+   Layout principal — CSS Modules
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Cormorant+Garamond:wght@500;600&display=swap');
+
+:root {
+  --sidebar-w: 224px;
+  --topbar-h:  54px;
+}
+
+/* ── Structure ───────────────────────────────────────────── */
+.root {
+  display: flex;
+  min-height: 100vh;
+  background: #F5F0EB;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  min-height: 100vh;
+  background: #FFFCF8;
+  border-right: 1px solid rgba(27,176,206,0.1);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 80;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebarOverlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 79;
+  backdrop-filter: blur(2px);
+}
+
+/* ── Sidebar logo ────────────────────────────────────────── */
+.sidebarLogo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 16px;
+  border-bottom: 1px solid rgba(27,176,206,0.08);
+}
+.sidebarLogoIcon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1BB0CE, #0E7A93);
+  display: flex; align-items: center; justify-content: center;
+  color: white;
+  box-shadow: 0 3px 10px rgba(27,176,206,0.28);
+  flex-shrink: 0;
+}
+.sidebarLogoName {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1A1A1A;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.sidebarLogoSub {
+  font-size: 10px;
+  color: #A8A39D;
+  margin-top: 1px;
+}
+
+/* ── Nav ─────────────────────────────────────────────────── */
+.nav {
+  flex: 1;
+  padding: 10px 10px 0;
+  overflow-y: auto;
+}
+.navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #6B6259;
+  font-size: 13px;
+  font-weight: 400;
+  transition: all 0.12s;
+  position: relative;
+}
+.navItem:hover {
+  background: rgba(27,176,206,0.06);
+  color: #1BB0CE;
+}
+.navItemActive {
+  background: rgba(27,176,206,0.09) !important;
+  color: #1BB0CE !important;
+  font-weight: 500;
+}
+.navItemActive .navIcon { color: #1BB0CE; }
+.navIcon {
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: #A8A39D;
+  transition: color 0.12s;
+}
+.navItem:hover .navIcon { color: #1BB0CE; }
+.navLabel { flex: 1; }
+.navBadge {
+  background: #1BB0CE;
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 99px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ── Sidebar user ────────────────────────────────────────── */
+.sidebarUser {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(27,176,206,0.08);
+  margin-top: auto;
+}
+.sidebarUserAvatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1BB0CE, #0E7A93);
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+  flex-shrink: 0;
+}
+.sidebarUserName {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #1A1A1A;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebarUserRole {
+  font-size: 10.5px;
+  color: #A8A39D;
+}
+
+/* ── Main area ───────────────────────────────────────────── */
+.main {
+  flex: 1;
+  margin-left: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  height: var(--topbar-h);
+  background: #FFFCF8;
+  border-bottom: 1px solid rgba(27,176,206,0.1);
+  display: flex;
+  align-items: center;
+  padding: 0 1.25rem;
+  gap: 12px;
+  position: sticky; top: 0; z-index: 70;
+}
+.burgerBtn {
+  display: none;
+  background: none; border: none;
+  color: #6B6259; cursor: pointer;
+  padding: 4px; border-radius: 6px;
+}
+.burgerBtn:hover { background: rgba(27,176,206,0.08); color: #1BB0CE; }
+
+.topbarTitle {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  color: #3A3530;
+}
+.topbarRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Bouton icône topbar */
+.topbarBtn {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  background: none;
+  border: 1px solid transparent;
+  display: flex; align-items: center; justify-content: center;
+  color: #6B6259; cursor: pointer;
+  position: relative;
+  transition: all 0.12s;
+}
+.topbarBtn:hover {
+  background: rgba(27,176,206,0.07);
+  border-color: rgba(27,176,206,0.12);
+  color: #1BB0CE;
+}
+.topbarBtnAlert { color: #C8435A; }
+
+/* Badge notif */
+.notifDot {
+  position: absolute;
+  top: 3px; right: 3px;
+  background: #1BB0CE;
+  color: white;
+  font-size: 9px; font-weight: 700;
+  min-width: 16px; height: 16px;
+  border-radius: 99px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid #FFFCF8;
+  padding: 0 3px;
+}
+
+/* ── Panneau notifications ───────────────────────────────── */
+.notifWrap { position: relative; }
+.notifPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  background: #FFFCF8;
+  border: 1px solid rgba(27,176,206,0.12);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  overflow: hidden;
+  animation: slideDown 0.18s ease;
+  z-index: 200;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.notifHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.notifHeaderTitle {
+  font-size: 13px; font-weight: 600; color: #1A1A1A;
+}
+.notifMarkAll {
+  font-size: 11px; color: #C8435A; background: none; border: none;
+  cursor: pointer; font-weight: 500;
+}
+.notifMarkAll:hover { text-decoration: underline; }
+.notifList {
+  max-height: 360px;
+  overflow-y: auto;
+}
+.notifEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 2rem;
+  color: #A8A39D;
+  font-size: 12px;
+}
+.notifItem {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  transition: background 0.1s;
+}
+.notifItem:last-child { border-bottom: none; }
+.notifItem:hover { background: rgba(27,176,206,0.04); }
+.notifUnread { background: rgba(27,176,206,0.04); }
+.notifCritique { background: #FFF0F0 !important; }
+.notifItemDot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.dotNormale  { background: #A8A39D; }
+.dotHaute    { background: #BA7517; }
+.dotCritique { background: #C8435A; }
+.notifItemContent { flex: 1; min-width: 0; }
+.notifItemTitle {
+  font-size: 12.5px; font-weight: 500; color: #1A1A1A;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.notifItemMsg {
+  font-size: 11.5px; color: #6B6259; margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.notifItemTime { font-size: 10.5px; color: #A8A39D; margin-top: 3px; }
+
+/* ── Menu utilisateur ────────────────────────────────────── */
+.userMenuWrap { position: relative; }
+.userAvatarBtn {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1BB0CE, #0E7A93);
+  border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(27,176,206,0.25);
+  transition: box-shadow 0.12s;
+}
+.userAvatarBtn:hover { box-shadow: 0 3px 12px rgba(27,176,206,0.35); }
+.userAvatarText {
+  font-size: 12px; font-weight: 700; color: white; letter-spacing: 0.02em;
+}
+.userMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  background: #FFFCF8;
+  border: 1px solid rgba(27,176,206,0.12);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.12);
+  overflow: hidden;
+  animation: slideDown 0.18s ease;
+  z-index: 200;
+}
+.userMenuHeader {
+  padding: 14px;
+  background: rgba(27,176,206,0.04);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.userMenuName  { font-size: 13px; font-weight: 600; color: #1A1A1A; }
+.userMenuEmail { font-size: 11px; color: #8A8681; margin-top: 2px; word-break: break-all; }
+.userMenuRole  {
+  display: inline-block; margin-top: 6px;
+  font-size: 10px; font-weight: 600;
+  background: rgba(27,176,206,0.1); color: #1BB0CE;
+  padding: 2px 8px; border-radius: 99px;
+}
+.userMenuDivider { height: 1px; background: rgba(0,0,0,0.06); }
+.userMenuItem {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 9px 14px;
+  background: none; border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px; color: #3A3530;
+  cursor: pointer; text-align: left;
+  transition: background 0.1s;
+}
+.userMenuItem:hover { background: rgba(27,176,206,0.06); color: #1BB0CE; }
+.userMenuItemDanger { color: #A32D2D !important; }
+.userMenuItemDanger:hover { background: #FCEBEB !important; }
+
+/* ── Contenu ─────────────────────────────────────────────── */
+.content {
+  flex: 1;
+  padding: 1.5rem;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+  .sidebarOverlay {
+    display: block;
+  }
+  .main {
+    margin-left: 0;
+  }
+  .burgerBtn {
+    display: flex;
+  }
+  .content {
+    padding: 1rem;
+  }
+}

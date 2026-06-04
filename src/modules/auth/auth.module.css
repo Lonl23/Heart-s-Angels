@@ -1,0 +1,365 @@
+/* ============================================================
+   Auth module — CSS Modules
+   Palette : rose profond + ivoire chaud + noir doux
+   Police  : Cormorant Garamond (display) + DM Sans (UI)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+/* ── Root / Fond ─────────────────────────────────────────── */
+.root {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #F5F0EB;
+  font-family: 'DM Sans', sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Blobs décoratifs */
+.bg { position: absolute; inset: 0; pointer-events: none; }
+
+.bgBlob1 {
+  position: absolute;
+  width: 600px; height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200,67,90,0.12) 0%, transparent 70%);
+  top: -200px; right: -150px;
+  animation: drift 14s ease-in-out infinite alternate;
+}
+.bgBlob2 {
+  position: absolute;
+  width: 400px; height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(186,117,23,0.09) 0%, transparent 70%);
+  bottom: -100px; left: -100px;
+  animation: drift 18s ease-in-out infinite alternate-reverse;
+}
+.bgGrid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+@keyframes drift {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(30px, 20px) scale(1.05); }
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+.card {
+  position: relative; z-index: 1;
+  background: #FFFCF8;
+  border: 1px solid rgba(200,67,90,0.12);
+  border-radius: 20px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.6) inset,
+    0 8px 32px rgba(0,0,0,0.08),
+    0 2px 8px rgba(200,67,90,0.06);
+  padding: 2.25rem 2.5rem;
+  width: 100%;
+  max-width: 420px;
+  animation: slideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Logo ────────────────────────────────────────────────── */
+.logoWrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 1.5rem;
+}
+.logoHeart {
+  width: 48px; height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #C8435A, #E8697E);
+  display: flex; align-items: center; justify-content: center;
+  color: white;
+  box-shadow: 0 4px 14px rgba(200,67,90,0.35);
+  flex-shrink: 0;
+}
+.logoText {
+  display: flex;
+  flex-direction: column;
+}
+.logoName {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.45rem;
+  font-weight: 600;
+  color: #1A1A1A;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.logoTagline {
+  font-size: 11px;
+  color: #9E9E9E;
+  font-weight: 400;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Divider ─────────────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(200,67,90,0.15), transparent);
+  margin-bottom: 1.5rem;
+}
+
+/* ── Heading ─────────────────────────────────────────────── */
+.title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.7rem;
+  font-weight: 500;
+  color: #1A1A1A;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+.subtitle {
+  font-size: 13px;
+  color: #8A8681;
+  margin-bottom: 1.75rem;
+}
+
+/* ── Form ────────────────────────────────────────────────── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #5A5650;
+  display: block;
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.forgotLink {
+  font-size: 11px;
+  color: #C8435A;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.12s;
+}
+.forgotLink:hover { color: #8C1F35; text-decoration: underline; }
+
+/* Input */
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.inputIcon {
+  position: absolute;
+  left: 11px;
+  color: #B5B0AA;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  background: #FAF7F3;
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-family: 'DM Sans', sans-serif;
+  color: #1A1A1A;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.input::placeholder { color: #C0BAB4; }
+.input:focus {
+  outline: none;
+  border-color: #C8435A;
+  background: #FFFCF8;
+  box-shadow: 0 0 0 3px rgba(200,67,90,0.10);
+}
+.input:disabled { opacity: 0.6; cursor: not-allowed; }
+.inputPwd { padding-right: 42px; }
+
+.pwdToggle {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #B5B0AA;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+.pwdToggle:hover { color: #5A5650; background: rgba(0,0,0,0.04); }
+
+/* ── Error ───────────────────────────────────────────────── */
+.errorBox {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #FEF2F2;
+  border: 1px solid #FCD5D5;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: #991B1B;
+  margin-bottom: 14px;
+  animation: shake 0.35s ease;
+}
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%      { transform: translateX(-5px); }
+  60%      { transform: translateX(5px); }
+}
+
+/* ── Submit ──────────────────────────────────────────────── */
+.submitBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 20px;
+  background: linear-gradient(135deg, #C8435A, #D9566A);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 3px 12px rgba(200,67,90,0.30);
+  margin-top: 4px;
+}
+.submitBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #B33550, #C8435A);
+  box-shadow: 0 5px 18px rgba(200,67,90,0.38);
+  transform: translateY(-1px);
+}
+.submitBtn:active:not(:disabled) { transform: translateY(0); }
+.submitBtn:disabled { opacity: 0.65; cursor: not-allowed; transform: none; }
+
+/* Spinner */
+.spinner {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Security note ───────────────────────────────────────── */
+.securityNote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  font-size: 11px;
+  color: #A8A39D;
+}
+
+/* ── Version ─────────────────────────────────────────────── */
+.version {
+  position: fixed;
+  bottom: 14px; right: 16px;
+  font-size: 11px;
+  color: #B5B0AA;
+  z-index: 1;
+}
+
+/* ── Success box (pour ResetPassword) ───────────────────── */
+.successBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #F0FAF0;
+  border: 1px solid #C3E6C3;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 13px;
+  color: #1E5C1E;
+  margin-bottom: 14px;
+  animation: slideUp 0.3s ease;
+}
+.successBox svg { flex-shrink: 0; margin-top: 1px; }
+
+/* ── Back link ───────────────────────────────────────────── */
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: #8A8681;
+  text-decoration: none;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  width: 100%;
+  justify-content: center;
+  transition: color 0.12s;
+}
+.backLink:hover { color: #C8435A; }
+
+/* ── Règles mot de passe (NewPassword) ───────────────────── */
+.pwdRules {
+  background: #F8F5F0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pwdRule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #9E9E9E;
+  transition: color 0.15s;
+}
+.pwdRule.ok { color: #3B6D11; }
+.pwdRule .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .card { padding: 1.5rem; border-radius: 16px; }
+  .title { font-size: 1.45rem; }
+}
