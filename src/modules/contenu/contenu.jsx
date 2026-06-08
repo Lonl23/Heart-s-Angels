@@ -4,6 +4,8 @@ import { Routes, Route, Link, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import PhotoUpload from '@/components/shared/PhotoUpload'
+import RichText from '@/components/shared/RichText'
+import GestionFormulaires from './GestionFormulaires'
 import { Separateur, MOTIFS } from '@/public/components/Decor.jsx'
 
 export default function Contenu() {
@@ -16,6 +18,7 @@ export default function Contenu() {
       <Route path="equipe" element={<GestionEquipe />} />
       <Route path="temoignages" element={<GestionTemoignages />} />
       <Route path="galerie" element={<GestionGalerie />} />
+      <Route path="formulaires" element={<GestionFormulaires />} />
       <Route path="arriere-plans" element={<GestionArrierePlans />} />
       <Route path="pages" element={<GestionPages />} />
       <Route path="boutique" element={<GestionBoutique />} />
@@ -78,6 +81,7 @@ function ContenuDashboard() {
     { to:'temoignages',icon:'💬', label:'Témoignages',   count:null, desc:'Citations, photos, rôles' },
     { to:'galerie',    icon:'📸', label:'Galerie photos',count:null, desc:'Albums et photos' },
     { to:'boutique',   icon:'🛍️', label:'Boutique',      count:null, desc:'Articles, prix, variantes' },
+    { to:'formulaires',   icon:'📝', label:'Formulaires', count:null, desc:'Champs demandés et destinataires' },
     { to:'arriere-plans', icon:'🖼️', label:'Arrière-plans', count:null, desc:'Images de fond des pages (héros)' },
     { to:'pages',      icon:'📄', label:'Pages statiques',count:null, desc:'Mentions légales, politique conf.' },
     { to:'publication',icon:'🚀', label:'Publication',   count:null, desc:'Historique et publication manuelle' },
@@ -179,7 +183,7 @@ function Modal({ title, onClose, children }) {
   )
 }
 
-function TableRow({ cells, onEdit, onToggle, active }) {
+function TableRow({ cells, onEdit, onToggle, onDelete, active }) {
   return (
     <tr style={{ borderTop:'1px solid rgba(27,176,206,.06)', opacity: active===false ? .5 : 1 }}
       onMouseEnter={e=>e.currentTarget.style.background='#F8FCFD'}
@@ -191,6 +195,11 @@ function TableRow({ cells, onEdit, onToggle, active }) {
         {onToggle && (
           <button onClick={onToggle} style={{ padding:'4px 10px', background: active ? '#FCEBEB' : '#EAF3DE', color: active ? '#A32D2D' : '#3B6D11', border:'none', borderRadius:7, fontSize:12.5, fontWeight:600, cursor:'pointer' }}>
             {active ? 'Désactiver' : 'Activer'}
+          </button>
+        )}
+        {onDelete && (
+          <button onClick={onDelete} title="Supprimer définitivement" style={{ padding:'4px 10px', background:'#FCEBEB', color:'#C8435A', border:'none', borderRadius:7, fontSize:12.5, fontWeight:600, cursor:'pointer' }}>
+            🗑 Supprimer
           </button>
         )}
       </td>
@@ -248,13 +257,27 @@ function GestionEvenements() {
   function openEdit(it) { setForm({...it, date_debut: it.date_debut?.slice(0,16)}); setModal('edit') }
   async function save() {
     setSaving(true)
-    const payload = { ...form, slug: form.slug || form.titre_fr?.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60) }
+    // Garantir des id de tarifs uniques et non vides (corrige les anciens doublons)
+    const vus = new Set()
+    const tarifsCorriges = (form.tarifs || []).map((t, i) => {
+      let id = t.id
+      if (!id || vus.has(id)) id = 't' + Date.now() + '_' + i
+      vus.add(id)
+      return { ...t, id }
+    })
+    const payload = { ...form, tarifs: tarifsCorriges, slug: form.slug || form.titre_fr?.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60) }
     if (modal==='edit') await supabase.from('evenements_publics').update(payload).eq('id', form.id)
     else await supabase.from('evenements_publics').insert(payload)
     setSaving(false); setModal(null); load()
   }
   async function toggle(it) {
     await supabase.from('evenements_publics').update({ publie:!it.publie }).eq('id', it.id)
+    load()
+  }
+  async function remove(it) {
+    if (!confirm(`Supprimer définitivement l'événement « ${it.titre_fr || ''} » ?\n\nCette action est irréversible. Les inscriptions liées ne seront pas supprimées.`)) return
+    const { error } = await supabase.from('evenements_publics').delete().eq('id', it.id)
+    if (error) { alert('Suppression impossible : ' + error.message); return }
     load()
   }
 
@@ -276,6 +299,7 @@ function GestionEvenements() {
                 ]}
                 onEdit={() => openEdit(it)}
                 onToggle={() => toggle(it)}
+                onDelete={() => remove(it)}
                 active={it.publie}
               />
             ))}
@@ -295,20 +319,104 @@ function GestionEvenements() {
             <F label="Heure affichée" val={form.heure} set={v=>set('heure',v)} placeholder="8h00 – 18h00" />
           </div>
           <F label="Lieu" val={form.lieu} set={v=>set('lieu',v)} placeholder="Rue des Awirs 222, Flémalle" />
-          <TA label="Description (FR)" val={form.desc_fr} set={v=>set('desc_fr',v)} rows={4} />
-          <F label="Image URL" val={form.image_url} set={v=>set('image_url',v)} placeholder="https://…" />
-          <F label="Lien externe (inscription)" val={form.lien_externe} set={v=>set('lien_externe',v)} placeholder="https://hearts-angels-asbl.odoo.com/event" />
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-            <F label="Prix adulte (€)" val={form.prix_adulte} set={v=>set('prix_adulte',v)} type="number" />
-            <F label="Prix enfant (€)" val={form.prix_enfant} set={v=>set('prix_enfant',v)} type="number" />
+          <div style={{ marginBottom:12 }}>
+            <label style={{ fontSize:12.5, fontWeight:500, color:'#7A7470', display:'block', marginBottom:6 }}>Description (FR)</label>
+            <RichText value={form.desc_fr} onChange={v=>set('desc_fr',v)} placeholder="Décrivez l'événement : programme, tarifs, infos pratiques…" />
           </div>
+          <div style={{ marginBottom:12 }}>
+            <label style={{ fontSize:12.5, fontWeight:500, color:'#7A7470', display:'block', marginBottom:6 }}>Image de l'événement</label>
+            <PhotoUpload value={form.image_url} onChange={url=>set('image_url',url)} folder="evenements" shape="square" size={80} label="Choisir une image" aspect={1.6} sortie={1200} />
+          </div>
+          <F label="Lien externe (inscription)" val={form.lien_externe} set={v=>set('lien_externe',v)} placeholder="https://hearts-angels-asbl.odoo.com/event" />
+
+          {/* Gratuit / Payant + tarifs */}
+          <div style={{ background:'#F0F9FB', borderRadius:12, padding:'14px 16px', marginBottom:12 }}>
+            <div style={{ display:'flex', gap:16, marginBottom:form.gratuit?0:12 }}>
+              {[['gratuit','Gratuit'],['inscription_requise','Inscription requise']].map(([k,l])=>(
+                <label key={k} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:13.5, color:'#4A4340' }}>
+                  <input type="checkbox" checked={!!form[k]} onChange={e=>set(k,e.target.checked)} style={{ accentColor:'#1BB0CE', width:15, height:15 }}/>
+                  {l}
+                </label>
+              ))}
+            </div>
+
+            {!form.gratuit && <>
+              <div style={{ fontSize:12.5, fontWeight:600, color:'#0E4A5A', marginBottom:8 }}>Tarifs proposés</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {(form.tarifs || []).map((t, i) => (
+                  <div key={i} style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <input value={t.label||''} placeholder="Libellé (ex: Pilote moto)" onChange={e=>{ const arr=[...(form.tarifs||[])]; arr[i]={...arr[i], label:e.target.value, id:(arr[i].id||('t'+Date.now()+'_'+i))}; set('tarifs',arr) }}
+                      style={{ flex:2, padding:'8px 11px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif" }}/>
+                    <input type="number" value={t.prix??''} placeholder="€" onChange={e=>{ const arr=[...(form.tarifs||[])]; arr[i]={...arr[i], prix:parseFloat(e.target.value)||0}; set('tarifs',arr) }}
+                      style={{ width:90, padding:'8px 11px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif" }}/>
+                    <button type="button" onClick={()=>{ const arr=(form.tarifs||[]).filter((_,j)=>j!==i); set('tarifs',arr) }}
+                      style={{ padding:'8px 10px', background:'#FCEBEB', color:'#C8435A', border:'none', borderRadius:8, fontSize:13, cursor:'pointer' }}>✕</button>
+                  </div>
+                ))}
+                <button type="button" onClick={()=>set('tarifs',[...(form.tarifs||[]),{ id:'', label:'', prix:0 }])}
+                  style={{ alignSelf:'flex-start', padding:'7px 13px', background:'#E6F7FA', color:'#0E7A93', border:'none', borderRadius:8, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>
+                  + Ajouter un tarif
+                </button>
+              </div>
+
+              <div style={{ fontSize:12.5, fontWeight:600, color:'#0E4A5A', margin:'14px 0 8px' }}>Modes de paiement acceptés</div>
+              <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+                {[['paiement_virement','Virement (communication structurée)'],['paiement_payconiq','Payconiq']].map(([k,l])=>(
+                  <label key={k} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:13, color:'#4A4340' }}>
+                    <input type="checkbox" checked={!!form[k]} onChange={e=>set(k,e.target.checked)} style={{ accentColor:'#1BB0CE', width:15, height:15 }}/>
+                    {l}
+                  </label>
+                ))}
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:10 }}>
+                <F label="IBAN (vide = IBAN ASBL)" val={form.iban} set={v=>set('iban',v)} placeholder="BE45 0689 3611 4489" />
+                <F label="Lien Payconiq (optionnel)" val={form.payconiq_lien} set={v=>set('payconiq_lien',v)} placeholder="https://payconiq.com/..." />
+              </div>
+            </>}
+          </div>
+
+          {/* Champs personnalisés de l'événement */}
+          <div style={{ background:'#F0F9FB', borderRadius:12, padding:'14px 16px', marginBottom:12 }}>
+            <div style={{ fontSize:12.5, fontWeight:600, color:'#0E4A5A', marginBottom:4 }}>Champs personnalisés</div>
+            <div style={{ fontSize:11.5, color:'#7A7470', marginBottom:10 }}>Questions propres à cet événement (ex. n° de plaque, allergies…). Chaque champ peut être demandé à chaque participant ou une seule fois pour l'inscription.</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {(form.champs_perso || []).map((ch, i) => (
+                <div key={i} style={{ display:'flex', gap:7, alignItems:'center', flexWrap:'wrap', background:'white', borderRadius:9, padding:'8px 10px' }}>
+                  <input value={ch.label||''} placeholder="Libellé (ex: Numéro de plaque)"
+                    onChange={e=>{ const arr=[...(form.champs_perso||[])]; arr[i]={...arr[i], label:e.target.value, id:(arr[i].id||'c'+Date.now())}; set('champs_perso',arr) }}
+                    style={{ flex:2, minWidth:150, padding:'7px 10px', border:'1px solid rgba(0,0,0,.1)', borderRadius:7, fontSize:13, fontFamily:"'DM Sans',sans-serif" }}/>
+                  <select value={ch.type||'text'} onChange={e=>{ const arr=[...(form.champs_perso||[])]; arr[i]={...arr[i], type:e.target.value}; set('champs_perso',arr) }}
+                    style={{ padding:'7px 8px', border:'1px solid rgba(0,0,0,.1)', borderRadius:7, fontSize:12.5, fontFamily:"'DM Sans',sans-serif" }}>
+                    <option value="text">Texte court</option>
+                    <option value="textarea">Texte long</option>
+                    <option value="number">Nombre</option>
+                    <option value="date">Date</option>
+                    <option value="tel">Téléphone</option>
+                  </select>
+                  <select value={ch.portee||'participant'} onChange={e=>{ const arr=[...(form.champs_perso||[])]; arr[i]={...arr[i], portee:e.target.value}; set('champs_perso',arr) }}
+                    style={{ padding:'7px 8px', border:'1px solid rgba(0,0,0,.1)', borderRadius:7, fontSize:12.5, fontFamily:"'DM Sans',sans-serif" }}>
+                    <option value="participant">Par participant</option>
+                    <option value="global">Inscription globale</option>
+                  </select>
+                  <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, color:'#4A4340', cursor:'pointer' }}>
+                    <input type="checkbox" checked={!!ch.requis} onChange={e=>{ const arr=[...(form.champs_perso||[])]; arr[i]={...arr[i], requis:e.target.checked}; set('champs_perso',arr) }} style={{ accentColor:'#BA7517' }}/> Obligatoire
+                  </label>
+                  <button type="button" onClick={()=>{ const arr=(form.champs_perso||[]).filter((_,j)=>j!==i); set('champs_perso',arr) }}
+                    style={{ padding:'6px 9px', background:'#FCEBEB', color:'#C8435A', border:'none', borderRadius:7, fontSize:12.5, cursor:'pointer' }}>✕</button>
+                </div>
+              ))}
+              <button type="button" onClick={()=>set('champs_perso',[...(form.champs_perso||[]),{ id:'c'+Date.now(), label:'', type:'text', requis:false, portee:'participant' }])}
+                style={{ alignSelf:'flex-start', padding:'7px 13px', background:'#E6F7FA', color:'#0E7A93', border:'none', borderRadius:8, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>
+                + Ajouter un champ
+              </button>
+            </div>
+          </div>
+
           <div style={{ display:'flex', gap:16, marginBottom:12 }}>
-            {[['gratuit','Gratuit'],['inscription_requise','Inscription requise'],['publie','Publié']].map(([k,l])=>(
-              <label key={k} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:13.5, color:'#4A4340' }}>
-                <input type="checkbox" checked={!!form[k]} onChange={e=>set(k,e.target.checked)} style={{ accentColor:'#1BB0CE', width:15, height:15 }}/>
-                {l}
-              </label>
-            ))}
+            <label style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:13.5, color:'#4A4340' }}>
+              <input type="checkbox" checked={!!form.publie} onChange={e=>set('publie',e.target.checked)} style={{ accentColor:'#1BB0CE', width:15, height:15 }}/>
+              Publié (visible sur le site public)
+            </label>
           </div>
           <SaveBtn saving={saving} onClick={save} />
         </Modal>
@@ -989,12 +1097,16 @@ function Publication() {
 
 // ── GESTION DES ARRIÈRE-PLANS (images de fond des pages) ──
 const FONDS_CONFIGURABLES = [
-  { cle:'hero_accueil',     label:"Page d'accueil",        desc:'Grande image en haut de la page d\'accueil' },
-  { cle:'hero_partenaires', label:'Page Partenaires',      desc:'Bandeau en haut de la page partenaires' },
-  { cle:'hero_souhaits',    label:'Page Les Souhaits',     desc:'Bandeau en haut de la page des souhaits' },
-  { cle:'hero_soutenir',    label:'Page Nous Soutenir',    desc:'Bandeau en haut de la page de dons' },
-  { cle:'hero_contact',     label:'Page Contact',          desc:'Bandeau en haut de la page contact' },
-  { cle:'hero_evenements',  label:'Page Événements',       desc:'Bandeau en haut de la page événements' },
+  { cle:'hero_accueil',     label:"Page d'accueil",     desc:"Grande image en haut de la page d'accueil" },
+  { cle:'hero_souhaits',    label:'Les Souhaits',       desc:'Bandeau en haut de la page des souhaits' },
+  { cle:'hero_soutenir',    label:'Nous Soutenir',      desc:'Bandeau de la page de dons' },
+  { cle:'hero_benevole',    label:'Devenir Bénévole',   desc:'Bandeau de la page bénévolat' },
+  { cle:'hero_equipe',      label:'Notre Équipe',       desc:"Bandeau de la page de l'équipe" },
+  { cle:'hero_evenements',  label:'Événements',         desc:'Bandeau de la page événements' },
+  { cle:'hero_activites',   label:'Activités',          desc:'Bandeau de la page activités' },
+  { cle:'hero_galerie',     label:'Galerie',            desc:'Bandeau de la page galerie' },
+  { cle:'hero_partenaires', label:'Partenaires',        desc:'Bandeau de la page partenaires' },
+  { cle:'hero_contact',     label:'Contact',            desc:'Bandeau de la page contact' },
 ]
 
 function GestionArrierePlans() {

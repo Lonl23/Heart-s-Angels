@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { SepAuto } from '../components/Decor.jsx'
+import { useSiteImage } from '@/lib/siteConfig'
 
 const ACTIVITES = [
   {
@@ -75,11 +76,12 @@ const ACTIVITES = [
 ]
 
 export default function Activites() {
+  const heroImg = useSiteImage('hero_activites', null)
   return (
     <div style={{ fontFamily:"'DM Sans',sans-serif" }}>
       <style>{CSS}</style>
 
-      <section className="ac-hero">
+      <section className="ac-hero" style={{ '--hero-bg': heroImg ? `url(${heroImg})` : 'none' }}>
         <div className="ac-inner">
           <div className="ac-tag">🎪 Activités</div>
           <h1 className="ac-h1">Nos <em>activités & événements</em></h1>
@@ -145,7 +147,7 @@ export default function Activites() {
 
 const CSS = `
 .ac-hero{background:linear-gradient(135deg,#0A1E2D,#0E4A5A);padding:72px 20px;position:relative;overflow:hidden;}
-.ac-hero::before{content:'';position:absolute;inset:0;background:url('https://www.heartsangels.be/wp-content/uploads/2019/07/DSC_0043-1024x683.jpg') center/cover;opacity:.15;}
+.ac-hero::before{content:'';position:absolute;inset:0;background:var(--hero-bg) center/cover;opacity:.15;transition:opacity .5s ease;}
 .ac-hero::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,30,45,.9),rgba(14,74,90,.7));}
 .ac-inner{position:relative;z-index:1;max-width:1280px;margin:0 auto;}
 .ac-tag{display:inline-flex;background:rgba(27,176,206,.25);border:1px solid rgba(27,176,206,.4);border-radius:99px;padding:5px 14px;font-size:11.5px;font-weight:500;color:#7DE4F5;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px;}

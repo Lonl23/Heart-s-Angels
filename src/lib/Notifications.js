@@ -118,4 +118,39 @@ export async function notifBenevole(d, statut, expediteur_id) {
   })
 }
 
-export { idsDirection, envoyer }
+// ── Alerte stock minimal → coordinateur logistique + adjoint ──────────────────
+export async function notifStockMinimal(materiel) {
+  const dest = [
+    ...await idsAvecFonction('coord_logistique'),
+    ...await idsAdjointDe('coord_logistique'),
+  ]
+  await envoyer(dest, {
+    type: 'stock',
+    titre: 'Stock minimal atteint',
+    message: `Le matériel « ${materiel.nom} » est à ${materiel.quantite} ${materiel.unite || ''} (seuil : ${materiel.stock_minimal}). Réapprovisionnement à prévoir.`,
+    lien: '/app/stock',
+    priorite: 'haute',
+  })
+}
+
+// ── Soumission d'un formulaire public → fonctions destinataires + adjoints ────
+export async function notifFormulaire(cleFormulaire, titreFormulaire, destinataires, resume) {
+  // destinataires = tableau de fonctions ASBL
+  let ids = []
+  for (const fonction of (destinataires || [])) {
+    ids.push(...await idsAvecFonction(fonction), ...await idsAdjointDe(fonction))
+  }
+  const liens = {
+    contact: '/app/contenu', souhait: '/app/souhaits',
+    benevole: '/app/volontaires', evenement: '/app/contenu',
+  }
+  await envoyer(ids, {
+    type: 'formulaire',
+    titre: `Nouveau : ${titreFormulaire}`,
+    message: resume || `Une nouvelle soumission « ${titreFormulaire} » a été reçue.`,
+    lien: liens[cleFormulaire] || '/app',
+    priorite: 'normale',
+  })
+}
+
+export { idsDirection, envoyer, idsAvecFonction, idsAdjointDe }

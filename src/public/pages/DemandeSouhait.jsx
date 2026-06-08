@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '../i18n/index.jsx'
 import { SepAuto } from '../components/Decor.jsx'
+import { notifFormulaire } from '@/lib/notifications'
+import { supabase as _sb } from '@/lib/supabase'
+import { configEffective } from '@/lib/formulaires'
 
 const STEPS_FR = ['Patient', 'Contact', 'Souhait', 'Médical', 'Consentement']
 const STEPS_NL = ['Patiënt', 'Contact', 'Wens', 'Medisch', 'Toestemming']
@@ -83,7 +86,7 @@ const LABELS = {
 const INITIAL = {
   patient_prenom:'', patient_nom:'', patient_ddn:'', etablissement:'', medecin_referent:'',
   contact_prenom:'', contact_nom:'', contact_relation:'', contact_email:'', contact_telephone:'',
-  souhait_description:'', souhait_date:'', souhait_lieu:'',
+  souhait_description:'', souhait_date:'', souhait_lieu:'', souhait_dates:[''],
   mobilite:'', equipement_medical:'', allergies:'', urgence:false,
   consent_patient:false, consent_rgpd:false,
 }
@@ -95,31 +98,53 @@ export default function DemandeSouhait() {
   const STEPS = { fr:STEPS_FR, nl:STEPS_NL, en:STEPS_EN, de:STEPS_DE }[lang] || STEPS_FR
 
   const [form, setForm]   = useState(INITIAL)
-  const [step, setStep]   = useState(1)
+  const [libres, setLibres] = useState({})
+  const [cfg, setCfg]     = useState(null)
   const [sending, setSending] = useState(false)
   const [sent, setSent]   = useState(false)
   const [error, setError] = useState('')
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const setL = (id,v) => setLibres(l=>({...l,[id]:v}))
 
-  function validateStep(s) {
-    if (s===1) return form.patient_prenom.trim() && form.patient_nom.trim()
-    if (s===2) return form.contact_prenom.trim() && form.contact_nom.trim() && form.contact_email.trim()
-    if (s===3) return form.souhait_description.trim().length > 10
-    return true
-  }
+  useEffect(() => {
+    supabase.from('formulaires_config').select('*').eq('cle','souhait').maybeSingle()
+      .then(({ data }) => setCfg(configEffective('souhait', data || {})))
+  }, [])
 
-  function next() {
-    if (!validateStep(step)) { setError(L.errorRequired); return }
-    setError(''); setStep(s=>s+1)
-    window.scrollTo({ top:0, behavior:'smooth' })
-  }
-  function prev() { setStep(s=>s-1); setError('') }
+  // Un champ prédéfini est-il actif / requis ?
+  const champ = (nom) => cfg?.champs.find(c=>c.nom===nom)
+  const actif = (nom) => champ(nom)?.actif ?? true
+  const requis = (nom) => champ(nom)?.requis ?? false
+  const lbl = (nom, fallback) => (champ(nom)?.label || fallback) + (requis(nom)?' *':'')
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!cfg) return
+    // Validation des champs prédéfinis requis
+    for (const ch of cfg.champs.filter(c=>c.actif && c.requis)) {
+      if (!form[ch.nom] || !String(form[ch.nom]).trim()) { setError(L.errorRequired); return }
+    }
+    // Validation des questions libres requises
+    for (const q of cfg.champsLibres.filter(q=>q.requis)) {
+      if (!libres[q.id]) { setError(L.errorRequired); return }
+    }
+    // Consentement obligatoire
     if (!form.consent_patient || !form.consent_rgpd) { setError(L.errorConsent); return }
     setSending(true); setError('')
-    const { error:err } = await supabase.from('demandes_souhaits').insert({ ...form, langue:lang })
+    const datesValides = (form.souhait_dates || []).filter(Boolean)
+    const champs_libres = {}
+    cfg.champsLibres.forEach(q => { if (libres[q.id] !== undefined) champs_libres[q.label] = libres[q.id] })
+    const { souhait_dates, ...reste } = form
+    const { error:err } = await supabase.from('demandes_souhaits').insert({
+      ...reste,
+      souhait_date: datesValides[0] || null,
+      dates_souhaitees: datesValides,
+      champs_libres,
+      langue:lang,
+    })
+    if (!err) {
+      notifFormulaire('souhait', cfg.titre || 'Demande de souhait', cfg.destinataires, form.patient_nom || 'Nouvelle demande')
+    }
     if (err) { setError(L.errorSend); setSending(false); return }
     setSent(true); setSending(false)
   }
@@ -154,106 +179,125 @@ export default function DemandeSouhait() {
       {/* vague hero → contenu */}
       <SepAuto haut="#0E4A5A" bas="#FDFAF6" />
 
-      {/* Formulaire */}
+      {/* Formulaire — page unique */}
       <section style={{ padding:'56px 20px', background:'#FDFAF6' }}>
         <div style={{ maxWidth:720, margin:'0 auto' }}>
-
-          {/* Stepper */}
-          <div style={{ display:'flex', gap:0, marginBottom:36, position:'relative' }}>
-            <div style={{ position:'absolute', top:18, left:'10%', right:'10%', height:2, background:'#E6F7FA', zIndex:0 }} />
-            <div style={{ position:'absolute', top:18, left:'10%', height:2, background:'#1BB0CE', zIndex:0, width:`${((step-1)/4)*80}%`, transition:'width .3s' }} />
-            {STEPS.map((label,i)=>(
-              <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:7, position:'relative', zIndex:1 }}>
-                <div style={{ width:36, height:36, borderRadius:'50%', background: step>i+1 ? '#1BB0CE' : step===i+1 ? '#1BB0CE' : 'white', border:`2px solid ${step>=i+1 ? '#1BB0CE' : '#E6F7FA'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize: step>i+1 ? 16 : 13, fontWeight:600, color: step>=i+1 ? 'white' : '#A8A39D', transition:'all .25s' }}>
-                  {step>i+1 ? '✓' : i+1}
-                </div>
-                <span style={{ fontSize:10.5, color: step===i+1 ? '#1BB0CE' : '#A8A39D', fontWeight: step===i+1 ? 600 : 400, textAlign:'center', lineHeight:1.3 }}>{label}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Carte */}
           <div style={{ background:'white', border:'1px solid rgba(27,176,206,.12)', borderRadius:18, padding:'2rem', boxShadow:'0 4px 24px rgba(27,176,206,.08)' }}>
-            <h3 style={{ fontSize:16, fontWeight:600, color:'#1A1514', marginBottom:22 }}>{STEPS[step-1]}</h3>
-            <form onSubmit={handleSubmit}>
-              {/* Étape 1 — Patient */}
-              {step===1 && <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                <G2><F label={`${L.prenom} *`} val={form.patient_prenom} set={v=>set('patient_prenom',v)}/><F label={`${L.nom} *`} val={form.patient_nom} set={v=>set('patient_nom',v)}/></G2>
-                <F label={L.ddn} val={form.patient_ddn} set={v=>set('patient_ddn',v)} type="date"/>
-                <F label={L.etablissement} val={form.etablissement} set={v=>set('etablissement',v)} placeholder="CHC, GHDC, maison de repos…"/>
-                <F label={L.medecin} val={form.medecin_referent} set={v=>set('medecin_referent',v)} placeholder="Dr. Nom Prénom"/>
-                <CheckF label={L.urgence} val={form.urgence} set={v=>set('urgence',v)} accent />
-              </div>}
+            {!cfg ? <p style={{ color:'#7A7470' }}>Chargement…</p> : (
+            <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:26 }}>
 
-              {/* Étape 2 — Contact */}
-              {step===2 && <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                <G2><F label={`${L.cPrenom} *`} val={form.contact_prenom} set={v=>set('contact_prenom',v)}/><F label={`${L.cNom} *`} val={form.contact_nom} set={v=>set('contact_nom',v)}/></G2>
-                <Sel label={L.relation} val={form.contact_relation} set={v=>set('contact_relation',v)} options={L.relOptions}/>
-                <F label={`${L.email} *`} val={form.contact_email} set={v=>set('contact_email',v)} type="email"/>
-                <F label={L.tel} val={form.contact_telephone} set={v=>set('contact_telephone',v)} type="tel"/>
-              </div>}
-
-              {/* Étape 3 — Souhait */}
-              {step===3 && <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                <div>
-                  <label style={LBL}>{L.souhait} *</label>
-                  <textarea value={form.souhait_description} onChange={e=>set('souhait_description',e.target.value)} rows={5} placeholder="Décrivez le souhait avec le plus de détails possible…" style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", resize:'vertical' }}/>
-                </div>
+              {/* Bénéficiaire */}
+              <Bloc titre={L.title ? 'Bénéficiaire' : 'Bénéficiaire'}>
                 <G2>
-                  <F label={L.date} val={form.souhait_date} set={v=>set('souhait_date',v)} type="date"/>
-                  <F label={L.lieu} val={form.souhait_lieu} set={v=>set('souhait_lieu',v)} placeholder="Mer, Pairi Daiza…"/>
+                  {actif('patient_prenom') && <F label={lbl('patient_prenom', L.prenom)} val={form.patient_prenom} set={v=>set('patient_prenom',v)}/>}
+                  {actif('patient_nom') && <F label={lbl('patient_nom', L.nom)} val={form.patient_nom} set={v=>set('patient_nom',v)}/>}
                 </G2>
-              </div>}
+                {actif('patient_ddn') && <F label={lbl('patient_ddn', L.ddn)} val={form.patient_ddn} set={v=>set('patient_ddn',v)} type="date"/>}
+                {actif('etablissement') && <F label={lbl('etablissement', L.etablissement)} val={form.etablissement} set={v=>set('etablissement',v)} placeholder="CHC, GHDC, maison de repos…"/>}
+                {actif('medecin_referent') && <F label={lbl('medecin_referent', L.medecin)} val={form.medecin_referent} set={v=>set('medecin_referent',v)} placeholder="Dr. Nom Prénom"/>}
+                <CheckF label={L.urgence} val={form.urgence} set={v=>set('urgence',v)} accent />
+              </Bloc>
 
-              {/* Étape 4 — Médical */}
-              {step===4 && <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                <Sel label={L.mobilite} val={form.mobilite} set={v=>set('mobilite',v)} options={L.mobOptions}/>
+              {/* Contact */}
+              <Bloc titre="Contact">
+                <G2>
+                  {actif('contact_prenom') && <F label={lbl('contact_prenom', L.cPrenom)} val={form.contact_prenom} set={v=>set('contact_prenom',v)}/>}
+                  {actif('contact_nom') && <F label={lbl('contact_nom', L.cNom)} val={form.contact_nom} set={v=>set('contact_nom',v)}/>}
+                </G2>
+                {actif('contact_relation') && <Sel label={lbl('contact_relation', L.relation)} val={form.contact_relation} set={v=>set('contact_relation',v)} options={L.relOptions}/>}
+                {actif('contact_email') && <F label={lbl('contact_email', L.email)} val={form.contact_email} set={v=>set('contact_email',v)} type="email"/>}
+                {actif('contact_telephone') && <F label={lbl('contact_telephone', L.tel)} val={form.contact_telephone} set={v=>set('contact_telephone',v)} type="tel"/>}
+              </Bloc>
+
+              {/* Souhait */}
+              <Bloc titre={L.souhait}>
+                {actif('souhait_description') && <div>
+                  <label style={LBL}>{lbl('souhait_description', L.souhait)}</label>
+                  <textarea value={form.souhait_description} onChange={e=>set('souhait_description',e.target.value)} rows={5} placeholder="Décrivez le souhait avec le plus de détails possible…" style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", resize:'vertical' }}/>
+                </div>}
                 <div>
-                  <label style={LBL}>{L.equipement}</label>
-                  <textarea value={form.equipement_medical} onChange={e=>set('equipement_medical',e.target.value)} rows={3} placeholder="Oxygène, chaise roulante, pompe à morphine…" style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", resize:'vertical' }}/>
+                  <label style={LBL}>{L.date} <span style={{ color:'#A8A39D', fontWeight:400 }}>(vous pouvez proposer plusieurs dates)</span></label>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {(form.souhait_dates || ['']).map((d, i) => (
+                      <div key={i} style={{ display:'flex', gap:8, alignItems:'center' }}>
+                        <input type="date" value={d}
+                          onChange={e=>{ const arr=[...(form.souhait_dates||[''])]; arr[i]=e.target.value; set('souhait_dates',arr) }}
+                          style={{ flex:1, padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif" }}/>
+                        {(form.souhait_dates||['']).length > 1 && (
+                          <button type="button" onClick={()=>{ const arr=(form.souhait_dates||['']).filter((_,j)=>j!==i); set('souhait_dates',arr.length?arr:['']) }}
+                            style={{ padding:'8px 11px', background:'#FCEBEB', color:'#C8435A', border:'none', borderRadius:8, fontSize:13, cursor:'pointer' }}>✕</button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={()=>set('souhait_dates',[...(form.souhait_dates||['']),''])}
+                      style={{ alignSelf:'flex-start', padding:'7px 13px', background:'#E6F7FA', color:'#0E7A93', border:'none', borderRadius:8, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>
+                      + Ajouter une date
+                    </button>
+                  </div>
                 </div>
-                <F label={L.allergies} val={form.allergies} set={v=>set('allergies',v)} placeholder="Aucune / Pénicilline…"/>
-              </div>}
+                {actif('souhait_lieu') && <F label={lbl('souhait_lieu', L.lieu)} val={form.souhait_lieu} set={v=>set('souhait_lieu',v)} placeholder="Mer, Pairi Daiza…"/>}
+              </Bloc>
 
-              {/* Étape 5 — Consentement */}
-              {step===5 && <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-                <div style={{ background:'#F0F9FB', borderRadius:12, padding:'14px 16px', fontSize:13.5, color:'#0E4A5A', lineHeight:1.7 }}>
-                  <strong>{L.recap} :</strong><br/>
-                  Patient : <strong>{form.patient_prenom} {form.patient_nom}</strong><br/>
-                  Contact : <strong>{form.contact_email}</strong><br/>
-                  Souhait : <strong>{form.souhait_description.slice(0,80)}{form.souhait_description.length>80?'…':''}</strong>
-                  {form.urgence && <><br/><span style={{ color:'#C8435A', fontWeight:600 }}>⚠️ Demande urgente</span></>}
-                </div>
+              {/* Médical */}
+              {(actif('mobilite') || actif('equipement_medical') || actif('allergies')) && (
+                <Bloc titre={L.equipement}>
+                  {actif('mobilite') && <Sel label={lbl('mobilite', L.mobilite)} val={form.mobilite} set={v=>set('mobilite',v)} options={L.mobOptions}/>}
+                  {actif('equipement_medical') && <div>
+                    <label style={LBL}>{lbl('equipement_medical', L.equipement)}</label>
+                    <textarea value={form.equipement_medical} onChange={e=>set('equipement_medical',e.target.value)} rows={3} placeholder="Oxygène, chaise roulante, pompe à morphine…" style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", resize:'vertical' }}/>
+                  </div>}
+                  {actif('allergies') && <F label={lbl('allergies', L.allergies)} val={form.allergies} set={v=>set('allergies',v)} placeholder="Aucune / Pénicilline…"/>}
+                </Bloc>
+              )}
+
+              {/* Questions personnalisées (config interne) */}
+              {cfg.champsLibres.length > 0 && (
+                <Bloc titre="Informations complémentaires">
+                  {cfg.champsLibres.map(q => (
+                    <ChampLibre key={q.id} q={q} val={libres[q.id]||''} set={v=>setL(q.id,v)} />
+                  ))}
+                </Bloc>
+              )}
+
+              {/* Consentement */}
+              <Bloc titre={L.recap}>
                 <CheckF label={L.consentPatient} val={form.consent_patient} set={v=>set('consent_patient',v)}/>
                 <CheckF label={L.consentRgpd} val={form.consent_rgpd} set={v=>set('consent_rgpd',v)}/>
                 <div style={{ background:'#E6F7FA', border:'1px solid rgba(27,176,206,.2)', borderRadius:10, padding:'12px 14px', fontSize:12.5, color:'#0E4A5A' }}>
-                  🔒 Données traitées de façon confidentielle — RGPD — Hébergement EU (Frankfurt)
+                  🔒 Données traitées de façon confidentielle — RGPD
                 </div>
-              </div>}
+              </Bloc>
 
-              {/* Erreur */}
-              {error && <div style={{ background:'#FEF2F2', border:'1px solid #FCD5D5', borderRadius:8, padding:'9px 12px', fontSize:13, color:'#991B1B', marginTop:14 }}>{error}</div>}
+              {error && <div style={{ background:'#FEF2F2', border:'1px solid #FCD5D5', borderRadius:8, padding:'9px 12px', fontSize:13, color:'#991B1B' }}>{error}</div>}
 
-              {/* Navigation */}
-              <div style={{ display:'flex', gap:10, justifyContent:'space-between', marginTop:24, paddingTop:18, borderTop:'1px solid rgba(27,176,206,.08)' }}>
-                <div>
-                  {step>1 && <button type="button" onClick={prev} style={BTN_GHOST}>{L.precedent}</button>}
-                </div>
-                <div>
-                  {step<5
-                    ? <button type="button" onClick={next} style={BTN_PRIMARY}>{L.suivant}</button>
-                    : <button type="submit" disabled={sending||!form.consent_patient||!form.consent_rgpd} style={{ ...BTN_PRIMARY, opacity:(!form.consent_patient||!form.consent_rgpd)?.6:1, cursor:sending?'wait':'pointer' }}>
-                        {sending ? '⏳ Envoi…' : L.envoyer}
-                      </button>
-                  }
-                </div>
-              </div>
+              <button type="submit" disabled={sending||!form.consent_patient||!form.consent_rgpd}
+                style={{ ...BTN_PRIMARY, padding:'13px', fontSize:14.5, opacity:(!form.consent_patient||!form.consent_rgpd)?.6:1, cursor:sending?'wait':'pointer' }}>
+                {sending ? '⏳ Envoi…' : L.envoyer}
+              </button>
             </form>
+            )}
           </div>
         </div>
       </section>
     </div>
   )
+}
+
+function Bloc({ titre, children }) {
+  return (
+    <div>
+      <h3 style={{ fontSize:15, fontWeight:600, color:'#0E4A5A', marginBottom:14, paddingBottom:8, borderBottom:'1px solid rgba(27,176,206,.1)' }}>{titre}</h3>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>{children}</div>
+    </div>
+  )
+}
+
+function ChampLibre({ q, val, set }) {
+  const label = q.label + (q.requis?' *':'')
+  if (q.type === 'textarea') return <div><label style={LBL}>{label}</label><textarea value={val} onChange={e=>set(e.target.value)} rows={4} style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", resize:'vertical' }}/></div>
+  if (q.type === 'select') return <Sel label={label} val={val} set={set} options={q.options||[]}/>
+  if (q.type === 'checkbox') return <CheckF label={label} val={!!val} set={set}/>
+  return <F label={label} val={val} set={set} type={q.type}/>
 }
 
 const LBL = { fontSize:'12.5px', fontWeight:500, color:'#7A7470', display:'block', marginBottom:5 }

@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useI18n } from '../i18n/index.jsx'
 import { SepAuto } from '../components/Decor.jsx'
+import { useSiteImage } from '@/lib/siteConfig'
 
 export default function NousSoutenir() {
   const { raw } = useI18n()
+  const heroImg = useSiteImage('hero_soutenir', null)
   const d = raw?.donations || {}
   const [amount, setAmount] = useState('')
   const [custom, setCustom] = useState('')
@@ -20,7 +22,7 @@ export default function NousSoutenir() {
       <style>{CSS}</style>
 
       {/* Hero avec photo */}
-      <section className="ns-hero">
+      <section className="ns-hero" style={{ '--hero-bg': heroImg ? `url(${heroImg})` : 'none' }}>
         <div className="ns-hero-bg" />
         <div className="ns-hero-inner">
           <div className="ns-tag">💝 Nous soutenir</div>
@@ -137,7 +139,7 @@ export default function NousSoutenir() {
 
 const CSS = `
 .ns-hero{background:linear-gradient(135deg,#0A1E2D,#0E4A5A);padding:80px 20px;position:relative;overflow:hidden;}
-.ns-hero-bg{position:absolute;inset:0;background:url('https://www.heartsangels.be/wp-content/uploads/2026/04/DSC_0975-scaled.jpg') center/cover;opacity:.2;}
+.ns-hero-bg{position:absolute;inset:0;background:var(--hero-bg) center/cover;opacity:.2;transition:opacity .5s ease;}
 .ns-hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,30,45,.88),rgba(14,74,90,.7));}
 .ns-hero-inner{position:relative;z-index:1;max-width:1280px;margin:0 auto;}
 .ns-tag{display:inline-flex;background:rgba(27,176,206,.25);border:1px solid rgba(27,176,206,.4);border-radius:99px;padding:5px 14px;font-size:11.5px;font-weight:500;color:#7DE4F5;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px;}

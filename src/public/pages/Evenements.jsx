@@ -3,53 +3,21 @@ import { Link } from 'react-router-dom'
 import { useI18n } from '../i18n/index.jsx'
 import { supabase } from '@/lib/supabase'
 import { SepAuto } from '../components/Decor.jsx'
-
-const EVENTS_STATIC = [
-  {
-    id: 'balade-2026',
-    titre_fr: 'Balade motos sécurisée – 9° édition',
-    titre_nl: 'Beveiligde motorrit – 9e editie',
-    titre_en: 'Secured motorbike ride – 9th edition',
-    titre_de: 'Gesicherte Motorradtour – 9. Ausgabe',
-    date_debut: '2026-06-28T08:00:00',
-    heure: '8h00 – 18h00',
-    lieu: 'Rue des Awirs 222, 4400 Flémalle',
-    desc_fr: '28 JUIN 2026\n\n• 8h00 : Accueil et petit-déjeuner\n• 9h30 : Départ de la balade classique\n• À l\'arrivée : pain saucisse – frites – bar\n\nTarifs :\n• Pilote : 8 €\n• Accompagnant : 4 €\n\nInscription obligatoire en ligne.\nRenseignements : +32 493 19 14 78',
-    gratuit: false,
-    prix_adulte: 8,
-    inscription_requise: true,
-    lien_externe: null,
-    image_url: 'https://www.heartsangels.be/wp-content/uploads/2019/07/DSC_0043-1024x683.jpg',
-    publie: true,
-  },
-  {
-    id: 'marche-2026',
-    titre_fr: 'Marche ADEPS 2026 – 8° édition',
-    titre_nl: 'ADEPS wandeling 2026 – 8e editie',
-    titre_en: 'ADEPS walk 2026 – 8th edition',
-    titre_de: 'ADEPS Wanderung 2026 – 8. Ausgabe',
-    date_debut: '2026-11-01T08:00:00',
-    heure: '8h00 – 17h00',
-    lieu: 'Rue des Awirs 222, 4400 Flémalle',
-    desc_fr: '1er NOVEMBRE 2026\n\n4 parcours de : 5 – 10 – 15 – 20 km\n\nLa participation aux Marches ADEPS est GRATUITE !\n\nAfin de soutenir financièrement l\'ASBL, nous vous invitons à vous restaurer sur place :\n• Sandwichs et soupe avant la marche\n• Pain saucisse, hamburger, frites et bar à l\'arrivée\n\nInscriptions non obligatoires mais bienvenues.',
-    gratuit: true,
-    inscription_requise: false,
-    lien_externe: null,
-    image_url: 'https://www.heartsangels.be/wp-content/uploads/2022/11/marche.jpg',
-    publie: true,
-  },
-]
+import { useSiteImage } from '@/lib/siteConfig'
 
 export default function Evenements() {
   const { raw } = useI18n()
+  const heroImg = useSiteImage('hero_evenements', null)
   const lang = raw?.lang || 'fr'
-  const [events, setEvents] = useState(EVENTS_STATIC)
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
   const [sel, setSel] = useState(null)
 
   useEffect(() => {
     supabase.from('evenements_publics').select('*').eq('publie', true)
       .order('date_debut').then(({ data }) => {
-        if (data?.length) setEvents([...EVENTS_STATIC, ...data])
+        setEvents(data || [])
+        setLoading(false)
       })
   }, [])
 
@@ -61,7 +29,7 @@ export default function Evenements() {
       <style>{CSS}</style>
 
       {/* Hero */}
-      <section className="ev-hero">
+      <section className="ev-hero" style={{ '--hero-bg': heroImg ? `url(${heroImg})` : 'none' }}>
         <div className="ev-hero-overlay" />
         <div className="ev-hero-inner">
           <div className="tag-hero">Agenda</div>
@@ -82,6 +50,11 @@ export default function Evenements() {
               <EventCard key={ev.id || i} ev={ev} lang={lang} onClick={() => setSel(ev)} />
             ))}
           </div>
+          {!loading && upcoming.length === 0 && (
+            <p style={{ color:'#7A7470', fontSize:14.5, textAlign:'center', padding:'24px 0' }}>
+              Aucun événement à venir pour le moment. Revenez bientôt !
+            </p>
+          )}
         </div>
       </section>
 
@@ -112,7 +85,7 @@ export default function Evenements() {
               </div>
               <h2 className="ev-modal-title">{sel[`titre_${lang}`] || sel.titre_fr}</h2>
               {sel.lieu && <div className="ev-modal-lieu">📍 {sel.lieu}</div>}
-              <div className="ev-modal-desc">{(sel[`desc_${lang}`] || sel.desc_fr || '').split('\n').map((l,i)=><span key={i}>{l}<br/></span>)}</div>
+              <div className="ev-modal-desc" dangerouslySetInnerHTML={{ __html: sel[`desc_${lang}`] || sel.desc_fr || '' }} />
               <div className="ev-modal-footer">
                 {sel.gratuit
                   ? <span className="ev-badge-green">✓ Gratuit</span>
@@ -149,7 +122,7 @@ function EventCard({ ev, lang, onClick, past }) {
           📅 {d.toLocaleDateString('fr-BE', { day:'numeric', month:'long', year:'numeric' })}
         </div>
         <h3 className="ev-card-title">{titre}</h3>
-        <p className="ev-card-desc">{desc.replace(/\n/g,' ').slice(0,100)}…</p>
+        <p className="ev-card-desc">{desc.replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim().slice(0,100)}…</p>
         <div className="ev-card-meta">
           {ev.lieu && <span>📍 {ev.lieu.split(',')[0]}</span>}
           {ev.heure && <span>🕐 {ev.heure}</span>}
@@ -163,7 +136,7 @@ function EventCard({ ev, lang, onClick, past }) {
 
 const CSS = `
 .ev-hero{background:linear-gradient(135deg,#0A1E2D,#0E4A5A);padding:80px 20px 72px;position:relative;overflow:hidden;}
-.ev-hero::before{content:'';position:absolute;inset:0;background:url('https://www.heartsangels.be/wp-content/uploads/2019/07/DSC_0043-1024x683.jpg') center/cover;opacity:.15;}
+.ev-hero::before{content:'';position:absolute;inset:0;background:var(--hero-bg) center/cover;opacity:.15;transition:opacity .5s ease;}
 .ev-hero-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,30,45,.9),rgba(14,74,90,.7));}
 .ev-hero-inner{position:relative;z-index:1;max-width:1280px;margin:0 auto;}
 .tag-hero{display:inline-flex;background:rgba(27,176,206,.25);border:1px solid rgba(27,176,206,.4);border-radius:99px;padding:5px 14px;font-size:11.5px;font-weight:500;color:#7DE4F5;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px;}
@@ -198,7 +171,7 @@ const CSS = `
 .ev-modal-date{font-size:12px;color:#1BB0CE;font-weight:600;margin-bottom:10px;}
 .ev-modal-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.6rem;font-weight:500;color:#1A1514;margin-bottom:8px;}
 .ev-modal-lieu{font-size:13.5px;color:#7A7470;margin-bottom:14px;}
-.ev-modal-desc{font-size:14px;color:#4A4340;line-height:1.8;margin-bottom:20px;white-space:pre-line;}
+.ev-modal-desc{font-size:14px;color:#4A4340;line-height:1.8;margin-bottom:20px;}
 .ev-modal-footer{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:16px;border-top:1px solid rgba(27,176,206,.1);}
 .ev-btn-inscr{display:inline-flex;align-items:center;gap:7px;padding:10px 20px;background:#1BB0CE;color:white;border-radius:8px;text-decoration:none;font-size:13.5px;font-weight:600;transition:all .15s;}
 .ev-btn-inscr:hover{background:#0E7A93;}

@@ -1,24 +1,43 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useI18n } from '../i18n/index.jsx'
 import { supabase } from '@/lib/supabase'
 import { SepAuto } from '../components/Decor.jsx'
+import { configEffective } from '@/lib/formulaires'
+import { notifFormulaire } from '@/lib/notifications'
 
 export default function Contact() {
   const { raw } = useI18n()
   const c = raw?.contact || {}
-  const [form, setForm] = useState({ nom:'', email:'', telephone:'', sujet:'', message:'' })
+  const [cfg, setCfg] = useState(null)
+  const [form, setForm] = useState({})
+  const [libres, setLibres] = useState({})
   const [sending, setSending] = useState(false)
   const [sent, setSent]       = useState(false)
   const [error, setError]     = useState('')
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
+  const setL = (id,v) => setLibres(l=>({...l,[id]:v}))
+
+  useEffect(() => {
+    supabase.from('formulaires_config').select('*').eq('cle','contact').maybeSingle()
+      .then(({ data }) => setCfg(configEffective('contact', data || {})))
+  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!form.nom || !form.email || !form.message) { setError('Veuillez remplir tous les champs obligatoires.'); return }
+    if (!cfg) return
+    for (const ch of cfg.champs.filter(c=>c.actif && c.requis)) {
+      if (!form[ch.nom]) { setError('Veuillez remplir tous les champs obligatoires.'); return }
+    }
+    for (const q of cfg.champsLibres.filter(q=>q.requis)) {
+      if (!libres[q.id]) { setError('Veuillez remplir tous les champs obligatoires.'); return }
+    }
     setSending(true); setError('')
-    const { error:err } = await supabase.from('contacts').insert(form)
+    const champs_libres = {}
+    cfg.champsLibres.forEach(q => { if (libres[q.id] !== undefined) champs_libres[q.label] = libres[q.id] })
+    const { error:err } = await supabase.from('contacts').insert({ ...form, champs_libres })
     if (err) { setError('Erreur lors de l\'envoi. Veuillez réessayer.'); setSending(false); return }
+    notifFormulaire('contact', cfg.titre, cfg.destinataires, `${form.prenom||''} ${form.nom||''} — ${form.sujet||'contact'}`.trim())
     setSent(true); setSending(false)
   }
 
@@ -31,7 +50,6 @@ export default function Contact() {
     { icon:'📋', label:'BCE', val:'0537.416.028', href:null },
   ]
 
-  const sujets = ['Demande d\'information', 'Partenariat', 'Don', 'Bénévolat', 'Presse', 'Autre']
 
   return (
     <div style={{ fontFamily:"'DM Sans',sans-serif" }}>
@@ -106,21 +124,20 @@ export default function Contact() {
               ) : (
                 <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
                   <h3 style={{ fontFamily:"'Cormorant Garamond',Georgia,serif", fontSize:'1.4rem', fontWeight:500, color:'#1A1514', marginBottom:4 }}>Envoyer un message</h3>
-                  <F label="Nom et prénom *" val={form.nom} set={v=>set('nom',v)} />
-                  <F label="Email *" val={form.email} set={v=>set('email',v)} type="email" />
-                  <F label="Téléphone" val={form.telephone} set={v=>set('telephone',v)} type="tel" />
-                  <div>
-                    <label style={{ fontSize:12.5, fontWeight:500, color:'#7A7470', display:'block', marginBottom:5 }}>Sujet</label>
-                    <select value={form.sujet} onChange={e=>set('sujet',e.target.value)} style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif" }}>
-                      <option value="">— Sélectionnez un sujet</option>
-                      {sujets.map(s=><option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize:12.5, fontWeight:500, color:'#7A7470', display:'block', marginBottom:5 }}>Message *</label>
-                    <textarea value={form.message} onChange={e=>set('message',e.target.value)} rows={5}
-                      style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", resize:'vertical' }} />
-                  </div>
+
+                  {!cfg ? <p style={{ color:'#7A7470', fontSize:13 }}>Chargement…</p> : <>
+                    {/* Champs prédéfinis actifs */}
+                    {cfg.champs.filter(ch=>ch.actif).map(ch => (
+                      <Champ key={ch.nom} label={ch.label + (ch.requis?' *':'')} type={ch.type}
+                        val={form[ch.nom]||''} set={v=>set(ch.nom,v)} />
+                    ))}
+                    {/* Questions libres */}
+                    {cfg.champsLibres.map(q => (
+                      <Champ key={q.id} label={q.label + (q.requis?' *':'')} type={q.type} options={q.options}
+                        val={libres[q.id]||''} set={v=>setL(q.id,v)} />
+                    ))}
+                  </>}
+
                   {error && <div style={{ background:'#FEF2F2', border:'1px solid #FCD5D5', borderRadius:8, padding:'9px 12px', fontSize:13, color:'#991B1B' }}>{error}</div>}
                   <button type="submit" disabled={sending}
                     style={{ padding:13, background:sending?'rgba(27,176,206,.4)':'#1BB0CE', color:'white', border:'none', borderRadius:10, fontSize:14.5, fontWeight:600, cursor:sending?'wait':'pointer', fontFamily:"'DM Sans',sans-serif", boxShadow:'0 3px 14px rgba(27,176,206,.3)' }}>
@@ -136,15 +153,16 @@ export default function Contact() {
   )
 }
 
-function F({ label, val, set, type='text' }) {
-  return (
-    <div>
-      <label style={{ fontSize:12.5, fontWeight:500, color:'#7A7470', display:'block', marginBottom:5 }}>{label}</label>
-      <input type={type} value={val} onChange={e=>set(e.target.value)} style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", transition:'border-color .12s' }}
-        onFocus={e=>e.target.style.borderColor='#1BB0CE'} onBlur={e=>e.target.style.borderColor='rgba(0,0,0,.1)'} />
-    </div>
-  )
+function Champ({ label, val, set, type='text', options }) {
+  const base = { width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif" }
+  const lbl = <label style={{ fontSize:12.5, fontWeight:500, color:'#7A7470', display:'block', marginBottom:5 }}>{label}</label>
+  if (type === 'textarea') return <div>{lbl}<textarea value={val} onChange={e=>set(e.target.value)} rows={5} style={{ ...base, resize:'vertical' }} /></div>
+  if (type === 'select') return <div>{lbl}<select value={val} onChange={e=>set(e.target.value)} style={base}><option value="">— Sélectionnez —</option>{(options||[]).map(o=><option key={o} value={o}>{o}</option>)}</select></div>
+  if (type === 'checkbox') return <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:13.5, color:'#4A4340', cursor:'pointer' }}><input type="checkbox" checked={!!val} onChange={e=>set(e.target.checked)} style={{ accentColor:'#1BB0CE' }} />{label}</label>
+  return <div>{lbl}<input type={type} value={val} onChange={e=>set(e.target.value)} style={base}
+    onFocus={e=>e.target.style.borderColor='#1BB0CE'} onBlur={e=>e.target.style.borderColor='rgba(0,0,0,.1)'} /></div>
 }
+
 
 const CSS = `
 .ct-hero{background:linear-gradient(135deg,#0A1E2D,#0E4A5A);padding:72px 20px;position:relative;overflow:hidden;}

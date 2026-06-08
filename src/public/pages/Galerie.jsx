@@ -3,9 +3,11 @@ import { useI18n } from '../i18n/index.jsx'
 import { supabase } from '@/lib/supabase'
 import { ALBUMS_STATIC } from '../utils/images.js'
 import { SepAuto } from '../components/Decor.jsx'
+import { useSiteImage } from '@/lib/siteConfig'
 
 export default function Galerie() {
   const { raw } = useI18n()
+  const heroImg = useSiteImage('hero_galerie', null)
   const lang = raw?.lang || 'fr'
   const [albums, setAlbums]   = useState(ALBUMS_STATIC)
   const [catSel, setCatSel]   = useState('tous')
@@ -24,7 +26,7 @@ export default function Galerie() {
       <style>{CSS}</style>
 
       {/* Hero avec vraie photo */}
-      <section className="ga-hero">
+      <section className="ga-hero" style={{ '--hero-bg': heroImg ? `url(${heroImg})` : 'none' }}>
         <div className="ga-hero-bg" />
         <div className="ga-hero-inner">
           <div className="ga-tag">📸 Galerie photos</div>
@@ -145,7 +147,7 @@ function AlbumCard({ album, lang, onClick }) {
 
 const CSS = `
 .ga-hero{background:linear-gradient(135deg,#0A1E2D,#0E4A5A);padding:72px 20px;position:relative;overflow:hidden;}
-.ga-hero-bg{position:absolute;inset:0;background:url('https://www.heartsangels.be/wp-content/uploads/photo-gallery/imported_from_media_libray/thumb/476831437_1096540589279038_8483905148748547052_n.jpg') center/cover;opacity:.18;}
+.ga-hero-bg{position:absolute;inset:0;background:var(--hero-bg) center/cover;opacity:.18;transition:opacity .5s ease;}
 .ga-hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,30,45,.9),rgba(14,74,90,.75));}
 .ga-hero-inner{position:relative;z-index:1;max-width:1280px;margin:0 auto;}
 .ga-tag{display:inline-flex;background:rgba(27,176,206,.25);border:1px solid rgba(27,176,206,.4);border-radius:99px;padding:5px 14px;font-size:11.5px;font-weight:500;color:#7DE4F5;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px;}

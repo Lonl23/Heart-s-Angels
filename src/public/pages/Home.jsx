@@ -3,9 +3,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useI18n } from '../i18n/index.jsx'
 import { supabase } from '@/lib/supabase'
 import { SepAuto } from '../components/Decor.jsx'
+import { useSiteImage } from '@/lib/siteConfig'
 
 const IMG = {
-  hero:     'https://www.heartsangels.be/wp-content/uploads/2026/04/DSC_0975-scaled.jpg',
   olivier:  'https://www.heartsangels.be/wp-content/uploads/2019/12/Olivier-Schoonejans.jpg',
   nady:     'https://www.heartsangels.be/wp-content/uploads/2024/06/448340450_848408590653269_3974634456659016404_n.jpg',
   isabelle: 'https://www.heartsangels.be/wp-content/uploads/2023/05/ISABELLESTIERNON.png',
@@ -37,11 +37,16 @@ export default function Home() {
   const [events, setEvents] = useState(EVENTS_FALLBACK)
   const [temoIdx, setTemoIdx] = useState(0)
   const [partenaires, setPartenaires] = useState(PARTNERS_FALLBACK)
-  const [heroImg, setHeroImg] = useState(IMG.hero)
+  const heroImg = useSiteImage('hero_accueil', null)
+  const [heroPret, setHeroPret] = useState(false)
+  useEffect(() => {
+    if (!heroImg) return
+    const img = new Image(); img.src = heroImg
+    img.onload = () => setHeroPret(true)
+    if (img.complete) setHeroPret(true)
+  }, [heroImg])
 
   useEffect(() => {
-    supabase.from('site_images').select('image_url').eq('cle','hero_accueil').maybeSingle()
-      .then(({ data }) => { if (data?.image_url) setHeroImg(data.image_url) })
 
     supabase.from('evenements_publics').select('*').eq('publie', true)
       .gte('date_debut', new Date().toISOString()).order('date_debut').limit(3)
@@ -86,7 +91,8 @@ export default function Home() {
 
       {/* ── HERO compact ── */}
       <section className="hero">
-        <div className="hero-bg" style={{ backgroundImage:`url(${heroImg})` }} />
+        <div className="hero-bg" style={{ background:'linear-gradient(135deg,#0A1E2D,#0E4A5A)' }} />
+        {heroImg && <div className="hero-bg" style={{ backgroundImage:`url(${heroImg})`, opacity: heroPret ? 1 : 0, transition:'opacity .6s ease' }} />}
         <div className="hero-overlay" />
         <div className="hero-inner">
           <div className="hero-content">

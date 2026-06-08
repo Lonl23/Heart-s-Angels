@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom'
 import { useI18n } from '../i18n/index.jsx'
 import { supabase } from '@/lib/supabase'
 import { SepAuto } from '../components/Decor.jsx'
+import { useSiteImage } from '@/lib/siteConfig'
+import { notifFormulaire } from '@/lib/notifications'
+import { supabase as _sb } from '@/lib/supabase'
 
 const L = {
   fr: {
@@ -83,6 +86,7 @@ const IMG = {
 
 export default function DevenirBenevole() {
   const { raw } = useI18n()
+  const heroImg = useSiteImage('hero_benevole', null)
   const lang = raw?.lang || 'fr'
   const t = L[lang] || L.fr
 
@@ -98,6 +102,10 @@ export default function DevenirBenevole() {
     if (!form.consent_rgpd) { setError(t.errConsent); return }
     setSending(true); setError('')
     const { error:err } = await supabase.from('candidatures_benevoles').insert({ ...form, langue:lang })
+    if (!err) {
+      const { data:_cfg } = await _sb.from('formulaires_config').select('titre,destinataires').eq('cle','benevole').maybeSingle()
+      notifFormulaire('benevole', _cfg?.titre || 'Candidature bénévole', _cfg?.destinataires || ['coord_benevoles'], `${form.prenom||''} ${form.nom||''}`.trim())
+    }
     if (err) { setError(t.errSend); setSending(false); return }
     setSent(true); setSending(false)
   }
@@ -118,7 +126,7 @@ export default function DevenirBenevole() {
       <style>{CSS}</style>
 
       {/* Hero */}
-      <section className="db-hero">
+      <section className="db-hero" style={{ '--hero-bg': heroImg ? `url(${heroImg})` : 'none' }}>
         <div className="db-hero-bg" />
         <div className="db-hero-inner">
           <div className="db-tag">{t.tag}</div>
@@ -213,7 +221,7 @@ function F({ label, val, set, type='text' }) {
 
 const CSS = `
 .db-hero{background:linear-gradient(135deg,#0A1E2D,#0E4A5A);padding:72px 20px;position:relative;overflow:hidden;}
-.db-hero-bg{position:absolute;inset:0;background:url('https://www.heartsangels.be/wp-content/uploads/2026/04/DSC_0975-scaled.jpg') center/cover;opacity:.15;}
+.db-hero-bg{position:absolute;inset:0;background:var(--hero-bg) center/cover;opacity:.15;transition:opacity .5s ease;}
 .db-hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,30,45,.9),rgba(14,74,90,.7));}
 .db-hero-inner{position:relative;z-index:1;max-width:1280px;margin:0 auto;}
 .db-tag{display:inline-flex;background:rgba(27,176,206,.25);border:1px solid rgba(27,176,206,.4);border-radius:99px;padding:5px 14px;font-size:11.5px;font-weight:500;color:#7DE4F5;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px;}

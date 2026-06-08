@@ -4,6 +4,7 @@ import { useI18n } from '../i18n/index.jsx'
 import { supabase } from '@/lib/supabase'
 import { IMG } from '../utils/images.js'
 import { SepAuto } from '../components/Decor.jsx'
+import { useSiteImage } from '@/lib/siteConfig'
 
 const EQUIPE_STATIC = [
   { prenom:'Ludovic',   nom:'Whenham',  role_fr:'Président · Infirmier en soins palliatifs', categorie:'ca', photo_url: IMG.ludovic },
@@ -16,6 +17,7 @@ const EQUIPE_STATIC = [
 
 export default function Equipe() {
   const { raw } = useI18n()
+  const heroImg = useSiteImage('hero_equipe', null)
   const lang = raw?.lang || 'fr'
   const [membres, setMembres] = useState(EQUIPE_STATIC)
 
@@ -33,7 +35,7 @@ export default function Equipe() {
       <style>{CSS}</style>
 
       {/* Hero */}
-      <section className="eq-hero">
+      <section className="eq-hero" style={{ '--hero-bg': heroImg ? `url(${heroImg})` : 'none' }}>
         <div className="eq-hero-bg" />
         <div className="eq-hero-inner">
           <div className="eq-tag">👥 Notre équipe</div>
@@ -124,7 +126,7 @@ function MemberCard({ m, lang, featured }) {
 
 const CSS = `
 .eq-hero{background:linear-gradient(135deg,#0A1E2D,#0E4A5A);padding:72px 20px;position:relative;overflow:hidden;}
-.eq-hero-bg{position:absolute;inset:0;background:url('https://www.heartsangels.be/wp-content/uploads/2026/04/DSC_0975-scaled.jpg') center/cover;opacity:.15;}
+.eq-hero-bg{position:absolute;inset:0;background:var(--hero-bg) center/cover;opacity:.15;transition:opacity .5s ease;}
 .eq-hero-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,30,45,.9),rgba(14,74,90,.7));}
 .eq-hero-inner{position:relative;z-index:1;max-width:1280px;margin:0 auto;}
 .eq-tag{display:inline-flex;background:rgba(27,176,206,.25);border:1px solid rgba(27,176,206,.4);border-radius:99px;padding:5px 14px;font-size:11.5px;font-weight:500;color:#7DE4F5;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px;}

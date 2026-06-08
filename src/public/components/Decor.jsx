@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useMotif } from '@/lib/siteConfig'
 // src/public/components/Decor.jsx
 // Bibliothèque de séparateurs et formes décoratives réutilisables sur tout le site public.
 
@@ -81,23 +80,6 @@ export const MOTIFS = [
   { cle:'droit',       label:'Droit (aucun)' },
 ]
 
-// ── Motif global (choisi dans l'app interne), mis en cache ────────────────────
-let _motifCache = null
-let _motifListeners = []
-export function useMotif() {
-  const [m, setM] = useState(_motifCache || 'vague1')
-  useEffect(() => {
-    if (_motifCache) { setM(_motifCache); return }
-    _motifListeners.push(setM)
-    supabase.from('site_images').select('image_url').eq('cle', 'motif_separateur').maybeSingle()
-      .then(({ data }) => {
-        _motifCache = data?.image_url || 'vague1'
-        _motifListeners.forEach(fn => fn(_motifCache))
-      })
-    return () => { _motifListeners = _motifListeners.filter(fn => fn !== setM) }
-  }, [])
-  return m
-}
 
 // Séparateur qui suit automatiquement le motif global choisi
 export function SepAuto({ haut, bas, h = 80 }) {

@@ -2,57 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useI18n } from '../i18n/index.jsx'
-
-// Données statiques — les clés correspondent exactement aux id/slug utilisés dans Evenements.jsx
-const EVENTS_STATIC = {
-  'balade-2026': {
-    id: 'balade-2026',
-    slug: 'balade-2026',
-    titre_fr: 'Balade motos sécurisée – 9° édition',
-    titre_nl: 'Beveiligde motorrit – 9e editie',
-    titre_en: 'Secured motorbike ride – 9th edition',
-    titre_de: 'Gesicherte Motorradtour – 9. Ausgabe',
-    date_debut: '2026-06-28T08:00:00',
-    heure: '8h00 – 18h00',
-    lieu: 'Rue des Awirs 222, 4400 Flémalle',
-    image_url: 'https://www.heartsangels.be/wp-content/uploads/2019/07/DSC_0043-1024x683.jpg',
-    gratuit: false,
-    tarifs: [
-      { id: 'pilote',       label: 'Pilote (moto)',                   prix: 8  },
-      { id: 'accompagnant', label: 'Accompagnant (passager)',          prix: 4  },
-      { id: 'formule_duo',  label: 'Formule duo (pilote + accompagnant)', prix: 11 },
-    ],
-    note: '',
-    paiement_virement: true,
-    paiement_ligne: false,
-  },
-  'marche-2026': {
-    id: 'marche-2026',
-    slug: 'marche-2026',
-    titre_fr: 'Marche ADEPS 2026 – 8° édition',
-    titre_nl: 'ADEPS wandeling 2026 – 8e editie',
-    titre_en: 'ADEPS walk 2026 – 8th edition',
-    titre_de: 'ADEPS Wanderung 2026 – 8. Ausgabe',
-    date_debut: '2026-11-01T08:00:00',
-    heure: '8h00 – 17h00',
-    lieu: 'Rue des Awirs 222, 4400 Flémalle',
-    image_url: 'https://www.heartsangels.be/wp-content/uploads/2022/11/marche.jpg',
-    gratuit: true,
-    tarifs: [
-      { id: '5km',   label: 'Parcours 5 km',   prix: 0 },
-      { id: '10km',  label: 'Parcours 10 km',  prix: 0 },
-      { id: '15km',  label: 'Parcours 15 km',  prix: 0 },
-      { id: '20km',  label: 'Parcours 20 km',  prix: 0 },
-    ],
-    note: 'Participation gratuite ! Pour soutenir l\'ASBL, pensez à vous restaurer sur place.',
-    paiement_virement: false,
-    paiement_ligne: false,
-  },
-}
-
-const EMPTY_PARTICIPANT = (defaultTarif = '') => ({
-  prenom: '', nom: '', email: '', tel: '', tarif: defaultTarif
-})
+import { notifFormulaire } from '@/lib/notifications'
+import { supabase as _sb } from '@/lib/supabase'
+import { communicationStructuree, baseDepuisInscription, hashCourt } from '@/lib/paiement'
 
 export default function InscriptionEvenement() {
   const { slug } = useParams()
@@ -61,65 +13,110 @@ export default function InscriptionEvenement() {
 
   const [event, setEvent]       = useState(null)
   const [loading, setLoading]   = useState(true)
-  const [participants, setParticipants] = useState([])
+  const [quantites, setQuantites] = useState({})   // { tarifId: nombre }
+  const [contact, setContact]   = useState({ prenom:'', nom:'', email:'', tel:'' })
+  const [noms, setNoms]         = useState([])      // [{ prenom, nom, medical, perso:{} }] par place
+  const [globaux, setGlobaux]   = useState({})      // réponses aux champs perso globaux
   const [mode, setMode]         = useState('virement')
   const [sending, setSending]   = useState(false)
   const [sent, setSent]         = useState(false)
+  const [comm, setComm]         = useState('')
   const [error, setError]       = useState('')
+  const setC = (k,v) => setContact(c=>({...c,[k]:v}))
 
   useEffect(() => {
-    // 1. Chercher dans les données statiques (correspond à id ou slug)
-    const staticEv = EVENTS_STATIC[slug]
-    if (staticEv) {
-      setEvent(staticEv)
-      setParticipants([EMPTY_PARTICIPANT(staticEv.tarifs[0]?.id || '')])
+    // Lecture 100% base. On cherche par slug ; si le paramètre est un UUID, on cherche aussi par id.
+    const estUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug)
+
+    async function charger() {
+      let ev = null
+      // 1) par slug
+      const r1 = await supabase.from('evenements_publics').select('*').eq('slug', slug).eq('publie', true).limit(1)
+      ev = r1.data?.[0] || null
+      // 2) sinon par id (uniquement si UUID valide)
+      if (!ev && estUUID) {
+        const r2 = await supabase.from('evenements_publics').select('*').eq('id', slug).eq('publie', true).limit(1)
+        ev = r2.data?.[0] || null
+      }
+      if (ev) {
+        const tarifs = (ev.tarifs && ev.tarifs.length) ? ev.tarifs
+          : (ev.gratuit ? [{ id: 'gratuit', label: 'Gratuit', prix: 0 }] : [])
+        setEvent({ ...ev, tarifs })
+        if (ev.paiement_virement === false && ev.paiement_payconiq) setMode('payconiq')
+      }
       setLoading(false)
-      return
     }
-    // 2. Chercher en Supabase par slug OU par id
-    supabase.from('evenements_publics')
-      .select('*')
-      .or(`slug.eq.${slug},id.eq.${slug}`)
-      .eq('publie', true)
-      .limit(1)
-      .then(({ data }) => {
-        const ev = data?.[0]
-        if (ev) {
-          const tarifs = ev.tarifs ||
-            (ev.gratuit
-              ? [{ id: 'gratuit', label: 'Gratuit', prix: 0 }]
-              : [
-                  ...(ev.prix_adulte > 0  ? [{ id:'adulte',  label:'Adulte',  prix: ev.prix_adulte  }] : []),
-                  ...(ev.prix_enfant > 0  ? [{ id:'enfant',  label:'Enfant',  prix: ev.prix_enfant  }] : []),
-                ])
-          const enriched = { ...ev, tarifs }
-          setEvent(enriched)
-          setParticipants([EMPTY_PARTICIPANT(tarifs[0]?.id || '')])
-        }
-        setLoading(false)
-      })
+    charger()
   }, [slug])
 
   // ── Participants ──────────────────────────────────────────────────────────
-  function addParticipant() {
-    setParticipants(p => [...p, EMPTY_PARTICIPANT(event?.tarifs[0]?.id || '')])
+  // Incrémenter / décrémenter la quantité d'un tarif
+  // Incrémenter / décrémenter par INDEX du tarif (évite les collisions d'id)
+  function inc(idx) {
+    setQuantites(q => ({ ...q, [idx]: (q[idx] || 0) + 1 }))
   }
-  function removeParticipant(i) {
-    setParticipants(p => p.filter((_, idx) => idx !== i))
-  }
-  function updateP(i, k, v) {
-    setParticipants(p => p.map((pt, idx) => idx === i ? { ...pt, [k]: v } : pt))
+  function dec(idx) {
+    setQuantites(q => ({ ...q, [idx]: Math.max(0, (q[idx] || 0) - 1) }))
   }
 
-  const total = participants.reduce((sum, p) => {
-    const tarif = event?.tarifs?.find(t => t.id === p.tarif)
-    return sum + (tarif?.prix || 0)
-  }, 0)
+  const totalPlaces = Object.values(quantites).reduce((s, n) => s + (n || 0), 0)
+  const total = (event?.tarifs || []).reduce((sum, t, idx) => sum + (quantites[idx] || 0) * (t.prix || 0), 0)
+
+  // Synchroniser la liste des participants avec le nombre de places
+  useEffect(() => {
+    setNoms(prev => {
+      const arr = [...prev]
+      while (arr.length < totalPlaces) arr.push({ prenom: '', nom: '', medical: '', perso: {} })
+      return arr.slice(0, totalPlaces)
+    })
+  }, [totalPlaces])
+
+  function setNom(i, k, v) {
+    setNoms(prev => prev.map((n, idx) => idx === i ? { ...n, [k]: v } : n))
+  }
+  function setNomPerso(i, champId, v) {
+    setNoms(prev => prev.map((n, idx) => idx === i ? { ...n, perso: { ...(n.perso||{}), [champId]: v } } : n))
+  }
+
+  // Champs personnalisés par portée
+  const champsParticipant = (event?.champs_perso || []).filter(c => c.portee === 'participant')
+  const champsGlobaux     = (event?.champs_perso || []).filter(c => c.portee === 'global')
 
   // ── Validation ────────────────────────────────────────────────────────────
   function validate() {
-    if (participants.length === 0) return false
-    return participants.every(p => p.prenom.trim() && p.nom.trim() && p.email.trim() && p.tarif)
+    if (totalPlaces === 0) return false
+    if (!contact.prenom.trim() || !contact.nom.trim() || !contact.email.trim()) return false
+    if (totalPlaces > 1 && noms.some((n, i) => i > 0 && (!n.prenom.trim() || !n.nom.trim()))) return false
+    // Champs perso participant obligatoires
+    for (const ch of champsParticipant.filter(c => c.requis)) {
+      if (noms.some(n => !n.perso?.[ch.id])) return false
+    }
+    // Champs perso globaux obligatoires
+    for (const ch of champsGlobaux.filter(c => c.requis)) {
+      if (!globaux[ch.id]) return false
+    }
+    return true
+  }
+
+  // Construit la liste des participants pour l'enregistrement
+  function construireParticipants() {
+    const liste = []
+    ;(event?.tarifs || []).forEach((t, idx) => {
+      const n = quantites[idx] || 0
+      for (let k = 0; k < n; k++) liste.push({ tarif: t.id, tarif_label: t.label, prix: t.prix })
+    })
+    liste.forEach((p, i) => {
+      const info = noms[i] || {}
+      const estContact = (i === 0)  // le participant 1 est toujours la personne de contact
+      liste[i] = {
+        ...p,
+        prenom: estContact ? contact.prenom : (info.prenom || ''),
+        nom:    estContact ? contact.nom    : (info.nom || ''),
+        medical: info.medical || '',
+        champs: info.perso || {},
+      }
+    })
+    return liste
   }
 
   // ── Soumission ────────────────────────────────────────────────────────────
@@ -128,19 +125,35 @@ export default function InscriptionEvenement() {
     if (!validate()) { setError('Veuillez remplir tous les champs obligatoires (*).'); return }
     if (total > 0 && !mode) { setError('Choisissez un mode de paiement.'); return }
     setSending(true)
+    const participants = construireParticipants()
+    // Communication structurée (virement) générée si payant
+    let communication = ''
+    if (total > 0 && mode === 'virement') {
+      const base = baseDepuisInscription(hashCourt(event.id), Date.now() % 1000000)
+      communication = communicationStructuree(base)
+      setComm(communication)
+    }
     try {
       await supabase.from('inscriptions_evenements').insert({
         evenement_id:    event.id,
         evenement_titre: event.titre_fr,
         participants,
+        contact,
         montant_total:   total,
         mode_paiement:   total === 0 ? 'gratuit' : mode,
-        statut:          total === 0 ? 'confirme' : mode === 'virement' ? 'en_attente_paiement' : 'en_attente_stripe',
-        email_contact:   participants[0].email,
+        statut:          total === 0 ? 'confirme' : mode === 'virement' ? 'en_attente_paiement' : 'en_attente_payconiq',
+        statut_paiement: total === 0 ? 'paye' : 'en_attente',
+        communication_structuree: communication || null,
+        champs_globaux:  globaux,
+        email_contact:   contact.email,
         langue:          lang,
       })
     } catch (e) {
       console.warn('DB insert error (table manquante?):', e)
+    }
+    {
+      const { data:_cfg } = await _sb.from('formulaires_config').select('titre,destinataires').eq('cle','evenement').maybeSingle()
+      notifFormulaire('evenement', _cfg?.titre || 'Inscription événement', _cfg?.destinataires || ['coord_benevoles'], `${participants[0]?.prenom||''} ${participants[0]?.nom||''} (${participants.length} pers.)`.trim())
     }
     setSent(true)
     setSending(false)
@@ -170,7 +183,7 @@ export default function InscriptionEvenement() {
   const titre   = event[`titre_${lang}`] || event.titre_fr
   const dateStr = new Date(event.date_debut).toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
 
-  if (sent) return <Confirmation event={event} titre={titre} dateStr={dateStr} participants={participants} total={total} mode={mode} lang={lang} />
+  if (sent) return <Confirmation event={event} titre={titre} dateStr={dateStr} participants={construireParticipants()} total={total} mode={mode} lang={lang} comm={comm} />
 
   return (
     <div style={{ fontFamily:"'DM Sans',sans-serif" }}>
@@ -197,61 +210,116 @@ export default function InscriptionEvenement() {
 
           {/* ── FORMULAIRE ── */}
           <div>
-            <h2 className="ie-form-title">
-              {participants.length > 1 ? `${participants.length} participant${participants.length > 1 ? 's' : ''}` : 'Vos informations'}
-            </h2>
+            <h2 className="ie-form-title">Votre inscription</h2>
 
-            {participants.map((p, i) => (
-              <div key={i} className="ie-participant">
-                <div className="ie-participant-header">
-                  <span style={{ fontSize:13, fontWeight:600, color:'#1BB0CE' }}>
-                    {participants.length > 1 ? `Participant ${i + 1}` : 'Participant'}
-                  </span>
-                  {i > 0 && (
-                    <button onClick={() => removeParticipant(i)} className="ie-remove-btn">✕ Supprimer</button>
-                  )}
+            {/* Choix des formules avec compteurs */}
+            <div style={{ marginBottom:22 }}>
+              <div className="ie-section-title">Formules</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {event.tarifs.map((t, idx) => {
+                  const n = quantites[idx] || 0
+                  return (
+                    <div key={idx} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'12px 14px', background:'white', border:`1px solid ${n>0?'#1BB0CE':'rgba(27,176,206,.15)'}`, borderRadius:12 }}>
+                      <div>
+                        <div style={{ fontSize:14, fontWeight:600, color:'#1A1514' }}>{t.label}</div>
+                        <div style={{ fontSize:13, color:'#1BB0CE', fontWeight:500 }}>{t.prix === 0 ? 'Gratuit' : `${t.prix} €`}</div>
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <button type="button" onClick={()=>dec(idx)} disabled={n===0}
+                          style={{ width:32, height:32, borderRadius:8, border:'1px solid rgba(27,176,206,.3)', background:'white', color:'#1BB0CE', fontSize:18, fontWeight:700, cursor:n===0?'not-allowed':'pointer', opacity:n===0?.4:1 }}>−</button>
+                        <span style={{ minWidth:24, textAlign:'center', fontSize:15, fontWeight:700, color:'#1A1514' }}>{n}</span>
+                        <button type="button" onClick={()=>inc(idx)}
+                          style={{ width:32, height:32, borderRadius:8, border:'none', background:'#1BB0CE', color:'white', fontSize:18, fontWeight:700, cursor:'pointer' }}>+</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {totalPlaces > 0 && (
+                <div style={{ marginTop:10, fontSize:13, color:'#7A7470' }}>
+                  {totalPlaces} inscription{totalPlaces>1?'s':''} au total
                 </div>
+              )}
+            </div>
 
-                <div className="ie-row-2">
-                  <F label="Prénom *" val={p.prenom} set={v => updateP(i,'prenom',v)} />
-                  <F label="Nom *"    val={p.nom}    set={v => updateP(i,'nom',v)} />
-                </div>
-                <F label={i === 0 ? "Email * (confirmation envoyée ici)" : "Email"} val={p.email} set={v => updateP(i,'email',v)} type="email" style={{ marginTop:10 }} />
-                <F label="Téléphone" val={p.tel} set={v => updateP(i,'tel',v)} type="tel" style={{ marginTop:10 }} />
+            {/* Coordonnées du contact principal */}
+            <div style={{ marginBottom:22 }}>
+              <div className="ie-section-title">{totalPlaces > 1 ? 'Personne de contact' : 'Vos coordonnées'}</div>
+              <div className="ie-row-2">
+                <F label="Prénom *" val={contact.prenom} set={v=>setC('prenom',v)} />
+                <F label="Nom *"    val={contact.nom}    set={v=>setC('nom',v)} />
+              </div>
+              <F label="Email * (confirmation envoyée ici)" val={contact.email} set={v=>setC('email',v)} type="email" style={{ marginTop:10 }} />
+              <F label="Téléphone" val={contact.tel} set={v=>setC('tel',v)} type="tel" style={{ marginTop:10 }} />
+            </div>
 
-                {/* Sélection formule */}
-                <div style={{ marginTop:12 }}>
-                  <label className="ie-label">Formule *</label>
-                  <div className="ie-tarifs-grid">
-                    {event.tarifs.map(t => (
-                      <label key={t.id} className={`ie-tarif-card ${p.tarif === t.id ? 'selected' : ''}`}>
-                        <input type="radio" name={`tarif-${i}`} value={t.id} checked={p.tarif === t.id} onChange={() => updateP(i,'tarif',t.id)} style={{ display:'none' }}/>
-                        <div className="ie-tarif-label">{t.label}</div>
-                        <div className="ie-tarif-prix">{t.prix === 0 ? 'Gratuit' : `${t.prix} €`}</div>
-                        {p.tarif === t.id && <div className="ie-tarif-check">✓</div>}
-                      </label>
-                    ))}
-                  </div>
+            {/* Participants : nom (si plusieurs), médical, champs perso participant */}
+            {totalPlaces > 0 && (
+              <div style={{ marginBottom:22 }}>
+                <div className="ie-section-title">{totalPlaces > 1 ? 'Détail des participants' : 'Informations participant'}</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                  {noms.map((nm, i) => (
+                    <div key={i} style={{ background:'white', border:'1px solid rgba(27,176,206,.15)', borderRadius:12, padding:'14px 16px' }}>
+                      {totalPlaces > 1 && i === 0 && (
+                        <div style={{ fontSize:12.5, fontWeight:600, color:'#1BB0CE', marginBottom:8 }}>
+                          Participant 1 — vous ({contact.prenom || '…'} {contact.nom || ''})
+                        </div>
+                      )}
+                      {totalPlaces > 1 && i > 0 && (
+                        <>
+                          <div style={{ fontSize:12.5, fontWeight:600, color:'#1BB0CE', marginBottom:8 }}>Participant {i+1}</div>
+                          <div className="ie-row-2">
+                            <F label="Prénom *" val={nm.prenom} set={v=>setNom(i,'prenom',v)} />
+                            <F label="Nom *"    val={nm.nom}    set={v=>setNom(i,'nom',v)} />
+                          </div>
+                        </>
+                      )}
+                      {/* Champs perso par participant */}
+                      {champsParticipant.map(ch => (
+                        <div key={ch.id} style={{ marginTop:10 }}>
+                          <ChampPerso ch={ch} val={nm.perso?.[ch.id]||''} set={v=>setNomPerso(i,ch.id,v)} />
+                        </div>
+                      ))}
+                      {/* Médical par participant */}
+                      <div style={{ marginTop:10 }}>
+                        <label style={{ fontSize:12.5, fontWeight:500, color:'#7A5512', display:'block', marginBottom:5 }}>⚕️ Pathologies / infos médicales (confidentiel — équipes de secours)</label>
+                        <textarea value={nm.medical||''} onChange={e=>setNom(i,'medical',e.target.value)} rows={2}
+                          placeholder="Diabète, allergie sévère, mobilité réduite… (vide si rien)"
+                          style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(186,117,23,.3)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", resize:'vertical', background:'#FFFBF2' }} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
 
-            <button onClick={addParticipant} className="ie-add-btn">
-              + Ajouter un participant
-            </button>
+            {/* Champs personnalisés globaux */}
+            {champsGlobaux.length > 0 && (
+              <div style={{ marginBottom:22 }}>
+                <div className="ie-section-title">Informations complémentaires</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                  {champsGlobaux.map(ch => (
+                    <ChampPerso key={ch.id} ch={ch} val={globaux[ch.id]||''} set={v=>setGlobaux(g=>({...g,[ch.id]:v}))} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Mode paiement */}
             {total > 0 && (
               <div style={{ marginBottom:22 }}>
                 <div className="ie-section-title">Mode de paiement</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                  <PayOption val="virement" sel={mode} set={setMode}
-                    icon="🏦" title="Virement bancaire"
-                    desc="IBAN BE45 0689 3611 4489 — vous recevrez les instructions après validation" />
-                  <PayOption val="stripe" sel={mode} set={setMode}
-                    icon="💳" title="Paiement en ligne (carte)"
-                    desc="Visa, Mastercard, Bancontact — paiement sécurisé"
-                    disabled note="Bientôt disponible" />
+                  {(event.paiement_virement !== false) && (
+                    <PayOption val="virement" sel={mode} set={setMode}
+                      icon="🏦" title="Virement bancaire"
+                      desc="Communication structurée générée automatiquement après validation" />
+                  )}
+                  {event.paiement_payconiq && (
+                    <PayOption val="payconiq" sel={mode} set={setMode}
+                      icon="📱" title="Payconiq"
+                      desc="Paiement mobile rapide" />
+                  )}
                 </div>
               </div>
             )}
@@ -262,7 +330,7 @@ export default function InscriptionEvenement() {
 
             {error && <div className="ie-error">{error}</div>}
 
-            <button onClick={handleSubmit} disabled={sending || (mode === 'stripe' && total > 0)} className={`ie-submit-btn ${(sending || (mode === 'stripe' && total > 0)) ? 'disabled' : ''}`}>
+            <button onClick={handleSubmit} disabled={sending} className={`ie-submit-btn ${sending ? 'disabled' : ''}`}>
               {sending
                 ? '⏳ Enregistrement…'
                 : total === 0
@@ -300,11 +368,11 @@ export default function InscriptionEvenement() {
                 </div>
 
                 {/* Total */}
-                {participants.some(p => p.tarif) && (
+                {totalPlaces > 0 && (
                   <div style={{ borderTop:'2px solid rgba(27,176,206,.12)', paddingTop:12, marginTop:8 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <span style={{ fontSize:13, color:'#7A7470' }}>
-                        Total ({participants.length} pers.)
+                        Total ({totalPlaces} place{totalPlaces>1?'s':''})
                       </span>
                       <span style={{ fontSize:18, fontWeight:700, color: total === 0 ? '#3B6D11' : '#1BB0CE' }}>
                         {total === 0 ? 'Gratuit' : `${total.toFixed(2)} €`}
@@ -323,6 +391,20 @@ export default function InscriptionEvenement() {
 }
 
 // ── Composants helpers ────────────────────────────────────────────────────────
+
+function ChampPerso({ ch, val, set }) {
+  const label = ch.label + (ch.requis ? ' *' : '')
+  if (ch.type === 'textarea') {
+    return (
+      <div>
+        <label style={{ fontSize:12.5, fontWeight:500, color:'#7A7470', display:'block', marginBottom:4 }}>{label}</label>
+        <textarea value={val} onChange={e=>set(e.target.value)} rows={3}
+          style={{ width:'100%', padding:'9px 12px', border:'1px solid rgba(0,0,0,.1)', borderRadius:8, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", resize:'vertical' }} />
+      </div>
+    )
+  }
+  return <F label={label} val={val} set={set} type={ch.type === 'number' ? 'number' : ch.type === 'date' ? 'date' : ch.type === 'tel' ? 'tel' : 'text'} />
+}
 
 function F({ label, val, set, type='text', style }) {
   return (
@@ -349,7 +431,8 @@ function PayOption({ val, sel, set, icon, title, desc, disabled, note }) {
   )
 }
 
-function Confirmation({ event, titre, dateStr, participants, total, mode, lang }) {
+function Confirmation({ event, titre, dateStr, participants, total, mode, lang, comm }) {
+  const iban = event.iban || 'BE45 0689 3611 4489'
   return (
     <div style={{ minHeight:'70vh', display:'flex', alignItems:'center', justifyContent:'center', padding:40, background:'#FDFAF6', fontFamily:"'DM Sans',sans-serif" }}>
       <div style={{ maxWidth:560, width:'100%' }}>
@@ -371,10 +454,27 @@ function Confirmation({ event, titre, dateStr, participants, total, mode, lang }
               <div style={{ fontSize:14, fontWeight:600, color:'#0E4A5A', marginBottom:10 }}>🏦 Virement à effectuer</div>
               <div style={{ fontSize:13.5, color:'#0E4A5A', lineHeight:2 }}>
                 Bénéficiaire : <strong>Heart's Angels ASBL</strong><br/>
-                IBAN : <strong>BE45 0689 3611 4489</strong><br/>
+                IBAN : <strong>{iban}</strong><br/>
                 BIC : <strong>GKCCBEBB</strong><br/>
                 Montant : <strong style={{ fontSize:17, color:'#1BB0CE' }}>{total.toFixed(2)} €</strong><br/>
-                Communication : <strong>{titre} — {participants[0].nom} {participants[0].prenom}</strong>
+                Communication structurée :{' '}
+                <strong style={{ fontSize:16, color:'#0E7A93', letterSpacing:'.02em' }}>{comm || `${titre} — ${participants[0].nom}`}</strong>
+              </div>
+              {comm && <div style={{ marginTop:10, fontSize:12, color:'#0E4A5A', background:'white', borderRadius:8, padding:'8px 11px' }}>
+                ⚠️ Indiquez bien la <strong>communication structurée</strong> exacte : elle permet de rattacher automatiquement votre paiement à votre inscription.
+              </div>}
+            </div>
+          )}
+
+          {total > 0 && mode === 'payconiq' && (
+            <div style={{ background:'#FDF0F8', border:'1px solid rgba(200,67,150,.2)', borderRadius:12, padding:'18px 20px', marginBottom:22 }}>
+              <div style={{ fontSize:14, fontWeight:600, color:'#A8266F', marginBottom:10 }}>📱 Paiement Payconiq</div>
+              <div style={{ fontSize:13.5, color:'#7A2456', lineHeight:1.9 }}>
+                Montant : <strong style={{ fontSize:17 }}>{total.toFixed(2)} €</strong><br/>
+                {event.payconiq_lien
+                  ? <>Payez via ce lien : <a href={event.payconiq_lien} target="_blank" rel="noreferrer" style={{ color:'#A8266F', fontWeight:600 }}>Ouvrir Payconiq</a></>
+                  : <>Vous recevrez les instructions Payconiq par e-mail.</>}
+                <br/>Référence : <strong>{comm || titre}</strong>
               </div>
             </div>
           )}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useI18n } from '../i18n/index.jsx'
 import { supabase } from '@/lib/supabase'
 import { SepAuto } from '../components/Decor.jsx'
+import { useSiteImage } from '@/lib/siteConfig'
 
 const PARTENAIRES_FALLBACK = [
   // Médicaux / Hospitaliers
@@ -35,12 +36,9 @@ const CAT_LABELS = {
 export default function Partenaires() {
   const { raw } = useI18n()
   const [partenaires, setPartenaires] = useState(null)
-  const [heroImg, setHeroImg] = useState(null)
+  const heroImg = useSiteImage('hero_partenaires', null)
 
   useEffect(() => {
-    supabase.from('site_images').select('image_url').eq('cle','hero_partenaires').maybeSingle()
-      .then(({ data }) => { if (data?.image_url) setHeroImg(data.image_url) })
-
     supabase.from('partenaires').select('*')
       .eq('actif', true).order('categorie').order('ordre')
       .then(({ data, error }) => {
