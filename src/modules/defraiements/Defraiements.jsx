@@ -118,8 +118,16 @@ function ListeDefraiements() {
     const km_reel = parseFloat(form.km)||0
     const km_calc = kmFactures(km_reel)
     const montant_km = parseFloat((km_calc * KM_RATE).toFixed(2))
+    // Numéro : MATRICULE/AAMMJJ(date d'encodage) + lettre domaine + compteur
+    let numero = null
+    try {
+      const aujourdhui = new Date().toISOString().slice(0,10)   // date d'encodage
+      const { data: num } = await supabase.rpc('generer_numero_defraiement', { p_user: profile?.id, p_date: aujourdhui, p_domaine: form.domaine })
+      numero = num || null
+    } catch { /* si la fonction n'existe pas encore, on continue sans numéro */ }
     const { error } = await supabase.from('defraiements').insert({
       user_id:          profile?.id,
+      numero,
       date_deplacement: form.date_deplacement,
       souhait_id:       form.souhait_id || null,
       categorie:        form.domaine,
@@ -225,12 +233,13 @@ function ListeDefraiements() {
       ) : (
         <div style={{ background:'white', border:'1px solid rgba(27,176,206,.09)', borderRadius:14, overflow:'auto' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13.5 }}>
-            <thead><tr style={{ background:'#FDFAF6' }}>{['Date',...(tab==='tous'?['Bénévole']:[]),'Souhait','Catégorie','Km','Avances','Total','Statut'].map(h=><th key={h} style={{ padding:'9px 14px', textAlign:'left', fontSize:12, fontWeight:600, color:'#7A7470', whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ background:'#FDFAF6' }}>{['N°','Date',...(tab==='tous'?['Bénévole']:[]),'Souhait','Catégorie','Km','Avances','Total','Statut'].map(h=><th key={h} style={{ padding:'9px 14px', textAlign:'left', fontSize:12, fontWeight:600, color:'#7A7470', whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
             <tbody>
               {itemsAnnee.map((d,i)=>{
                 const st = STATUT_STYLES[d.statut] || { bg:'#F0EFED', color:'#7A7470', label:d.statut }
                 return (
                   <tr key={i} style={{ borderTop:'1px solid rgba(27,176,206,.05)' }}>
+                    <td style={{ padding:'9px 14px', color:'#0E7A93', fontWeight:600, fontFamily:'monospace', fontSize:12, whiteSpace:'nowrap' }}>{d.numero || '—'}</td>
                     <td style={{ padding:'9px 14px', color:'#7A7470', whiteSpace:'nowrap' }}>{new Date(d.date_deplacement).toLocaleDateString('fr-BE')}</td>
                     {tab==='tous' && <td style={{ padding:'9px 14px', color:'#1A1514', fontWeight:500 }}>{d.profiles?.prenom} {d.profiles?.nom}</td>}
                     <td style={{ padding:'9px 14px', color:'#4A4340' }}>{d.souhaits ? `${d.souhaits.patient_prenom} ${d.souhaits.patient_nom}` : '—'}</td>

@@ -157,6 +157,10 @@ export default function InscriptionEvenement() {
     }
     setSent(true)
     setSending(false)
+    // Paiement Payconiq : ouvrir le lien de paiement bancaire
+    if (total > 0 && mode === 'payconiq' && event.payconiq_lien) {
+      window.open(event.payconiq_lien, '_blank', 'noopener')
+    }
   }
 
   // ── Écrans ────────────────────────────────────────────────────────────────
@@ -472,7 +476,7 @@ function Confirmation({ event, titre, dateStr, participants, total, mode, lang, 
               <div style={{ fontSize:13.5, color:'#7A2456', lineHeight:1.9 }}>
                 Montant : <strong style={{ fontSize:17 }}>{total.toFixed(2)} €</strong><br/>
                 {event.payconiq_lien
-                  ? <>Payez via ce lien : <a href={event.payconiq_lien} target="_blank" rel="noreferrer" style={{ color:'#A8266F', fontWeight:600 }}>Ouvrir Payconiq</a></>
+                  ? <>Cliquez pour payer : <a href={event.payconiq_lien} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'8px 16px', background:'#A8266F', color:'white', borderRadius:8, fontWeight:600, textDecoration:'none' }}>📱 Payer maintenant via Payconiq</a></>
                   : <>Vous recevrez les instructions Payconiq par e-mail.</>}
                 <br/>Référence : <strong>{comm || titre}</strong>
               </div>

@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { PHASES_RECOLTEUR as _PHASES } from '@/lib/souhaitStatuts'
 
 const AuthContext = createContext(null)
 
-export const PHASES_RECOLTEUR = ['nouvelle','contact','evaluation','planifie']
+export const PHASES_RECOLTEUR = _PHASES
 
 // ── QUALIFICATIONS (compétences médicales / non-médicales) ──
 const QUALIF_MEDICALES = ['ambulancier','infirmier','medecin','kinesitherapeute','aide_soignant','psychologue','volontaire_medical']
@@ -26,6 +27,20 @@ export const FONCTIONS_LABELS = {
 }
 // Fonctions pouvant avoir un adjoint
 export const FONCTIONS_AVEC_ADJOINT = ['coord_medical','coord_projets','coord_logistique','coord_transports','coord_benevoles']
+
+// Pages de l'application (pour la gestion des accès)
+export const NAV_PAGES = [
+  { key: 'nav.dashboard',      label: 'Tableau de bord' },
+  { key: 'nav.disponibilites', label: 'Disponibilités' },
+  { key: 'nav.souhaits',       label: 'Souhaits' },
+  { key: 'nav.defraiements',   label: 'Défraiements' },
+  { key: 'nav.volontaires',    label: 'Volontaires' },
+  { key: 'nav.vente',          label: 'Vente événements' },
+  { key: 'nav.comptabilite',   label: 'Comptabilité' },
+  { key: 'nav.stock',          label: 'Stock matériel' },
+  { key: 'nav.contenu',        label: 'Contenu du site' },
+  { key: 'nav.organigramme',   label: 'Organigramme' },
+]
 
 // Raccourcis de groupes de fonctions
 const F = {
@@ -64,6 +79,7 @@ const PERM_MATRIX = {
   'nav.benevoles':        ['president','vice_president','coord_medical','coord_transports','coord_benevoles','coord_informatique'],
   'nav.stock':            ['president','vice_president','tresorier','coord_logistique','coord_informatique'],
   'nav.contenu':          ['president','relations_publiques','coord_informatique'],
+  'nav.acces':            ['president','vice_president','coord_informatique'],
 
   // Caisse événementielle (mode "aveugle" : encoder sans voir les totaux) — bénévoles
   'vente.caisse_evenement': '*',
@@ -94,6 +110,24 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [simMode, setSimMode] = useState(() => localStorage.getItem('ha_sim_mode') === 'true')
+  const [accesConfig, setAccesConfig] = useState({})   // { fonction: [pages] }
+  const [simProfil, setSimProfil] = useState(null)      // simulation : profil fictif observé
+
+  // Charger la config d'accès par fonction
+  useEffect(() => {
+    supabase.from('acces_pages').select('*').then(({ data }) => {
+      const map = {}
+      ;(data || []).forEach(r => { map[r.fonction] = r.pages || [] })
+      setAccesConfig(map)
+    })
+  }, [])
+  function rechargerAcces() {
+    return supabase.from('acces_pages').select('*').then(({ data }) => {
+      const map = {}
+      ;(data || []).forEach(r => { map[r.fonction] = r.pages || [] })
+      setAccesConfig(map)
+    })
+  }
 
   useEffect(() => {
     let mounted = true
@@ -172,26 +206,66 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // Profil effectivement observé (réel ou simulé)
+  const profilEffectif = simProfil || profile
+
   // Liste effective des fonctions (titulaire + adjoint, qui hérite des mêmes accès)
   function mesFonctions() {
-    if (!profile) return []
-    return [...(profile.fonctions || []), ...(profile.fonctions_adjoint || [])]
+    if (!profilEffectif) return []
+    return [...(profilEffectif.fonctions || []), ...(profilEffectif.fonctions_adjoint || [])]
+  }
+  // Pages autorisées par DÉFAUT pour une fonction (selon la matrice)
+  function pagesDefautPour(f) {
+    return NAV_PAGES.map(p => p.key).filter(k => {
+      const a = PERM_MATRIX[k]
+      return a === '*' || (Array.isArray(a) && a.includes(f))
+    })
+  }
+  // Une page (clé nav.*) est-elle visible pour le profil observé ?
+  function canPage(navKey) {
+    if (!profilEffectif) return false
+    // Super-user RÉEL voit tout (sauf en simulation où l'on observe quelqu'un d'autre)
+    if (!simProfil && profile?.niveau_acces === 'super_user') return true
+    // Override par volontaire (pages_perso) prioritaire
+    if (Array.isArray(profilEffectif.pages_perso)) return profilEffectif.pages_perso.includes(navKey)
+    // Pages universelles
+    if (PERM_MATRIX[navKey] === '*') return true
+    // Via les fonctions (config si définie, sinon défaut)
+    const fns = mesFonctions()
+    if (fns.some(f => (accesConfig[f] || pagesDefautPour(f)).includes(navKey))) return true
+    // Via la qualification / rôle (ex. volontaires médicaux → souhaits, affectés seulement)
+    const allowed = PERM_MATRIX[navKey]
+    if (Array.isArray(allowed)) {
+      const roles = [profilEffectif.role, ...(profilEffectif.roles_supplementaires || [])]
+      if (roles.some(r => allowed.includes(r))) return true
+    }
+    return false
   }
   // Est-on adjoint (et pas titulaire) d'une fonction ? → validations en cascade
   function estAdjoint(fonction) {
-    if (!profile) return false
-    return (profile.fonctions_adjoint || []).includes(fonction) && !(profile.fonctions || []).includes(fonction)
+    if (!profilEffectif) return false
+    return (profilEffectif.fonctions_adjoint || []).includes(fonction) && !(profilEffectif.fonctions || []).includes(fonction)
   }
 
+  // ── Simulation ──────────────────────────────────────────────────────────────
+  function simulerFonctions(fonctions) {
+    setSimProfil({ fonctions: fonctions || [], fonctions_adjoint: [], niveau_acces: 'standard', _sim: true, _label: 'Fonctions : ' + (fonctions || []).join(', ') })
+  }
+  function simulerVolontaire(p) {
+    setSimProfil({ ...p, niveau_acces: p.niveau_acces === 'super_user' ? 'standard' : p.niveau_acces, _sim: true, _label: `${p.prenom || ''} ${p.nom || ''}`.trim() || p.email })
+  }
+  function arreterSimulation() { setSimProfil(null) }
+
   function can(perm) {
-    if (!profile) return false
-    // SUPER-USER : accès total (sauf le mode super-user lui-même qui reste explicite)
-    if (profile.niveau_acces === 'super_user' && perm !== 'super_user.mode') return true
+    if (!profilEffectif) return false
+    // Les pages de navigation passent par la config d'accès / simulation
+    if (perm.startsWith('nav.')) return canPage(perm)
+    // SUPER-USER RÉEL : accès total (sauf en simulation)
+    if (!simProfil && profile?.niveau_acces === 'super_user' && perm !== 'super_user.mode') return true
     const allowed = PERM_MATRIX[perm]
     if (allowed === undefined) return false
     if (allowed === '*') return true
-    // Le coordinateur informatique en simMode peut voir les modules en simulation
-    if (simMode && mesFonctions().includes('coord_informatique')) return true
+    if (!simProfil && simMode && mesFonctions().includes('coord_informatique')) return true
     return mesFonctions().some(f => allowed.includes(f))
   }
 
@@ -204,13 +278,13 @@ export function AuthProvider({ children }) {
   }
 
   function souhaitsAccess() {
-    if (!profile) return 'none'
-    if (profile.niveau_acces === 'super_user') return 'all'
+    if (!profilEffectif) return 'none'
+    if (!simProfil && profile?.niveau_acces === 'super_user') return 'all'
     const f = mesFonctions()
-    if (simMode && f.includes('coord_informatique')) return 'all'
+    if (!simProfil && simMode && f.includes('coord_informatique')) return 'all'
     if (f.some(x => ['president','vice_president','coord_medical'].includes(x))) return 'all'
     if (f.includes('recolteur_souhaits')) return 'avant_realisation'
-    if ([profile.role, ...(profile.roles_supplementaires||[])].some(r => QUALIF_MEDICALES.includes(r))) return 'affecte'
+    if ([profilEffectif.role, ...(profilEffectif.roles_supplementaires||[])].some(r => QUALIF_MEDICALES.includes(r))) return 'affecte'
     return 'none'
   }
 
@@ -243,7 +317,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, can, hasRole, mesFonctions, estAdjoint, souhaitsAccess, signIn, signOut, resetPassword, retryProfile, simMode, toggleSimMode, isSuperUser: profile?.niveau_acces === 'super_user', isCoordInfo: (profile?.fonctions||[]).includes('coord_informatique') }}>
+    <AuthContext.Provider value={{ user, profile, loading, can, canPage, hasRole, mesFonctions, estAdjoint, souhaitsAccess, signIn, signOut, resetPassword, retryProfile, simMode, toggleSimMode, accesConfig, rechargerAcces, simProfil, simulerFonctions, simulerVolontaire, arreterSimulation, isSuperUser: profile?.niveau_acces === 'super_user', isCoordInfo: (profile?.fonctions||[]).includes('coord_informatique') }}>
       {children}
     </AuthContext.Provider>
   )

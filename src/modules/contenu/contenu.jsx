@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import PhotoUpload from '@/components/shared/PhotoUpload'
 import RichText from '@/components/shared/RichText'
 import GestionFormulaires from './GestionFormulaires'
+import EventInscriptions from './EventInscriptions'
 import { Separateur, MOTIFS } from '@/public/components/Decor.jsx'
 
 export default function Contenu() {
@@ -183,7 +184,7 @@ function Modal({ title, onClose, children }) {
   )
 }
 
-function TableRow({ cells, onEdit, onToggle, onDelete, active }) {
+function TableRow({ cells, onEdit, onToggle, onDelete, onView, active }) {
   return (
     <tr style={{ borderTop:'1px solid rgba(27,176,206,.06)', opacity: active===false ? .5 : 1 }}
       onMouseEnter={e=>e.currentTarget.style.background='#F8FCFD'}
@@ -191,6 +192,9 @@ function TableRow({ cells, onEdit, onToggle, onDelete, active }) {
     >
       {cells.map((c,i) => <td key={i} style={{ padding:'10px 14px', fontSize:13.5, color:i===0?'#1A1514':'#4A4340', fontWeight:i===0?500:400 }}>{c}</td>)}
       <td style={{ padding:'10px 14px', display:'flex', gap:8 }}>
+        {onView && (
+          <button onClick={onView} style={{ padding:'4px 12px', background:'#EAF3DE', color:'#3B6D11', border:'none', borderRadius:7, fontSize:12.5, fontWeight:600, cursor:'pointer' }}>👥 Inscriptions</button>
+        )}
         <button onClick={onEdit} style={{ padding:'4px 12px', background:'#E6F7FA', color:'#1BB0CE', border:'none', borderRadius:7, fontSize:12.5, fontWeight:600, cursor:'pointer' }}>✏️ Modifier</button>
         {onToggle && (
           <button onClick={onToggle} style={{ padding:'4px 10px', background: active ? '#FCEBEB' : '#EAF3DE', color: active ? '#A32D2D' : '#3B6D11', border:'none', borderRadius:7, fontSize:12.5, fontWeight:600, cursor:'pointer' }}>
@@ -246,6 +250,7 @@ function GestionEvenements() {
   const [modal, setModal] = useState(null)
   const [form, setForm]   = useState({})
   const [saving, setSaving] = useState(false)
+  const [voirInscriptions, setVoirInscriptions] = useState(null)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
   useEffect(() => { load() }, [])
@@ -281,6 +286,8 @@ function GestionEvenements() {
     load()
   }
 
+  if (voirInscriptions) return <EventInscriptions event={voirInscriptions} onBack={() => setVoirInscriptions(null)} />
+
   return (
     <div style={{ padding:'28px 24px', fontFamily:"'DM Sans',sans-serif", maxWidth:1050 }}>
       <SectionHeader title="Événements" onAdd={openNew} addLabel="Nouvel événement" />
@@ -297,6 +304,7 @@ function GestionEvenements() {
                   it.gratuit ? '✓ Oui' : `${it.prix_adulte||0} €`,
                   <span style={{ background:it.publie?'#EAF3DE':'#F0EFED', color:it.publie?'#3B6D11':'#7A7470', padding:'2px 8px', borderRadius:99, fontSize:11.5, fontWeight:600 }}>{it.publie?'Publié':'Brouillon'}</span>,
                 ]}
+                onView={() => setVoirInscriptions(it)}
                 onEdit={() => openEdit(it)}
                 onToggle={() => toggle(it)}
                 onDelete={() => remove(it)}

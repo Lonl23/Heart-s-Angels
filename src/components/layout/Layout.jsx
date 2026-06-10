@@ -14,13 +14,14 @@ const NAV_ITEMS = [
   { to: '/app/volontaires',     icon: <UsersIcon />,    label: 'Volontaires',      perm: 'nav.volontaires' },
   { to: '/app/vente',           icon: <CartIcon />,     label: 'Vente événements', perm: 'nav.vente' },
   { to: '/app/comptabilite',    icon: <ChartIcon />,    label: 'Comptabilité',     perm: 'nav.comptabilite' },
-  { to: '/app/stock',           icon: <BoxIcon />,      label: 'Stock boutique',   perm: 'nav.stock' },
+  { to: '/app/stock',           icon: <BoxIcon />,      label: 'Stock matériel',   perm: 'nav.stock' },
   { to: '/app/contenu',         icon: <EditIcon />,     label: 'Contenu du site',  perm: 'nav.contenu' },
   { to: '/app/organigramme',    icon: <OrgIcon />,      label: 'Organigramme',     perm: 'nav.organigramme' },
+  { to: '/app/acces',           icon: <OrgIcon />,      label: 'Gestion des accès', perm: 'nav.acces' },
 ]
 
 export default function Layout() {
-  const { profile, can, hasRole, signOut, simMode, toggleSimMode, isCoordInfo } = useAuth()
+  const { profile, can, hasRole, signOut, simMode, toggleSimMode, isCoordInfo, simProfil, arreterSimulation } = useAuth()
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications()
   const navigate  = useNavigate()
   const location  = useLocation()
@@ -82,6 +83,14 @@ export default function Layout() {
 
   return (
     <div className={styles.root}>
+
+      {/* Bannière de simulation (visible partout) */}
+      {simProfil && (
+        <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:1000, background:'#BA7517', color:'white', padding:'8px 16px', display:'flex', justifyContent:'center', alignItems:'center', gap:14, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", boxShadow:'0 2px 8px rgba(0,0,0,.2)' }}>
+          <span>👁️ Vous voyez l'application comme <strong>{simProfil._label}</strong></span>
+          <button onClick={arreterSimulation} style={{ padding:'4px 12px', background:'white', color:'#BA7517', border:'none', borderRadius:7, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>Quitter la simulation</button>
+        </div>
+      )}
 
       {/* ── Sidebar ─────────────────────────────────────────── */}
       {sidebarOpen && (

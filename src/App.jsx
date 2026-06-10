@@ -20,6 +20,8 @@ const Volontaires    = lazy(() => import('@/modules/volontaires/Volontaires'))
 const Defraiements   = lazy(() => import('@/modules/defraiements/Defraiements'))
 const Organigramme   = lazy(() => import('@/modules/organigramme/Organigramme'))
 const Stock          = lazy(() => import('@/modules/stock/Stock'))
+const StockMateriel  = lazy(() => import('@/modules/stock/StockMateriel'))
+const GestionAcces   = lazy(() => import('@/modules/acces/GestionAcces'))
 const Contenu        = lazy(() => import('@/modules/contenu/Contenu'))
 
 // Pages publiques — lazy
@@ -78,7 +80,9 @@ export default function App() {
             <Route path="volontaires/*"  element={<Volontaires />} />
             <Route path="defraiements/*" element={<Defraiements />} />
             <Route path="organigramme"   element={<Organigramme />} />
-            <Route path="stock"          element={<Stock />} />
+            <Route path="acces"          element={<GestionAcces />} />
+            <Route path="stock"          element={<StockMateriel />} />
+            <Route path="stock-boutique" element={<Stock />} />
           <Route path="contenu/*"       element={<Contenu />} />
           </Route>
 

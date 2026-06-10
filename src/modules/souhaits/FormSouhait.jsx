@@ -2,15 +2,16 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { STATUTS_SOUHAIT } from '@/lib/souhaitStatuts'
+import AddressSearch from '@/components/shared/AddressSearch'
 
 const STEPS = [
-  { id:'patient',   label:'Patient',      icon:'👤' },
-  { id:'contact',   label:'Contact',      icon:'📞' },
-  { id:'souhait',   label:'Souhait',      icon:'❤️' },
-  { id:'medical',   label:'Médical',      icon:'🏥' },
-  { id:'logistique',label:'Logistique',   icon:'🚑' },
-  { id:'dates',     label:'Dates',        icon:'📅' },
-  { id:'suivi',     label:'Suivi',        icon:'📋' },
+  { id:'nouveau',    label:'Nouveau',     icon:'🆕' },
+  { id:'rencontre',  label:'Rencontre',   icon:'🤝' },
+  { id:'medical',    label:'Médical',     icon:'🏥' },
+  { id:'logistique', label:'Logistique',  icon:'🚑' },
+  { id:'dates',      label:'Dates',       icon:'📅' },
+  { id:'suivi',      label:'Suivi',       icon:'📋' },
 ]
 
 const INITIAL = {
@@ -38,7 +39,7 @@ const INITIAL = {
   lieu_retour:'',
   sur_plusieurs_jours:false, adresse_hotel:'', nb_nuits:0, date_fin:'',
   // Admin
-  urgence:false, statut:'en_attente', notes:'',
+  urgence:false, statut:'nouveau', notes:'',
   // Suivi récolteur
   date_premiere_demande:'', date_rencontre_beneficiaire:'', notes_recolteur:'',
 }
@@ -55,6 +56,7 @@ export default function FormSouhait() {
   const [step, setStep]   = useState(0)
   const [dates, setDates] = useState([]) // dates possibles
   const [vehicules, setVehicules] = useState([])
+  const [equipages, setEquipages] = useState([])
   const [suiviEntries, setSuiviEntries] = useState([])
   const [newSuivi, setNewSuivi] = useState({ type_contact:'note', contenu:'' })
   const [saving, setSaving] = useState(false)
@@ -79,6 +81,7 @@ export default function FormSouhait() {
           if (s.date_rencontre_beneficiaire) f.date_rencontre_beneficiaire = s.date_rencontre_beneficiaire.slice(0,10)
           setForm(f)
           setVehicules(s.vehicules || [])
+          setEquipages(s.equipages || [])
         }
         setDates(sd || [])
         setSuiviEntries(sv || [])
@@ -113,6 +116,20 @@ export default function FormSouhait() {
     setDates(d => d.filter((_,idx) => idx!==i))
   }
 
+  // ── Équipages ────────────────────────────────────────────────────────────────
+  function addEquipage(type) {
+    setEquipages(e => [...e, type === 'logistique'
+      ? { id:'eq'+Date.now(), type:'logistique', note:'' }
+      : { id:'eq'+Date.now(), type:'ambulance', mode:'normalise', longue_route:false, note:'' }
+    ])
+  }
+  function updateEquipage(i, k, v) {
+    setEquipages(es => es.map((e,idx)=> idx===i ? {...e,[k]:v} : e))
+  }
+  function removeEquipage(i) {
+    setEquipages(es => es.filter((_,idx)=>idx!==i))
+  }
+
   // ── Véhicules ────────────────────────────────────────────────────────────────
   function addVehicule() {
     setVehicules(v => [...v, { type:'ambulance', immatriculation:'', conducteur:'', note:'' }])
@@ -145,13 +162,19 @@ export default function FormSouhait() {
     if (!form.patient_prenom || !form.patient_nom) { setError('Prénom et nom du patient requis.'); return }
     setSaving(true); setError('')
 
-    const payload = { ...form, vehicules, created_by: profile?.id }
+    // Les champs vides ('') cassent les colonnes DATE/numériques → convertir en null
+    const clean = Object.fromEntries(
+      Object.entries(form).map(([k, v]) => [k, v === '' ? null : v])
+    )
+    const payload = { ...clean, vehicules, equipages, created_by: profile?.id }
 
     let souhaitId = id
     if (isEdit) {
-      await supabase.from('souhaits').update(payload).eq('id', id)
+      const { error: errUp } = await supabase.from('souhaits').update(payload).eq('id', id)
+      if (errUp) { setSaving(false); setError('Enregistrement impossible : ' + errUp.message); return }
     } else {
-      const { data } = await supabase.from('souhaits').insert(payload).select().single()
+      const { data, error: errIns } = await supabase.from('souhaits').insert(payload).select().single()
+      if (errIns) { setSaving(false); setError('Création impossible : ' + errIns.message); return }
       souhaitId = data?.id
     }
 
@@ -204,39 +227,44 @@ export default function FormSouhait() {
       </div>
 
       {/* Contenu */}
+      {(() => { const curId = STEPS[step]?.id; return (
       <div style={{ background:'white', border:'1px solid rgba(27,176,206,.1)', borderRadius:16, padding:'24px', boxShadow:'0 2px 12px rgba(27,176,206,.06)' }}>
 
-        {/* ── PATIENT ── */}
-        {step===0 && <Section titre="Informations du patient">
+        {/* ── NOUVEAU : essentiel ── */}
+        {curId==='nouveau' && <Section titre="Nouveau souhait — informations essentielles">
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, marginBottom:4 }}>Bénéficiaire</div>
           <G2><F label="Prénom *" val={form.patient_prenom} set={v=>set('patient_prenom',v)} />
               <F label="Nom *" val={form.patient_nom} set={v=>set('patient_nom',v)} /></G2>
           <G2><F label="Date de naissance" val={form.patient_ddn} set={v=>set('patient_ddn',v)} type="date" />
-              <F label="Établissement / MRS / Hôpital" val={form.etablissement} set={v=>set('etablissement',v)} /></G2>
+              <F label="Institution / MRS / Hôpital" val={form.etablissement} set={v=>set('etablissement',v)} /></G2>
+
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'14px 0 4px' }}>Demandeur</div>
+          <G2><F label="Prénom *" val={form.contact_prenom} set={v=>set('contact_prenom',v)} />
+              <F label="Nom *" val={form.contact_nom} set={v=>set('contact_nom',v)} /></G2>
+          <G2><F label="Date de naissance" val={form.contact_ddn} set={v=>set('contact_ddn',v)} type="date" />
+              <Sel label="Lien avec le bénéficiaire" val={form.contact_relation} set={v=>set('contact_relation',v)} opts={['Conjoint(e)','Enfant','Parent','Frère/Sœur','Ami(e)','Soignant(e)','Autre']} /></G2>
+          <G2><F label="Email" val={form.contact_email} set={v=>set('contact_email',v)} type="email" />
+              <F label="Téléphone" val={form.contact_telephone} set={v=>set('contact_telephone',v)} type="tel" /></G2>
+
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'14px 0 4px' }}>Première idée du souhait</div>
+          <div>
+            <label style={LBL}>Que voudrait faire le bénéficiaire ? *</label>
+            <textarea value={form.souhait_description} onChange={e=>set('souhait_description',e.target.value)} rows={3} placeholder="Première idée du souhait (sera précisée lors de la rencontre)…" style={TA}/>
+          </div>
+          <G2><F label="Lieu / Destination envisagée" val={form.souhait_lieu} set={v=>set('souhait_lieu',v)} placeholder="Mer, Pairi Daiza, Banneux…" />
+              <div style={{ display:'flex', alignItems:'flex-end' }}><CK val={form.urgence} set={v=>set('urgence',v)} label="⚠️ Demande urgente" accent /></div></G2>
+        </Section>}
+
+        {/* ── RENCONTRE : compléments recueillis sur place ── */}
+        {curId==='rencontre' && <Section titre="Rencontre — informations complémentaires">
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, marginBottom:4 }}>Référents</div>
           <G2><F label="Médecin traitant" val={form.medecin_referent} set={v=>set('medecin_referent',v)} />
               <F label="Tél. médecin" val={form.telephone_medecin} set={v=>set('telephone_medecin',v)} type="tel" /></G2>
           <F label="Infirmier(ère) référent(e) de l'établissement" val={form.infirmier_referent_etablissement} set={v=>set('infirmier_referent_etablissement',v)} />
           <G2><F label="Contact d'urgence — Nom" val={form.contact_urgence_nom} set={v=>set('contact_urgence_nom',v)} />
               <F label="Contact d'urgence — Tél." val={form.contact_urgence_tel} set={v=>set('contact_urgence_tel',v)} type="tel" /></G2>
-        </Section>}
 
-        {/* ── CONTACT FAMILLE ── */}
-        {step===1 && <Section titre="Contact famille / représentant">
-          <G2><F label="Prénom *" val={form.contact_prenom} set={v=>set('contact_prenom',v)} />
-              <F label="Nom *" val={form.contact_nom} set={v=>set('contact_nom',v)} /></G2>
-          <Sel label="Relation avec le patient" val={form.contact_relation} set={v=>set('contact_relation',v)} opts={['Conjoint(e)','Enfant','Parent','Frère/Sœur','Ami(e)','Soignant(e)','Autre']} />
-          <G2><F label="Email" val={form.contact_email} set={v=>set('contact_email',v)} type="email" />
-              <F label="Téléphone" val={form.contact_telephone} set={v=>set('contact_telephone',v)} type="tel" /></G2>
-        </Section>}
-
-        {/* ── SOUHAIT ── */}
-        {step===2 && <Section titre="Description du souhait">
-          <div>
-            <label style={LBL}>Description complète du souhait *</label>
-            <textarea value={form.souhait_description} onChange={e=>set('souhait_description',e.target.value)} rows={4} placeholder="Décrivez le souhait avec tous les détails importants…" style={TA}/>
-          </div>
-          <F label="Lieu / Destination" val={form.souhait_lieu} set={v=>set('souhait_lieu',v)} placeholder="Mer, Pairi Daiza, Banneux…" />
-          <CK val={form.urgence} set={v=>set('urgence',v)} label="⚠️ Demande urgente" accent />
-          <div style={{ background:'#F0F9FB', border:'1px solid rgba(27,176,206,.15)', borderRadius:12, padding:'14px 16px' }}>
+          <div style={{ background:'#F0F9FB', border:'1px solid rgba(27,176,206,.15)', borderRadius:12, padding:'14px 16px', marginTop:12 }}>
             <div style={{ fontSize:13, fontWeight:600, color:'#0E4A5A', marginBottom:10 }}>Consentements</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
               <CK val={form.consentement_photo}       set={v=>set('consentement_photo',v)}       label="📸 Photos autorisées" />
@@ -247,8 +275,9 @@ export default function FormSouhait() {
           </div>
         </Section>}
 
+
         {/* ── MÉDICAL ── */}
-        {step===3 && <Section titre="Informations médicales">
+        {curId==='medical' && <Section titre="Informations médicales">
           <div>
             <label style={LBL}>Pathologies — Description complète</label>
             <textarea value={form.pathologies} onChange={e=>set('pathologies',e.target.value)} rows={4} placeholder="Décrivez en détail les pathologies, le stade de la maladie, les limitations fonctionnelles importantes pour la journée de mission…" style={TA}/>
@@ -286,19 +315,23 @@ export default function FormSouhait() {
         </Section>}
 
         {/* ── LOGISTIQUE ── */}
-        {step===4 && <Section titre="Logistique & transports">
+        {curId==='logistique' && <Section titre="Logistique & transports">
           <div style={{ background:'#E6F7FA', border:'1px solid rgba(27,176,206,.2)', borderRadius:12, padding:'14px 16px', marginBottom:8 }}>
             <div style={{ fontSize:13, fontWeight:600, color:'#0E4A5A', marginBottom:10 }}>📍 Lieu de prise en charge</div>
             <G2>
               <F label="Nom du lieu / Établissement" val={form.lieu_prise_en_charge} set={v=>set('lieu_prise_en_charge',v)} placeholder="CHC Saint-Joseph…" />
-              <F label="Adresse complète" val={form.adresse_prise_en_charge} set={v=>set('adresse_prise_en_charge',v)} placeholder="Rue, numéro, code postal, ville" />
+              <AddressSearch label="Adresse complète" value={form.adresse_prise_en_charge}
+                onChange={({adresse,lat,lon})=>setForm(s=>({...s, adresse_prise_en_charge:adresse, pec_lat:lat, pec_lon:lon}))}
+                placeholder="Rechercher l'adresse de prise en charge…" />
             </G2>
           </div>
           <div style={{ background:'#EAF3DE', border:'1px solid rgba(59,109,17,.15)', borderRadius:12, padding:'14px 16px', marginBottom:8 }}>
             <div style={{ fontSize:13, fontWeight:600, color:'#3B6D11', marginBottom:10 }}>🎯 Lieu de destination</div>
             <G2>
               <F label="Nom du lieu / Destination" val={form.lieu_destination} set={v=>set('lieu_destination',v)} placeholder="Mer du Nord — De Haan…" />
-              <F label="Adresse complète" val={form.adresse_destination} set={v=>set('adresse_destination',v)} placeholder="Rue, numéro, code postal, ville" />
+              <AddressSearch label="Adresse complète" value={form.adresse_destination}
+                onChange={({adresse,lat,lon})=>setForm(s=>({...s, adresse_destination:adresse, dest_lat:lat, dest_lon:lon}))}
+                placeholder="Rechercher l'adresse de destination…" />
             </G2>
           </div>
           <F label="Lieu de retour (si différent de la prise en charge)" val={form.lieu_retour} set={v=>set('lieu_retour',v)} placeholder="Même lieu ou adresse différente…" />
@@ -316,6 +349,53 @@ export default function FormSouhait() {
               </G2>
               <F label="Adresse de l'hôtel / hébergement" val={form.adresse_hotel} set={v=>set('adresse_hotel',v)} placeholder="Nom de l'hôtel, rue, numéro, code postal, ville" />
             </>}
+          </div>
+
+          {/* Équipages & besoins en personnel */}
+          <div style={{ marginTop:16, background:'#F0F9FB', border:'1px solid rgba(27,176,206,.12)', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6, flexWrap:'wrap', gap:8 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:'#0E4A5A' }}>👥 Équipages & besoins en personnel</div>
+              <div style={{ display:'flex', gap:6 }}>
+                <button type="button" onClick={()=>addEquipage('ambulance')} style={BTN_SM}>+ Ambulance</button>
+                <button type="button" onClick={()=>addEquipage('logistique')} style={{ ...BTN_SM, background:'#EAF3DE', color:'#3B6D11' }}>+ Véhicule logistique</button>
+              </div>
+            </div>
+            <div style={{ fontSize:11.5, color:'#7A7470', marginBottom:12 }}>Chaque ambulance nécessite 1 ambulancier accrédité conducteur + 1 équipier. Ajoutez une 2ᵉ ambulance pour un 2ᵉ patient, ou un véhicule logistique (ex. transport d'une chaise roulante).</div>
+
+            {equipages.length === 0 && <div style={{ fontSize:13, color:'#A8A39D', fontStyle:'italic' }}>Aucun équipage défini — ajoutez au moins une ambulance.</div>}
+
+            {equipages.map((eq, i) => (
+              <div key={eq.id || i} style={{ background:'white', border:'1px solid rgba(27,176,206,.12)', borderRadius:10, padding:'12px 14px', marginBottom:8 }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                  <span style={{ fontSize:12.5, fontWeight:700, color: eq.type==='logistique' ? '#3B6D11' : '#C8435A' }}>
+                    {eq.type === 'logistique' ? `🚐 Véhicule logistique ${i+1}` : `🚑 Ambulance ${i+1}`}
+                  </span>
+                  <button type="button" onClick={()=>removeEquipage(i)} style={{ ...BTN_SM, background:'#FCEBEB', color:'#C8435A' }}>✕</button>
+                </div>
+
+                {eq.type === 'ambulance' ? (
+                  <div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                      <Sel label="Mode" val={eq.mode||'normalise'} set={v=>updateEquipage(i,'mode',v)}
+                        opts={['normalise','paramedicalise']} labels={['Normalisé','Paramédicalisé']} />
+                      <div style={{ fontSize:11.5, color:'#7A7470', alignSelf:'end', paddingBottom:6, lineHeight:1.4 }}>
+                        2 volontaires médicaux obligatoires, dont 1 <strong>accrédité chauffeur</strong>.
+                        {eq.mode === 'paramedicalise'
+                          ? ' Le 2ᵉ doit être infirmier ou médecin.'
+                          : ' Le 2ᵉ est ambulancier.'}
+                      </div>
+                    </div>
+                    <label style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, fontSize:12.5, color:'#4A4340', cursor:'pointer' }}>
+                      <input type="checkbox" checked={!!eq.longue_route} onChange={e=>updateEquipage(i,'longue_route',e.target.checked)} style={{ accentColor:'#1BB0CE', width:15, height:15 }} />
+                      Longue route → ajouter un 3ᵉ équipier (2ᵉ ambulancier chauffeur)
+                    </label>
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12.5, color:'#3B6D11' }}>Besoin : 1 volontaire (conducteur). Ex. transport de chaise roulante, matériel.</div>
+                )}
+                <F label="Note" val={eq.note||''} set={v=>updateEquipage(i,'note',v)} placeholder="Précision éventuelle…" />
+              </div>
+            ))}
           </div>
 
           {/* Véhicules — coordinateur transports uniquement */}
@@ -340,7 +420,7 @@ export default function FormSouhait() {
         </Section>}
 
         {/* ── DATES ── */}
-        {step===5 && <Section titre="Dates possibles de réalisation">
+        {curId==='dates' && <Section titre="Dates possibles de réalisation">
           <div style={{ background:'#F0F9FB', border:'1px solid rgba(27,176,206,.12)', borderRadius:10, padding:'12px 14px', marginBottom:16, fontSize:13, color:'#0E4A5A' }}>
             💡 Indiquez une ou plusieurs dates possibles. Le coordinateur confirmera la date définitive en fonction des disponibilités de l'équipe.
           </div>
@@ -372,7 +452,7 @@ export default function FormSouhait() {
         </Section>}
 
         {/* ── SUIVI RÉCOLTEUR ── */}
-        {step===6 && <Section titre="Suivi récolteur de souhait">
+        {curId==='suivi' && <Section titre="Suivi récolteur de souhait">
           <G2>
             <F label="Date de première demande" val={form.date_premiere_demande} set={v=>set('date_premiere_demande',v)} type="date" />
             <F label="Date de rencontre du bénéficiaire" val={form.date_rencontre_beneficiaire} set={v=>set('date_rencontre_beneficiaire',v)} type="date" />
@@ -417,8 +497,8 @@ export default function FormSouhait() {
           {/* Statut général */}
           <div style={{ marginTop:8 }}>
             <Sel label="Statut du souhait" val={form.statut} set={v=>set('statut',v)}
-              opts={['nouvelle','contact','evaluation','planifie','en_cours','realise','annule']}
-              labels={['Nouvelle demande','En contact','En évaluation','Planifié','En cours','Réalisé','Annulé']} />
+              opts={STATUTS_SOUHAIT.map(s=>s.key)}
+              labels={STATUTS_SOUHAIT.map(s=>s.label)} />
           </div>
           <div>
             <label style={LBL}>Notes internes (coordinateur)</label>
@@ -448,6 +528,7 @@ export default function FormSouhait() {
           </div>
         </div>
       </div>
+      ); })()}
     </div>
   )
 }

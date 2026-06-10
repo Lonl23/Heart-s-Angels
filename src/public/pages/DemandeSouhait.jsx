@@ -134,7 +134,9 @@ export default function DemandeSouhait() {
     const datesValides = (form.souhait_dates || []).filter(Boolean)
     const champs_libres = {}
     cfg.champsLibres.forEach(q => { if (libres[q.id] !== undefined) champs_libres[q.label] = libres[q.id] })
-    const { souhait_dates, ...reste } = form
+    const { souhait_dates, ...resteForm } = form
+    // Les champs vides ('') cassent les colonnes DATE → null
+    const reste = Object.fromEntries(Object.entries(resteForm).map(([k,v]) => [k, v === '' ? null : v]))
     const { error:err } = await supabase.from('demandes_souhaits').insert({
       ...reste,
       souhait_date: datesValides[0] || null,
@@ -145,7 +147,7 @@ export default function DemandeSouhait() {
     if (!err) {
       notifFormulaire('souhait', cfg.titre || 'Demande de souhait', cfg.destinataires, form.patient_nom || 'Nouvelle demande')
     }
-    if (err) { setError(L.errorSend); setSending(false); return }
+    if (err) { setError(L.errorSend + ' (' + err.message + ')'); setSending(false); return }
     setSent(true); setSending(false)
   }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth, FONCTIONS_LABELS } from '@/hooks/useAuth'
 import PhotoUpload from '@/components/shared/PhotoUpload'
 
 // ── Couleurs par catégorie de rôle ────────────────────────────────────────────
@@ -66,7 +66,7 @@ function OrganigrammeView() {
 
   async function save() {
     setSaving(true)
-    const payload = { titre:form.titre, sous_titre:form.sous_titre, profile_id:form.profile_id||null, parent_id:form.parent_id||null, couleur:form.couleur||'#1BB0CE', ordre:parseInt(form.ordre)||0 }
+    const payload = { titre:form.titre, sous_titre:form.sous_titre, fonction:form.fonction||null, profile_id:form.profile_id||null, parent_id:form.parent_id||null, couleur:form.couleur||'#1BB0CE', ordre:parseInt(form.ordre)||0 }
     if (form.id) await supabase.from('organigramme_postes').update(payload).eq('id',form.id)
     else await supabase.from('organigramme_postes').insert(payload)
     setSaving(false); setModal(null); load()
@@ -115,6 +115,13 @@ function OrganigrammeView() {
             <select value={form.profile_id||''} onChange={e=>set('profile_id',e.target.value||null)} style={SEL}>
               <option value="">— Poste vacant</option>
               {profiles.map(p=><option key={p.id} value={p.id}>{p.prenom} {p.nom} ({p.role})</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom:12 }}>
+            <label style={LBL}>Fonction liée (pour le rattachement automatique)</label>
+            <select value={form.fonction||''} onChange={e=>set('fonction',e.target.value||null)} style={SEL}>
+              <option value="">— Aucune</option>
+              {Object.entries(FONCTIONS_LABELS).map(([k,l])=><option key={k} value={k}>{l}</option>)}
             </select>
           </div>
           <div style={{ marginBottom:12 }}>
