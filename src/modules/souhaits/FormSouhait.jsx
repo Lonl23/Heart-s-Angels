@@ -4,6 +4,10 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { STATUTS_SOUHAIT } from '@/lib/souhaitStatuts'
 import AddressSearch from '@/components/shared/AddressSearch'
+import FileUpload from '@/components/shared/FileUpload'
+import ContactMedicalSelect from '@/components/shared/ContactMedicalSelect'
+import AffectationEquipages from '@/components/souhaits/AffectationEquipages'
+import TraitementsEditor from '@/components/souhaits/TraitementsEditor'
 
 const STEPS = [
   { id:'nouveau',    label:'Nouveau',     icon:'🆕' },
@@ -28,16 +32,22 @@ const INITIAL = {
   consentement_publication:false, consentement_signe:false,
   // Médical
   pathologies:'', traitement_actuel:'', allergies_medicaments:'',
+  medecin_traitant:'', medecin_garde:'', infirmiers:'', kine:'', deuxieme_ligne:'',
+  ne_pas_reanimer:false, details_acharnement:'', antecedents:'', douleurs:'', voie_acces:'', mobilisations:'', communication:'',
+  cible_saturation_o2:'', debit_o2:'', apport_o2:'', cible_ta:'', cible_fc:'',
+  deglutition:'', alimentation:'', continence_urinaire:'', continence_fecale:'', precisions_continences:'',
   consignes_reanimation:'', cpr_autorise:false,
   niveau_douleur:'stable', position_transport:'assis',
   materiel_medical:'', materiel_specifique:'',
   oxygene_requis:false, debit_oxygene:'',
   mobilite:'', equipement_medical:'',
   // Logistique
-  lieu_prise_en_charge:'', adresse_prise_en_charge:'',
-  lieu_destination:'', adresse_destination:'',
+  lieu_prise_en_charge:'', adresse_prise_en_charge:'', pec_domicile:false, pec_precisions:'', pec_numero_chambre:'', pec_route:'',
+  lieu_destination:'', adresse_destination:'', dest_adresse_particuliere:'', dest_precisions:'',
   lieu_retour:'',
-  sur_plusieurs_jours:false, adresse_hotel:'', nb_nuits:0, date_fin:'',
+  sur_plusieurs_jours:false, hotels:[], adresse_hotel:'', nb_nuits:0, date_fin:'',
+  base_depart:'', rdv_base:'', depart_base:'', arrivee_pec:'', depart_pec:'', arrivee_destination:'', planning_particulier:[],
+  traitements:[],
   // Admin
   urgence:false, statut:'nouveau', notes:'',
   // Suivi récolteur
@@ -79,6 +89,7 @@ export default function FormSouhait() {
           if (s.patient_ddn) f.patient_ddn = s.patient_ddn.slice(0,10)
           if (s.date_premiere_demande) f.date_premiere_demande = s.date_premiere_demande.slice(0,10)
           if (s.date_rencontre_beneficiaire) f.date_rencontre_beneficiaire = s.date_rencontre_beneficiaire.slice(0,10)
+          ;['rdv_base','depart_base','arrivee_pec','depart_pec','arrivee_destination'].forEach(k=>{ if (s[k]) f[k] = new Date(s[k]).toISOString().slice(0,16) })
           setForm(f)
           setVehicules(s.vehicules || [])
           setEquipages(s.equipages || [])
@@ -114,6 +125,17 @@ export default function FormSouhait() {
   }
   function removeDate(i) {
     setDates(d => d.filter((_,idx) => idx!==i))
+  }
+
+  // ── Hôtels (souhait multi-jours) ──────────────────────────────────────────────
+  function addHotel() {
+    setForm(s => ({ ...s, hotels:[...(s.hotels||[]), { id:'h'+Date.now(), nom:'', adresse:'', date_arrivee:'', date_depart:'', nb_nuits:1, confirmation_url:'', confirmation_nom:'' }] }))
+  }
+  function updateHotel(i, k, v) {
+    setForm(s => ({ ...s, hotels:(s.hotels||[]).map((h,idx)=> idx===i ? {...h,[k]:v} : h) }))
+  }
+  function removeHotel(i) {
+    setForm(s => ({ ...s, hotels:(s.hotels||[]).filter((_,idx)=>idx!==i) }))
   }
 
   // ── Équipages ────────────────────────────────────────────────────────────────
@@ -266,7 +288,7 @@ export default function FormSouhait() {
 
           <div style={{ background:'#F0F9FB', border:'1px solid rgba(27,176,206,.15)', borderRadius:12, padding:'14px 16px', marginTop:12 }}>
             <div style={{ fontSize:13, fontWeight:600, color:'#0E4A5A', marginBottom:10 }}>Consentements</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:8 }}>
               <CK val={form.consentement_photo}       set={v=>set('consentement_photo',v)}       label="📸 Photos autorisées" />
               <CK val={form.consentement_video}       set={v=>set('consentement_video',v)}       label="🎥 Vidéos autorisées" />
               <CK val={form.consentement_publication} set={v=>set('consentement_publication',v)} label="📢 Publication autorisée" />
@@ -278,61 +300,137 @@ export default function FormSouhait() {
 
         {/* ── MÉDICAL ── */}
         {curId==='medical' && <Section titre="Informations médicales">
-          <div>
-            <label style={LBL}>Pathologies — Description complète</label>
-            <textarea value={form.pathologies} onChange={e=>set('pathologies',e.target.value)} rows={4} placeholder="Décrivez en détail les pathologies, le stade de la maladie, les limitations fonctionnelles importantes pour la journée de mission…" style={TA}/>
-          </div>
-          <div>
-            <label style={LBL}>Traitement actuel</label>
-            <textarea value={form.traitement_actuel} onChange={e=>set('traitement_actuel',e.target.value)} rows={3} placeholder="Médicaments, posologie, administration pendant la mission…" style={TA}/>
-          </div>
-          <F label="Allergies médicamenteuses" val={form.allergies_medicaments} set={v=>set('allergies_medicaments',v)} placeholder="Aucune connue / Pénicilline…" />
-          <div style={{ background:'#FCEBEB', border:'1px solid rgba(200,67,90,.2)', borderRadius:12, padding:'14px 16px' }}>
-            <div style={{ fontSize:13, fontWeight:700, color:'#C8435A', marginBottom:10 }}>⚕️ Consignes de réanimation (IMPORTANT)</div>
-            <div>
-              <label style={LBL}>Consignes d'acharnement thérapeutique / DNR</label>
-              <textarea value={form.consignes_reanimation} onChange={e=>set('consignes_reanimation',e.target.value)} rows={3} placeholder="Ex: Pas de réanimation cardio-pulmonaire — consentement signé. Soins de confort uniquement. Morphine autorisée…" style={TA}/>
-            </div>
-            <div style={{ marginTop:10 }}>
-              <CK val={form.cpr_autorise} set={v=>set('cpr_autorise',v)} label="Massage cardiaque (CPR) autorisé si nécessaire" accent />
-            </div>
-          </div>
+          {/* Contacts médicaux */}
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, marginBottom:6 }}>Contacts médicaux</div>
           <G2>
-            <Sel label="Niveau de douleur / état général" val={form.niveau_douleur} set={v=>set('niveau_douleur',v)} opts={['stable','douleur_moderee','douleur_forte','inconfort']} labels={['Stable','Douleur modérée','Douleur forte','Inconfort / Agitation']} />
-            <Sel label="Position de transport" val={form.position_transport} set={v=>set('position_transport',v)} opts={['assis','semi_assis','allonge','brancard','fauteuil_roulant']} labels={['Assis','Semi-assis','Allongé','Brancard','Fauteuil roulant']} />
+            <ContactMedicalSelect label="Médecin référent" type="medecin" value={form.medecin_referent} onChange={(v)=>set('medecin_referent',v)} placeholder="Dr…" />
+            <ContactMedicalSelect label="Médecin traitant" type="medecin" value={form.medecin_traitant}
+              onChange={(v,c)=>{ set('medecin_traitant',v); if (c?.telephone) set('telephone_medecin', c.telephone) }} placeholder="Dr…" />
           </G2>
-          <Sel label="Mobilité" val={form.mobilite} set={v=>set('mobilite',v)} opts={['autonome','fauteuil_roulant','brancard','lit_medicalise']} labels={['Autonome','Fauteuil roulant','Brancard','Lit médicalisé']} />
+          <G2>
+            <ContactMedicalSelect label="Médecin de garde" type="medecin" value={form.medecin_garde} onChange={(v)=>set('medecin_garde',v)} placeholder="Dr…" />
+            <ContactMedicalSelect label="Infirmiers" type="infirmier" value={form.infirmiers} onChange={(v)=>set('infirmiers',v)} placeholder="Service / nom…" />
+          </G2>
+          <G2>
+            <ContactMedicalSelect label="Kiné" type="kine" value={form.kine} onChange={(v)=>set('kine',v)} />
+            <ContactMedicalSelect label="2ᵉ ligne" type="autre" value={form.deuxieme_ligne} onChange={(v)=>set('deuxieme_ligne',v)} placeholder="Contact 2e ligne…" />
+          </G2>
+
+          {/* Informations médicales */}
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'16px 0 6px' }}>Informations médicales</div>
+          <F label="Allergies" val={form.allergies_medicaments} set={v=>set('allergies_medicaments',v)} placeholder="Aucune connue / Pénicilline…" />
+          <div style={{ background:'#FCEBEB', border:'1px solid rgba(200,67,90,.2)', borderRadius:12, padding:'12px 14px', marginTop:8 }}>
+            <CK val={form.ne_pas_reanimer} set={v=>set('ne_pas_reanimer',v)} label="⚕️ Ne pas réanimer (NPR)" accent />
+            <div style={{ marginTop:8 }}>
+              <label style={LBL}>Détails acharnement thérapeutique</label>
+              <textarea value={form.details_acharnement} onChange={e=>set('details_acharnement',e.target.value)} rows={2} placeholder="Soins de confort uniquement, morphine autorisée…" style={TA}/>
+            </div>
+          </div>
+          <div style={{ marginTop:10 }}>
+            <label style={LBL}>Pathologies</label>
+            <textarea value={form.pathologies} onChange={e=>set('pathologies',e.target.value)} rows={3} placeholder="Pathologies, stade, limitations fonctionnelles…" style={TA}/>
+          </div>
+          <div>
+            <label style={LBL}>Antécédents</label>
+            <textarea value={form.antecedents} onChange={e=>set('antecedents',e.target.value)} rows={2} style={TA}/>
+          </div>
+          <F label="Douleurs" val={form.douleurs} set={v=>set('douleurs',v)} placeholder="Diffuses, localisées…" />
+
+          {/* Divers */}
+          <G2>
+            <F label="Voie d'accès" val={form.voie_acces} set={v=>set('voie_acces',v)} placeholder="Cathéter, PAC…" />
+            <F label="Mobilisations" val={form.mobilisations} set={v=>set('mobilisations',v)} placeholder="Tient debout, lève-personne…" />
+          </G2>
+          <F label="Communication" val={form.communication} set={v=>set('communication',v)} placeholder="Normale, malentendant…" />
+
+          {/* Paramètres */}
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'16px 0 6px' }}>Paramètres</div>
+          <G2>
+            <F label="Cible saturation O2" val={form.cible_saturation_o2} set={v=>set('cible_saturation_o2',v)} placeholder="≥ 92%…" />
+            <F label="Débit O2" val={form.debit_o2} set={v=>set('debit_o2',v)} placeholder="2 L/min…" />
+          </G2>
+          <G2>
+            <F label="Apport O2" val={form.apport_o2} set={v=>set('apport_o2',v)} placeholder="Lunettes, masque…" />
+            <F label="Cible TA" val={form.cible_ta} set={v=>set('cible_ta',v)} placeholder="Ex. 110-140…" />
+          </G2>
+          <F label="Cible FC" val={form.cible_fc} set={v=>set('cible_fc',v)} placeholder="Ex. 60-90…" />
+
+          {/* Déglutition / alimentation / continences */}
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'16px 0 6px' }}>Déglutition · alimentation · continences</div>
+          <G2>
+            <F label="Déglutition" val={form.deglutition} set={v=>set('deglutition',v)} placeholder="Normale, troubles…" />
+            <F label="Alimentation" val={form.alimentation} set={v=>set('alimentation',v)} placeholder="Découpée, mixée…" />
+          </G2>
+          <G2>
+            <F label="Continence urinaire" val={form.continence_urinaire} set={v=>set('continence_urinaire',v)} placeholder="Cystocath, protection…" />
+            <F label="Continence fécale" val={form.continence_fecale} set={v=>set('continence_fecale',v)} placeholder="Protection…" />
+          </G2>
+          <F label="Précisions continences" val={form.precisions_continences} set={v=>set('precisions_continences',v)} />
+
+          {/* Mobilité & transport (conservé) */}
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'16px 0 6px' }}>Mobilité & transport</div>
+          <Sel label="Position de transport" val={form.position_transport} set={v=>set('position_transport',v)} opts={['assis','semi_assis','allonge','brancard','fauteuil_roulant']} labels={['Assis','Semi-assis','Allongé','Brancard','Fauteuil roulant']} />
           <div>
             <label style={LBL}>Matériel médical à prévoir</label>
-            <textarea value={form.materiel_medical} onChange={e=>set('materiel_medical',e.target.value)} rows={3} placeholder="Pompe à morphine, cathéter, pansements, scope, défibrillateur…" style={TA}/>
+            <textarea value={form.materiel_medical} onChange={e=>set('materiel_medical',e.target.value)} rows={2} placeholder="Pompe à morphine, O2, scope…" style={TA}/>
           </div>
-          <div>
-            <label style={LBL}>Matériel spécifique / Équipement adapté</label>
-            <textarea value={form.materiel_specifique} onChange={e=>set('materiel_specifique',e.target.value)} rows={2} placeholder="Fauteuil adapté, lève-personne, cale-pieds…" style={TA}/>
-          </div>
-          <CK val={form.oxygene_requis} set={v=>set('oxygene_requis',v)} label="Oxygène nécessaire" />
-          {form.oxygene_requis && <F label="Débit d'oxygène" val={form.debit_oxygene} set={v=>set('debit_oxygene',v)} placeholder="Ex: 2L/min en continu" />}
+
+          {/* Plan de traitement */}
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'16px 0 6px' }}>💊 Plan de traitement</div>
+          <div style={{ fontSize:11.5, color:'#7A7470', marginBottom:8 }}>Médicament, voie, posologie, et heures de prise (d'office) ou condition (si nécessaire). L'administration se cochera ensuite dans la fiche le jour de la mission.</div>
+          <TraitementsEditor value={form.traitements} onChange={(l)=>set('traitements',l)} />
         </Section>}
 
         {/* ── LOGISTIQUE ── */}
         {curId==='logistique' && <Section titre="Logistique & transports">
           <div style={{ background:'#E6F7FA', border:'1px solid rgba(27,176,206,.2)', borderRadius:12, padding:'14px 16px', marginBottom:8 }}>
             <div style={{ fontSize:13, fontWeight:600, color:'#0E4A5A', marginBottom:10 }}>📍 Lieu de prise en charge</div>
+            <CK val={form.pec_domicile} set={v=>set('pec_domicile',v)} label="🏠 Prise en charge au domicile" />
+            <div style={{ marginTop:8 }}>
+              <AddressSearch label="Rechercher (nom d'hôpital, établissement, adresse…)"
+                value={form.lieu_prise_en_charge}
+                onChange={({adresse,nom,lat,lon})=>setForm(s=>({...s,
+                  lieu_prise_en_charge: nom || s.lieu_prise_en_charge,
+                  adresse_prise_en_charge: adresse,
+                  pec_lat:lat, pec_lon:lon }))}
+                placeholder="Ex. CHC MontLégia, CHU Liège…" />
+            </div>
             <G2>
               <F label="Nom du lieu / Établissement" val={form.lieu_prise_en_charge} set={v=>set('lieu_prise_en_charge',v)} placeholder="CHC Saint-Joseph…" />
-              <AddressSearch label="Adresse complète" value={form.adresse_prise_en_charge}
-                onChange={({adresse,lat,lon})=>setForm(s=>({...s, adresse_prise_en_charge:adresse, pec_lat:lat, pec_lon:lon}))}
-                placeholder="Rechercher l'adresse de prise en charge…" />
+              <F label="Adresse complète" val={form.adresse_prise_en_charge} set={v=>set('adresse_prise_en_charge',v)} placeholder="Rue, numéro, code postal, ville" />
             </G2>
+            <G2>
+              <F label="Route / aile (hôpital)" val={form.pec_route} set={v=>set('pec_route',v)} placeholder="Ex. Route 200, aile B…" />
+              <F label="N° de chambre" val={form.pec_numero_chambre} set={v=>set('pec_numero_chambre',v)} placeholder="Ex. 249" />
+            </G2>
+            <div style={{ marginTop:10 }}>
+              <label style={LBL}>Précisions prise en charge</label>
+              <textarea value={form.pec_precisions} onChange={e=>set('pec_precisions',e.target.value)} rows={2} style={TA}
+                placeholder="Ex. 2e étage, demander à l'accompagnante d'attendre dans le hall…" />
+            </div>
           </div>
           <div style={{ background:'#EAF3DE', border:'1px solid rgba(59,109,17,.15)', borderRadius:12, padding:'14px 16px', marginBottom:8 }}>
             <div style={{ fontSize:13, fontWeight:600, color:'#3B6D11', marginBottom:10 }}>🎯 Lieu de destination</div>
+            <AddressSearch label="Rechercher (lieu, point marquant, parking…)"
+              value={form.lieu_destination}
+              onChange={({adresse,nom,lat,lon})=>setForm(s=>({...s,
+                lieu_destination: nom || s.lieu_destination,
+                adresse_destination: adresse,
+                dest_lat:lat, dest_lon:lon }))}
+              placeholder="Ex. Parking De Haan, Pairi Daiza, digue de mer…" />
             <G2>
               <F label="Nom du lieu / Destination" val={form.lieu_destination} set={v=>set('lieu_destination',v)} placeholder="Mer du Nord — De Haan…" />
-              <AddressSearch label="Adresse complète" value={form.adresse_destination}
-                onChange={({adresse,lat,lon})=>setForm(s=>({...s, adresse_destination:adresse, dest_lat:lat, dest_lon:lon}))}
-                placeholder="Rechercher l'adresse de destination…" />
+              <F label="Adresse complète" val={form.adresse_destination} set={v=>set('adresse_destination',v)} placeholder="Rue, numéro, code postal, ville" />
             </G2>
+            <G2>
+              <F label="Adresse particulière / repère" val={form.dest_adresse_particuliere} set={v=>set('dest_adresse_particuliere',v)} placeholder="Parking, accès PMR, point de rendez-vous…" />
+              <div />
+            </G2>
+            <div style={{ marginTop:10 }}>
+              <label style={LBL}>Précisions destination</label>
+              <textarea value={form.dest_precisions} onChange={e=>set('dest_precisions',e.target.value)} rows={2} style={TA}
+                placeholder="Indications utiles à l'arrivée…" />
+            </div>
           </div>
           <F label="Lieu de retour (si différent de la prise en charge)" val={form.lieu_retour} set={v=>set('lieu_retour',v)} placeholder="Même lieu ou adresse différente…" />
 
@@ -343,11 +441,36 @@ export default function FormSouhait() {
               <span style={{ fontSize:13.5, fontWeight:600, color:'#BA7517' }}>🏨 Souhait sur plusieurs jours (avec nuitée)</span>
             </label>
             {form.sur_plusieurs_jours && <>
-              <G2>
-                <F label="Date de fin du séjour" val={form.date_fin} set={v=>set('date_fin',v)} type="date" />
-                <F label="Nombre de nuits" val={form.nb_nuits} set={v=>set('nb_nuits',v)} type="number" placeholder="1" />
-              </G2>
-              <F label="Adresse de l'hôtel / hébergement" val={form.adresse_hotel} set={v=>set('adresse_hotel',v)} placeholder="Nom de l'hôtel, rue, numéro, code postal, ville" />
+              <F label="Date de fin du séjour" val={form.date_fin} set={v=>set('date_fin',v)} type="date" />
+
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', margin:'14px 0 8px' }}>
+                <span style={{ fontSize:12.5, fontWeight:700, color:'#7A5512', textTransform:'uppercase', letterSpacing:.3 }}>Réservations d'hôtel</span>
+                <button type="button" onClick={addHotel} style={{ ...BTN_SM, background:'#FAEEDA', color:'#BA7517' }}>+ Hôtel</button>
+              </div>
+              {(form.hotels||[]).length === 0 && <div style={{ fontSize:12.5, color:'#A8A39D', fontStyle:'italic' }}>Aucune réservation encodée.</div>}
+              {(form.hotels||[]).map((h,i)=>(
+                <div key={h.id||i} style={{ background:'white', border:'1px solid rgba(186,117,23,.2)', borderRadius:10, padding:'12px 14px', marginBottom:8 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                    <span style={{ fontSize:12.5, fontWeight:700, color:'#7A5512' }}>🏨 Hôtel {i+1}</span>
+                    <button type="button" onClick={()=>removeHotel(i)} style={{ ...BTN_SM, background:'#FCEBEB', color:'#C8435A' }}>✕</button>
+                  </div>
+                  <F label="Nom de l'hôtel" val={h.nom} set={v=>updateHotel(i,'nom',v)} placeholder="Ex. Ibis De Haan" />
+                  <AddressSearch label="Adresse" value={h.adresse}
+                    onChange={({adresse})=>updateHotel(i,'adresse',adresse)}
+                    placeholder="Rechercher l'adresse de l'hôtel…" />
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:10, marginTop:8 }}>
+                    <F label="Arrivée" val={h.date_arrivee} set={v=>updateHotel(i,'date_arrivee',v)} type="date" />
+                    <F label="Départ" val={h.date_depart} set={v=>updateHotel(i,'date_depart',v)} type="date" />
+                    <F label="Nuits" val={h.nb_nuits} set={v=>updateHotel(i,'nb_nuits',v)} type="number" />
+                  </div>
+                  <div style={{ marginTop:10 }}>
+                    <label style={{ ...LBL, marginBottom:4 }}>Confirmation de réservation (PDF)</label>
+                    <FileUpload value={h.confirmation_url ? { url:h.confirmation_url, nom:h.confirmation_nom } : null}
+                      onChange={(file)=>{ updateHotel(i,'confirmation_url', file?.url||''); updateHotel(i,'confirmation_nom', file?.nom||'') }}
+                      label="Joindre la confirmation PDF" folder="hotels" />
+                  </div>
+                </div>
+              ))}
             </>}
           </div>
 
@@ -375,7 +498,7 @@ export default function FormSouhait() {
 
                 {eq.type === 'ambulance' ? (
                   <div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:10 }}>
                       <Sel label="Mode" val={eq.mode||'normalise'} set={v=>updateEquipage(i,'mode',v)}
                         opts={['normalise','paramedicalise']} labels={['Normalisé','Paramédicalisé']} />
                       <div style={{ fontSize:11.5, color:'#7A7470', alignSelf:'end', paddingBottom:6, lineHeight:1.4 }}>
@@ -393,29 +516,37 @@ export default function FormSouhait() {
                 ) : (
                   <div style={{ fontSize:12.5, color:'#3B6D11' }}>Besoin : 1 volontaire (conducteur). Ex. transport de chaise roulante, matériel.</div>
                 )}
+                <div style={{ marginTop:10 }}>
+                  <F label="🚗 Immatriculation du véhicule" val={eq.immatriculation||''} set={v=>updateEquipage(i,'immatriculation',v)} placeholder="1-ABC-234" />
+                </div>
                 <F label="Note" val={eq.note||''} set={v=>updateEquipage(i,'note',v)} placeholder="Précision éventuelle…" />
               </div>
             ))}
+
+            {/* Affectation du personnel + véhicules (édition d'un souhait existant) */}
+            {isEdit ? (
+              <AffectationEquipages souhaitId={id} equipages={equipages}
+                dateSouhait={form.date_souhait} dateFin={form.date_fin} surPlusieursJours={form.sur_plusieurs_jours}
+                onVehicule={(eqId,plate)=>setEquipages(es=>es.map(e=>e.id===eqId?{...e,immatriculation:plate}:e))}
+                onChauffeur={(eqId,userId)=>setEquipages(es=>es.map(e=>e.id===eqId?{...e,chauffeur_id:userId}:e))} />
+            ) : (
+              <div style={{ marginTop:12, fontSize:12, color:'#A8A39D', fontStyle:'italic' }}>Enregistrez d'abord le souhait pour pouvoir affecter le personnel.</div>
+            )}
           </div>
 
-          {/* Véhicules — coordinateur transports uniquement */}
-          <div style={{ marginTop:16 }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:'#1A1514' }}>🚑 Véhicules (coordinateur transports)</div>
-              {can('souhaits.logistique') && <button onClick={addVehicule} style={BTN_SM}>+ Véhicule</button>}
-            </div>
-            {vehicules.length === 0 && <div style={{ fontSize:13, color:'#A8A39D', fontStyle:'italic' }}>Aucun véhicule encodé — à compléter par le coordinateur transports</div>}
-            {vehicules.map((v,i)=>(
-              <div key={i} style={{ background:'white', border:'1px solid rgba(27,176,206,.1)', borderRadius:10, padding:'12px 14px', marginBottom:8 }}>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:10, alignItems:'end' }}>
-                  <Sel label="Type" val={v.type} set={val=>updateVehicule(i,'type',val)} opts={['ambulance','tpmr','voiture']} labels={['Ambulance','TPMR','Voiture']} />
-                  <F label="Immatriculation" val={v.immatriculation} set={val=>updateVehicule(i,'immatriculation',val)} placeholder="1-ABC-234" />
-                  <F label="Conducteur" val={v.conducteur} set={val=>updateVehicule(i,'conducteur',val)} placeholder="Nom Prénom" />
-                  <button onClick={()=>removeVehicule(i)} style={{ ...BTN_SM, background:'#FCEBEB', color:'#C8435A', marginBottom:2 }}>✕</button>
-                </div>
-                <F label="Note" val={v.note} set={val=>updateVehicule(i,'note',val)} placeholder="Remarque, capacité…" />
-              </div>
-            ))}
+          {/* Timing */}
+          <div style={{ marginTop:16, background:'#F0F9FB', border:'1px solid rgba(27,176,206,.12)', borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'#0E4A5A', marginBottom:10 }}>🕐 Timing de la mission</div>
+            <F label="Base de départ" val={form.base_depart} set={v=>set('base_depart',v)} placeholder="Ex. Solumob Jemeppe/Meuse" />
+            <G2>
+              <F label="RDV base" val={form.rdv_base} set={v=>set('rdv_base',v)} type="datetime-local" />
+              <F label="Départ base" val={form.depart_base} set={v=>set('depart_base',v)} type="datetime-local" />
+            </G2>
+            <G2>
+              <F label="Arrivée lieu PEC" val={form.arrivee_pec} set={v=>set('arrivee_pec',v)} type="datetime-local" />
+              <F label="Départ lieu PEC" val={form.depart_pec} set={v=>set('depart_pec',v)} type="datetime-local" />
+            </G2>
+            <F label="Arrivée destination" val={form.arrivee_destination} set={v=>set('arrivee_destination',v)} type="datetime-local" />
           </div>
         </Section>}
 
@@ -438,7 +569,7 @@ export default function FormSouhait() {
                   <button onClick={()=>removeDate(i)} style={{ ...BTN_SM, background:'#FCEBEB', color:'#C8435A', padding:'3px 9px', fontSize:12 }}>✕</button>
                 </div>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:10 }}>
                 <F label="Date *" val={d.date_proposee} set={v=>updateDate(i,'date_proposee',v)} type="date" />
                 <F label="Heure de départ" val={d.heure_depart} set={v=>updateDate(i,'heure_depart',v)} type="time" />
                 <F label="Retour estimé" val={d.heure_retour_estimee} set={v=>updateDate(i,'heure_retour_estimee',v)} type="time" />
@@ -537,7 +668,7 @@ export default function FormSouhait() {
 function Section({ titre, children }) {
   return <div><div style={{ fontFamily:"'Cormorant Garamond',Georgia,serif", fontSize:'1.3rem', fontWeight:500, color:'#1A1514', marginBottom:18 }}>{titre}</div><div style={{ display:'flex', flexDirection:'column', gap:14 }}>{children}</div></div>
 }
-function G2({ children }) { return <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>{children}</div> }
+function G2({ children }) { return <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12 }}>{children}</div> }
 function F({ label, val, set, type='text', placeholder }) {
   return <div><label style={LBL}>{label}</label><input type={type} value={val||''} onChange={e=>set(e.target.value)} placeholder={placeholder} style={INP} onFocus={e=>e.target.style.borderColor='#1BB0CE'} onBlur={e=>e.target.style.borderColor='rgba(0,0,0,.1)'}/></div>
 }

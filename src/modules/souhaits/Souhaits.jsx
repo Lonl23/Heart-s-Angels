@@ -47,9 +47,8 @@ function ListeSouhaits() {
         // Récolteur : uniquement les phases avant réalisation
         q = q.in('statut', PHASES_RECOLTEUR)
       } else if (access === 'affecte') {
-        // Volontaire médical : uniquement les souhaits où il est affecté ET en phase de réalisation
-        // On charge tout puis on filtre côté client (la RLS gère le reste)
-        q = q.in('statut', PHASES_AFFECTE)
+        // Volontaire affecté : uniquement ses souhaits, et seulement à partir de « prêt à réaliser »
+        if (tab !== 'archives') q = q.in('statut', ['pret','en_cours'])
       } else if (access === 'none') {
         setItems([]); setLoading(false); return
       }
@@ -67,7 +66,7 @@ function ListeSouhaits() {
         // Fallback : recharger sans l'embed souhait_personnel
         let q2 = supabase.from('souhaits').select('*').order('created_at', { ascending: false })
         if (access === 'avant_realisation') q2 = q2.in('statut', PHASES_RECOLTEUR)
-        else if (access === 'affecte')      q2 = q2.in('statut', PHASES_AFFECTE)
+        else if (access === 'affecte' && tab !== 'archives') q2 = q2.in('statut', ['pret','en_cours'])
         if (tab === 'archives') q2 = q2.in('statut', PHASES_ARCHIVE)
         else if (access === 'all') q2 = q2.not('statut', 'in', '("realise","non_realise")')
         if (filtre !== 'tous' && filtre !== 'mes') q2 = q2.eq('statut', filtre)

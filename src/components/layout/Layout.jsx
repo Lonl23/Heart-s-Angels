@@ -82,11 +82,11 @@ export default function Layout() {
     : '?'
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} style={simProfil ? { paddingTop: 'calc(42px + env(safe-area-inset-top))' } : undefined}>
 
       {/* Bannière de simulation (visible partout) */}
       {simProfil && (
-        <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:1000, background:'#BA7517', color:'white', padding:'8px 16px', display:'flex', justifyContent:'center', alignItems:'center', gap:14, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", boxShadow:'0 2px 8px rgba(0,0,0,.2)' }}>
+        <div style={{ position:'fixed', top:0, left:0, right:0, zIndex:1000, background:'#BA7517', color:'white', padding:'calc(8px + env(safe-area-inset-top)) 16px 8px', display:'flex', justifyContent:'center', alignItems:'center', gap:14, fontSize:13.5, fontFamily:"'DM Sans',sans-serif", boxShadow:'0 2px 8px rgba(0,0,0,.2)', flexWrap:'wrap' }}>
           <span>👁️ Vous voyez l'application comme <strong>{simProfil._label}</strong></span>
           <button onClick={arreterSimulation} style={{ padding:'4px 12px', background:'white', color:'#BA7517', border:'none', borderRadius:7, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>Quitter la simulation</button>
         </div>

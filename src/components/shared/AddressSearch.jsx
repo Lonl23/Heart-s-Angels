@@ -21,7 +21,7 @@ export default function AddressSearch({ value, onChange, placeholder = 'Recherch
 
   function handleType(v) {
     setQ(v)
-    onChange({ adresse: v, lat: null, lon: null })   // saisie libre conservée
+    onChange({ adresse: v, nom: null, lat: null, lon: null })   // saisie libre conservée
     clearTimeout(timer.current)
     if (v.trim().length < 4) { setRes([]); setOpen(false); return }
     timer.current = setTimeout(() => rechercher(v), 450)
@@ -30,7 +30,7 @@ export default function AddressSearch({ value, onChange, placeholder = 'Recherch
   async function rechercher(v) {
     setLd(true)
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=be,fr,nl,lu,de&q=${encodeURIComponent(v)}`
+      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&namedetails=1&limit=6&countrycodes=be,fr,nl,lu,de&q=${encodeURIComponent(v)}`
       const r = await fetch(url, { headers: { 'Accept-Language': 'fr' } })
       const data = await r.json()
       setRes(data || [])
@@ -41,8 +41,9 @@ export default function AddressSearch({ value, onChange, placeholder = 'Recherch
 
   function choisir(item) {
     const adresse = item.display_name
+    const nom = item.namedetails?.name || item.name || adresse.split(',')[0]
     setQ(adresse); setOpen(false)
-    onChange({ adresse, lat: parseFloat(item.lat), lon: parseFloat(item.lon) })
+    onChange({ adresse, nom, lat: parseFloat(item.lat), lon: parseFloat(item.lon) })
   }
 
   return (

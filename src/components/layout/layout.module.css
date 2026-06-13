@@ -7,12 +7,17 @@
 :root {
   --sidebar-w: 224px;
   --topbar-h:  54px;
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
 }
 
 /* ── Structure ───────────────────────────────────────────── */
 .root {
   display: flex;
-  min-height: 100vh;
+  min-height: 100vh;        /* fallback */
+  min-height: 100dvh;       /* hauteur dynamique : pas de coupure en bas */
   background: #F5F0EB;
   font-family: 'DM Sans', sans-serif;
 }
@@ -21,6 +26,7 @@
 .sidebar {
   width: var(--sidebar-w);
   min-height: 100vh;
+  min-height: 100dvh;
   background: #FFFCF8;
   border-right: 1px solid rgba(27,176,206,0.1);
   display: flex;
@@ -28,6 +34,8 @@
   position: fixed;
   top: 0; left: 0; bottom: 0;
   z-index: 80;
+  padding-top: var(--safe-top);          /* sous l'encoche */
+  padding-left: var(--safe-left);
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -75,6 +83,7 @@
   flex: 1;
   padding: 10px 10px 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .navGroup {
   display: flex;
@@ -130,6 +139,7 @@
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
+  padding-bottom: calc(12px + var(--safe-bottom));   /* barre gestuelle */
   border-top: 1px solid rgba(27,176,206,0.08);
   margin-top: auto;
 }
@@ -162,18 +172,24 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
+  min-width: 0;            /* évite les débordements horizontaux sur mobile */
 }
 
 /* ── Topbar ──────────────────────────────────────────────── */
 .topbar {
-  height: var(--topbar-h);
+  box-sizing: border-box;
+  min-height: var(--topbar-h);
   background: #FFFCF8;
   border-bottom: 1px solid rgba(27,176,206,0.1);
   display: flex;
   align-items: center;
   padding: 0 1.25rem;
+  padding-top: var(--safe-top);                      /* topbar sous l'encoche */
+  padding-right: calc(1.25rem + var(--safe-right));
   gap: 12px;
-  position: sticky; top: 0; z-index: 70;
+  position: sticky;
+  top: 0; z-index: 70;
 }
 .burgerBtn {
   display: none;
@@ -188,6 +204,9 @@
   font-size: 14px;
   font-weight: 500;
   color: #3A3530;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .topbarRight {
   display: flex;
@@ -233,7 +252,8 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 320px;
+  width: min(320px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
   background: #FFFCF8;
   border: 1px solid rgba(27,176,206,0.12);
   border-radius: 14px;
@@ -262,8 +282,9 @@
 }
 .notifMarkAll:hover { text-decoration: underline; }
 .notifList {
-  max-height: 360px;
+  max-height: min(360px, 60vh);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .notifEmpty {
   display: flex;
@@ -316,6 +337,7 @@
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 2px 8px rgba(27,176,206,0.25);
   transition: box-shadow 0.12s;
+  flex-shrink: 0;
 }
 .userAvatarBtn:hover { box-shadow: 0 3px 12px rgba(27,176,206,0.35); }
 .userAvatarText {
@@ -325,7 +347,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 220px;
+  width: min(220px, calc(100vw - 16px));
   background: #FFFCF8;
   border: 1px solid rgba(27,176,206,0.12);
   border-radius: 12px;
@@ -374,6 +396,7 @@
 @media (max-width: 900px) {
   .sidebar {
     transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.12);
   }
   .sidebarOpen {
     transform: translateX(0);
@@ -386,8 +409,32 @@
   }
   .burgerBtn {
     display: flex;
+    width: 40px; height: 40px;
+    align-items: center; justify-content: center;
+    margin-left: calc(-1 * 4px);
   }
   .content {
     padding: 1rem;
+    padding-left: calc(1rem + var(--safe-left));
+    padding-right: calc(1rem + var(--safe-right));
+    padding-bottom: calc(1.25rem + var(--safe-bottom));   /* barre gestuelle */
   }
+  /* Cibles tactiles plus grandes */
+  .topbarBtn,
+  .userAvatarBtn {
+    width: 40px; height: 40px;
+  }
+  .navItem {
+    padding: 11px 12px;
+    font-size: 14px;
+  }
+  .topbarTitle {
+    font-size: 15px;
+  }
+}
+
+/* Très petits écrans : titre topbar discret pour laisser la place aux actions */
+@media (max-width: 380px) {
+  .topbar { padding-left: 0.75rem; padding-right: calc(0.75rem + var(--safe-right)); gap: 8px; }
+  .topbarTitle { font-size: 14px; }
 }
