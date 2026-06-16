@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -23,6 +23,7 @@ const ROLE_COLORS = {
 // Rôles qui apparaissent dans les disponibilités
 const ROLES_OPERATIONNELS = Object.keys(ROLE_COLORS)
 
+function ymd(d){ const x=new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}` }
 function getRoleColor(role) {
   return ROLE_COLORS[role] || { bg:'#7A7470', text:'white', label:role }
 }
@@ -53,40 +54,89 @@ export default function Disponibilites() {
   const [form, setForm]     = useState({})
   const [saving, setSaving] = useState(false)
   const [filterRole, setFilterRole] = useState('tous')
-  const [joursSouhaits, setJoursSouhaits] = useState([]) // dates avec souhaits planifiés
-  const [couverture, setCouverture] = useState({}) // {date: {amb:n, inf:n}}
+  const [joursSouhaits, setJoursSouhaits] = useState([]) // dates possibles (proposées)
+  const [joursConfirmes, setJoursConfirmes] = useState([])
+  const [souhaitOptions, setSouhaitOptions] = useState([]) // [{ jours:[...] }] une entrée par option de date
   const [filterUser, setFilterUser] = useState('moi') // 'moi' | 'tous'
   const [profiles, setProfiles] = useState([])
+
+  const hasRole = (p,r) => p?.role === r || (p?.roles_supplementaires || []).includes(r)
+  const estAmbAccredite = (p) => hasRole(p,'ambulancier') && !!p?.selection_medicale
+  const estInfirmier = (p) => hasRole(p,'infirmier') || hasRole(p,'medecin')
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
   const load = useCallback(async () => {
     const [{ data: d }, { data: p }] = await Promise.all([
-      supabase.from('disponibilites').select('*, profiles!disponibilites_user_id_fkey(id,prenom,nom,role,photo_url,selection_medicale)').order('date_debut'),
+      supabase.from('disponibilites').select('*, profiles!disponibilites_user_id_fkey(id,prenom,nom,role,roles_supplementaires,photo_url,selection_medicale)').order('date_debut'),
       supabase.from('profiles').select('id,prenom,nom,role,photo_url').eq('actif',true).order('nom'),
     ])
     setDispos(d||[])
     setProfiles(p||[])
-    // Charger les jours avec souhaits planifiés (60 jours)
-    const depuis = new Date().toISOString().slice(0,10)
-    const jusqu = new Date(Date.now()+60*864e5).toISOString().slice(0,10)
-    const { data: souhaitsJ } = await supabase
-      .from('souhaits').select('date_confirmee, souhait_dates(date_proposee, confirmee)')
-      .in('statut', ['planifie','en_cours'])
-      .gte('date_confirmee', depuis).lte('date_confirmee', jusqu)
+    // Jours où un souhait est proposé comme DATE POSSIBLE (plages incluses)
+    const depuis = ymd(new Date())
+    const jusqu  = ymd(new Date(Date.now()+120*864e5))
+    const { data: sd } = await supabase
+      .from('souhait_dates')
+      .select('date_proposee, date_fin_proposee, plusieurs_jours, confirmee, souhaits!inner(statut)')
+      .gte('date_proposee', depuis).lte('date_proposee', jusqu)
+    const ARCHIVE = ['realise','non_realise','renseignements']
     const jours = new Set()
-    souhaitsJ?.forEach(s => {
-      if (s.date_confirmee) jours.add(s.date_confirmee)
-      s.souhait_dates?.forEach(sd => { if (sd.confirmee) jours.add(sd.date_proposee) })
+    const confirmes = new Set()
+    const options = []
+    sd?.forEach(row => {
+      if (ARCHIVE.includes(row.souhaits?.statut)) return
+      const debut = row.date_proposee
+      const fin = (row.plusieurs_jours && row.date_fin_proposee) ? row.date_fin_proposee : debut
+      const a = new Date(debut+'T00:00:00'), b = new Date(fin+'T00:00:00')
+      const jrs = []
+      for (let t=new Date(a); t<=b; t.setDate(t.getDate()+1)) {
+        const j = ymd(t)
+        jrs.push(j); jours.add(j); if (row.confirmee) confirmes.add(j)
+      }
+      if (jrs.length) options.push({ jours: jrs })
     })
     setJoursSouhaits([...jours])
-    // Couverture médicale par jour
-    const { data: cov } = await supabase.from('couverture_medicale_jour').select('*').order('jour')
-    const covMap = {}
-    cov?.forEach(r => { covMap[r.jour] = r })
-    setCouverture(covMap)
+    setJoursConfirmes([...confirmes])
+    setSouhaitOptions(options)
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // Disponibilités par volontaire (plages), pour vérifier la couverture sur TOUS les jours d'une option
+  const byUser = useMemo(() => {
+    const m = new Map()
+    for (const d of dispos) {
+      const dd = d.date_debut ? String(d.date_debut).slice(0,10) : null
+      const df = d.date_fin ? String(d.date_fin).slice(0,10) : dd
+      if (!dd) continue
+      if (!m.has(d.user_id)) m.set(d.user_id, { profile: d.profiles, ranges: [] })
+      m.get(d.user_id).ranges.push({ dd, df: df || dd })
+    }
+    return m
+  }, [dispos])
+
+  // Couverture : une option (mono ou multi-jours) est couverte si ≥1 ambulancier accrédité
+  // ET ≥1 infirmier/médecin sont disponibles sur TOUS ses jours. Le résultat est reporté sur chaque jour.
+  const couverture = useMemo(() => {
+    const couvreTous = (ranges, jrs) => jrs.every(j => ranges.some(r => r.dd <= j && r.df >= j))
+    const m = {}
+    for (const opt of souhaitOptions) {
+      let amb = 0, inf = 0
+      for (const { profile: p, ranges } of byUser.values()) {
+        if (!couvreTous(ranges, opt.jours)) continue
+        if (estAmbAccredite(p)) amb++
+        if (estInfirmier(p)) inf++
+      }
+      const ok = amb >= 1 && inf >= 1
+      for (const j of opt.jours) {
+        const prev = m[j]
+        m[j] = prev
+          ? { amb: Math.min(prev.amb, amb), inf: Math.min(prev.inf, inf), ok: prev.ok && ok }
+          : { amb, inf, ok }
+      }
+    }
+    return m
+  }, [souhaitOptions, byUser])
 
   const weekDays = getWeekDays(currentDate)
 
@@ -104,23 +154,25 @@ export default function Disponibilites() {
   function openNew(date) {
     if (!profile) return
     const d = date || new Date()
-    const iso = d.toISOString().slice(0,10)
+    const iso = ymd(d)
     setForm({
       user_id:  profile.id,
-      date_debut:  `${iso}T08:00`,
-      date_fin:    `${iso}T18:00`,
-      type:        'disponible',
-      note:        '',
+      jour:     iso,
+      jour_fin: iso,
+      type:     'disponible',
+      note:     '',
     })
     setModal({ type:'new' })
   }
 
   async function save() {
     setSaving(true)
+    const jour = form.jour || (form.date_debut ? String(form.date_debut).slice(0,10) : null)
+    const jourFin = form.jour_fin || jour
     const payload = {
       user_id: form.user_id || profile.id,
-      date_debut: form.date_debut,
-      date_fin:   form.date_fin,
+      date_debut: `${jour}T00:00:00`,
+      date_fin:   `${jourFin}T23:59:00`,
       type:       form.type,
       note:       form.note || null,
     }
@@ -130,6 +182,11 @@ export default function Disponibilites() {
       await supabase.from('disponibilites').insert(payload)
     }
     setSaving(false); setModal(null); load()
+  }
+
+  function openEdit(d){
+    setForm({ ...d, jour: String(d.date_debut).slice(0,10), jour_fin: String(d.date_fin||d.date_debut).slice(0,10) })
+    setModal({ type:'edit' })
   }
 
   async function remove() {
@@ -233,34 +290,38 @@ export default function Disponibilites() {
               return dd.getDate()===day.getDate() && dd.getMonth()===day.getMonth()
             })
             const isToday = day.toDateString() === new Date().toDateString()
-            const dayStr = day.toISOString().slice(0,10)
+            const dayStr = ymd(day)
             const hasSouhait = joursSouhaits.includes(dayStr)
-            const cov = couverture[dayStr] || {}
-            const couvertOK = (cov.nb_ambulanciers_selection >= 1) && (cov.nb_infirmiers >= 1)
+            const cov = couverture[dayStr] || { amb:0, inf:0, ok:false }
+            const couvertOK = cov.ok
             const dayRed = hasSouhait && !couvertOK
             return (
-              <div key={di} className={`disp-day ${isToday?'disp-day-today':''} ${dayRed?'disp-day-red':''}`} onClick={()=>openNew(day)}>
-                {dayRed && <div className="disp-day-alert" title="Souhait planifié — couverture médicale incomplète">⚠️</div>}
+              <div key={di} className={`disp-day ${isToday?'disp-day-today':''} ${dayRed?'disp-day-red':''}`} onClick={()=>openNew(day)}
+                style={hasSouhait && couvertOK ? { boxShadow:'inset 0 0 0 2px rgba(59,109,17,.4)' } : undefined}>
+                {dayRed && <div className="disp-day-alert" title="Souhait à couvrir — il manque la qualification requise">⚠️</div>}
                 <div className="disp-day-header">
                   <span className="disp-day-name">{JOURS[di]}</span>
                   <span className={`disp-day-num ${isToday?'today':''}`}>{day.getDate()}</span>
                 </div>
+                {hasSouhait && (
+                  <div style={{ fontSize:10.5, fontWeight:600, borderRadius:6, padding:'2px 5px', marginBottom:4, background: couvertOK?'#EAF3DE':'#FCEBEB', color: couvertOK?'#3B6D11':'#C8435A' }}>
+                    {couvertOK ? '✅ Souhait couvert' : '🎯 Souhait — manque '}{!couvertOK && [cov.amb<1?'ambulancier accr.':null, cov.inf<1?'infirmier':null].filter(Boolean).join(' + ')}
+                  </div>
+                )}
                 <div className="disp-day-events">
                   {dayDispos.map((d, i) => {
                     const rc = getRoleColor(d.profiles?.role)
                     const tc = TYPE_COLORS[d.type] || TYPE_COLORS.disponible
-                    const hDeb = new Date(d.date_debut).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})
-                    const hFin = new Date(d.date_fin).toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})
                     return (
                       <div key={i} className="disp-event"
                         style={{ background: filterUser==='tous' ? rc.bg : tc.bg, color: filterUser==='tous' ? rc.text : tc.tc, border:`1px solid ${filterUser==='tous'?(rc.border||'transparent'):'transparent'}` }}
                         onClick={e=>{
                           e.stopPropagation()
                           if (d.user_id === profile?.id || can('coordinateur')) {
-                            setForm(d); setModal({ type:'edit' })
+                            openEdit(d)
                           }
                         }}>
-                        <div className="disp-event-time">{hDeb}–{hFin}</div>
+                        <div className="disp-event-time">Journée</div>
                         {filterUser === 'tous' && (
                           <div className="disp-event-who">{d.profiles?.prenom} {d.profiles?.nom?.[0]}.</div>
                         )}
@@ -293,11 +354,11 @@ export default function Disponibilites() {
             const fin = new Date(d.date_fin)
             const canEdit = d.user_id === profile?.id || can('coordinateur')
             return (
-              <div key={i} className="disp-list-row" onClick={()=>canEdit&&(setForm(d),setModal({type:'edit'}))}>
+              <div key={i} className="disp-list-row" onClick={()=>canEdit&&openEdit(d)}>
                 <div className="disp-list-role-dot" style={{ background: rc.bg, border:`1px solid ${rc.border||'transparent'}` }}/>
                 <div className="disp-list-date">
                   <div className="disp-list-date-main">{deb.toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'short'})}</div>
-                  <div className="disp-list-time">{deb.toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})} – {fin.toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit'})}</div>
+                  <div className="disp-list-time">{ymd(deb)===ymd(fin) ? 'Journée entière' : `→ ${fin.toLocaleDateString('fr-BE',{weekday:'short',day:'numeric',month:'short'})}`}</div>
                 </div>
                 {filterUser === 'tous' && (
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -323,7 +384,7 @@ export default function Disponibilites() {
       )}
 
       {/* ── VUE MOIS ── */}
-      {view === 'mois' && <MonthView currentDate={currentDate} dispos={dispFiltered} profile={profile} joursSouhaits={joursSouhaits} couverture={couverture} onDayClick={openNew} onEventClick={(d)=>{ if(d.user_id===profile?.id||can('coordinateur')){setForm(d);setModal({type:'edit'})} }} />}
+      {view === 'mois' && <MonthView currentDate={currentDate} dispos={dispFiltered} profile={profile} joursSouhaits={joursSouhaits} couverture={couverture} onDayClick={openNew} onEventClick={(d)=>{ if(d.user_id===profile?.id||can('coordinateur')){openEdit(d)} }} />}
 
       {/* Légende */}
       <div className="disp-legend">
@@ -399,16 +460,19 @@ export default function Disponibilites() {
                 </div>
               </div>
 
-              {/* Dates */}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                <div>
-                  <label style={LBL}>Du</label>
-                  <input type="datetime-local" value={form.date_debut||''} onChange={e=>set('date_debut',e.target.value)} style={INP}/>
+              {/* Dates — journée entière */}
+              <div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                  <div>
+                    <label style={LBL}>Jour</label>
+                    <input type="date" value={form.jour||''} onChange={e=>set('jour',e.target.value)} style={INP}/>
+                  </div>
+                  <div>
+                    <label style={LBL}>Jusqu'au (optionnel)</label>
+                    <input type="date" value={form.jour_fin||''} min={form.jour||undefined} onChange={e=>set('jour_fin',e.target.value)} style={INP}/>
+                  </div>
                 </div>
-                <div>
-                  <label style={LBL}>Au</label>
-                  <input type="datetime-local" value={form.date_fin||''} onChange={e=>set('date_fin',e.target.value)} style={INP}/>
-                </div>
+                <div style={{ fontSize:11.5, color:'#7A7470', marginTop:6 }}>🕐 La disponibilité couvre la <strong>journée entière</strong>. Laissez « Jusqu'au » vide pour un seul jour.</div>
               </div>
 
               {/* Note */}
@@ -456,15 +520,26 @@ function MonthView({ currentDate, dispos, profile, joursSouhaits=[], couverture=
         {days.map((day, i) => {
           if (!day) return <div key={i}/>
           const isToday = day.toDateString() === new Date().toDateString()
+          const dayStr = ymd(day)
+          const hasSouhait = joursSouhaits.includes(dayStr)
+          const cov = couverture[dayStr] || { amb:0, inf:0, ok:false }
+          const dayRed = hasSouhait && !cov.ok
+          const dayGreen = hasSouhait && cov.ok
           const dayDispos = dispos.filter(d=>{
             const dd = new Date(d.date_debut)
             return dd.getDate()===day.getDate() && dd.getMonth()===month && dd.getFullYear()===year
           })
+          const bg = isToday ? '#E6F7FA' : dayRed ? '#FDF1F3' : dayGreen ? '#F6FBF1' : 'white'
+          const bord = isToday ? '#1BB0CE' : dayRed ? '#C8435A' : dayGreen ? '#3B6D11' : 'rgba(27,176,206,.08)'
           return (
-            <div key={i} onClick={()=>onDayClick(day)} style={{ minHeight:80, background:isToday?'#E6F7FA':'white', border:`1px solid ${isToday?'#1BB0CE':'rgba(27,176,206,.08)'}`, borderRadius:8, padding:'4px', cursor:'pointer', transition:'background .12s' }}
-              onMouseEnter={e=>{ if(!isToday) e.currentTarget.style.background='#F8FCFD' }}
-              onMouseLeave={e=>{ if(!isToday) e.currentTarget.style.background='white' }}>
-              <div style={{ fontSize:12, fontWeight:isToday?700:400, color:isToday?'#1BB0CE':'#4A4340', marginBottom:3, textAlign:'right' }}>{day.getDate()}</div>
+            <div key={i} onClick={()=>onDayClick(day)} style={{ minHeight:80, background:bg, border:`1px solid ${bord}`, borderRadius:8, padding:'4px', cursor:'pointer', transition:'background .12s', position:'relative' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3 }}>
+                {hasSouhait && <span title={cov.ok ? 'Souhait couvert' : 'Souhait — qualification manquante'} style={{ fontSize:11 }}>{cov.ok ? '✅' : '🎯'}</span>}
+                <div style={{ fontSize:12, fontWeight:isToday?700:400, color:isToday?'#1BB0CE':'#4A4340', marginLeft:'auto' }}>{day.getDate()}</div>
+              </div>
+              {hasSouhait && !cov.ok && (
+                <div style={{ fontSize:9.5, fontWeight:600, color:'#C8435A', marginBottom:2 }}>manque {[cov.amb<1?'amb. accr.':null, cov.inf<1?'inf.':null].filter(Boolean).join(' + ')}</div>
+              )}
               {dayDispos.slice(0,3).map((d,j)=>{
                 const rc = getRoleColor(d.profiles?.role)
                 return (
@@ -478,8 +553,9 @@ function MonthView({ currentDate, dispos, profile, joursSouhaits=[], couverture=
             </div>
           )
         })}
-        <div style={{ display:'flex', alignItems:'center', gap:7, marginTop:10, background:'#FEF2F2', border:'1px solid rgba(200,67,90,.2)', borderRadius:8, padding:'7px 12px', fontSize:12, color:'#C8435A', fontWeight:500 }}>
-          ⚠️ Jour rouge = souhait planifié sans couverture minimale (1 ambulancier accrédité conducteur + 1 infirmier)
+        <div style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:14, marginTop:10, flexWrap:'wrap', fontSize:12, fontWeight:500 }}>
+          <span style={{ display:'flex', alignItems:'center', gap:6, color:'#C8435A' }}><span style={{ width:12, height:12, borderRadius:3, background:'#FDF1F3', border:'1px solid #C8435A' }}/>🎯 Souhait sans la qualification requise (1 ambulancier accrédité + 1 infirmier)</span>
+          <span style={{ display:'flex', alignItems:'center', gap:6, color:'#3B6D11' }}><span style={{ width:12, height:12, borderRadius:3, background:'#F6FBF1', border:'1px solid #3B6D11' }}/>✅ Souhait couvert</span>
         </div>
       </div>
     </div>

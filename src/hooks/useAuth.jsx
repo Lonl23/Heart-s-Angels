@@ -40,6 +40,7 @@ export const NAV_PAGES = [
   { key: 'nav.stock',          label: 'Stock matériel' },
   { key: 'nav.contenu',        label: 'Contenu du site' },
   { key: 'nav.organigramme',   label: 'Organigramme' },
+  { key: 'nav.annuaire',       label: 'Annuaire' },
 ]
 
 // Raccourcis de groupes de fonctions
@@ -89,6 +90,8 @@ const PERM_MATRIX = {
   'nav.defraiements':     '*',
   'nav.souhaits':         ['president','vice_president','coord_medical','coord_logistique','coord_transports','recolteur_souhaits','relations_publiques','coord_informatique', ...QUALIF_MEDICALES],
   'nav.volontaires':      ['president','vice_president','coord_medical','coord_transports','coord_benevoles','coord_informatique'],
+  'nav.annuaire':         ['president','vice_president','coord_medical','coord_logistique','coord_transports','recolteur_souhaits','coord_informatique', ...QUALIF_MEDICALES],
+  'annuaire.medical':     ['president','vice_president','coord_medical','recolteur_souhaits','coord_informatique', ...QUALIF_MEDICALES],
 
   // Sous-permissions héritées (compat ancien code)
   'souhaits.read':        ['president','vice_president','coord_medical','recolteur_souhaits','coord_informatique', ...QUALIF_MEDICALES],

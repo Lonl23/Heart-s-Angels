@@ -153,4 +153,23 @@ export async function notifFormulaire(cleFormulaire, titreFormulaire, destinatai
   })
 }
 
+// ── Rapport final d'un souhait réalisé → coordinateurs transport & médical ────
+export async function notifRapportFinalSouhait(souhait, expediteur_id) {
+  const dest = [
+    ...await idsAvecFonction('coord_transports'),
+    ...await idsAdjointDe('coord_transports'),
+    ...await idsAvecFonction('coord_medical'),
+    ...await idsAdjointDe('coord_medical'),
+  ]
+  const patient = `${souhait.patient_prenom||''} ${souhait.patient_nom||''}`.trim() || 'un patient'
+  await envoyer(dest, {
+    type: 'souhait',
+    titre: 'Rapport de réalisation disponible',
+    message: `Le souhait de ${patient} est passé en « réalisé ». Le rapport final consolidé est disponible (PDF téléchargeable dans l'onglet Rapport).`,
+    lien: `/app/souhaits/${souhait.id}`,
+    priorite: 'normale',
+    expediteur_id,
+  })
+}
+
 export { idsDirection, envoyer, idsAvecFonction, idsAdjointDe }

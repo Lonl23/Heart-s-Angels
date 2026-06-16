@@ -18,9 +18,26 @@ const STEPS = [
   { id:'suivi',      label:'Suivi',       icon:'📋' },
 ]
 
+function todayLocal(){ const x=new Date(); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}` }
+const TIMINGS_DEBUT = [
+  { id:'rdv_base',            label:'Rendez-vous Base' },
+  { id:'depart_base',         label:'Départ Base' },
+  { id:'sur_place_pec',       label:'Sur place PEC' },
+  { id:'depart_destination',  label:'Départ vers la destination' },
+  { id:'arrivee_destination', label:'Arrivé destination' },
+]
+const TIMINGS_FIN = [
+  { id:'retour_pec',     label:'Retour vers PEC' },
+  { id:'arrivee_retour', label:'Arrivé retour' },
+  { id:'retour_base',    label:'Retour Base' },
+  { id:'rentre_base',    label:'Rentré base' },
+]
+const TIMINGS_INIT = [...TIMINGS_DEBUT, ...TIMINGS_FIN].map(t => ({ id:t.id, label:t.label, heure:'', jour:'' }))
+
 const INITIAL = {
   // Patient
   patient_prenom:'', patient_nom:'', patient_ddn:'', etablissement:'',
+  beneficiaire_id:'', accompagnant_id:'',
   medecin_referent:'', telephone_medecin:'',
   contact_urgence_nom:'', contact_urgence_tel:'',
   infirmier_referent_etablissement:'',
@@ -46,7 +63,7 @@ const INITIAL = {
   lieu_destination:'', adresse_destination:'', dest_adresse_particuliere:'', dest_precisions:'',
   lieu_retour:'',
   sur_plusieurs_jours:false, hotels:[], adresse_hotel:'', nb_nuits:0, date_fin:'',
-  base_depart:'', rdv_base:'', depart_base:'', arrivee_pec:'', depart_pec:'', arrivee_destination:'', planning_particulier:[],
+  base_depart:'', planning_particulier:[], timings: TIMINGS_INIT.map(t=>({...t})),
   traitements:[],
   // Admin
   urgence:false, statut:'nouveau', notes:'',
@@ -65,6 +82,8 @@ export default function FormSouhait() {
   const [form, setForm]   = useState(INITIAL)
   const [step, setStep]   = useState(0)
   const [dates, setDates] = useState([]) // dates possibles
+  const [dispos, setDispos] = useState([])
+  const [profilesList, setProfilesList] = useState([])
   const [vehicules, setVehicules] = useState([])
   const [equipages, setEquipages] = useState([])
   const [suiviEntries, setSuiviEntries] = useState([])
@@ -74,6 +93,36 @@ export default function FormSouhait() {
   const [loading, setLoading] = useState(isEdit || !!fromDemande)
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
+
+  // Annuaire : bénéficiaires + accompagnants (pour relier / créer)
+  const [annuBenef, setAnnuBenef] = useState([])
+  const [annuAcc, setAnnuAcc] = useState([])
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('annuaire_contacts')
+        .select('id,categorie,prenom,nom,date_naissance,beneficiaire_id,lien,email,telephone')
+        .in('categorie', ['beneficiaire','accompagnant'])
+      setAnnuBenef((data||[]).filter(c => c.categorie==='beneficiaire'))
+      setAnnuAcc((data||[]).filter(c => c.categorie==='accompagnant'))
+    })()
+  }, [])
+  const nomAnnu = (c) => c ? `${c.prenom||''} ${c.nom||''}`.trim() || '—' : ''
+  function choisirBenef(v) {
+    if (!v) { setForm(f=>({ ...f, beneficiaire_id:'', accompagnant_id:'' })); return }
+    const b = annuBenef.find(x => x.id === v)
+    setForm(f => ({ ...f, beneficiaire_id:v, accompagnant_id:'',
+      patient_prenom: b?.prenom||'', patient_nom: b?.nom||'',
+      patient_ddn: b?.date_naissance ? String(b.date_naissance).slice(0,10) : '' }))
+  }
+  function choisirAcc(v) {
+    if (!v) { set('accompagnant_id',''); return }
+    const a = annuAcc.find(x => x.id === v)
+    setForm(f => ({ ...f, accompagnant_id:v,
+      contact_prenom: a?.prenom||'', contact_nom: a?.nom||'',
+      contact_relation: a?.lien||f.contact_relation,
+      contact_email: a?.email||'', contact_telephone: a?.telephone||'' }))
+  }
+  const accsDuBenef = annuAcc.filter(a => a.beneficiaire_id === form.beneficiaire_id)
 
   useEffect(() => {
     async function load() {
@@ -89,7 +138,6 @@ export default function FormSouhait() {
           if (s.patient_ddn) f.patient_ddn = s.patient_ddn.slice(0,10)
           if (s.date_premiere_demande) f.date_premiere_demande = s.date_premiere_demande.slice(0,10)
           if (s.date_rencontre_beneficiaire) f.date_rencontre_beneficiaire = s.date_rencontre_beneficiaire.slice(0,10)
-          ;['rdv_base','depart_base','arrivee_pec','depart_pec','arrivee_destination'].forEach(k=>{ if (s[k]) f[k] = new Date(s[k]).toISOString().slice(0,16) })
           setForm(f)
           setVehicules(s.vehicules || [])
           setEquipages(s.equipages || [])
@@ -117,8 +165,52 @@ export default function FormSouhait() {
   }, [id, fromDemande, isEdit])
 
   // ── Dates possibles ─────────────────────────────────────────────────────────
+  // Chargement des disponibilités + profils (pour l'indicateur de couverture)
+  useEffect(() => {
+    (async () => {
+      const [{ data: pr }, { data: dp }] = await Promise.all([
+        supabase.from('profiles').select('id,role,roles_supplementaires,selection_medicale'),
+        supabase.from('disponibilites').select('user_id,date_debut,date_fin'),
+      ])
+      setProfilesList(pr || [])
+      setDispos(dp || [])
+    })()
+  }, [])
+
+  const hasRole = (p,r) => p.role === r || (p.roles_supplementaires || []).includes(r)
+  const estAmbAccredite = (p) => hasRole(p,'ambulancier') && !!p.selection_medicale
+  const estInfirmier = (p) => hasRole(p,'infirmier') || hasRole(p,'medecin')
+
+  function joursEntre(d1, d2) {
+    const out = []; const a = new Date(d1+'T00:00:00'); const b = new Date((d2||d1)+'T00:00:00')
+    const ymd = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
+    for (let t = new Date(a); t <= b; t.setDate(t.getDate()+1)) out.push(ymd(t))
+    return out
+  }
+  function userCouvre(userId, jours) {
+    const ds = dispos.filter(d => d.user_id === userId).map(d => {
+      const dd = d.date_debut ? String(d.date_debut).slice(0,10) : null
+      const df = d.date_fin ? String(d.date_fin).slice(0,10) : dd
+      return { dd, df: df || dd }
+    })
+    return jours.every(j => ds.some(({dd,df}) => dd && dd <= j && df >= j))
+  }
+  // Couverture d'une date possible : ≥1 ambulancier accrédité + ≥1 infirmier dispo sur TOUS les jours
+  function couverture(d) {
+    if (!d.date_proposee) return { vide:true, ok:false }
+    if (d.plusieurs_jours && !d.date_fin_proposee) return { incomplet:true, ok:false }
+    const jours = joursEntre(d.date_proposee, d.plusieurs_jours ? d.date_fin_proposee : null)
+    let nbAmb = 0, nbInf = 0
+    for (const p of profilesList) {
+      if (!userCouvre(p.id, jours)) continue
+      if (estAmbAccredite(p)) nbAmb++
+      if (estInfirmier(p)) nbInf++
+    }
+    return { ok: nbAmb >= 1 && nbInf >= 1, nbAmb, nbInf, nbJours: jours.length }
+  }
+
   function addDate() {
-    setDates(d => [...d, { date_proposee:'', heure_depart:'', heure_retour_estimee:'', note:'', confirmee:false, _new:true }])
+    setDates(d => [...d, { date_proposee:'', date_fin_proposee:'', plusieurs_jours:false, heure_depart:'', heure_retour_estimee:'', note:'', confirmee:false, _new:true }])
   }
   function updateDate(i, k, v) {
     setDates(d => d.map((dd,idx) => idx===i ? {...dd,[k]:v} : dd))
@@ -184,11 +276,30 @@ export default function FormSouhait() {
     if (!form.patient_prenom || !form.patient_nom) { setError('Prénom et nom du patient requis.'); return }
     setSaving(true); setError('')
 
+    // Annuaire : relier (ou créer automatiquement) le bénéficiaire et l'accompagnant
+    let benefId = form.beneficiaire_id || null
+    if (!benefId && (form.patient_prenom || form.patient_nom)) {
+      const { data: b } = await supabase.from('annuaire_contacts').insert({
+        categorie:'beneficiaire', prenom:form.patient_prenom||null, nom:form.patient_nom||null,
+        date_naissance:form.patient_ddn||null, created_by:profile?.id,
+      }).select('id').single()
+      benefId = b?.id || null
+    }
+    let accId = form.accompagnant_id || null
+    if (!accId && benefId && (form.contact_prenom || form.contact_nom)) {
+      const { data: a } = await supabase.from('annuaire_contacts').insert({
+        categorie:'accompagnant', beneficiaire_id:benefId,
+        prenom:form.contact_prenom||null, nom:form.contact_nom||null, lien:form.contact_relation||null,
+        email:form.contact_email||null, telephone:form.contact_telephone||null, created_by:profile?.id,
+      }).select('id').single()
+      accId = a?.id || null
+    }
+
     // Les champs vides ('') cassent les colonnes DATE/numériques → convertir en null
     const clean = Object.fromEntries(
       Object.entries(form).map(([k, v]) => [k, v === '' ? null : v])
     )
-    const payload = { ...clean, vehicules, equipages, created_by: profile?.id }
+    const payload = { ...clean, beneficiaire_id: benefId, accompagnant_id: accId, vehicules, equipages, created_by: profile?.id }
 
     let souhaitId = id
     if (isEdit) {
@@ -202,12 +313,27 @@ export default function FormSouhait() {
 
     if (souhaitId) {
       // Sauvegarder les dates possibles
+      // Supprimer en base les options de date retirées
+      const { data: existDates } = await supabase.from('souhait_dates').select('id').eq('souhait_id', souhaitId)
+      const keptIds = new Set(dates.filter(d => d.id && !d._new).map(d => d.id))
+      const toDelete = (existDates || []).filter(e => !keptIds.has(e.id)).map(e => e.id)
+      if (toDelete.length) await supabase.from('souhait_dates').delete().in('id', toDelete)
+
       for (const d of dates) {
         if (!d.date_proposee) continue
+        const champs = {
+          date_proposee: d.date_proposee,
+          plusieurs_jours: !!d.plusieurs_jours,
+          date_fin_proposee: (d.plusieurs_jours && d.date_fin_proposee) ? d.date_fin_proposee : null,
+          heure_depart: d.heure_depart||null,
+          heure_retour_estimee: d.heure_retour_estimee||null,
+          note: d.note||null,
+          confirmee: !!d.confirmee,
+        }
         if (d.id && !d._new) {
-          await supabase.from('souhait_dates').update({ date_proposee:d.date_proposee, heure_depart:d.heure_depart||null, heure_retour_estimee:d.heure_retour_estimee||null, note:d.note||null, confirmee:d.confirmee }).eq('id', d.id)
+          await supabase.from('souhait_dates').update(champs).eq('id', d.id)
         } else {
-          await supabase.from('souhait_dates').insert({ souhait_id:souhaitId, date_proposee:d.date_proposee, heure_depart:d.heure_depart||null, heure_retour_estimee:d.heure_retour_estimee||null, note:d.note||null, confirmee:!!d.confirmee })
+          await supabase.from('souhait_dates').insert({ souhait_id:souhaitId, ...champs })
         }
       }
       // Sauvegarder les entrées suivi nouvelles
@@ -255,12 +381,28 @@ export default function FormSouhait() {
         {/* ── NOUVEAU : essentiel ── */}
         {curId==='nouveau' && <Section titre="Nouveau souhait — informations essentielles">
           <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, marginBottom:4 }}>Bénéficiaire</div>
+          <div style={{ marginBottom:8 }}>
+            <label style={LBL}>Depuis l'annuaire</label>
+            <select value={form.beneficiaire_id||''} onChange={e=>choisirBenef(e.target.value)} style={{ ...TA, minHeight:0, padding:'9px 11px' }}>
+              <option value="">➕ Nouveau bénéficiaire (sera ajouté à l'annuaire)</option>
+              {annuBenef.map(b=> <option key={b.id} value={b.id}>{nomAnnu(b)}</option>)}
+            </select>
+          </div>
           <G2><F label="Prénom *" val={form.patient_prenom} set={v=>set('patient_prenom',v)} />
               <F label="Nom *" val={form.patient_nom} set={v=>set('patient_nom',v)} /></G2>
           <G2><F label="Date de naissance" val={form.patient_ddn} set={v=>set('patient_ddn',v)} type="date" />
               <F label="Institution / MRS / Hôpital" val={form.etablissement} set={v=>set('etablissement',v)} /></G2>
 
-          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'14px 0 4px' }}>Demandeur</div>
+          <div style={{ fontSize:12.5, fontWeight:700, color:'#0E4A5A', textTransform:'uppercase', letterSpacing:.4, margin:'14px 0 4px' }}>Demandeur / Accompagnant</div>
+          {form.beneficiaire_id && accsDuBenef.length > 0 && (
+            <div style={{ marginBottom:8 }}>
+              <label style={LBL}>Accompagnant (annuaire du bénéficiaire)</label>
+              <select value={form.accompagnant_id||''} onChange={e=>choisirAcc(e.target.value)} style={{ ...TA, minHeight:0, padding:'9px 11px' }}>
+                <option value="">➕ Nouvel accompagnant (sera ajouté à l'annuaire)</option>
+                {accsDuBenef.map(a=> <option key={a.id} value={a.id}>{nomAnnu(a)}{a.lien?` (${a.lien})`:''}</option>)}
+              </select>
+            </div>
+          )}
           <G2><F label="Prénom *" val={form.contact_prenom} set={v=>set('contact_prenom',v)} />
               <F label="Nom *" val={form.contact_nom} set={v=>set('contact_nom',v)} /></G2>
           <G2><F label="Date de naissance" val={form.contact_ddn} set={v=>set('contact_ddn',v)} type="date" />
@@ -538,15 +680,8 @@ export default function FormSouhait() {
           <div style={{ marginTop:16, background:'#F0F9FB', border:'1px solid rgba(27,176,206,.12)', borderRadius:12, padding:'14px 16px' }}>
             <div style={{ fontSize:13, fontWeight:600, color:'#0E4A5A', marginBottom:10 }}>🕐 Timing de la mission</div>
             <F label="Base de départ" val={form.base_depart} set={v=>set('base_depart',v)} placeholder="Ex. Solumob Jemeppe/Meuse" />
-            <G2>
-              <F label="RDV base" val={form.rdv_base} set={v=>set('rdv_base',v)} type="datetime-local" />
-              <F label="Départ base" val={form.depart_base} set={v=>set('depart_base',v)} type="datetime-local" />
-            </G2>
-            <G2>
-              <F label="Arrivée lieu PEC" val={form.arrivee_pec} set={v=>set('arrivee_pec',v)} type="datetime-local" />
-              <F label="Départ lieu PEC" val={form.depart_pec} set={v=>set('depart_pec',v)} type="datetime-local" />
-            </G2>
-            <F label="Arrivée destination" val={form.arrivee_destination} set={v=>set('arrivee_destination',v)} type="datetime-local" />
+            <div style={{ fontSize:11.5, color:'#7A7470', margin:'8px 0 6px' }}>Encodez les heures (jour du souhait par défaut). Cochez « jour précis » pour changer la date.</div>
+            <TimingsEditor timings={form.timings} onChange={(t)=>set('timings',t)} />
           </div>
         </Section>}
 
@@ -555,8 +690,12 @@ export default function FormSouhait() {
           <div style={{ background:'#F0F9FB', border:'1px solid rgba(27,176,206,.12)', borderRadius:10, padding:'12px 14px', marginBottom:16, fontSize:13, color:'#0E4A5A' }}>
             💡 Indiquez une ou plusieurs dates possibles. Le coordinateur confirmera la date définitive en fonction des disponibilités de l'équipe.
           </div>
-          {dates.map((d,i)=>(
-            <div key={i} style={{ background:'white', border:`1.5px solid ${d.confirmee?'#3B6D11':'rgba(27,176,206,.12)'}`, borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
+          {dates.map((d,i)=>{
+            const cov = couverture(d)
+            const couleur = d.confirmee ? '#3B6D11' : cov.vide ? 'rgba(27,176,206,.12)' : cov.ok ? '#3B6D11' : '#C8435A'
+            const fond = d.confirmee || cov.ok ? '#F6FBF1' : cov.vide ? 'white' : '#FDF1F3'
+            return (
+            <div key={i} style={{ background:fond, border:`1.5px solid ${couleur}`, borderRadius:12, padding:'14px 16px', marginBottom:10 }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
                 <div style={{ fontSize:13, fontWeight:600, color: d.confirmee?'#3B6D11':'#1A1514' }}>
                   {d.confirmee ? '✅ Date confirmée' : `Option ${i+1}`}
@@ -570,13 +709,31 @@ export default function FormSouhait() {
                 </div>
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:10 }}>
-                <F label="Date *" val={d.date_proposee} set={v=>updateDate(i,'date_proposee',v)} type="date" />
+                <F label={d.plusieurs_jours ? 'Date de début *' : 'Date *'} val={d.date_proposee} set={v=>updateDate(i,'date_proposee',v)} type="date" />
+                {d.plusieurs_jours && <F label="Date de fin *" val={d.date_fin_proposee} set={v=>updateDate(i,'date_fin_proposee',v)} type="date" />}
                 <F label="Heure de départ" val={d.heure_depart} set={v=>updateDate(i,'heure_depart',v)} type="time" />
                 <F label="Retour estimé" val={d.heure_retour_estimee} set={v=>updateDate(i,'heure_retour_estimee',v)} type="time" />
               </div>
+              <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, color:'#BA7517', cursor:'pointer', margin:'8px 0 4px' }}>
+                <input type="checkbox" checked={!!d.plusieurs_jours} onChange={e=>updateDate(i,'plusieurs_jours',e.target.checked)} style={{ accentColor:'#BA7517', width:16, height:16 }} />
+                Souhait sur plusieurs jours
+              </label>
               <F label="Note" val={d.note} set={v=>updateDate(i,'note',v)} placeholder="Remarque pour cette date…" />
+
+              {/* Indicateur de couverture */}
+              {cov.vide ? null : cov.incomplet ? (
+                <div style={{ marginTop:8, fontSize:12.5, fontWeight:600, color:'#BA7517' }}>⚠️ Indiquez la date de fin pour vérifier les disponibilités.</div>
+              ) : (
+                <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontSize:12.5, fontWeight:600, color: cov.ok ? '#3B6D11' : '#C8435A' }}>
+                  <span>{cov.ok ? '✅ Disponibilités suffisantes' : '🔴 Disponibilités insuffisantes'}</span>
+                  <span style={{ color:'#5A6A6E', fontWeight:500 }}>
+                    {cov.nbJours > 1 ? `sur les ${cov.nbJours} jours : ` : ''}
+                    {cov.nbAmb} ambulancier{cov.nbAmb>1?'s':''} accrédité{cov.nbAmb>1?'s':''}{cov.nbAmb<1?' (manquant)':''} · {cov.nbInf} infirmier/médecin{cov.nbInf>1?'s':''}{cov.nbInf<1?' (manquant)':''}
+                  </span>
+                </div>
+              )}
             </div>
-          ))}
+          )})}
           <button onClick={addDate} style={{ ...BTN_SM, width:'100%', justifyContent:'center', padding:'10px' }}>
             + Ajouter une date possible
           </button>
@@ -668,6 +825,73 @@ export default function FormSouhait() {
 function Section({ titre, children }) {
   return <div><div style={{ fontFamily:"'Cormorant Garamond',Georgia,serif", fontSize:'1.3rem', fontWeight:500, color:'#1A1514', marginBottom:18 }}>{titre}</div><div style={{ display:'flex', flexDirection:'column', gap:14 }}>{children}</div></div>
 }
+function TimingsEditor({ timings, onChange }) {
+  const list = Array.isArray(timings) ? timings : []
+  const milieu = list.filter(t => t.custom)
+  const valOf = (id) => list.find(t => t.id === id && !t.custom) || { id, heure:'', jour:'' }
+  const debutMap = Object.fromEntries(TIMINGS_DEBUT.map(t => [t.id, valOf(t.id)]))
+  const finMap   = Object.fromEntries(TIMINGS_FIN.map(t => [t.id, valOf(t.id)]))
+
+  function emit(dMap, mil, fMap) {
+    const debut = TIMINGS_DEBUT.map(t => ({ ...(dMap[t.id]||{}), id:t.id, label:t.label, heure:dMap[t.id]?.heure||'', jour:dMap[t.id]?.jour||'' }))
+    const fin   = TIMINGS_FIN.map(t => ({ ...(fMap[t.id]||{}), id:t.id, label:t.label, heure:fMap[t.id]?.heure||'', jour:fMap[t.id]?.jour||'' }))
+    onChange([...debut, ...mil, ...fin])
+  }
+  const setFixed = (bloc, id, k, v) => {
+    if (bloc === 'debut') { const m = { ...debutMap, [id]:{ ...debutMap[id], [k]:v } }; emit(m, milieu, finMap) }
+    else { const m = { ...finMap, [id]:{ ...finMap[id], [k]:v } }; emit(debutMap, milieu, m) }
+  }
+  const setMil = (id,k,v) => emit(debutMap, milieu.map(m=>m.id===id?{ ...m, [k]:v }:m), finMap)
+  const delMil = (id)     => emit(debutMap, milieu.filter(m=>m.id!==id), finMap)
+  function addMil(){ const label = prompt('Libellé de l\'horaire (ex. Pause, Arrivée hôtel…)'); if (label && label.trim()) emit(debutMap, [...milieu, { id:'t'+Date.now(), label:label.trim(), heure:'', jour:'', custom:true }], finMap) }
+
+  const IN = { padding:'7px 9px', border:'1px solid rgba(0,0,0,.12)', borderRadius:7, fontSize:13, fontFamily:"'DM Sans',sans-serif" }
+
+  const ligneFixe = (bloc, t) => {
+    const v = (bloc==='debut'?debutMap:finMap)[t.id]
+    return (
+      <div key={t.id} style={{ background:'white', border:'1px solid rgba(0,0,0,.08)', borderRadius:9, padding:'9px 11px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <span style={{ flex:1, minWidth:150, fontSize:13, fontWeight:600, color:'#1A1514' }}>{t.label}</span>
+          <input type="time" value={v.heure||''} onChange={e=>setFixed(bloc,t.id,'heure',e.target.value)} style={{ ...IN, width:120 }} />
+        </div>
+        <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:11.5, color:'#0E7A93', marginTop:6, cursor:'pointer' }}>
+          <input type="checkbox" checked={!!v.jour} onChange={e=>setFixed(bloc,t.id,'jour', e.target.checked ? todayLocal() : '')} style={{ accentColor:'#1BB0CE' }} />
+          Jour précis
+        </label>
+        {v.jour && <input type="date" value={v.jour} onChange={e=>setFixed(bloc,t.id,'jour',e.target.value)} style={{ ...IN, marginTop:5 }} />}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+      {TIMINGS_DEBUT.map(t => ligneFixe('debut', t))}
+
+      {/* Milieu libre */}
+      <div style={{ borderLeft:'2px dashed rgba(14,122,147,.3)', paddingLeft:10, marginLeft:2, display:'flex', flexDirection:'column', gap:8 }}>
+        {milieu.map(m => (
+          <div key={m.id} style={{ background:'#F0F9FB', border:'1px solid rgba(27,176,206,.15)', borderRadius:9, padding:'9px 11px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              <input value={m.label} onChange={e=>setMil(m.id,'label',e.target.value)} placeholder="Libellé" style={{ ...IN, flex:1, minWidth:140 }} />
+              <input type="time" value={m.heure||''} onChange={e=>setMil(m.id,'heure',e.target.value)} style={{ ...IN, width:120 }} />
+              <button type="button" onClick={()=>delMil(m.id)} style={{ background:'#FCEBEB', color:'#C8435A', border:'none', borderRadius:6, padding:'4px 8px', fontSize:12, cursor:'pointer' }}>✕</button>
+            </div>
+            <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:11.5, color:'#0E7A93', marginTop:6, cursor:'pointer' }}>
+              <input type="checkbox" checked={!!m.jour} onChange={e=>setMil(m.id,'jour', e.target.checked ? todayLocal() : '')} style={{ accentColor:'#1BB0CE' }} />
+              Jour précis
+            </label>
+            {m.jour && <input type="date" value={m.jour} onChange={e=>setMil(m.id,'jour',e.target.value)} style={{ ...IN, marginTop:5 }} />}
+          </div>
+        ))}
+        <button type="button" onClick={addMil} style={{ alignSelf:'flex-start', padding:'7px 13px', background:'#E6F7FA', color:'#0E7A93', border:'1px dashed rgba(14,122,147,.4)', borderRadius:8, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>+ Ajouter un horaire (entre aller et retour)</button>
+      </div>
+
+      {TIMINGS_FIN.map(t => ligneFixe('fin', t))}
+    </div>
+  )
+}
+
 function G2({ children }) { return <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12 }}>{children}</div> }
 function F({ label, val, set, type='text', placeholder }) {
   return <div><label style={LBL}>{label}</label><input type={type} value={val||''} onChange={e=>set(e.target.value)} placeholder={placeholder} style={INP} onFocus={e=>e.target.style.borderColor='#1BB0CE'} onBlur={e=>e.target.style.borderColor='rgba(0,0,0,.1)'}/></div>

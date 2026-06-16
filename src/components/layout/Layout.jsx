@@ -5,6 +5,9 @@ import MonProfil from '@/modules/profil/MonProfil'
 import { useNotifications } from '@/hooks/useNotifications'
 import styles from './layout.module.css'
 
+// Logo de l'ASBL (même source que la navbar publique)
+const LOGO = 'https://www.heartsangels.be/wp-content/uploads/2026/03/cropped-logo-hearts-angels-vectorise-scaled-1.png'
+
 // ── Navigation items ──────────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { to: '/app/dashboard',       icon: <GridIcon />,     label: 'Tableau de bord',  perm: 'nav.dashboard' },
@@ -12,6 +15,7 @@ const NAV_ITEMS = [
   { to: '/app/souhaits',        icon: <HeartNavIcon />, label: 'Souhaits',         perm: 'nav.souhaits' },
   { to: '/app/defraiements',    icon: <ReceiptIcon />,  label: 'Défraiements',     perm: 'nav.defraiements' },
   { to: '/app/volontaires',     icon: <UsersIcon />,    label: 'Volontaires',      perm: 'nav.volontaires' },
+  { to: '/app/annuaire',        icon: <UsersIcon />,    label: 'Annuaire',         perm: 'nav.annuaire' },
   { to: '/app/vente',           icon: <CartIcon />,     label: 'Vente événements', perm: 'nav.vente' },
   { to: '/app/comptabilite',    icon: <ChartIcon />,    label: 'Comptabilité',     perm: 'nav.comptabilite' },
   { to: '/app/stock',           icon: <BoxIcon />,      label: 'Stock matériel',   perm: 'nav.stock' },
@@ -80,6 +84,8 @@ export default function Layout() {
   const avatarInitials = profile
     ? (profile.prenom?.[0] || '') + (profile.nom?.[0] || '')
     : '?'
+  const photoUrl = profile?.photo_url || null
+  const avatarImgStyle = { width:'100%', height:'100%', objectFit:'cover', borderRadius:'50%', display:'block' }
 
   return (
     <div className={styles.root} style={simProfil ? { paddingTop: 'calc(42px + env(safe-area-inset-top))' } : undefined}>
@@ -100,7 +106,9 @@ export default function Layout() {
       <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarOpen : ''}`}>
         {/* Logo */}
         <div className={styles.sidebarLogo}>
-          <div className={styles.sidebarLogoIcon}><HeartLogoIcon /></div>
+          <div className={styles.sidebarLogoIcon} style={{ background:'transparent', overflow:'hidden', padding:0 }}>
+            <img src={LOGO} alt="Heart's Angels" style={{ width:'100%', height:'100%', objectFit:'contain', display:'block' }} />
+          </div>
           <div>
             <div className={styles.sidebarLogoName}>Heart's Angels</div>
             <div className={styles.sidebarLogoSub}>Gestion interne</div>
@@ -132,7 +140,7 @@ export default function Layout() {
 
         {/* Profil utilisateur (bas de sidebar) */}
         <div className={styles.sidebarUser} onClick={() => setProfilOpen(true)} style={{ cursor:'pointer' }} title="Mon profil">
-          <div className={styles.sidebarUserAvatar}>{avatarInitials}</div>
+          <div className={styles.sidebarUserAvatar}>{photoUrl ? <img src={photoUrl} alt="" style={avatarImgStyle} onError={e=>{ e.currentTarget.style.display='none' }} /> : avatarInitials}</div>
           <div className={styles.sidebarUserInfo}>
             <div className={styles.sidebarUserName}>
               {profile?.prenom} {profile?.nom}
@@ -230,7 +238,9 @@ export default function Layout() {
                 onClick={() => setUserMenuOpen(v => !v)}
                 aria-label="Menu utilisateur"
               >
-                <span className={styles.userAvatarText}>{avatarInitials}</span>
+                {photoUrl
+                  ? <img src={photoUrl} alt="" style={avatarImgStyle} onError={e=>{ e.currentTarget.style.display='none' }} />
+                  : <span className={styles.userAvatarText}>{avatarInitials}</span>}
               </button>
 
               {userMenuOpen && (

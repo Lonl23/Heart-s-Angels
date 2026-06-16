@@ -13,6 +13,7 @@ import Home           from '@/public/pages/Home'
 // App interne — lazy
 const Dashboard      = lazy(() => import('@/modules/dashboard/Dashboard'))
 const Disponibilites = lazy(() => import('@/modules/disponibilites/Disponibilites'))
+const Annuaire = lazy(() => import('@/modules/annuaire/Annuaire'))
 const Souhaits       = lazy(() => import('@/modules/souhaits/Souhaits'))
 const Comptabilite   = lazy(() => import('@/modules/comptabilite/Comptabilite'))
 const Vente          = lazy(() => import('@/modules/vente/Vente'))
@@ -78,6 +79,7 @@ export default function App() {
             <Route path="comptabilite/*" element={<Comptabilite />} />
             <Route path="vente/*"        element={<Vente />} />
             <Route path="volontaires/*"  element={<Volontaires />} />
+            <Route path="annuaire/*"     element={<Annuaire />} />
             <Route path="defraiements/*" element={<Defraiements />} />
             <Route path="organigramme"   element={<Organigramme />} />
             <Route path="acces"          element={<GestionAcces />} />
