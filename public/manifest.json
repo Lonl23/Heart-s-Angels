@@ -8,7 +8,7 @@
   "display": "standalone",
   "background_color": "#0A1E2D",
   "theme_color": "#1BB0CE",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "icons": [
     {
       "src": "https://www.heartsangels.be/wp-content/uploads/2026/03/cropped-logo-hearts-angels-vectorise-scaled-2-270x270.png",

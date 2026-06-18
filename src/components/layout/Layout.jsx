@@ -87,6 +87,26 @@ export default function Layout() {
   const photoUrl = profile?.photo_url || null
   const avatarImgStyle = { width:'100%', height:'100%', objectFit:'cover', borderRadius:'50%', display:'block' }
 
+  // ── Thème (clair / sombre / système) — mémorisé par utilisateur + appareil ──
+  const themeKey = `ha-theme:${profile?.id || 'anon'}`
+  const [theme, setThemeState] = useState('system')
+  useEffect(() => {
+    try { setThemeState(localStorage.getItem(themeKey) || 'system') } catch { /* */ }
+  }, [themeKey])
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => {
+      const dark = theme === 'dark' || (theme === 'system' && mq.matches)
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light')
+    }
+    apply()
+    if (theme === 'system') {
+      mq.addEventListener('change', apply)
+      return () => mq.removeEventListener('change', apply)
+    }
+  }, [theme])
+  const setTheme = (t) => { setThemeState(t); try { localStorage.setItem(themeKey, t) } catch { /* */ } }
+
   return (
     <div className={styles.root} style={simProfil ? { paddingTop: 'calc(42px + env(safe-area-inset-top))' } : undefined}>
 
@@ -267,6 +287,19 @@ export default function Layout() {
                       </button>
                     </>
                   )}
+                  <div className={styles.userMenuDivider} />
+                  <div style={{ padding:'8px 14px 10px' }}>
+                    <div style={{ fontSize:10.5, fontWeight:700, color:'var(--text-faint)', marginBottom:6, textTransform:'uppercase', letterSpacing:.5 }}>Thème</div>
+                    <div style={{ display:'flex', gap:6 }}>
+                      {[['light','☀️','Clair'],['dark','🌙','Sombre'],['system','💻','Auto']].map(([v,ic,lb])=>(
+                        <button key={v} onClick={()=>setTheme(v)}
+                          style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:3, padding:'8px 4px', borderRadius:9, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:"'DM Sans',sans-serif",
+                            border:`1.5px solid ${theme===v?'#1BB0CE':'var(--border)'}`, background: theme===v?'rgba(27,176,206,.12)':'transparent', color: theme===v?'#0E7A93':'var(--text-2)' }}>
+                          <span style={{ fontSize:15 }}>{ic}</span>{lb}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className={styles.userMenuDivider} />
                   <button
                     className={`${styles.userMenuItem} ${styles.userMenuItemDanger}`}
