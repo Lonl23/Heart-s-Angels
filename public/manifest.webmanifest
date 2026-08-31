@@ -1,0 +1,9 @@
+{
+  "name": "Heart's Angels ASBL",
+  "short_name": "Heart's Angels",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1BB0CE",
+  "icons": []
+}

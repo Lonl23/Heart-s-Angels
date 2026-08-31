@@ -1,0 +1,11 @@
+{
+  "name": "hearts-angels-installeur",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "scripts": { "start": "node install.js" },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "pg": "^8.12.0"
+  }
+}

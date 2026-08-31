@@ -1,0 +1,128 @@
+-- ════════════════════════════════════════════════════════════════════════════
+--  Missions des volontaires & confidentialité médicale.
+--  Un volontaire non médical affecté à un souhait n'accède qu'à des données
+--  limitées (prénom, lieu PEC, destination, heures, check véhicule) via des
+--  fonctions SECURITY DEFINER. La lecture directe des tables « souhait » est
+--  réservée aux personnes autorisées (médical / coordination / récolteurs).
+--  Idempotent. À exécuter après tous les SQL précédents.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- Véhicule affecté au volontaire pour la mission
+alter table public.souhait_personnel add column if not exists vehicule text;
+
+-- Qui peut voir l'intégralité d'un souhait (données médicales incluses)
+create or replace function public.peut_voir_souhaits()
+returns boolean language sql stable security definer set search_path = public as $$
+  with me as (select role::text as role, fiche from public.profiles where id = auth.uid())
+  select coalesce((
+    select role in ('admin','president','coordinateur','medecin','infirmier','ambulancier_bleu','ambulancier_gris')
+        or (fiche->>'type_benevole') = 'medical'
+        or coalesce(fiche->'roles_asbl' ?| array[
+             'president','vice_president','administrateur_asbl','recolteur_souhait',
+             'coord_transport','coord_transport_adjoint','coord_benevoles','coord_benevoles_adjoint',
+             'resp_logistique','resp_logistique_adjoint'], false)
+    from me
+  ), false)
+$$;
+
+create or replace function public.suis_affecte(p_souhait uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.souhait_personnel where souhait_id = p_souhait and user_id = auth.uid())
+$$;
+
+-- Liste de mes affectations (données minimales)
+create or replace function public.mes_affectations()
+returns table(souhait_id uuid, beneficiaire_prenom text, date_souhaitee date, statut text, vehicule text)
+language sql stable security definer set search_path = public as $$
+  select s.id, s.beneficiaire_prenom, s.date_souhaitee, s.statut::text, sp.vehicule
+  from public.souhait_personnel sp
+  join public.souhaits s on s.id = sp.souhait_id
+  where sp.user_id = auth.uid()
+  order by s.date_souhaitee nulls last
+$$;
+
+-- Détail restreint (aucune donnée médicale, pas de nom de famille)
+create or replace function public.ma_mission(p_souhait uuid)
+returns json language plpgsql stable security definer set search_path = public as $$
+declare s public.souhaits; sp public.souhait_personnel; m jsonb;
+begin
+  select * into sp from public.souhait_personnel where souhait_id = p_souhait and user_id = auth.uid() limit 1;
+  if not found then return json_build_object('ok', false); end if;
+  select * into s from public.souhaits where id = p_souhait;
+  m := coalesce(s.mission, '{}'::jsonb);
+  return json_build_object(
+    'ok', true,
+    'beneficiaire_prenom', s.beneficiaire_prenom,
+    'lieu_prise_en_charge', coalesce(nullif(m->>'pec_institution',''), case when (m->>'pec_domicile')='true' then 'Domicile' else null end),
+    'precisions_pec', m->>'pec_precisions',
+    'destination', m->>'dest_lieu',
+    'precisions_destination', m->>'dest_precisions',
+    'vehicule', sp.vehicule,
+    'role_mission', sp.role_mission,
+    'timing', json_build_object(
+      'base_depart', m->>'base_depart', 'rdv_base', m->>'rdv_base', 'depart_base', m->>'depart_base',
+      'arrivee_pec', m->>'arrivee_pec', 'depart_pec', m->>'depart_pec', 'arrivee_destination', m->>'arrivee_destination'
+    ),
+    'check_base', coalesce(m->'checklists'->'base', '{}'::jsonb),
+    'check_retour_base', coalesce(m->'checklists'->'retour_base', '{}'::jsonb)
+  );
+end $$;
+
+-- Cocher un item du check véhicule (base / retour_base uniquement)
+create or replace function public.check_vehicule(p_souhait uuid, p_section text, p_item text, p_val boolean)
+returns json language plpgsql security definer set search_path = public as $$
+declare m jsonb;
+begin
+  if not public.suis_affecte(p_souhait) then return json_build_object('ok', false, 'error', 'non affecté'); end if;
+  if p_section not in ('base','retour_base') then return json_build_object('ok', false, 'error', 'section interdite'); end if;
+  select coalesce(mission, '{}'::jsonb) into m from public.souhaits where id = p_souhait;
+  m := jsonb_set(m, array['checklists', p_section, p_item], to_jsonb(p_val), true);
+  update public.souhaits set mission = m where id = p_souhait;
+  return json_build_object('ok', true);
+end $$;
+
+grant execute on function public.peut_voir_souhaits() to authenticated;
+grant execute on function public.suis_affecte(uuid) to authenticated;
+grant execute on function public.mes_affectations() to authenticated;
+grant execute on function public.ma_mission(uuid) to authenticated;
+grant execute on function public.check_vehicule(uuid, text, text, boolean) to authenticated;
+
+-- ── Restreindre la LECTURE directe des données de souhait ────────────────────
+-- On remplace les policies « staff » (tout interne) par « peut_voir_souhaits ».
+drop policy if exists souhaits_staff_all           on public.souhaits;
+create policy souhaits_voir on public.souhaits for all to authenticated
+  using (public.peut_voir_souhaits()) with check (public.peut_voir_souhaits());
+
+drop policy if exists medicaments_staff_all         on public.souhait_medicaments;
+create policy medicaments_voir on public.souhait_medicaments for all to authenticated
+  using (public.peut_voir_souhaits()) with check (public.peut_voir_souhaits());
+
+drop policy if exists souhait_suivi_staff_all       on public.souhait_suivi;
+create policy souhait_suivi_voir on public.souhait_suivi for all to authenticated
+  using (public.peut_voir_souhaits()) with check (public.peut_voir_souhaits());
+
+drop policy if exists souhait_rapports_staff_all    on public.souhait_rapports;
+create policy souhait_rapports_voir on public.souhait_rapports for all to authenticated
+  using (public.peut_voir_souhaits()) with check (public.peut_voir_souhaits());
+
+drop policy if exists souhait_dates_staff_all       on public.souhait_dates;
+create policy souhait_dates_voir on public.souhait_dates for all to authenticated
+  using (public.peut_voir_souhaits()) with check (public.peut_voir_souhaits());
+
+drop policy if exists demandes_staff_all            on public.demandes_souhaits;
+create policy demandes_voir on public.demandes_souhaits for all to authenticated
+  using (public.peut_voir_souhaits()) with check (public.peut_voir_souhaits());
+
+drop policy if exists sc_staff                      on public.souhait_checklist;
+create policy sc_voir on public.souhait_checklist for all to authenticated
+  using (public.peut_voir_souhaits()) with check (public.peut_voir_souhaits());
+
+-- souhait_personnel : autorisés = coordination ; + chacun voit SES affectations
+drop policy if exists souhait_personnel_staff_all   on public.souhait_personnel;
+create policy souhait_personnel_voir on public.souhait_personnel for all to authenticated
+  using (public.peut_voir_souhaits()) with check (public.peut_voir_souhaits());
+drop policy if exists souhait_personnel_self on public.souhait_personnel;
+create policy souhait_personnel_self on public.souhait_personnel for select to authenticated
+  using (user_id = auth.uid());
+
+notify pgrst, 'reload schema';

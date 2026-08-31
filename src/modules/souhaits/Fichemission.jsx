@@ -1,250 +1,334 @@
-import { useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { supabase } from '@/lib/supabase'
+import { Btn, fmtAdresse } from '@/components/ui'
+import { CHECKLISTS } from './missionSchema'
+import { debitLabel } from './medCalc'
 
-// Génère un PDF via la fenêtre print du navigateur (sans dépendance jsPDF)
-export default function FicheMission({ souhait, dates, personnel, onClose }) {
-  const [generating, setGenerating] = useState(false)
+const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
+const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
 
-  const s = souhait || {}
-  const dateConfirmee = dates?.find(d => d.confirmee) || dates?.[0]
+const MED_ROLES = ['medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris']
+const MED_QUAL = ['ambulancier', 'infirmier', 'medecin']
+const estMed = p => !!p && (MED_ROLES.includes(p.role) || p.fiche?.type_benevole === 'medical' || (p.fiche?.qualifications || []).some(q => MED_QUAL.includes(q)))
 
-  const NIVEAU_LABEL = { stable:'Stable', douleur_moderee:'Douleur modérée', douleur_forte:'Douleur forte', inconfort:'Inconfort / Agitation' }
-  const POSITION_LABEL = { assis:'Assis(e)', semi_assis:'Semi-assis(e)', allonge:'Allongé(e)', brancard:'Brancard', fauteuil_roulant:'Fauteuil roulant' }
-  const MOBILITE_LABEL = { autonome:'Autonome', fauteuil_roulant:'Fauteuil roulant', brancard:'Brancard', lit_medicalise:'Lit médicalisé' }
+export default function FicheMission({ souhaitId, onClose }) {
+  const [s, setS] = useState(null)
+  const [meds, setMeds] = useState([])
+  const [equipe, setEquipe] = useState([])
+  const ficheRef = useRef(null)
 
-  function printFiche() {
-    setGenerating(true)
-    const w = window.open('', '_blank', 'width=900,height=1200')
-    w.document.write(generateHTML())
-    w.document.close()
-    setTimeout(() => { w.print(); setGenerating(false) }, 500)
+  useEffect(() => { (async () => {
+    const { data: so } = await supabase.from('souhaits').select('*').eq('id', souhaitId).single()
+    setS(so)
+    const { data: ints } = await supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId)
+    let all = ints || []
+    const { data: dem } = await supabase.from('demandes_souhaits').select('id').eq('souhait_id', souhaitId).limit(1)
+    if (dem?.[0]) { const { data: pm } = await supabase.from('souhait_medicaments').select('*').eq('demande_id', dem[0].id); all = [...all, ...(pm || [])] }
+    setMeds(all)
+    const { data: eq } = await supabase.from('souhait_personnel').select('*, profiles(prenom,nom,role,fiche)').eq('souhait_id', souhaitId)
+    setEquipe(eq || [])
+  })() }, [souhaitId])
+
+  if (!s) return <div style={{ padding:24 }}>Chargement…</div>
+  const m = s.mission || {}
+  const vecteurs = m.vecteurs || []
+  // une fiche par vecteur ; à défaut, une fiche maîtresse (coordination) complète
+  function imprimer() {
+    const html = ficheRef.current ? ficheRef.current.innerHTML : ''
+    const doc = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche de mission</title><style>' + printStyles + '</style></head><body>' + html + '</body></html>'
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
+    document.body.appendChild(iframe)
+    const idoc = iframe.contentWindow.document
+    idoc.open(); idoc.write(doc); idoc.close()
+    setTimeout(() => {
+      try { iframe.contentWindow.focus(); iframe.contentWindow.print() } catch (e) {}
+      setTimeout(() => { try { document.body.removeChild(iframe) } catch (e) {} }, 1500)
+    }, 350)
   }
 
-  function generateHTML() {
-    const nom = `${s.patient_prenom || ''} ${s.patient_nom || ''}`
-    const dob = s.patient_ddn ? new Date(s.patient_ddn).toLocaleDateString('fr-BE') : '—'
-    const dateMission = dateConfirmee?.date_proposee ? new Date(dateConfirmee.date_proposee).toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long', year:'numeric' }) : '—'
-    const heureDep = dateConfirmee?.heure_depart || '—'
-    const heureRet = dateConfirmee?.heure_retour_estimee || '—'
-    const vehiculesHTML = (s.vehicules||[]).map(v =>
-      `<tr><td><strong>${v.type?.toUpperCase()}</strong></td><td>${v.immatriculation||'—'}</td><td>${v.conducteur||'—'}</td><td>${v.note||''}</td></tr>`
-    ).join('') || '<tr><td colspan="4" style="color:#999;font-style:italic">Aucun véhicule encodé</td></tr>'
-
-    const personnelHTML = (personnel||[]).map(p =>
-      `<div class="badge badge-${p.role}">${p.prenom} ${p.nom} (${p.role?.replace('_',' ')})</div>`
-    ).join('') || '<em style="color:#999">Non encore défini</em>'
-
-    return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<title>Fiche de mission — ${nom} — ${dateMission}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1A1514;background:white;padding:16px;}
-  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #1BB0CE;padding-bottom:12px;margin-bottom:16px;}
-  .header h1{font-size:20px;color:#0E4A5A;font-weight:700;}
-  .header .date{font-size:13px;color:#555;text-align:right;}
-  .logo-text{font-size:24px;font-weight:800;color:#1BB0CE;letter-spacing:-1px;}
-  .logo-sub{font-size:10px;color:#7A7470;text-transform:uppercase;letter-spacing:.1em;}
-  .section{margin-bottom:14px;page-break-inside:avoid;}
-  .section-title{font-size:13px;font-weight:700;color:white;padding:5px 10px;border-radius:5px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;}
-  .bg-blue{background:#1BB0CE;} .bg-red{background:#C8435A;} .bg-green{background:#3B6D11;}
-  .bg-orange{background:#BA7517;} .bg-purple{background:#534AB7;} .bg-dark{background:#0A1E2D;}
-  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:4px;}
-  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
-  .field{margin-bottom:6px;}
-  .field label{font-size:10px;font-weight:600;color:#7A7470;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:1px;}
-  .field .val{font-size:12.5px;color:#1A1514;}
-  .field .val.big{font-size:14px;font-weight:700;}
-  .alert{background:#FEF2F2;border:2px solid #C8435A;border-radius:6px;padding:8px 12px;margin-bottom:10px;}
-  .alert-title{font-size:13px;font-weight:800;color:#C8435A;margin-bottom:4px;}
-  .alert p{font-size:12px;color:#1A1514;line-height:1.5;}
-  .warn{background:#FAEEDA;border:1.5px solid #BA7517;border-radius:6px;padding:8px 12px;margin-bottom:10px;}
-  .warn-title{font-size:12px;font-weight:700;color:#BA7517;margin-bottom:3px;}
-  .ok{background:#EAF3DE;border:1.5px solid #3B6D11;border-radius:6px;padding:8px 12px;margin-bottom:10px;}
-  .ok-title{font-size:12px;font-weight:700;color:#3B6D11;margin-bottom:3px;}
-  table{width:100%;border-collapse:collapse;font-size:12px;}
-  th{background:#F0F9FB;padding:5px 8px;text-align:left;font-size:10px;font-weight:700;color:#7A7470;text-transform:uppercase;border-bottom:1px solid #ddd;}
-  td{padding:5px 8px;border-bottom:1px solid #f0f0f0;}
-  .badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;margin:2px;}
-  .badge-infirmier{background:#EAF3DE;color:#3B6D11;}
-  .badge-ambulancier{background:#E6F7FA;color:#1BB0CE;}
-  .badge-medecin{background:#FBEAF0;color:#C8435A;}
-  .badge-default{background:#F0EFED;color:#7A7470;}
-  .consentements{display:flex;flex-wrap:wrap;gap:6px;}
-  .consent-ok{background:#EAF3DE;color:#3B6D11;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:600;}
-  .consent-no{background:#F0EFED;color:#7A7470;padding:3px 10px;border-radius:99px;font-size:11px;}
-  .footer{margin-top:20px;padding-top:10px;border-top:2px solid #1BB0CE;display:flex;justify-content:space-between;font-size:10px;color:#7A7470;}
-  .page-break{page-break-before:always;}
-  @media print{body{padding:8px;} .no-print{display:none;}}
-  .sign-box{border:1px solid #ddd;border-radius:6px;height:50px;margin-top:4px;}
-</style>
-</head>
-<body>
-<div class="header">
-  <div>
-    <div class="logo-text">❤️ Heart's Angels</div>
-    <div class="logo-sub">Fiche de mission — Confidentiel</div>
-  </div>
-  <div class="date">
-    <strong>Mission du ${dateMission}</strong><br>
-    Départ : ${heureDep} — Retour estimé : ${heureRet}<br>
-    Généré le ${new Date().toLocaleDateString('fr-BE',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}
-  </div>
-</div>
-
-<!-- PATIENT -->
-<div class="section">
-  <div class="section-title bg-dark">👤 Patient</div>
-  <div class="row">
-    <div class="field"><label>Nom complet</label><div class="val big">${nom}</div></div>
-    <div class="field"><label>Date de naissance</label><div class="val">${dob}</div></div>
-    <div class="field"><label>Établissement d'origine</label><div class="val">${s.etablissement||'—'}</div></div>
-    <div class="field"><label>Infirmier(ère) référent(e)</label><div class="val">${s.infirmier_referent_etablissement||'—'}</div></div>
-    <div class="field"><label>Médecin traitant</label><div class="val">${s.medecin_referent||'—'}</div></div>
-    <div class="field"><label>Tél. médecin</label><div class="val">${s.telephone_medecin||'—'}</div></div>
-    <div class="field"><label>Contact d'urgence</label><div class="val">${s.contact_urgence_nom||'—'}</div></div>
-    <div class="field"><label>Tél. urgence</label><div class="val">${s.contact_urgence_tel||'—'}</div></div>
-  </div>
-</div>
-
-<!-- CONSIGNES RÉANIMATION — EN ROUGE EN TÊTE -->
-<div class="alert">
-  <div class="alert-title">⚕️ CONSIGNES DE RÉANIMATION</div>
-  <p>${s.consignes_reanimation || 'Non spécifié — vérifier avant la mission'}</p>
-  <p style="margin-top:6px"><strong>Massage cardiaque (CPR) :</strong> <span style="font-size:14px;font-weight:800;color:${s.cpr_autorise?'#3B6D11':'#C8435A'}">${s.cpr_autorise ? '✅ AUTORISÉ' : '❌ NON AUTORISÉ'}</span></p>
-</div>
-
-<!-- PATHOLOGIES -->
-<div class="section">
-  <div class="section-title bg-red">🏥 Pathologies & État médical</div>
-  <div class="field"><label>Description des pathologies</label><div class="val" style="white-space:pre-wrap;line-height:1.6">${s.pathologies || '—'}</div></div>
-  <div class="row" style="margin-top:8px">
-    <div class="field"><label>Niveau de douleur / État général</label><div class="val">${NIVEAU_LABEL[s.niveau_douleur] || s.niveau_douleur || '—'}</div></div>
-    <div class="field"><label>Position de transport</label><div class="val">${POSITION_LABEL[s.position_transport] || s.position_transport || '—'}</div></div>
-    <div class="field"><label>Mobilité</label><div class="val">${MOBILITE_LABEL[s.mobilite] || s.mobilite || '—'}</div></div>
-    <div class="field"><label>Allergies médicamenteuses</label><div class="val">${s.allergies_medicaments || 'Aucune connue'}</div></div>
-  </div>
-  <div class="field" style="margin-top:6px"><label>Traitement actuel</label><div class="val" style="white-space:pre-wrap">${s.traitement_actuel || '—'}</div></div>
-</div>
-
-<!-- MATÉRIEL -->
-<div class="section">
-  <div class="section-title bg-orange">🧰 Matériel à prévoir</div>
-  <div class="row">
-    <div>
-      <div class="field"><label>Matériel médical</label><div class="val" style="white-space:pre-wrap">${s.materiel_medical || 'Aucun spécifié'}</div></div>
-      <div class="field" style="margin-top:6px"><label>Matériel spécifique / Équipement adapté</label><div class="val" style="white-space:pre-wrap">${s.materiel_specifique || 'Aucun'}</div></div>
-    </div>
-    <div>
-      ${s.oxygene_requis ? `<div class="warn"><div class="warn-title">💨 OXYGÈNE REQUIS</div><div>Débit : <strong>${s.debit_oxygene || 'à définir'}</strong></div></div>` : '<div class="ok"><div class="ok-title">Pas d\'oxygène nécessaire</div></div>'}
-    </div>
-  </div>
-</div>
-
-<!-- LOGISTIQUE -->
-<div class="section">
-  <div class="section-title bg-blue">🗺️ Logistique & Déplacement</div>
-  <div class="row3">
-    <div class="field"><label>📍 Prise en charge</label><div class="val">${s.lieu_prise_en_charge||'—'}</div><div class="val" style="font-size:11px;color:#555">${s.adresse_prise_en_charge||''}</div></div>
-    <div class="field"><label>🎯 Destination</label><div class="val">${s.lieu_destination||'—'}</div><div class="val" style="font-size:11px;color:#555">${s.adresse_destination||''}</div></div>
-    <div class="field"><label>🔄 Retour</label><div class="val">${s.lieu_retour||s.lieu_prise_en_charge||'—'}</div></div>
-  </div>
-  <div style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:#7A7470;text-transform:uppercase;letter-spacing:.04em">Véhicules</label>
-  <table style="margin-top:4px"><thead><tr><th>Type</th><th>Immatriculation</th><th>Conducteur</th><th>Note</th></tr></thead>
-  <tbody>${vehiculesHTML}</tbody></table></div>
-</div>
-
-<!-- SOUHAIT & CONSENTEMENTS -->
-<div class="section">
-  <div class="section-title bg-purple">❤️ Le souhait & Consentements</div>
-  <div class="field"><label>Description du souhait</label><div class="val" style="white-space:pre-wrap;font-size:13px;font-style:italic">"${s.souhait_description||'—'}"</div></div>
-  <div style="margin-top:8px"><label style="font-size:10px;font-weight:700;color:#7A7470;text-transform:uppercase;letter-spacing:.04em">Consentements</label>
-  <div class="consentements" style="margin-top:4px">
-    <span class="${s.consentement_photo?'consent-ok':'consent-no'}">📸 Photos : ${s.consentement_photo?'OUI':'NON'}</span>
-    <span class="${s.consentement_video?'consent-ok':'consent-no'}">🎥 Vidéos : ${s.consentement_video?'OUI':'NON'}</span>
-    <span class="${s.consentement_publication?'consent-ok':'consent-no'}">📢 Publication : ${s.consentement_publication?'OUI':'NON'}</span>
-    <span class="${s.consentement_signe?'consent-ok':'consent-no'}">✅ Signé : ${s.consentement_signe?'OUI':'NON'}</span>
-  </div></div>
-</div>
-
-<!-- ÉQUIPE -->
-<div class="section">
-  <div class="section-title bg-green">👥 Équipe de mission</div>
-  <div>${personnelHTML}</div>
-</div>
-
-<!-- CONTACT FAMILLE -->
-<div class="section">
-  <div class="section-title bg-dark">📞 Contact famille présent</div>
-  <div class="row">
-    <div class="field"><label>Nom</label><div class="val">${s.contact_prenom||''} ${s.contact_nom||''} (${s.contact_relation||'—'})</div></div>
-    <div class="field"><label>Téléphone</label><div class="val">${s.contact_telephone||'—'}</div></div>
-  </div>
-</div>
-
-<!-- SIGNATURES -->
-<div class="section page-break">
-  <div class="section-title bg-dark">✍️ Signatures</div>
-  <div class="row3">
-    <div class="field"><label>Responsable de mission</label><div class="sign-box"></div></div>
-    <div class="field"><label>Coordinateur médical</label><div class="sign-box"></div></div>
-    <div class="field"><label>Bénéficiaire / Représentant</label><div class="sign-box"></div></div>
-  </div>
-</div>
-
-<div class="footer">
-  <span>Heart's Angels ASBL — Rue des Awirs 249, 4400 Flémalle — info@heartsangels.be</span>
-  <span>CONFIDENTIEL — Document à usage interne uniquement</span>
-</div>
-</body></html>`
-  }
+  const fiches = vecteurs.length
+    ? vecteurs.map((v, i) => ({ v, i, crew: equipe.filter(e => e.vecteur_id === v.id) }))
+    : [{ v:null, i:0, crew: equipe }]
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:'white', borderRadius:18, width:'100%', maxWidth:520, padding:'28px', fontFamily:"'DM Sans',sans-serif" }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
-          <h2 style={{ fontFamily:"'Cormorant Garamond',Georgia,serif", fontSize:'1.5rem', fontWeight:500, color:'#1A1514' }}>📄 Fiche de mission</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:22, color:'#7A7470' }}>✕</button>
+    <div style={{ background:'var(--bg)', minHeight:'100vh' }}>
+      <div className="no-print" style={{ display:'flex', gap:10, padding:'14px 16px', position:'sticky', top:0, background:'var(--surface)', borderBottom:'1px solid var(--border)', zIndex:5 }}>
+        <Btn kind="soft" onClick={onClose}>← Retour</Btn>
+        <Btn onClick={imprimer}>🖨 Imprimer / PDF (A4 recto-verso)</Btn>
+        <span style={{ alignSelf:'center', fontSize:12.5, color:'var(--text-muted)' }}>{fiches.length} fiche{fiches.length>1?'s':''} · une par vecteur</span>
+      </div>
+
+      <div className="fiche" ref={ficheRef}>
+        {fiches.map((f, idx) => {
+          const med = f.v ? f.crew.some(c => estMed(c.profiles)) : true
+          return <FicheVecteur key={idx} s={s} m={m} f={f} med={med} meds={meds} total={fiches.length} first={idx===0} />
+        })}
+      </div>
+
+      <style>{styles}</style>
+    </div>
+  )
+}
+
+function FicheVecteur({ s, m, f, med, meds, total, first }) {
+  const v = f.v
+  const pecAdr = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
+  const vecteurLabel = v ? `Vecteur ${f.i + 1} — ${v.nom || '—'}${v.type_transport ? ` · ${v.type_transport}` : ''}${v.plaque ? ` · ${v.plaque}` : ''}` : 'Toutes affectations'
+  const Wm = () => <div className={'wm ' + (med ? 'med' : 'conf')}><span>{med ? 'CONFIDENTIEL\nSECRET MÉDICAL' : 'CONFIDENTIEL'}</span></div>
+
+  return (
+    <div className={'fiche-block' + (first ? '' : ' brk')}>
+      {/* ═══ RECTO ═══ */}
+      <div className="page recto">
+        <Wm />
+        <div className="content">
+          <Masthead s={s} face="RECTO" vecteurLabel={vecteurLabel} med={med} />
+          <Sec t="Administratif">
+            <Fld l="Registre national" v={m.registre_national} />
+            <Fld l="Récolteur de souhait" v={m.recolteur} />
+            <Fld l="Priorité élevée" v={m.priorite_elevee ? 'Oui' : ''} />
+            <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
+            <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />
+            <Fld l="Autorisation photos" v={m.autorisation_photos ? 'Oui' : ''} />
+            <Fld l="Adresse du domicile du patient" v={fmtAdresse(m.patient_adresse)} wide />
+          </Sec>
+          <Sec t="🏁 Base">
+            <Fld l="Base" v={m.base_nom} />
+            <Fld l="Adresse" v={fmtAdresse(m.base_adresse)} />
+            <Fld l="Rendez-vous" v={dt(m.rdv_base)} />
+            <Fld l="Départ" v={dt(m.depart_base)} />
+          </Sec>
+          <Sec t="🧑‍🦽 Prise en charge">
+            <Fld l="Lieu" v={m.pec_type} />
+            <Fld l="Institution" v={m.pec_institution} />
+            <Fld l="Adresse" v={fmtAdresse(pecAdr)} wide />
+            <Fld l="Service" v={m.pec_service} third />
+            <Fld l="Étage" v={m.pec_etage} third />
+            <Fld l="Aile / route" v={m.pec_aile} third />
+            <Fld l="Chambre" v={m.pec_chambre} third />
+            <Fld l="PEC souhaitée" v={dt(m.arrivee_pec)} third />
+            <Fld l="Départ souhaité" v={dt(m.depart_pec)} third />
+            <Fld l="Précisions" v={m.pec_precisions} wide />
+          </Sec>
+          <Sec t="📍 Destination">
+            <Fld l="Adresse" v={fmtAdresse(m.dest_adresse)} wide />
+            <Fld l="Précisions" v={m.dest_precisions} wide />
+            <Fld l="Heure souhaitée sur place" v={dt(m.arrivee_destination)} />
+          </Sec>
+          <Sec t="↩︎ Retour">
+            <Fld l="Type de retour" v={m.retour_type} />
+            <Fld l="Heure attendue" v={dt(m.retour_heure)} />
+            <Fld l="Précisions" v={m.retour_precisions} wide />
+          </Sec>
+          <Sec t="🚐 Équipage" plain>
+            {v && <div className="vec"><div className="vh">{vecteurLabel}</div>
+              <div className="crew">{f.crew.length ? f.crew.map(c => `${c.profiles?.prenom||''} ${c.profiles?.nom||''}${c.role_mission?` (${c.role_mission})`:''}`).join(' · ') : <span className="muted">équipage à compléter</span>}</div>
+            </div>}
+            {!v && (m.vecteurs || []).map((vv, i) => <div key={vv.id} className="vec"><div className="vh">Vecteur {i+1} — {vv.nom||'—'}</div></div>)}
+          </Sec>
         </div>
+      </div>
 
-        <div style={{ background:'#F0F9FB', border:'1px solid rgba(27,176,206,.15)', borderRadius:12, padding:'14px 16px', marginBottom:20 }}>
-          <div style={{ fontSize:14, fontWeight:600, color:'#0E4A5A', marginBottom:6 }}>
-            {souhait?.patient_prenom} {souhait?.patient_nom}
-          </div>
-          <div style={{ fontSize:13, color:'#7A7470' }}>
-            Mission : {dateConfirmee?.date_proposee ? new Date(dateConfirmee.date_proposee).toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : 'Date non confirmée'}
-          </div>
+      {/* ═══ VERSO ═══ */}
+      <div className="page">
+        <Wm />
+        <div className="content">
+          <Masthead s={s} face="VERSO" vecteurLabel={vecteurLabel} med={med} />
+
+          {med && (
+            <>
+              <Sec t="⚕️ Infos médicales">
+                <Fld l="Allergies" v={m.allergies} wide alert />
+                <Fld l="Ne pas réanimer" v={m.ne_pas_reanimer ? 'OUI' : ''} alert />
+                <Fld l="Douleurs" v={m.douleurs} />
+                <Fld l="Pathologies" v={m.pathologies} wide />
+                <Fld l="Antécédents" v={m.antecedents} wide />
+                <Fld l="Voie d'accès" v={m.voie_acces} />
+                <Fld l="Mobilisations" v={m.mobilisations} />
+                <Fld l="Communication" v={m.communication} />
+                <Fld l="Déglutition" v={m.deglutition} />
+                <Fld l="Alimentation" v={m.alimentation} />
+                <Fld l="Continence urinaire" v={m.continence_urinaire} />
+                <Fld l="Continence fécale" v={m.continence_fecale} />
+                <Fld l="Précisions continences" v={m.precisions_continences} wide />
+              </Sec>
+              <Sec t="📊 Paramètres">
+                <Fld l="Cible SpO₂" v={m.cible_saturation_o2} third />
+                <Fld l="Débit O₂" v={m.debit_o2} third />
+                <Fld l="Apport O₂" v={m.apport_o2} third />
+                <Fld l="Cible TA" v={m.cible_ta} third />
+                <Fld l="Cible FC" v={m.cible_fc} third />
+              </Sec>
+              <Sec t="💊 Médicaments" plain>
+                {meds.length === 0 ? <div className="muted">Aucun.</div> : (
+                  <table className="tbl">
+                    <thead><tr><th>Médicament</th><th>Dosage</th><th>Voie</th><th>Débit</th><th>Horaires</th></tr></thead>
+                    <tbody>
+                      {meds.map(md => (
+                        <tr key={md.id}>
+                          <td>{md.medicament}</td><td>{md.dosage}</td><td>{md.voie}</td><td>{debitLabel(md) || '—'}</td>
+                          <td>{md.type_admin==='si_necessaire' ? `Si besoin${md.posologie_max?` (max ${md.posologie_max})`:''}` : (Array.isArray(md.horaires)?md.horaires.join(' · '):'')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </Sec>
+            </>
+          )}
+
+          <Sec t="✅ Checklist véhicule — à cocher" plain>
+            {v ? ['base','retour_base'].map(sec => (
+              <div key={sec} className="cl-wrap">
+                <div className="cl-title">{CHECKLISTS[sec].titre}</div>
+                {CHECKLISTS[sec].items.map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
+              </div>
+            )) : <div className="muted">Définissez des vecteurs pour la checklist véhicule.</div>}
+          </Sec>
+
+          {med && (
+            <Sec t="✅ Checklists prise en charge — à cocher" plain>
+              {['pec','retour_pec'].map(sec => (
+                <div key={sec} className="cl-wrap">
+                  <div className="cl-title">{CHECKLISTS[sec].titre}</div>
+                  {CHECKLISTS[sec].items.map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
+                </div>
+              ))}
+            </Sec>
+          )}
+
+          <Sec t="📝 Rapport de mission / observations" plain>
+            <div className="rline" /><div className="rline" /><div className="rline" />
+          </Sec>
         </div>
-
-        <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
-          {[
-            ['✅','Consignes de réanimation', !!souhait?.consignes_reanimation],
-            ['✅','Pathologies décrites', !!souhait?.pathologies],
-            ['✅','Matériel à prévoir', !!souhait?.materiel_medical],
-            ['✅','Lieu de prise en charge', !!souhait?.lieu_prise_en_charge],
-            ['✅','Lieu de destination', !!souhait?.lieu_destination],
-            ['✅','Véhicules encodés', (souhait?.vehicules||[]).length > 0],
-            ['✅','Consentement signé', !!souhait?.consentement_signe],
-          ].map(([icon, label, ok], i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:10, fontSize:13 }}>
-              <span style={{ color: ok ? '#3B6D11' : '#A8A39D', fontSize:16 }}>{ok ? '✅' : '○'}</span>
-              <span style={{ color: ok ? '#1A1514' : '#A8A39D' }}>{label}</span>
-            </div>
-          ))}
-        </div>
-
-        {!souhait?.vehicules?.length && (
-          <div style={{ background:'#FAEEDA', border:'1px solid rgba(186,117,23,.2)', borderRadius:9, padding:'9px 12px', fontSize:12.5, color:'#BA7517', marginBottom:14 }}>
-            ⚠️ Aucun véhicule encodé. Demandez au coordinateur médical de compléter les plaques.
-          </div>
-        )}
-
-        <button onClick={printFiche} disabled={generating} style={{ width:'100%', padding:13, background:'#1BB0CE', color:'white', border:'none', borderRadius:10, fontSize:14.5, fontWeight:700, cursor:generating?'wait':'pointer', fontFamily:"'DM Sans',sans-serif" }}>
-          {generating ? '⏳ Génération…' : '🖨️ Générer et imprimer la fiche'}
-        </button>
-        <p style={{ fontSize:11.5, color:'#7A7470', textAlign:'center', marginTop:8 }}>Une fenêtre d'impression s'ouvrira. Vous pouvez aussi sauvegarder en PDF.</p>
       </div>
     </div>
   )
 }
+
+function Masthead({ s, face, vecteurLabel, med }) {
+  return (
+    <div className="masthead">
+      <div>
+        <div className="kicker">Heart's Angels · Fiche de mission</div>
+        <div className="name">{s.beneficiaire_prenom} {s.beneficiaire_nom}{s.beneficiaire_ddn && <small> — né(e) le {d(s.beneficiaire_ddn)}</small>}</div>
+        {s.description && <div className="wish">« {s.description} »</div>}
+        <div className="vlabel">{vecteurLabel} · {med ? 'équipage médical' : 'équipage non médical'}</div>
+      </div>
+      <div className="badge"><span className="face">{face}</span>{s.date_souhaitee && <div className="date">🗓 {d(s.date_souhaitee)}</div>}</div>
+    </div>
+  )
+}
+function Sec({ t, plain, children }) {
+  return (
+    <div className="sec">
+      <div className="sec-h"><span className="t">{t}</span></div>
+      {plain ? children : <div className="grid">{children}</div>}
+    </div>
+  )
+}
+function Fld({ l, v, wide, third, alert }) {
+  if (!v) return null
+  const cls = 'f' + (wide?' wide':'') + (third?' third':'')
+  return <span className={cls}><span className="l">{l}</span><span className={'v'+(alert?' alert':'')}>{v}</span></span>
+}
+
+const styles = `
+  .fiche { color:#243033; }
+  .fiche-block { }
+  .page { position:relative; background:#fff; color:#243033; width:210mm; min-height:297mm; margin:16px auto; padding:14mm; border:1px solid #E3EBEC; border-radius:8px; font-family:'Karla','Helvetica Neue',Arial,sans-serif; font-size:11.5px; overflow:hidden; }
+  .page > .content { position:relative; z-index:1; }
+  .wm { position:absolute; inset:0; z-index:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+  .wm span { transform:rotate(-45deg); font-size:58px; font-weight:800; letter-spacing:8px; white-space:pre; text-align:center; line-height:1.35; }
+  .wm.med span { color:rgba(178,59,59,0.09); }
+  .wm.conf span { color:rgba(14,74,90,0.07); }
+  .masthead { background:#0E4A5A; color:#fff; border-radius:12px; padding:15px 20px; display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
+  .masthead .kicker { font-size:9px; letter-spacing:2.5px; text-transform:uppercase; color:#8FCAD6; font-weight:700; }
+  .masthead .name { font-family:'Newsreader',Georgia,serif; font-size:21px; margin-top:3px; font-weight:600; }
+  .masthead .name small { font-weight:400; font-size:12px; color:#B9DCE3; font-family:'Karla',sans-serif; }
+  .masthead .wish { font-style:italic; color:#CFE6EB; margin-top:4px; font-size:11.5px; max-width:480px; }
+  .masthead .vlabel { margin-top:6px; font-size:10px; color:#8FCAD6; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
+  .masthead .badge { text-align:right; white-space:nowrap; }
+  .masthead .face { display:inline-block; background:#178FA6; color:#fff; padding:3px 12px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:1.5px; }
+  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; }
+  .sec { margin-bottom:9px; }
+  .sec-h { background:#EDF4F5; border-left:4px solid #7E9B76; padding:5px 11px; border-radius:5px; margin-bottom:7px; }
+  .sec-h .t { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:#0E4A5A; }
+  .f { display:inline-block; width:49%; vertical-align:top; padding:1px 10px 3px 0; }
+  .f.wide { width:100%; } .f.third { width:32.5%; }
+  .f .l { font-size:8px; text-transform:uppercase; letter-spacing:.7px; color:#8CA0A3; font-weight:700; display:block; }
+  .f .v { font-size:11px; color:#243033; font-weight:600; line-height:1.25; }
+  .f .v.alert { color:#B23B3B; }
+  table.tbl { width:100%; border-collapse:collapse; border-radius:7px; overflow:hidden; box-shadow:0 0 0 1px #E3EBEC; }
+  table.tbl th { background:#0E4A5A; color:#fff; font-size:9px; text-transform:uppercase; letter-spacing:.6px; padding:6px 8px; text-align:left; font-weight:700; }
+  table.tbl td { padding:5px 8px; font-size:10.5px; border-bottom:1px solid #EAF0F1; }
+  table.tbl tr:nth-child(even) td { background:#F6FAFB; }
+  table.tbl tr:last-child td { border-bottom:none; }
+  .vec { border:1px solid #E7EEF0; border-left:4px solid #178FA6; border-radius:7px; padding:7px 11px; margin-bottom:6px; }
+  .vec .vh { font-weight:700; color:#0E4A5A; font-size:11.5px; }
+  .vec .crew { margin-top:3px; color:#39494C; font-size:10.5px; }
+  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; }
+  .cl-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#178FA6; margin:2px 0 4px; }
+  .cl-item { padding:2.5px 0; font-size:10.5px; color:#39494C; }
+  .cl-box { display:inline-block; width:11px; height:11px; border:1.4px solid #9DB0B3; border-radius:3px; margin-right:7px; vertical-align:-1px; }
+  .vec-cl { margin-bottom:8px; }
+  .rline { border-bottom:1px solid #C7D3D5; height:19px; }
+  .muted { color:#8CA0A3; }
+  @media print {
+    .no-print { display:none !important; }
+    @page { size:A4; margin:10mm; }
+    .page { border:none; border-radius:0; margin:0; max-width:none; padding:0; }
+    .page.recto { page-break-after:always; }
+    .fiche-block.brk { page-break-before:always; }
+  }
+`
+
+
+// Feuille de style dédiée à l'impression : document isolé, A4, pagination
+// naturelle (aucune troncature), sans le fond de l'application.
+const printStyles = `
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; background:#fff; }
+  body { font-family:'Karla','Helvetica Neue',Arial,sans-serif; color:#243033; font-size:11.5px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  @page { size:A4; margin:12mm; }
+  .page { position:relative; background:#fff; min-height:271mm; padding:0; }
+  .page.recto { page-break-after:always; }
+  .fiche-block.brk { page-break-before:always; }
+  .content { position:relative; z-index:1; }
+  .wm { position:absolute; inset:0; z-index:0; display:flex; align-items:center; justify-content:center; }
+  .wm span { transform:rotate(-45deg); font-size:58px; font-weight:800; letter-spacing:8px; white-space:pre; text-align:center; line-height:1.35; }
+  .wm.med span { color:rgba(178,59,59,0.09); }
+  .wm.conf span { color:rgba(14,74,90,0.07); }
+  .masthead { background:#0E4A5A !important; color:#fff; border-radius:12px; padding:15px 20px; display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
+  .masthead .kicker { font-size:9px; letter-spacing:2.5px; text-transform:uppercase; color:#8FCAD6; font-weight:700; }
+  .masthead .name { font-family:'Newsreader',Georgia,serif; font-size:21px; margin-top:3px; font-weight:600; }
+  .masthead .name small { font-weight:400; font-size:12px; color:#B9DCE3; }
+  .masthead .wish { font-style:italic; color:#CFE6EB; margin-top:4px; font-size:11.5px; max-width:480px; }
+  .masthead .vlabel { margin-top:6px; font-size:10px; color:#8FCAD6; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
+  .masthead .badge { text-align:right; white-space:nowrap; }
+  .masthead .face { display:inline-block; background:#178FA6; color:#fff; padding:3px 12px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:1.5px; }
+  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; }
+  .sec { margin-bottom:9px; page-break-inside:avoid; }
+  .sec-h { background:#EDF4F5; border-left:4px solid #7E9B76; padding:5px 11px; border-radius:5px; margin-bottom:7px; }
+  .sec-h .t { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:#0E4A5A; }
+  .f { display:inline-block; width:49%; vertical-align:top; padding:1px 10px 3px 0; }
+  .f.wide { width:100%; } .f.third { width:32.5%; }
+  .f .l { font-size:8px; text-transform:uppercase; letter-spacing:.7px; color:#8CA0A3; font-weight:700; display:block; }
+  .f .v { font-size:11px; color:#243033; font-weight:600; line-height:1.25; }
+  .f .v.alert { color:#B23B3B; }
+  table.tbl { width:100%; border-collapse:collapse; }
+  table.tbl th { background:#0E4A5A !important; color:#fff; font-size:9px; text-transform:uppercase; letter-spacing:.6px; padding:6px 8px; text-align:left; font-weight:700; }
+  table.tbl td { padding:5px 8px; font-size:10.5px; border-bottom:1px solid #EAF0F1; }
+  table.tbl tr:nth-child(even) td { background:#F6FAFB; }
+  .vec { border:1px solid #E7EEF0; border-left:4px solid #178FA6; border-radius:7px; padding:7px 11px; margin-bottom:6px; page-break-inside:avoid; }
+  .vec .vh { font-weight:700; color:#0E4A5A; font-size:11.5px; }
+  .vec .crew { margin-top:3px; color:#39494C; font-size:10.5px; }
+  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; }
+  .cl-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#178FA6; margin:2px 0 4px; }
+  .cl-item { padding:2.5px 0; font-size:10.5px; color:#39494C; }
+  .cl-box { display:inline-block; width:11px; height:11px; border:1.4px solid #9DB0B3; border-radius:3px; margin-right:7px; vertical-align:-1px; }
+  .vec-cl { margin-bottom:8px; }
+  .rline { border-bottom:1px solid #C7D3D5; height:19px; }
+  .muted { color:#8CA0A3; }
+`

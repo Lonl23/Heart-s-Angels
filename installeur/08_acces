@@ -1,0 +1,22 @@
+-- ════════════════════════════════════════════════════════════════════════════
+--  Matrice d'accès : autoriser/refuser chaque accès selon le rôle ASBL,
+--  la qualification ou le type de bénévole. Idempotent.
+-- ════════════════════════════════════════════════════════════════════════════
+create table if not exists public.acces_config (
+  dimension text not null,          -- role | qualif | type
+  sujet     text not null,          -- ex: president, ambulancier, medical
+  acces     text not null,          -- ex: souhaits, defraiements, stock…
+  autorise  boolean default false,
+  primary key (dimension, sujet, acces)
+);
+
+alter table public.acces_config enable row level security;
+drop policy if exists acces_read on public.acces_config;
+create policy acces_read on public.acces_config for select to authenticated using (true);
+drop policy if exists acces_admin on public.acces_config;
+create policy acces_admin on public.acces_config for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+
+grant select, insert, update, delete on public.acces_config to authenticated, service_role;
+
+notify pgrst, 'reload schema';
