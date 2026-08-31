@@ -9,9 +9,9 @@ import MissionForm from './MissionForm'
 import MissionSummary from './MissionSummary'
 import Suivi from './Suivi'
 
-export default function DetailSouhait({ id, onBack }) {
+export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer=false }) {
   const [s, setS] = useState(null)
-  const [mode, setMode] = useState('view')
+  const mode = preparer ? 'edit' : 'view'
   const [tab, setTab] = useState('resume')
   const [fiche, setFiche] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -80,7 +80,7 @@ export default function DetailSouhait({ id, onBack }) {
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           <Btn kind="soft" onClick={()=>setFiche(true)}>Imprimer la fiche</Btn>
-          <Btn kind={mode==='edit'?'ok':'primary'} onClick={()=>setMode(mode==='edit'?'view':'edit')}>
+          <Btn kind={mode==='edit'?'ok':'primary'} onClick={()=>mode==='edit' ? onVoir?.() : onPreparer?.()}>
             {mode==='edit' ? 'Terminer l\'encodage' : 'Préparer le dossier'}
           </Btn>
         </div>

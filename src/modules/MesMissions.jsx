@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { Page, Card, Empty, Loading, Pill } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
@@ -13,13 +14,14 @@ const FILTRES = [
 
 export default function MesMissions() {
   const { session } = useAuth()
+  const nav = useNavigate()
+  const { id } = useParams()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  const [sel, setSel] = useState(null)
   const [filtre, setFiltre] = useState('a_faire')
   const [err, setErr] = useState(null)
 
-  useEffect(() => { load() }, [session?.user?.id])
+  useEffect(() => { if (!id) load() }, [session?.user?.id, id])
   async function load() {
     setLoading(true); setErr(null)
     const { data, error } = await supabase.rpc('mes_affectations')
@@ -28,7 +30,7 @@ export default function MesMissions() {
     setLoading(false)
   }
 
-  if (sel) return <MissionExecution souhaitId={sel} onBack={()=>{ setSel(null); load() }} />
+  if (id) return <MissionExecution souhaitId={id} onBack={() => nav('/app/missions')} />
 
   const visible = items.filter(m => {
     if (filtre === 'en_cours') return m.statut === 'en_cours'
@@ -55,7 +57,7 @@ export default function MesMissions() {
             {visible.map(m => {
               const st = stInfo(m.statut)
               return (
-                <Card key={m.souhait_id} clickable onClick={()=>setSel(m.souhait_id)} style={{ padding:'16px 16px' }}>
+                <Card key={m.souhait_id} clickable onClick={()=>nav(`/app/missions/${m.souhait_id}`)} style={{ padding:'16px 16px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'flex-start' }}>
                     <div style={{ minWidth:0 }}>
                       <div style={{ fontWeight:700, fontSize:16, color:'var(--text)' }}>

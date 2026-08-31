@@ -19,10 +19,12 @@ const TABS = [
 
 export default function MissionForm({ souhaitId }) {
   const [m, setM] = useState(null)
-  const [tab, setTab] = useState('administratif')
+  const [tab, setTab] = useState(() => sessionStorage.getItem(`encodage-tab-${souhaitId}`) || 'administratif')
   const [status, setStatus] = useState('')      // '', 'saving', 'saved'
   const chargee = useRef(false)
   const timer = useRef()
+
+  useEffect(() => { sessionStorage.setItem(`encodage-tab-${souhaitId}`, tab) }, [souhaitId, tab])
 
   useEffect(() => { (async () => {
     const { data } = await supabase.from('souhaits').select('mission').eq('id', souhaitId).single()

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 const AuthContext = createContext(null)
@@ -15,17 +15,38 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [matrix, setMatrix] = useState({})
   const [matrixCount, setMatrixCount] = useState(0)
+  const pret = useRef(false)
+  const uid = useRef(null)
+  const profileRef = useRef(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       if (data.session) loadProfile(data.session.user.id)
-      else setLoading(false)
+      else { pret.current = true; setLoading(false) }
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      // Un rafraîchissement de jeton (onglet en arrière-plan) peut émettre
+      // TOKEN_REFRESHED, SIGNED_IN, voire un SIGNED_OUT transitoire : ne jamais
+      // démonter l'écran ni envoyer vers /login.
+      if (event === 'TOKEN_REFRESHED') {
+        if (s) setSession(s)
+        return
+      }
+      if (event === 'SIGNED_OUT') {
+        setSession(null)
+        setProfile(null)
+        profileRef.current = null
+        uid.current = null
+        pret.current = true
+        setLoading(false)
+        return
+      }
+      if (!s) return
       setSession(s)
-      if (s) loadProfile(s.user.id)
-      else { setProfile(null); setLoading(false) }
+      const meme = pret.current && uid.current === s.user.id
+      if (meme && event !== 'USER_UPDATED') return
+      setTimeout(() => loadProfile(s.user.id), 0)
     })
     loadMatrix()
     return () => sub.subscription.unsubscribe()
@@ -38,9 +59,13 @@ export function AuthProvider({ children }) {
   }
 
   async function loadProfile(userId) {
-    setLoading(true)
+    const silencieux = pret.current && uid.current === userId && !!profileRef.current
+    if (!silencieux) setLoading(true)
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
     setProfile(data || null)
+    profileRef.current = data || null
+    uid.current = userId
+    pret.current = true
     setLoading(false)
   }
 
@@ -51,17 +76,15 @@ export function AuthProvider({ children }) {
     if (perm === 'medical')     return MEDICAL.includes(role)
     if (perm === 'staff')       return STAFF.includes(role)
     if (perm === 'partenaire')  return role === 'partenaire'
-    // nav.* et autres → réservé au personnel interne
     return STAFF.includes(role)
   }
 
   function canAccess(feature) {
     if (!role || role === 'partenaire') return false
-    if (ADMINS.includes(role) || accesTotal()) return true          // accès total
+    if (ADMINS.includes(role) || accesTotal()) return true
     const BASE = ['dashboard','missions','defraiements','disponibilites']
-    if (BASE.includes(feature)) return true                          // socle : tout volontaire
+    if (BASE.includes(feature)) return true
     if (feature === 'souhaits') return peutGererSouhaits()
-    // modules restreints (stock, annuaire, …) : via la matrice uniquement
     const fi = profile?.fiche || {}
     const sujets = [
       fi.type_benevole && ['type', fi.type_benevole],
@@ -87,16 +110,48 @@ export function AuthProvider({ children }) {
     return roles.some(r => ['coord_transport','coord_transport_adjoint','coord_medical','coord_medical_adjoint','recolteur_souhait'].includes(r))
   }
   function peutVoirSouhaitComplet() { return peutGererSouhaits() || estMedical() }
-  // Peut attribuer type / qualifications aux bénévoles (coordinateur bénévoles + accès total)
   function peutGererFiches() {
     if (accesTotal()) return true
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => ['coord_benevoles','coord_benevoles_adjoint'].includes(r))
   }
+  function peutVoirToutesDispos() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'coordinateur') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => [
+      'president','vice_president',
+      'coord_transport','coord_transport_adjoint',
+      'recolteur_souhait',
+      'coord_benevoles','coord_benevoles_adjoint',
+    ].includes(r))
+  }
+  function peutGererDispos() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'coordinateur') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => [
+      'president','vice_president',
+      'coord_transport','coord_transport_adjoint',
+      'coord_benevoles','coord_benevoles_adjoint',
+    ].includes(r))
+  }
+  function estVolontaireNonMedical() {
+    if (peutVoirToutesDispos()) return false
+    const t = profile?.fiche?.type_benevole
+    if (t === 'medical') return false
+    return t === 'non_medical' || role === 'volontaire_non_medical'
+  }
 
   async function signOut() { await supabase.auth.signOut() }
 
-  const value = { session, user: session?.user || null, profile, role, loading, can, canAccess, accesTotal, estMedical, peutGererSouhaits, peutVoirSouhaitComplet, peutGererFiches, reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id) }
+  const value = useMemo(() => ({
+    session, user: session?.user || null, profile, role, loading,
+    can, canAccess, accesTotal, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, estVolontaireNonMedical,
+    reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
+  }), [session, profile, role, loading, matrix, matrixCount])
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

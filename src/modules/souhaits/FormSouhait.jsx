@@ -9,7 +9,8 @@ export default function FormSouhait({ initial, onDone, inline=false }) {
   const [f, setF] = useState(initial || {
     beneficiaire_prenom:'', beneficiaire_nom:'', beneficiaire_ddn:'', beneficiaire_contact:'',
     description:'', localisation:'', notes_medicales:'', besoins_specifiques:'',
-    date_souhaitee:'', statut:'nouveau', priorite:2,
+    date_souhaitee:'', date_fin:'', courte_duree:false, heure_depart:'', heure_retour:'',
+    statut:'nouveau', priorite:2,
   })
   const set = (k,v) => setF(s => ({ ...s, [k]:v }))
   const [saving, setSaving] = useState(false)
@@ -27,12 +28,25 @@ export default function FormSouhait({ initial, onDone, inline=false }) {
       beneficiaire_ddn:f.beneficiaire_ddn||null, beneficiaire_contact:f.beneficiaire_contact||null,
       description:f.description, localisation:f.localisation||null,
       notes_medicales:f.notes_medicales||null, besoins_specifiques:f.besoins_specifiques||null,
-      date_souhaitee:f.date_souhaitee||null, priorite:Number(f.priorite)||2,
+      date_souhaitee:f.date_souhaitee||null,
+      date_fin: f.date_fin && f.date_souhaitee && f.date_fin >= f.date_souhaitee ? f.date_fin : (f.date_souhaitee || null),
+      courte_duree: !!f.courte_duree,
+      heure_depart: f.courte_duree && f.heure_depart ? f.heure_depart : null,
+      heure_retour: f.courte_duree && f.heure_retour ? f.heure_retour : null,
+      priorite:Number(f.priorite)||2,
     }
     if (statut !== undefined) payload.statut = statut
-    if (f.id) await supabase.from('souhaits').update(payload).eq('id', f.id)
-    else await supabase.from('souhaits').insert({ ...payload, created_by:profile?.id })
-    setSaving(false); onDone(f.id || true)
+    if (f.id) {
+      const { error } = await supabase.from('souhaits').update(payload).eq('id', f.id)
+      setSaving(false)
+      if (error) { alert('Erreur : ' + error.message); return }
+      onDone(f.id)
+      return
+    }
+    const { data, error } = await supabase.from('souhaits').insert({ ...payload, created_by:profile?.id }).select('id').single()
+    setSaving(false)
+    if (error) { alert('Erreur : ' + error.message); return }
+    onDone(data?.id)
   }
 
   const Wrap = inline ? 'div' : 'div'
@@ -63,10 +77,21 @@ export default function FormSouhait({ initial, onDone, inline=false }) {
       <Card style={{ marginBottom:14 }}>
         <div style={{ fontWeight:600, color:'var(--heading)', marginBottom:10 }}>Le souhait</div>
         <TA label="Description *" value={f.description} set={v=>set('description',v)} rows={3} />
+        <F label="Lieu (affiché au calendrier, sans nom de patient)" value={f.localisation} set={v=>set('localisation',v)} />
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:10 }}>
-          <F label="Lieu" value={f.localisation} set={v=>set('localisation',v)} />
-          <F label="Date souhaitée" type="date" value={f.date_souhaitee} set={v=>set('date_souhaitee',v)} />
+          <F label="Du" type="date" value={f.date_souhaitee} set={v=>setF(s => ({ ...s, date_souhaitee:v, date_fin: (!s.date_fin || s.date_fin < v) ? v : s.date_fin }))} />
+          <F label="Au (si plusieurs jours)" type="date" value={f.date_fin || f.date_souhaitee} set={v=>set('date_fin',v)} />
         </div>
+        <label className="ha-check" style={{ marginBottom:10 }}>
+          <input type="checkbox" checked={!!f.courte_duree} onChange={e=>set('courte_duree', e.target.checked)} />
+          <span>Souhait de courte durée (sinon toute la journée, minuit à minuit)</span>
+        </label>
+        {!!f.courte_duree && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:10 }}>
+            <F label="Heure de départ" type="time" value={(f.heure_depart||'').slice(0,5)} set={v=>set('heure_depart',v)} />
+            <F label="Heure de retour" type="time" value={(f.heure_retour||'').slice(0,5)} set={v=>set('heure_retour',v)} />
+          </div>
+        )}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:10 }}>
           {!inline && !f.id && <Sel label="Statut" value={f.statut} set={v=>set('statut',v)} options={PIPELINE_ENCODE.map(k=>({v:k,l:STATUTS[k].l}))} />}
           {!inline && f.id && <Sel label="Statut" value={f.statut} set={v=>set('statut',v)} options={statutsDisponibles(initial?.statut || f.statut).map(k=>({v:k,l:STATUTS[k].l}))} />}

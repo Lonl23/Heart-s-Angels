@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  Photos terrain (4 coins du véhicule + photos d'étape) et vecteur personnel.
+--  Photos terrain (4 côtés du véhicule à la prise et à la remise + ticket carburant).
 --  Un volontaire ne voit / ne coche que LE véhicule auquel il est affecté.
 --  Idempotent. Après 10_mission_terrain.sql.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -139,11 +139,12 @@ create or replace function public.sauver_photo_terrain(
 returns json language plpgsql security definer set search_path = public as $$
 declare
   m jsonb;
-  coins text[] := array['avant_gauche','avant_droit','arriere_gauche','arriere_droit'];
-  extras text[] := array['pec','retour_pec','retour_base'];
+  coins text[] := array['avant','arriere','gauche','droit','avant_gauche','avant_droit','arriere_gauche','arriere_droit'];
+  extras text[] := array['pec','retour_pec','retour_base','ticket_carburant'];
   arr jsonb;
   i int;
   found boolean := false;
+  coin_key text;
 begin
   if not public.suis_affecte(p_souhait) then
     return json_build_object('ok', false, 'error', 'non affecté');
@@ -151,13 +152,22 @@ begin
   if p_vecteur is null or p_vecteur = '' then
     return json_build_object('ok', false, 'error', 'vecteur requis');
   end if;
-  if not (p_slot = any(coins) or p_slot = any(extras)) then
+  if not (p_slot = any(coins) or p_slot = any(extras) or p_slot like 'r\_%' escape '\') then
     return json_build_object('ok', false, 'error', 'slot interdit');
   end if;
   select coalesce(mission, '{}'::jsonb) into m from public.souhaits where id = p_souhait;
 
   if p_slot = any(coins) then
     m := public._jsonb_set_path(m, array['terrain_photos', p_vecteur, 'coins', p_slot], coalesce(p_meta, 'null'::jsonb));
+  elsif p_slot = 'ticket_carburant' then
+    m := public._jsonb_set_path(m, array['terrain_photos', p_vecteur, 'ticket_carburant'], coalesce(p_meta, 'null'::jsonb));
+  elsif p_slot like 'r\_%' escape '\' then
+    coin_key := substr(p_slot, 3);
+    if coin_key = any(coins) then
+      m := public._jsonb_set_path(m, array['terrain_photos', p_vecteur, 'coins_retour', coin_key], coalesce(p_meta, 'null'::jsonb));
+    else
+      return json_build_object('ok', false, 'error', 'slot interdit');
+    end if;
   else
     arr := coalesce(m->'terrain_photos'->p_vecteur->p_slot, '[]'::jsonb);
     if jsonb_typeof(arr) <> 'array' then arr := '[]'::jsonb; end if;

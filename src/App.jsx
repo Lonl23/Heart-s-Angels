@@ -28,8 +28,12 @@ export default function App() {
       {/* Espace interne (personnel) */}
       <Route path="/app" element={<RequireStaff><Layout /></RequireStaff>}>
         <Route index element={<Dashboard />} />
-        <Route path="souhaits"       element={<Souhaits />} />
-        <Route path="missions"       element={<MesMissions />} />
+        <Route path="souhaits/nouveau" element={<Souhaits />} />
+        <Route path="souhaits/:id/preparer" element={<Souhaits />} />
+        <Route path="souhaits/:id" element={<Souhaits />} />
+        <Route path="souhaits" element={<Souhaits />} />
+        <Route path="missions/:id" element={<MesMissions />} />
+        <Route path="missions" element={<MesMissions />} />
         <Route path="defraiements"   element={<Stub nom="Défraiements" />} />
         <Route path="disponibilites" element={<Disponibilites />} />
         <Route path="stock"          element={<Stock />} />

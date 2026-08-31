@@ -264,3 +264,74 @@ img, svg, video, table { max-width: 100%; }
   h1 { font-size: 1.4rem; }
   h2 { font-size: 1.25rem; }
 }
+
+/* ── Calendrier disponibilités ────────────────────────────────────────────── */
+.ha-cal-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.ha-cal-titre { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.25rem; color: var(--heading); font-weight: 500; }
+.ha-cal-legend {
+  display: flex; flex-wrap: wrap; gap: 12px 16px; font-size: 12px; color: var(--text-muted);
+  margin: 0 0 10px;
+}
+.ha-cal-dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px;
+  vertical-align: -1px;
+}
+.ha-cal-dot.ambu { background: #185FA5; }
+.ha-cal-dot.infi { background: #3B6D11; }
+.ha-cal-dot.dual { background: linear-gradient(90deg, #185FA5, #3B6D11); }
+.ha-cal-dot.nonmed { background: #6B6560; }
+.ha-cal-dot.miss-no { background: #C62828; }
+.ha-cal-dot.miss-ok { background: #D4FF00; border: 1px solid #9BB800; }
+.ha-cal-scroll { overflow-x: auto; margin: 0 -4px 16px; }
+.ha-cal { min-width: 640px; }
+.ha-cal-headrow, .ha-cal-lane, .ha-cal-days {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px;
+}
+.ha-cal-head {
+  font-size: 11px; font-weight: 700; color: var(--text-muted); text-align: center;
+  padding: 6px 0; text-transform: uppercase; letter-spacing: .04em;
+}
+.ha-cal-head.is-we { color: var(--accent); }
+.ha-cal-week {
+  border-top: 1px solid var(--border); padding: 4px 0 8px;
+}
+.ha-cal-lane { min-height: 22px; margin-bottom: 2px; }
+.ha-cal-ev {
+  margin: 1px 2px; padding: 2px 7px; border: none; border-radius: 6px;
+  font-size: 11.5px; font-weight: 700; text-align: left; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ha-cal-ev.mission { cursor: default; }
+.ha-cal-ev.mission.is-incomplet { background: #C62828; color: #fff; }
+.ha-cal-ev.mission.is-complet { background: #D4FF00; color: #1A2200; }
+.ha-cal-ev.dispo-ambu, .ha-aff-p.dispo-ambu { background: #185FA5; color: #fff; }
+.ha-cal-ev.dispo-infi, .ha-aff-p.dispo-infi { background: #3B6D11; color: #fff; }
+.ha-cal-ev.dispo-dual, .ha-aff-p.dispo-dual {
+  background: linear-gradient(90deg, #185FA5 0%, #3B6D11 100%);
+  color: #fff;
+}
+.ha-cal-ev.dispo-nonmed, .ha-cal-ev.dispo-autre,
+.ha-aff-p.dispo-nonmed, .ha-aff-p.dispo-autre { background: #6B6560; color: #fff; }
+.ha-aff-rapides { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.ha-aff-p {
+  padding:7px 12px; border:none; border-radius:99; font-size:13px; font-weight:600;
+  cursor:pointer; color:#fff;
+}
+.ha-cal-day {
+  min-height: 44px; border: 1px solid var(--border); background: var(--card);
+  border-radius: 8px; padding: 4px 6px; text-align: left; color: var(--text);
+}
+.ha-cal.is-semaine .ha-cal-day { min-height: 72px; }
+.ha-cal-day.is-we { background: color-mix(in srgb, var(--accent) 7%, var(--card)); }
+.ha-cal-day.is-out { opacity: .45; }
+.ha-cal-day.is-today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ha-cal-num { font-size: 12.5px; font-weight: 700; }
+[data-theme="dark"] .ha-cal-ev.mission.is-incomplet { background: #E24B4B; color: #fff; }
+[data-theme="dark"] .ha-cal-ev.mission.is-complet { background: #E8FF4A; color: #141800; }
+[data-theme="dark"] .ha-cal-ev.dispo-ambu { background: #2B8AD4; }
+[data-theme="dark"] .ha-cal-ev.dispo-infi { background: #5A9A2A; }
+[data-theme="dark"] .ha-cal-ev.dispo-dual { background: linear-gradient(90deg, #2B8AD4 0%, #5A9A2A 100%); }
+[data-theme="dark"] .ha-cal-ev.dispo-nonmed, [data-theme="dark"] .ha-cal-ev.dispo-autre { background: #8A837C; }

@@ -52,6 +52,10 @@ async function main() {
     await client.query(lireSQL('09_missions_volontaires'))
     await client.query(lireSQL('10_mission_terrain.sql'))
     await client.query(lireSQL('11_photos_terrain.sql'))
+    await client.query(lireSQL('12_calendrier_dispos.sql'))
+    await client.query(lireSQL('13_dispos_equipe.sql'))
+    await client.query(lireSQL('14_quals_implicites.sql'))
+    await client.query(lireSQL('15_affectation_dispos.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

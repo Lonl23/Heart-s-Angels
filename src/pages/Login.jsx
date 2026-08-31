@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import config from '@/app.config'
@@ -9,13 +9,17 @@ import { lbl, inp } from '@/components/ui'
 export default function Login() {
   const { session, can, loading } = useAuth()
   const nav = useNavigate()
+  const loc = useLocation()
   const [email, setEmail] = useState('')
   const [pwd, setPwd] = useState('')
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (!loading && session) nav(can('partenaire') ? '/partenaire' : '/app', { replace:true })
+    if (loading || !session) return
+    if (can('partenaire')) { nav('/partenaire', { replace:true }); return }
+    const from = loc.state?.from
+    nav(typeof from === 'string' && from.startsWith('/app') ? from : '/app', { replace:true })
   }, [session, loading])
 
   async function submit(e) {

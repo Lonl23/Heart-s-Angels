@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, inp } from '@/components/ui'
 
-export const COINS = [
-  { id:'avant_gauche',  l:'Avant gauche',  place:'AG' },
-  { id:'avant_droit',   l:'Avant droit',   place:'AD' },
-  { id:'arriere_gauche',l:'Arrière gauche',place:'ARG' },
-  { id:'arriere_droit', l:'Arrière droit', place:'ARD' },
+export const COTES = [
+  { id:'avant',   l:'Avant' },
+  { id:'arriere', l:'Arrière' },
+  { id:'gauche',  l:'Côté gauche' },
+  { id:'droit',   l:'Côté droit' },
 ]
 
 export async function compressImage(file) {
@@ -142,14 +142,14 @@ export function PhotoAnnotator({ meta, onSave, onClose }) {
   )
 }
 
-export function CoinPhotos({ coins, onCapture, onAnnotate, disabled }) {
+export function CoinPhotos({ coins, onCapture, onAnnotate, disabled, hint }) {
   return (
     <div>
       <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>
-        Photographiez les 4 coins du véhicule. S'il y a un dégât, marquez-le sur la photo.
+        {hint || 'Photographiez les 4 côtés du véhicule. S\'il y a un dégât, marquez-le sur la photo.'}
       </div>
       <div className="ha-coins">
-        {COINS.map(c => {
+        {COTES.map(c => {
           const meta = coins?.[c.id]
           return (
             <div key={c.id} className="ha-coin">
@@ -178,28 +178,30 @@ export function CoinPhotos({ coins, onCapture, onAnnotate, disabled }) {
   )
 }
 
-export function ExtraPhotos({ photos, onCapture, onAnnotate, onDelete, disabled }) {
+export function TicketPhoto({ meta, onCapture, disabled }) {
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, marginBottom:8 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)' }}>Photos de cette étape</div>
-        <label className="ha-add-photo">
-          <input type="file" accept="image/*" capture="environment" disabled={disabled}
-            onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(f) }} />
-          + Photo
-        </label>
+      <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>
+        Photographiez le ticket de caisse du carburant (plein ou appoint).
       </div>
-      {(!photos || photos.length === 0) && (
-        <div style={{ fontSize:13, color:'var(--text-faint)' }}>Aucune photo pour l'instant. Ajoutez-en si besoin (dégât, matériel, lieu…).</div>
-      )}
-      <div className="ha-photo-row">
-        {(photos || []).map(p => (
-          <div key={p.id} className="ha-photo-item">
-            <PhotoThumb meta={p} onAnnotate={()=>onAnnotate(p)} />
-            <button type="button" className="ha-photo-del" onClick={()=>onDelete(p)} disabled={disabled}>✕</button>
+      {meta?.path
+        ? (
+          <div style={{ maxWidth: 280 }}>
+            <PhotoThumb meta={meta} />
+            <label className="ha-coin-replace">
+              <input type="file" accept="image/*" capture="environment" disabled={disabled}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(f) }} />
+              Reprendre
+            </label>
           </div>
-        ))}
-      </div>
+        )
+        : (
+          <label className="ha-coin-empty" style={{ maxWidth: 280 }}>
+            <input type="file" accept="image/*" capture="environment" disabled={disabled}
+              onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(f) }} />
+            <span>📷 Ticket carburant</span>
+          </label>
+        )}
     </div>
   )
 }

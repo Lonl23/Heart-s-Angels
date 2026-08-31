@@ -5,7 +5,7 @@ import { Btn, inp, fmtAdresse, Loading, Flash, Pill } from '@/components/ui'
 import { CHECKLISTS } from './missionSchema'
 import { stInfo } from './Souhaits'
 import MedicamentsMAR from './MedicamentsMAR'
-import { COINS, CoinPhotos, ExtraPhotos, PhotoAnnotator, uploadMissionPhoto } from './TerrainPhotos'
+import { COTES, CoinPhotos, PhotoAnnotator, TicketPhoto, uploadMissionPhoto } from './TerrainPhotos'
 
 const fmtDt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }) : '—'
 
@@ -178,65 +178,46 @@ export default function MissionExecution({ souhaitId, onBack }) {
     if (error) setErr(error.message); else flash()
   }
 
-  async function persistPhoto(slot, meta, action = 'set') {
+  async function persistPhoto(slot, meta, action = 'set', groupe = 'coins') {
     if (complet) {
       const next = { ...(m || {}) }
       const tp = { ...(next.terrain_photos || {}) }
       const cur = { ...(tp[vecteurId] || {}) }
-      if (COINS.some(c => c.id === slot)) {
-        cur.coins = { ...(cur.coins || {}), [slot]: meta }
-      } else {
-        const arr = [...(cur[slot] || [])]
-        if (action === 'add') arr.push(meta)
-        else if (action === 'delete') {
-          const i = arr.findIndex(p => p.id === meta.id)
-          if (i >= 0) arr.splice(i, 1)
-        } else {
-          const i = arr.findIndex(p => p.id === meta.id)
-          if (i >= 0) arr[i] = meta; else arr.push(meta)
-        }
-        cur[slot] = arr
-      }
+      if (groupe === 'ticket') cur.ticket_carburant = meta
+      else cur[groupe] = { ...(cur[groupe] || {}), [slot]: meta }
       tp[vecteurId] = cur
       await saveMission({ ...next, terrain_photos: tp })
       return
     }
+    const rpcSlot = groupe === 'ticket' ? 'ticket_carburant' : (groupe === 'coins_retour' ? ('r_' + slot) : slot)
     const { data, error } = await supabase.rpc('sauver_photo_terrain', {
-      p_souhait: souhaitId, p_vecteur: vecteurId, p_slot: slot, p_meta: meta, p_action: action,
+      p_souhait: souhaitId, p_vecteur: vecteurId, p_slot: rpcSlot, p_meta: meta, p_action: action,
     })
     if (error || data?.ok === false) { setErr(error?.message || data?.error); return }
     setRpc(x => {
       const photos = { ...(x.photos || {}) }
-      if (COINS.some(c => c.id === slot)) {
-        photos.coins = { ...(photos.coins || {}), [slot]: meta }
-      } else {
-        let arr = [...(photos[slot] || [])]
-        if (action === 'add') arr.push(meta)
-        else if (action === 'delete') arr = arr.filter(p => p.id !== meta.id)
-        else arr = arr.map(p => p.id === meta.id ? meta : p)
-        photos[slot] = arr
-      }
+      if (groupe === 'ticket') photos.ticket_carburant = meta
+      else photos[groupe] = { ...(photos[groupe] || {}), [slot]: meta }
       return { ...x, photos }
     })
     flash()
   }
 
-  async function captureCoin(slot, file) {
+  async function captureCoin(slot, file, groupe = 'coins') {
     try {
-      const meta = await uploadMissionPhoto(souhaitId, vecteurId, slot, file)
-      await persistPhoto(slot, meta, 'set')
-      setAnnot({ slot, meta, extra: false })
+      const meta = await uploadMissionPhoto(souhaitId, vecteurId, `${groupe}/${slot}`, file)
+      await persistPhoto(slot, meta, 'set', groupe)
+      setAnnot({ slot, meta, extra: false, groupe })
     } catch (e) { setErr(e.message || 'Photo impossible.') }
   }
-  async function captureExtra(slot, file) {
+  async function captureTicket(file) {
     try {
-      const meta = await uploadMissionPhoto(souhaitId, vecteurId, slot, file)
-      await persistPhoto(slot, meta, 'add')
-      setAnnot({ slot, meta, extra: true })
+      const meta = await uploadMissionPhoto(souhaitId, vecteurId, 'ticket_carburant', file)
+      await persistPhoto('ticket_carburant', meta, 'set', 'ticket')
     } catch (e) { setErr(e.message || 'Photo impossible.') }
   }
   async function saveAnnot(nextMeta) {
-    await persistPhoto(annot.slot, nextMeta, annot.extra ? 'update' : 'set')
+    await persistPhoto(annot.slot, nextMeta, 'set', annot.groupe || 'coins')
     setAnnot(null)
   }
 
@@ -253,9 +234,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
     flash()
   }
 
-  const coinsOk = COINS.every(c => photos?.coins?.[c.id]?.path)
+  const cotesOk = COTES.every(c => photos?.coins?.[c.id]?.path)
   async function partir() {
-    if (!coinsOk) { setErr('Photographiez les 4 coins du véhicule avant de partir.'); return }
+    if (!cotesOk) { setErr('Photographiez les 4 côtés du véhicule avant de partir.'); return }
     if (sh?.statut !== 'en_cours' && sh?.statut !== 'realise') await avancer('en_cours')
     await aller('pec')
   }
@@ -343,9 +324,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
           {etape === 'vehicule' && (
             <>
               <Section titre="Itinéraire du jour"><Itineraire d={itin} compact /></Section>
-              <Section titre="Photos des 4 coins">
-                <CoinPhotos coins={photos.coins || {}} onCapture={captureCoin} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false })} disabled={locked || !vecteurId} />
-                {!coinsOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 photos sont demandées avant de quitter la base.</div>}
+              <Section titre="Photos des 4 côtés — prise du véhicule">
+                <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} disabled={locked || !vecteurId} />
+                {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés sont demandés avant de quitter la base.</div>}
               </Section>
               <Section titre="Checklist départ">
                 <CheckBlock items={CHECKLISTS.base.items} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
@@ -363,7 +344,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
               <Section titre="Checklist prise en charge">
                 <CheckBlock items={CHECKLISTS.pec.items} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
               </Section>
-              <Section titre="Photos"><ExtraPhotos photos={photos.pec || []} onCapture={f=>captureExtra('pec', f)} onAnnotate={meta=>setAnnot({ slot:'pec', meta, extra:true })} onDelete={p=>persistPhoto('pec', p, 'delete')} disabled={locked} /></Section>
               {medical && complet && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
             </>
           )}
@@ -374,18 +354,28 @@ export default function MissionExecution({ souhaitId, onBack }) {
               <Section titre="Checklist retour patient">
                 <CheckBlock items={CHECKLISTS.retour_pec.items} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
               </Section>
-              <Section titre="Photos"><ExtraPhotos photos={photos.retour_pec || []} onCapture={f=>captureExtra('retour_pec', f)} onAnnotate={meta=>setAnnot({ slot:'retour_pec', meta, extra:true })} onDelete={p=>persistPhoto('retour_pec', p, 'delete')} disabled={locked} /></Section>
               {medical && complet && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
             </>
           )}
 
           {etape === 'retour_base' && (
             <>
+              <Section titre="Photos des 4 côtés — remise du véhicule">
+                <CoinPhotos
+                  coins={photos.coins_retour || {}}
+                  hint="Photographiez à nouveau les 4 côtés. Marquez tout dégât apparu pendant la mission."
+                  onCapture={(slot, f)=>captureCoin(slot, f, 'coins_retour')}
+                  onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins_retour' })}
+                  disabled={locked || !vecteurId}
+                />
+              </Section>
+              <Section titre="Ticket de caisse carburant">
+                <TicketPhoto meta={photos.ticket_carburant} onCapture={captureTicket} disabled={locked || !vecteurId} />
+              </Section>
               <Section titre="Checklist retour base">
                 <CheckBlock items={CHECKLISTS.retour_base.items} etat={checks.retour_base} onToggle={(it,on)=>toggleCheck('retour_base', it, on)} />
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
-              <Section titre="Photos"><ExtraPhotos photos={photos.retour_base || []} onCapture={f=>captureExtra('retour_base', f)} onAnnotate={meta=>setAnnot({ slot:'retour_base', meta, extra:true })} onDelete={p=>persistPhoto('retour_base', p, 'delete')} disabled={locked} /></Section>
               {medical && complet && <RapportMedical m={m} onSave={saveMission} />}
               <RapportLogistique value={complet ? (m?.rapport_observations || '') : (rpc?.rapport_observations || '')} onSave={saveObs} />
             </>

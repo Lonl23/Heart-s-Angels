@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
@@ -37,27 +38,41 @@ export function statutsDisponibles(actuel) {
 }
 
 export default function Souhaits() {
+  const nav = useNavigate()
+  const { id } = useParams()
+  const loc = useLocation()
   const [tab, setTab] = useState('souhaits')
-  const [sel, setSel] = useState(null)
-  const [creer, setCreer] = useState(false)
   const [nbDemandes, setNbDemandes] = useState(0)
+  const nouveau = loc.pathname.endsWith('/nouveau')
+  const preparer = loc.pathname.endsWith('/preparer')
 
   useEffect(() => {
     supabase.from('demandes_souhaits').select('id', { count:'exact', head:true }).in('statut', ['nouvelle','en_cours'])
       .then(({ count }) => setNbDemandes(count || 0))
-  }, [sel, creer, tab])
+  }, [id, nouveau, tab, loc.pathname])
 
-  if (sel) return <DetailSouhait id={sel} onBack={() => setSel(null)} />
-  if (creer) return <FormSouhait onDone={() => setCreer(false)} />
+  if (nouveau) return (
+    <FormSouhait onDone={(nid) => {
+      if (typeof nid === 'string') nav(`/app/souhaits/${nid}/preparer`)
+      else nav('/app/souhaits')
+    }} />
+  )
+  if (id) return (
+    <DetailSouhait id={id} preparer={preparer}
+      onBack={() => nav('/app/souhaits')}
+      onPreparer={() => nav(`/app/souhaits/${id}/preparer`)}
+      onVoir={() => nav(`/app/souhaits/${id}`)}
+    />
+  )
 
   return (
     <Page title="Souhaits" subtitle="Encodez les dossiers ici. Le terrain (checklists, MAR, démarrer / terminer) se fait dans Mes missions."
-      action={tab==='souhaits' ? <Btn onClick={()=>setCreer(true)}>+ Nouveau souhait</Btn> : null}>
+      action={tab==='souhaits' ? <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn> : null}>
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
       ]} />
-      {tab === 'souhaits' ? <Kanban onOpen={setSel} /> : <Demandes onOpen={setSel} />}
+      {tab === 'souhaits' ? <Kanban onOpen={sid => nav(`/app/souhaits/${sid}`)} /> : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
     </Page>
   )
 }
