@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import config from '@/app.config'
 import { COPYRIGHT } from '@/copyright'
-import { Card, Btn, F, TA, Sel, Pill, inp, lbl, Empty, Loading } from '@/components/ui'
+import { Card, Btn, F, TA, Sel, Pill, inp, lbl, Empty, Loading, Logo } from '@/components/ui'
 
 const STATUT = {
   nouvelle:  { l:'Reçue',       c:'#BA7517', bg:'#FAEEDA' },
@@ -24,7 +23,10 @@ export default function PartenairePortail() {
   return (
     <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
       <header style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'var(--surface)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:20 }}>
-        <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>{config.organisation.nom} — Espace partenaire</div>
+        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+          <Logo size={40} />
+          <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>Espace partenaire</span>
+        </div>
         <Btn kind="soft" onClick={async()=>{ await signOut(); nav('/login') }}>Déconnexion</Btn>
       </header>
 

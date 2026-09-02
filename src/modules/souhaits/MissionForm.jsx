@@ -5,6 +5,7 @@ import { GROUPES } from './missionSchema'
 import Traitements from './Traitements'
 import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
+import MaterielRequis from './MaterielRequis'
 
 const grp = id => GROUPES.find(g => g.id === id)
 
@@ -12,6 +13,7 @@ const TABS = [
   { id:'administratif', label:'Administratif', groupes:['administratif'] },
   { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'] },
   { id:'vecteurs',      label:'Vecteurs & équipages' },
+  { id:'materiel',      label:'Matériel' },
   { id:'medical',       label:'Médical', groupes:['medical'] },
   { id:'traitements',   label:'Traitements' },
   { id:'suivi',         label:'Suivi interne' },
@@ -60,6 +62,7 @@ export default function MissionForm({ souhaitId }) {
       />
 
       {tab === 'vecteurs' && <Vecteurs souhaitId={souhaitId} m={m} setM={setM} />}
+      {tab === 'materiel' && <MaterielRequis m={m} setM={setM} />}
       {tab === 'traitements' && (
         <div>
           <Flash>Encodez les traitements prévus. Les administrations se cochent dans Mes missions, le jour J.</Flash>
@@ -71,7 +74,7 @@ export default function MissionForm({ souhaitId }) {
       )}
       {tab === 'suivi' && <Suivi souhaitId={souhaitId} />}
 
-      {cur.groupes && (
+      {cur?.groupes && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           {cur.groupes.map(gid => {
             if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} />

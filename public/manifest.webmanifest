@@ -1,9 +1,35 @@
 {
+  "id": "/",
   "name": "Heart's Angels ASBL",
   "short_name": "Heart's Angels",
-  "start_url": "/",
+  "description": "Espace interne : missions, disponibilités, stock et souhaits.",
+  "lang": "fr-BE",
+  "dir": "ltr",
+  "start_url": "/app",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "orientation": "any",
+  "background_color": "#F7F5F2",
   "theme_color": "#1BB0CE",
-  "icons": []
+  "categories": ["medical", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/ha-logo-192-v4.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ha-logo-512-v4.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ha-logo-512-maskable-v4.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
 }

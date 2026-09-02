@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import config from '@/app.config'
 // Briques d'interface partagées (thème + mobile)
 export const inp = { width:'100%', padding:'9px 12px', border:'1px solid var(--border)', borderRadius:9, fontSize:13.5, background:'var(--surface)', color:'var(--text)', boxSizing:'border-box', fontFamily:'inherit' }
 export const lbl = { fontSize:12.5, color:'var(--text-muted)', display:'block', marginBottom:5 }
@@ -172,4 +173,13 @@ export function AddressFields({ value, set }) {
 
 export function Pill({ children, color='var(--accent)', bg='var(--bg-alt)' }) {
   return <span style={{ background:bg, color, padding:'2px 9px', borderRadius:99, fontSize:11.5, fontWeight:600, whiteSpace:'nowrap' }}>{children}</span>
+}
+
+export function Logo({ size = 72, style, className }) {
+  const src = config.organisation?.logoUrl || '/icons/ha-logo-512-v4.png'
+  return (
+    <img src={src} alt={config.organisation?.nom || "Heart's Angels"} width={size} height={size}
+      className={className}
+      style={{ display:'block', objectFit:'contain', flexShrink:0, ...style }} />
+  )
 }

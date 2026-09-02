@@ -142,7 +142,7 @@ export function PhotoAnnotator({ meta, onSave, onClose }) {
   )
 }
 
-export function CoinPhotos({ coins, onCapture, onAnnotate, disabled, hint }) {
+export function CoinPhotos({ coins, onCapture, onAnnotate, onDelete, disabled, hint }) {
   return (
     <div>
       <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>
@@ -164,11 +164,19 @@ export function CoinPhotos({ coins, onCapture, onAnnotate, disabled, hint }) {
                   </label>
                 )}
               {meta?.path && (
-                <label className="ha-coin-replace">
-                  <input type="file" accept="image/*" capture="environment" disabled={disabled}
-                    onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(c.id, f) }} />
-                  Reprendre
-                </label>
+                <div className="ha-coin-actions">
+                  <label className="ha-coin-replace">
+                    <input type="file" accept="image/*" capture="environment" disabled={disabled}
+                      onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(c.id, f) }} />
+                    Reprendre
+                  </label>
+                  {onDelete && (
+                    <button type="button" className="ha-coin-delete" disabled={disabled}
+                      onClick={() => onDelete(c.id)}>
+                      Supprimer
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )

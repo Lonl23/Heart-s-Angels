@@ -12,7 +12,7 @@ window.__APP_CONFIG__ = {
     devise:  "EUR",
     tauxKm:  0.4201,              // barème kilométrique (BE 2026 : 0.4201 €/km)
     accent:  "#1BB0CE",
-    logoUrl: "",
+    logoUrl: "/icons/ha-logo-512-v4.png",
   },
   domaine: "https://heart-s-angels.web.app",
   supabase: {

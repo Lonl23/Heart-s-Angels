@@ -6,9 +6,26 @@ export const QUALIFS = [
   { v:'medecin',     l:'Médecin' },
   { v:'kine',        l:'Kiné' },
   { v:'psychologue', l:'Psychologue' },
+  { v:'secouriste',  l:'Secouriste' },
   { v:'chauffeur',   l:'Chauffeur' },
   { v:'autre',       l:'Autre' },
 ]
+
+/** Non médical : secouriste puis chauffeur (sélection médicale / permis reste un chip explicite). */
+const QUALS_FICHE_NON_MED = ['secouriste', 'chauffeur']
+
+export function qualifsPourType(type) {
+  if (type === 'non_medical') return QUALIFS.filter(q => QUALS_FICHE_NON_MED.includes(q.v))
+  return QUALIFS.filter(q => q.v !== 'secouriste')
+}
+
+/** En changeant de type, on retire les quals qui n’appartiennent plus à la liste. */
+export function qualificationsCompatibles(type, qs) {
+  const list = Array.isArray(qs) ? qs : []
+  if (type === 'non_medical') return list.filter(q => q === 'secouriste' || q === 'chauffeur')
+  if (type === 'medical') return list.filter(q => q !== 'secouriste')
+  return list
+}
 
 export const ROLES_MISSION = [
   ...QUALIFS,
@@ -17,13 +34,36 @@ export const ROLES_MISSION = [
 
 export const lblRoleMission = v => ROLES_MISSION.find(r => r.v === v)?.l || v
 
+const ROLES_PROFIL_MEDICAUX = ['medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris']
+const QUALS_MEDICALES = ['ambulancier', 'infirmier', 'medecin']
+
+/** Infirmier, médecin, ambulancier (y compris dual infi+ambu). Chauffeur / secouriste / VNM : non. */
+export function personneEstMedicale(p = {}) {
+  const role = p.role || p.profiles?.role
+  const fiche = p.fiche || p.profiles?.fiche
+  const rm = p.role_mission
+  if (fiche?.type_benevole === 'non_medical') return false
+  if (QUALS_MEDICALES.includes(rm)) return true
+  if (ROLES_PROFIL_MEDICAUX.includes(role)) return true
+  if (fiche?.type_benevole === 'medical') return true
+  const qs = Array.isArray(fiche?.qualifications) ? fiche.qualifications : []
+  return qs.some(q => QUALS_MEDICALES.includes(q))
+}
+
+/** L’équipage affecté à ce vecteur a-t-il au moins un médical ? (pas les rôles requis, l’affectation réelle.) */
+export function vecteurAEquipageMedical(membres) {
+  return (membres || []).some(e => personneEstMedicale(e))
+}
+
 /** Qualifications utiles en mission, d’après la fiche (pas de saisie à la dispo). */
 export function qualsImplicites(role, fiche) {
   const qs = new Set(fiche?.qualifications || [])
   if (['ambulancier_bleu', 'ambulancier_gris'].includes(role)) qs.add('ambulancier')
   if (role === 'infirmier') qs.add('infirmier')
   if (role === 'medecin') qs.add('medecin')
-  if (role === 'volontaire_non_medical' || fiche?.type_benevole === 'non_medical') qs.add('volontaire_non_medical')
+  if (role === 'volontaire_non_medical' || fiche?.type_benevole === 'non_medical' || qs.has('secouriste')) {
+    qs.add('volontaire_non_medical')
+  }
   const p = fiche?.permis || {}
   const permis = !!(p.B || p.C || p.E)
   if (qs.has('ambulancier') && permis && p.selection_medicale) qs.add('chauffeur')
@@ -37,7 +77,7 @@ export function teinteDepuisQuals(qs) {
   if (ambu && infi) return 'dual'
   if (infi) return 'infi'
   if (ambu) return 'ambu'
-  if (list.includes('volontaire_non_medical')) return 'nonmed'
+  if (list.includes('volontaire_non_medical') || list.includes('secouriste')) return 'nonmed'
   return 'autre'
 }
 
@@ -50,6 +90,90 @@ export const EQUIPAGE_DEFAUT = ['ambulancier', 'infirmier']
 /** Si rien n’est coché : ambulancier + infirmier. Si chauffeur seul est coché, on ne rajoute pas le défaut. */
 export function rolesRequisEffectifs(requis) {
   return (requis && requis.length) ? requis : EQUIPAGE_DEFAUT
+}
+
+/** Rôles d’un vecteur. Tableau présent (même vide) = ce véhicule ; sinon repli mission puis défaut. */
+export function rolesRequisVecteur(vecteur, missionRolesRequis) {
+  if (Array.isArray(vecteur?.roles_requis)) return rolesRequisEffectifs(vecteur.roles_requis)
+  return rolesRequisEffectifs(missionRolesRequis)
+}
+
+/** Concaténation par vecteur : deux véhicules infi+ambu = deux infi + deux ambu, pas 1+1. */
+export function rolesRequisTousVecteurs(mission) {
+  const vecteurs = mission?.vecteurs || []
+  if (!vecteurs.length) return rolesRequisEffectifs(mission?.roles_requis)
+  return vecteurs.flatMap(v => rolesRequisVecteur(v, mission?.roles_requis))
+}
+
+/** Retranche `couverts` de `requis` en tenant compte des doublons (un rôle par occurrence). */
+export function rolesManquantsMultiset(requis, couverts) {
+  const used = [...(couverts || [])]
+  const out = []
+  for (const r of requis || []) {
+    const i = used.indexOf(r)
+    if (i >= 0) used.splice(i, 1)
+    else out.push(r)
+  }
+  return out
+}
+
+function qualsDunePersonne(p) {
+  if (!p) return []
+  if (Array.isArray(p.quals) && p.quals.length) return p.quals
+  return qualsImplicites(p.role || p.profiles?.role, p.fiche || p.profiles?.fiche)
+}
+
+/**
+ * Couverture agrégée d’une mission : chaque vecteur est pourvu par son équipage,
+ * puis les personnes restantes (sans vecteur, ou seulement dispo) comblent les trous
+ * une seule fois. Un infi+ambu n’occupe qu’un côté, sur un seul vecteur.
+ */
+export function couvertureMission(mission, equipe = [], extras = []) {
+  const vecteurs = (mission?.vecteurs || []).length
+    ? mission.vecteurs
+    : [{ id: null, roles_requis: mission?.roles_requis }]
+  const used = new Set()
+  const requisAll = []
+  const couvertsAll = []
+
+  for (const v of vecteurs) {
+    const need = rolesRequisVecteur(v, mission?.roles_requis)
+    requisAll.push(...need)
+    const membres = v.id ? equipe.filter(e => e.vecteur_id === v.id) : equipe
+    for (const e of membres) if (e.user_id) used.add(e.user_id)
+    const missing = rolesEncoreManquants(need, membres.map(e => ({ quals: qualsDunePersonne(e) })))
+    couvertsAll.push(...need.filter(r => !missing.includes(r)))
+  }
+
+  let remaining = rolesManquantsMultiset(requisAll, couvertsAll)
+  const seen = new Set(used)
+  const pool = []
+  for (const e of equipe) {
+    if (!e.user_id || seen.has(e.user_id)) continue
+    seen.add(e.user_id)
+    pool.push({ user_id: e.user_id, quals: qualsDunePersonne(e) })
+  }
+  for (const p of extras) {
+    const uid = p.user_id
+    if (uid && seen.has(uid)) continue
+    if (uid) seen.add(uid)
+    pool.push({ user_id: uid, quals: qualsDunePersonne(p) })
+  }
+  const dejaGreedy = []
+  for (const p of pool) {
+    if (!remaining.length) break
+    const quals = p.quals || []
+    let role = roleSuggere(quals, remaining, dejaGreedy)
+    if (!role || !remaining.includes(role) || !quals.includes(role)) {
+      role = remaining.find(r => quals.includes(r)) || ''
+    }
+    if (!role) continue
+    remaining = remaining.slice()
+    remaining.splice(remaining.indexOf(role), 1)
+    couvertsAll.push(role)
+    dejaGreedy.push(role)
+  }
+  return { requis: requisAll, couverts: couvertsAll }
 }
 
 /** Rôle proposé à l’affectation : un infi+ambu va du côté le moins déjà pourvu. */
@@ -79,12 +203,39 @@ const UN = {
   kine: 'un kiné',
   psychologue: 'un psychologue',
   volontaire_non_medical: 'un volontaire non médical',
+  secouriste: 'un secouriste',
   autre: 'un volontaire',
 }
 
+const PLURIEL = {
+  ambulancier: 'ambulanciers',
+  infirmier: 'infirmiers',
+  chauffeur: 'chauffeurs',
+  medecin: 'médecins',
+  kine: 'kinés',
+  psychologue: 'psychologues',
+  volontaire_non_medical: 'volontaires non médicaux',
+  secouriste: 'secouristes',
+  autre: 'volontaires',
+}
+
+const NOMBRE = { 2: 'deux', 3: 'trois', 4: 'quatre', 5: 'cinq' }
+
+function bitManque(c, n) {
+  if (n <= 1) return UN[c] || ('un ' + String(c).replace(/_/g, ' '))
+  const qte = NOMBRE[n] || String(n)
+  return qte + ' ' + (PLURIEL[c] || String(c).replace(/_/g, ' '))
+}
+
 export function phraseIlManque(codes) {
-  const bits = (codes || []).map(c => UN[c] || ('un ' + String(c).replace(/_/g, ' ')))
-  if (!bits.length) return ''
+  if (!codes?.length) return ''
+  const order = []
+  const n = Object.create(null)
+  for (const c of codes) {
+    if (!n[c]) { order.push(c); n[c] = 0 }
+    n[c]++
+  }
+  const bits = order.map(c => bitManque(c, n[c]))
   if (bits.length === 1) return 'il manque ' + bits[0]
   if (bits.length === 2) return 'il manque ' + bits[0] + ' et ' + bits[1]
   return 'il manque ' + bits.slice(0, -1).join(', ') + ' et ' + bits[bits.length - 1]

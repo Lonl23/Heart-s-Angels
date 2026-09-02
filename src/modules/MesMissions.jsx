@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { Page, Card, Empty, Loading, Pill } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { stInfo } from './souhaits/Souhaits'
+import { lblStatutBase } from './souhaits/missionSchema'
 import MissionExecution from './souhaits/MissionExecution'
 
 const FILTRES = [
@@ -71,6 +72,7 @@ export default function MesMissions() {
                         {m.lieu ? ` · ${m.lieu}` : ''}
                         {m.vehicule ? ` · ${m.vehicule}` : ''}
                         {m.role_mission ? ` · ${m.role_mission}` : ''}
+                        {lblStatutBase(m.statut_base) ? ` · ${lblStatutBase(m.statut_base)}` : ''}
                       </div>
                     </div>
                     <Pill color={st.c} bg={st.bg}>{st.l}</Pill>

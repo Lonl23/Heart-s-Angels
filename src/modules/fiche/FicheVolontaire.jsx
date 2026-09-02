@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
-import { QUALIFS, ROLES_ASBL, SPECIALISATIONS_INF } from './ficheSchema'
+import { QUALIFS, ROLES_ASBL, SPECIALISATIONS_INF, qualifsPourType, qualificationsCompatibles } from './ficheSchema'
 
 const vide = {
   date_naissance:'', telephone:'', type_benevole:'',
@@ -54,6 +54,11 @@ export default function FicheVolontaire({ userId, onBack }) {
   })() }, [uid])
 
   const set = (k,v) => setF(s => ({ ...s, [k]:v }))
+  const setTypeBenevole = (v) => setF(s => ({
+    ...s,
+    type_benevole: v,
+    qualifications: qualificationsCompatibles(v, s.qualifications),
+  }))
   const setIn = (grp,k,v) => setF(s => ({ ...s, [grp]:{ ...s[grp], [k]:v } }))
   const toggleArr = (k,val) => setF(s => ({ ...s, [k]: s[k].includes(val) ? s[k].filter(x=>x!==val) : [...s[k], val] }))
   const toggleSpec = (val) => setF(s => ({ ...s, infirmier:{ ...s.infirmier, specialisations: s.infirmier.specialisations.includes(val) ? s.infirmier.specialisations.filter(x=>x!==val) : [...s.infirmier.specialisations, val] } }))
@@ -65,14 +70,23 @@ export default function FicheVolontaire({ userId, onBack }) {
     if (!prof?.prenom || !prof?.nom) { setMsg({ t:'Prénom et nom requis.', ok:false }); return }
     if (estAmbu && !f.ambulancier.visa_atnup.trim()) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier.', ok:false }); return }
     setSaving(true)
+    const fiche = { ...f, qualifications: qualificationsCompatibles(f.type_benevole, f.qualifications) }
     const { data, error } = await supabase.from('profiles')
-      .update({ prenom:prof.prenom, nom:prof.nom, fiche:f })
+      .update({ prenom:prof.prenom, nom:prof.nom, fiche })
       .eq('id', uid)
       .select('id,prenom,nom,email,role,fiche')
     setSaving(false)
     if (error) { setMsg({ t:'Erreur : ' + error.message, ok:false }); return }
     if (!data || data.length === 0) { setMsg({ t:"Rien n'a été enregistré (droits ou champ « fiche » manquant — appliquez 07_fiche_volontaire.sql).", ok:false }); return }
     setProf(data[0])
+    setF({ ...vide, ...(data[0].fiche || {}),
+      permis:{ ...vide.permis, ...((data[0].fiche||{}).permis||{}) },
+      ambulancier:{ ...vide.ambulancier, ...((data[0].fiche||{}).ambulancier||{}) },
+      infirmier:{ ...vide.infirmier, ...((data[0].fiche||{}).infirmier||{}) },
+      qualifications:(data[0].fiche||{}).qualifications||[],
+      roles_asbl:(data[0].fiche||{}).roles_asbl||[],
+      contacts_urgence:(data[0].fiche||{}).contacts_urgence||[],
+    })
     setMsg({ t:'Fiche enregistrée.', ok:true }); setTimeout(()=>setMsg(null), 3000)
     if (!userId) reload()
   }
@@ -112,10 +126,10 @@ export default function FicheVolontaire({ userId, onBack }) {
         {gestionQualif ? (
           <>
             <div style={{ maxWidth:280 }}>
-              <Sel label="Type de bénévole" value={f.type_benevole} set={v=>set('type_benevole',v)} options={[{v:'',l:'—'},{v:'medical',l:'Médical'},{v:'non_medical',l:'Non médical'}]} />
+              <Sel label="Type de bénévole" value={f.type_benevole} set={setTypeBenevole} options={[{v:'',l:'—'},{v:'medical',l:'Médical'},{v:'non_medical',l:'Non médical'}]} />
             </div>
             <label style={lbl}>Qualifications</label>
-            <Chips options={QUALIFS} selected={f.qualifications} onToggle={v=>toggleArr('qualifications',v)} />
+            <Chips options={qualifsPourType(f.type_benevole)} selected={f.qualifications} onToggle={v=>toggleArr('qualifications',v)} />
           </>
         ) : (
           <>

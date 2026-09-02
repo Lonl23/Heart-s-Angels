@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import config from '@/app.config'
 import { COPYRIGHT } from '@/copyright'
-import { lbl, inp } from '@/components/ui'
+import { lbl, inp, Logo } from '@/components/ui'
 
 export default function Login() {
   const { session, can, loading } = useAuth()
@@ -32,7 +31,7 @@ export default function Login() {
   return (
     <div style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
       <div style={{ width:'100%', maxWidth:380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
-        <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.7rem', color:'var(--heading)', textAlign:'center', marginBottom:4 }}>{config.organisation.nom}</div>
+        <Logo size={140} style={{ margin:'0 auto 8px' }} />
         <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, marginBottom:22 }}>Espace de gestion</p>
         <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <div>

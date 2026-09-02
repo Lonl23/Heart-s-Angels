@@ -136,6 +136,15 @@ export function AuthProvider({ children }) {
       'coord_benevoles','coord_benevoles_adjoint',
     ].includes(r))
   }
+  function peutGererStock() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'coordinateur') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => [
+      'president','vice_president',
+      'resp_logistique','resp_logistique_adjoint',
+    ].includes(r))
+  }
   function estVolontaireNonMedical() {
     if (peutVoirToutesDispos()) return false
     const t = profile?.fiche?.type_benevole
@@ -148,7 +157,7 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, estVolontaireNonMedical,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, estVolontaireNonMedical,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

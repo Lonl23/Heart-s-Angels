@@ -2,18 +2,22 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Empty } from '@/components/ui'
-import { libelleQualsImplicites, teinteDispo, rolesRequisEffectifs, phraseIlManque } from '@/modules/fiche/ficheSchema'
+import { libelleQualsImplicites, teinteDispo, rolesRequisEffectifs, phraseIlManque, couvertureMission, rolesManquantsMultiset, qualsImplicites } from '@/modules/fiche/ficheSchema'
 import {
   iso, addDays, todayISO, JOURS,
   titreMois, titreSemaine, grilleMois, grilleSemaine, packLanes, hhmm,
+  estHoraire, plageCalendrier, packTimedDay, PX_HEURE,
 } from './disponibilites/dates'
 
 function libelleMission(it) {
   const m = it.ev
   const base = (m.lieu || m.activite || 'Mission').trim()
-  const heures = m.courte_duree && (hhmm(m.heure_debut) || hhmm(m.heure_fin))
-    ? ` · ${hhmm(m.heure_debut) || '…'}${hhmm(m.heure_fin) ? '–' + hhmm(m.heure_fin) : ''}`
-    : ''
+  const hRdv = hhmm(m.rdv_base)
+  const heures = hRdv
+    ? ` · ${hRdv}–24 h`
+    : (m.courte_duree && (hhmm(m.heure_debut) || hhmm(m.heure_fin))
+      ? ` · ${hhmm(m.heure_debut) || '…'}${hhmm(m.heure_fin) ? '–' + hhmm(m.heure_fin) : '–24 h'}`
+      : '')
   const j = it.total <= 1 ? '' : (it.j0 === it.j1 ? ` · j${it.j0}/${it.total}` : ` · j${it.j0}–${it.j1}/${it.total}`)
   const manque = manques(m)
   if (!manque.length) return `${base}${j}${heures}`
@@ -22,13 +26,12 @@ function libelleMission(it) {
 
 function couverture(m) {
   const requis = rolesRequisEffectifs(m.roles_requis)
-  const couverts = m.roles_couverts || []
-  return requis.every(r => couverts.includes(r)) ? 'ok' : 'manque'
+  const manque = rolesManquantsMultiset(requis, m.roles_couverts || [])
+  return manque.length ? 'manque' : 'ok'
 }
 
 function manques(m) {
-  const couverts = m.roles_couverts || []
-  return rolesRequisEffectifs(m.roles_requis).filter(r => !couverts.includes(r))
+  return rolesManquantsMultiset(rolesRequisEffectifs(m.roles_requis), m.roles_couverts || [])
 }
 
 export default function Disponibilites() {
@@ -66,7 +69,34 @@ export default function Disponibilites() {
     ])
     if (e1) setErr(e1.message)
     if (dispoRes.error) setErr(dispoRes.error.message)
-    setMissions(Array.isArray(miss) ? miss : [])
+    let rows = Array.isArray(miss) ? miss : []
+    const ids = rows.map(m => m.souhait_id).filter(Boolean)
+    if (ids.length) {
+      const [{ data: extra }, { data: pers }] = await Promise.all([
+        supabase.from('souhaits').select('id, mission').in('id', ids),
+        supabase.from('souhait_personnel').select('souhait_id, user_id, vecteur_id, profiles(role,fiche)').in('souhait_id', ids),
+      ])
+      const by = Object.fromEntries((extra || []).map(s => [s.id, s.mission || {}]))
+      const persBy = {}
+      for (const e of pers || []) (persBy[e.souhait_id] ||= []).push(e)
+      rows = rows.map(m => {
+        if (!Object.prototype.hasOwnProperty.call(by, m.souhait_id)) {
+          return { ...m }
+        }
+        const mission = by[m.souhait_id] || {}
+        const extras = (dispoRes.data || [])
+          .filter(d => d.date_debut <= m.date_fin && (d.date_fin || d.date_debut) >= m.date_debut)
+          .map(d => ({ user_id: d.user_id, quals: qualsImplicites(d.profiles?.role, d.profiles?.fiche) }))
+        const cov = couvertureMission(mission, persBy[m.souhait_id] || [], extras)
+        return {
+          ...m,
+          rdv_base: m.rdv_base || mission.rdv_base || null,
+          roles_requis: cov.requis.length ? cov.requis : rolesRequisEffectifs(m.roles_requis),
+          roles_couverts: cov.couverts,
+        }
+      })
+    }
+    setMissions(rows)
     setDispos(dispoRes.data || [])
   }
 
@@ -134,23 +164,186 @@ export default function Disponibilites() {
       </div>
 
       <div className="ha-cal-scroll">
-        <div className={'ha-cal' + (vue === 'semaine' ? ' is-semaine' : '')}>
-          <div className="ha-cal-headrow">
-            {JOURS.map((j, i) => <div key={j} className={'ha-cal-head' + (i >= 5 ? ' is-we' : '')}>{j}</div>)}
+        {vue === 'semaine' ? (
+          <SemaineHoraire weekStart={grille.weeks[0]} today={today}
+            missions={missions} dispos={dispos} moi={profile?.id}
+            gerer={gerer}
+            onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
+        ) : (
+          <div className="ha-cal">
+            <div className="ha-cal-headrow">
+              {JOURS.map((j, i) => <div key={j} className={'ha-cal-head' + (i >= 5 ? ' is-we' : '')}>{j}</div>)}
+            </div>
+            {grille.weeks.map(ws => (
+              <Semaine key={iso(ws)} weekStart={ws} anchor={anchor} vue={vue} today={today}
+                missions={missions} dispos={dispos} moi={profile?.id}
+                gerer={gerer}
+                onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
+            ))}
           </div>
-          {grille.weeks.map(ws => (
-            <Semaine key={iso(ws)} weekStart={ws} anchor={anchor} vue={vue} today={today}
-              missions={missions} dispos={dispos} moi={profile?.id}
-              gerer={gerer}
-              onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
-          ))}
-        </div>
+        )}
       </div>
 
       {missions.length === 0 && dispos.length === 0 && !form && (
         <Empty title="Rien sur cette période" hint="Ajoutez vos jours de disponibilité. Les missions (lieu ou activité, sans nom de patient) s’afficheront ici." />
       )}
     </Page>
+  )
+}
+
+function ChipMission({ it }) {
+  const cov = couverture(it.ev)
+  const cls = 'ha-cal-ev mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet')
+  const txt = libelleMission(it)
+  return (
+    <div className={cls} style={{ gridColumn: `${it.col + 1} / span ${it.span}` }} title={txt}>
+      {txt}
+    </div>
+  )
+}
+
+function ChipDispo({ it, moi, gerer, onDispo, onSuppr }) {
+  const mine = it.ev.user_id === moi
+  const editable = mine || gerer
+  const p = it.ev.profiles
+  const quals = libelleQualsImplicites(p?.role, p?.fiche)
+  const nom = mine ? 'Moi' : `${p?.prenom || ''} ${p?.nom || ''}`.trim()
+  const label = quals ? `${nom} · ${quals}` : nom
+  const teinte = teinteDispo(p?.role, p?.fiche)
+  return (
+    <button type="button"
+      className={'ha-cal-ev dispo-' + teinte}
+      style={{ gridColumn: `${it.col + 1} / span ${it.span}`, cursor: editable ? 'pointer' : 'default' }}
+      title={label}
+      onClick={() => editable ? onDispo(it.ev) : null}
+      onContextMenu={e => { if (editable) { e.preventDefault(); onSuppr(it.ev) } }}>
+      {label}
+    </button>
+  )
+}
+
+function SemaineHoraire({ weekStart, today, missions, dispos, moi, gerer, onJour, onDispo, onSuppr }) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(t)
+  }, [])
+
+  const days = [0,1,2,3,4,5,6].map(i => addDays(weekStart, i))
+  const journee = missions.filter(m => !estHoraire(m))
+  const horaires = missions.filter(estHoraire)
+  const missLanes = packLanes(journee.map(m => ({ ...m, kind:'mission' })), weekStart)
+  const dispoLanes = packLanes(dispos.map(d => ({
+    ...d, kind:'dispo', date_debut: d.date_debut, date_fin: d.date_fin || d.date_debut,
+  })), weekStart)
+  const { h0, h1 } = plageCalendrier()
+  const px = PX_HEURE
+  const gridH = (h1 - h0) * px
+  const heures = []
+  for (let h = h0; h <= h1; h++) heures.push(h)
+
+  const nowIso = iso(now)
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  const nowTop = ((nowMin - h0 * 60) / 60) * px
+  const showNow = days.some(d => iso(d) === nowIso) && nowMin >= h0 * 60 && nowMin <= h1 * 60
+
+  return (
+    <div className="ha-cal ha-cal-horaire">
+      <div className="ha-cal-h-row ha-cal-h-sticky">
+        <div className="ha-cal-h-gutter" />
+        {days.map((day, i) => {
+          const id = iso(day)
+          const we = i >= 5
+          return (
+            <button key={id} type="button"
+              className={'ha-cal-h-head' + (we ? ' is-we' : '') + (id === today ? ' is-today' : '')}
+              onClick={() => onJour(day)}>
+              <span className="ha-cal-h-dow">{JOURS[i]}</span>
+              <span className="ha-cal-h-date">{day.getDate()}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="ha-cal-h-row ha-cal-h-allday">
+        <div className="ha-cal-h-gutter"><span className="ha-cal-h-label">Journée</span></div>
+        <div className="ha-cal-h-allday-body">
+          {missLanes.map((lane, li) => (
+            <div key={'m'+li} className="ha-cal-lane">
+              {lane.map(it => <ChipMission key={it.ev.souhait_id} it={it} />)}
+            </div>
+          ))}
+          {dispoLanes.map((lane, li) => (
+            <div key={'d'+li} className="ha-cal-lane">
+              {lane.map(it => (
+                <ChipDispo key={it.ev.id} it={it} moi={moi} gerer={gerer} onDispo={onDispo} onSuppr={onSuppr} />
+              ))}
+            </div>
+          ))}
+          <div className="ha-cal-days ha-cal-h-allday-hit">
+            {days.map(day => {
+              const we = day.getDay() === 0 || day.getDay() === 6
+              const id = iso(day)
+              return (
+                <button key={id} type="button"
+                  className={'ha-cal-day' + (we ? ' is-we' : '') + (id === today ? ' is-today' : '')}
+                  onClick={() => onJour(day)}>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="ha-cal-h-row ha-cal-h-body">
+        <div className="ha-cal-h-hours" style={{ height: gridH }}>
+          {heures.map(h => (
+            <div key={h} className="ha-cal-h-tick" style={{ top: (h - h0) * px }}>
+              {String(h).padStart(2, '0')} h
+            </div>
+          ))}
+        </div>
+        <div className="ha-cal-h-days" style={{ height: gridH }}>
+          {days.map((day, i) => {
+            const id = iso(day)
+            const we = i >= 5
+            const blocks = packTimedDay(horaires, id)
+            return (
+              <div key={id}
+                className={'ha-cal-h-col' + (we ? ' is-we' : '') + (id === today ? ' is-today' : '')}
+                onClick={() => onJour(day)}>
+                {heures.filter(h => h < h1).map(h => (
+                  <div key={h} className="ha-cal-h-line" style={{ top: (h - h0) * px }} />
+                ))}
+                <div className="ha-cal-h-line" style={{ top: gridH }} />
+                {showNow && id === nowIso && (
+                  <div className="ha-cal-h-now" style={{ top: nowTop }} />
+                )}
+                {blocks.map(it => {
+                  const cov = couverture(it.ev)
+                  const top = Math.max(0, ((it.start - h0 * 60) / 60) * px)
+                  const bot = Math.min(gridH, ((it.end - h0 * 60) / 60) * px)
+                  if (bot <= 0 || top >= gridH) return null
+                  const hgt = Math.max(px * 0.65, bot - top)
+                  const w = 100 / it.cols
+                  const left = it.col * w
+                  const txt = libelleMission({ ev: it.ev, total: 1, j0: 1, j1: 1 })
+                  return (
+                    <div key={it.ev.souhait_id}
+                      className={'ha-cal-h-ev mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet')}
+                      style={{ top, height: hgt, left: `calc(${left}% + 2px)`, width: `calc(${w}% - 4px)` }}
+                      title={txt}
+                      onClick={e => e.stopPropagation()}>
+                      {txt}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -165,41 +358,14 @@ function Semaine({ weekStart, anchor, vue, today, missions, dispos, moi, gerer, 
     <div className="ha-cal-week">
       {missLanes.map((lane, li) => (
         <div key={'m'+li} className="ha-cal-lane">
-          {lane.map(it => {
-            const cov = couverture(it.ev)
-            const cls = 'ha-cal-ev mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet')
-            const txt = libelleMission(it)
-            return (
-              <div key={it.ev.souhait_id} className={cls}
-                style={{ gridColumn: `${it.col + 1} / span ${it.span}` }}
-                title={txt}>
-                {txt}
-              </div>
-            )
-          })}
+          {lane.map(it => <ChipMission key={it.ev.souhait_id} it={it} />)}
         </div>
       ))}
       {dispoLanes.map((lane, li) => (
         <div key={'d'+li} className="ha-cal-lane">
-          {lane.map(it => {
-            const mine = it.ev.user_id === moi
-            const editable = mine || gerer
-            const p = it.ev.profiles
-            const quals = libelleQualsImplicites(p?.role, p?.fiche)
-            const nom = mine ? 'Moi' : `${p?.prenom || ''} ${p?.nom || ''}`.trim()
-            const label = quals ? `${nom} · ${quals}` : nom
-            const teinte = teinteDispo(p?.role, p?.fiche)
-            return (
-              <button key={it.ev.id} type="button"
-                className={'ha-cal-ev dispo-' + teinte}
-                style={{ gridColumn: `${it.col + 1} / span ${it.span}`, cursor: editable ? 'pointer' : 'default' }}
-                title={label}
-                onClick={() => editable ? onDispo(it.ev) : null}
-                onContextMenu={e => { if (editable) { e.preventDefault(); onSuppr(it.ev) } }}>
-                {label}
-              </button>
-            )
-          })}
+          {lane.map(it => (
+            <ChipDispo key={it.ev.id} it={it} moi={moi} gerer={gerer} onDispo={onDispo} onSuppr={onSuppr} />
+          ))}
         </div>
       ))}
       <div className="ha-cal-days">

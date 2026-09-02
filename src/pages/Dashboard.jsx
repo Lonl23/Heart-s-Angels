@@ -14,9 +14,9 @@ const CARDS = [
 ]
 
 export default function Dashboard() {
-  const { profile, canAccess } = useAuth()
+  const { profile, canAccess, peutGererStock } = useAuth()
   const [missions, setMissions] = useState(null)
-  const cartes = CARDS.filter(c => canAccess(c.key))
+  const cartes = CARDS.filter(c => c.key === 'stock' ? canAccess(c.key) && peutGererStock() : canAccess(c.key))
   const date = new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' })
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function Dashboard() {
           <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Vos prochaines missions</div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {aVenir.map(m => (
-              <Link key={m.souhait_id} to="/app/missions" style={{ textDecoration:'none' }}>
+              <Link key={m.souhait_id} to={`/app/missions/${m.souhait_id}`} style={{ textDecoration:'none' }}>
                 <Card clickable style={{ padding:'12px 16px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
                     <div>

@@ -28,7 +28,7 @@ begin
     when 'volontaire_non_medical' then array['volontaire_non_medical']
     else '{}'::text[]
   end;
-  if p_fiche->>'type_benevole' = 'non_medical' then
+  if p_fiche->>'type_benevole' = 'non_medical' or 'secouriste' = any (qs) then
     qs := qs || array['volontaire_non_medical'];
   end if;
 
@@ -150,6 +150,7 @@ begin
       requis := array['ambulancier', 'infirmier'];
     end if;
     besoin_nm := ('volontaire_non_medical' = any (requis))
+              or ('secouriste' = any (requis))
               or coalesce((r.mission->>'besoin_non_medical') in ('true','t','1'), false);
     if restreint and not besoin_nm then
       continue;
@@ -167,6 +168,7 @@ begin
       'courte_duree', coalesce(r.courte_duree, false),
       'heure_debut', r.heure_depart,
       'heure_fin', r.heure_retour,
+      'rdv_base', r.mission->>'rdv_base',
       'lieu', lieu,
       'activite', nullif(act, ''),
       'besoin_non_medical', besoin_nm,

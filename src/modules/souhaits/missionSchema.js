@@ -67,12 +67,59 @@ export const GROUPES = [
   ]},
 ]
 
-// Rapport logistique : 4 checklists + valeurs
+// Checklists terrain. kind : logistique (tout l’équipage du vecteur) |
+// médical (seulement infi / médecin / ambulancier) | mixte (medicalItems).
 export const CHECKLISTS = {
-  base: { titre:'Checklist Base', items:['GPS','Sac d\'intervention','Sac à dos','Sac confort','O2','Carte VISA + Essence','SN Requis','Dégâts véhicule ou pannes'] },
-  pec: { titre:'Checklist PEC', items:['Consentement','Autorisation photos','Feuille de traitements','Traitements avec surplus sécurité','Protections, sondes et sachet à diurèse (SN)','Divers requis'] },
-  retour_pec: { titre:'Checklist Retour PEC', items:['Traitements en surplus rendu','Divers patients rendu','Si institution, échange draps/matériel','Reprise matériels et sacs'] },
-  retour_base: { titre:'Checklist Retour Base', items:['Plein du véhicule','Rangement matériel (cfr Checklist Base)','Remplacement matériel pris dans le véhicule','Remise en ordre et nettoyage véhicule','Linge sale dans sac de linge','Remise des clés et papiers','Dégâts ou pannes durant la mission'] },
+  base: {
+    titre: 'Checklist Base',
+    kind: 'logistique',
+    items: ['GPS', 'Carte VISA + Essence', 'SN Requis', 'Dégâts véhicule ou pannes'],
+  },
+  pec: {
+    titre: 'Checklist PEC',
+    kind: 'medical',
+    items: ['Consentement', 'Autorisation photos', 'Feuille de traitements', 'Traitements avec surplus sécurité', 'Protections, sondes et sachet à diurèse (SN)', 'Divers requis'],
+  },
+  retour_pec: {
+    titre: 'Checklist Retour PEC',
+    kind: 'mixte',
+    items: ['Traitements en surplus rendu', 'Divers patients rendu', 'Si institution, échange draps/matériel', 'Reprise matériels et sacs'],
+    medicalItems: ['Traitements en surplus rendu', 'Divers patients rendu', 'Si institution, échange draps/matériel'],
+  },
+  retour_base: {
+    titre: 'Checklist Retour Base',
+    kind: 'logistique',
+    items: ['Plein du véhicule', 'Rangement matériel (cfr Checklist Base)', 'Remplacement matériel pris dans le véhicule', 'Remise en ordre et nettoyage véhicule', 'Linge sale dans sac de linge', 'Remise des clés et papiers', 'Dégâts ou pannes durant la mission'],
+  },
 }
+
+export function itemChecklistEstMedical(section, item) {
+  const def = CHECKLISTS[section]
+  if (!def) return false
+  if (def.kind === 'medical') return true
+  if (def.kind === 'logistique') return false
+  return (def.medicalItems || []).includes(item)
+}
+
+/** Items que CETTE personne doit cocher sur CE vecteur (jamais le médical si pas médical, ou si le vecteur n’a pas de médical). */
+export function itemsChecklistVisibles(section, { userMedical, vecteurMedical } = {}) {
+  const def = CHECKLISTS[section]
+  if (!def) return []
+  if (def.kind === 'medical') return (vecteurMedical && userMedical) ? def.items : []
+  if (def.kind === 'logistique') return def.items
+  return def.items.filter(it => !itemChecklistEstMedical(section, it) || (vecteurMedical && userMedical))
+}
+
+export function itemsChecklistManquants(section, etat, opts) {
+  return itemsChecklistVisibles(section, opts).filter(it => !etat?.[it])
+}
+
+export const STATUTS_BASE = [
+  { v: 'en_route', l: 'En chemin' },
+  { v: 'arrive',   l: 'Arrivé à la base' },
+  { v: 'pret',     l: 'Prêt' },
+]
+
+export const lblStatutBase = v => STATUTS_BASE.find(s => s.v === v)?.l || ''
 
 export const O2_LIGNES = ['B10','B10','B5','B5','B2']

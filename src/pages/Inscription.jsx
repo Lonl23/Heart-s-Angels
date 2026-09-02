@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import config from '@/app.config'
 import { COPYRIGHT } from '@/copyright'
-import { lbl, inp } from '@/components/ui'
+import { lbl, inp, Logo } from '@/components/ui'
 
 export default function Inscription() {
   const [email, setEmail] = useState('')
@@ -35,7 +34,7 @@ export default function Inscription() {
   return (
     <div style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
       <div style={{ width:'100%', maxWidth:400, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'28px 26px' }}>
-        <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.6rem', color:'var(--heading)', textAlign:'center' }}>{config.organisation.nom}</div>
+        <Logo size={140} style={{ margin:'0 auto 8px' }} />
         <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, margin:'4px 0 18px' }}>Créer mon compte avec un code d'invitation</p>
         <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <div>

@@ -28,8 +28,18 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
     ...g, lignes: g.fields.filter(f => f.t !== 'sep').map(f => ({ l:f.l, v:fmt(f, m[f.k]) })).filter(x => x.v)
   })).filter(g => g.lignes.length)
 
-  const cl = m.checklists || {}
-  const clRempli = Object.entries(CHECKLISTS).map(([sec, def]) => ({ titre:def.titre, faits:def.items.filter(it=>cl[sec]?.[it]).length, total:def.items.length })).filter(c => c.faits > 0)
+  const clRempli = (m.vecteurs?.length ? m.vecteurs : [{ id: null, nom: '' }]).flatMap(v => {
+    const vc = (v.id && m.vecteur_checklists?.[v.id]) || {}
+    const g = m.checklists || {}
+    return Object.entries(CHECKLISTS).map(([sec, def]) => {
+      const etat = vc[sec] || g[sec] || {}
+      return {
+        titre: [v.nom, def.titre].filter(Boolean).join(' · '),
+        faits: def.items.filter(it => etat[it]).length,
+        total: def.items.length,
+      }
+    })
+  }).filter(c => c.faits > 0)
 
   const rien = groupesRemplis.length === 0 && meds.length === 0 && clRempli.length === 0
   if (rien) return <Card><div style={{ color:'var(--text-muted)', fontSize:13.5 }}>Dossier encore vide. Ouvrez « Préparer le dossier » pour encoder le trajet, les vecteurs et le médical.</div></Card>

@@ -1,12 +1,22 @@
 -- ════════════════════════════════════════════════════════════════════════════
 --  Pont affectation ↔ disponibilités : qui est libre aux dates du souhait.
 --  Réservé à qui peut préparer un dossier (peut_voir_souhaits).
+--  RETURNS TABLE (pas jsonb) : supabase-js attend un jeu de lignes.
 --  Idempotent. Après 14_quals_implicites.sql.
 -- ════════════════════════════════════════════════════════════════════════════
 
 drop function if exists public.personnel_disponible_souhait(uuid);
+
 create or replace function public.personnel_disponible_souhait(p_souhait uuid)
-returns jsonb
+returns table (
+  user_id uuid,
+  prenom text,
+  nom text,
+  role text,
+  quals jsonb,
+  dispo text,
+  conflit boolean
+)
 language plpgsql
 stable
 security definer
@@ -16,14 +26,13 @@ declare
   d0 date;
   d1 date;
   njours int;
-  resultat jsonb := '[]'::jsonb;
   rec record;
   n_dispo int;
-  conflit boolean;
+  a_conflit boolean;
 begin
-  if p_souhait is null then return '[]'::jsonb; end if;
+  if p_souhait is null then return; end if;
   if not (public.peut_voir_souhaits() or public.peut_voir_toutes_dispos()) then
-    return '[]'::jsonb;
+    return;
   end if;
 
   select s.date_souhaitee, coalesce(s.date_fin, s.date_souhaitee)
@@ -52,7 +61,7 @@ begin
         and dis.date_fin >= d0;
     end if;
 
-    conflit := false;
+    a_conflit := false;
     if d0 is not null then
       select exists (
         select 1
@@ -64,26 +73,23 @@ begin
           and s.date_souhaitee is not null
           and coalesce(s.date_fin, s.date_souhaitee) >= d0
           and s.date_souhaitee <= d1
-      ) into conflit;
+      ) into a_conflit;
     end if;
 
-    resultat := resultat || jsonb_build_array(jsonb_build_object(
-      'user_id', rec.id,
-      'prenom', rec.prenom,
-      'nom', rec.nom,
-      'role', rec.role,
-      'quals', to_jsonb(public.quals_d_un_profil(rec.role, rec.fiche)),
-      'dispo', case
+    return query select
+      rec.id,
+      rec.prenom,
+      rec.nom,
+      rec.role,
+      to_jsonb(public.quals_d_un_profil(rec.role, rec.fiche)),
+      case
         when d0 is null then 'inconnu'
         when n_dispo >= njours then 'plein'
         when n_dispo > 0 then 'partiel'
         else 'non'
       end,
-      'conflit', coalesce(conflit, false)
-    ));
+      coalesce(a_conflit, false);
   end loop;
-
-  return resultat;
 end $$;
 
 grant execute on function public.personnel_disponible_souhait(uuid) to authenticated;

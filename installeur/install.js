@@ -56,6 +56,12 @@ async function main() {
     await client.query(lireSQL('13_dispos_equipe.sql'))
     await client.query(lireSQL('14_quals_implicites.sql'))
     await client.query(lireSQL('15_affectation_dispos.sql'))
+    await client.query(lireSQL('16_stock_qr.sql'))
+    await client.query(lireSQL('17_stock_oxygene.sql'))
+    await client.query(lireSQL('18_stock_emporter.sql'))
+    await client.query(lireSQL('19_calendrier_rdv_base.sql'))
+    await client.query(lireSQL('20_roles_par_vecteur.sql'))
+    await client.query(lireSQL('21_statuts_terrain.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

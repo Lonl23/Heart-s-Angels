@@ -187,6 +187,11 @@ input:focus, select:focus, textarea:focus {
   background: var(--card); color: var(--text-2); min-height: 64px;
 }
 .ha-etape.is-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--heading); }
+.ha-etape.is-done .ha-etape-n { background: #3B6D11; color: #fff; }
+.ha-statuts-base { display: flex; flex-direction: column; gap: 8px; }
+@media (min-width: 420px) {
+  .ha-statuts-base { display: grid; grid-template-columns: repeat(3, 1fr); }
+}
 .ha-etape-n {
   width: 22px; height: 22px; border-radius: 99px; font-size: 12px; font-weight: 700;
   display: grid; place-items: center; background: var(--bg-alt); color: var(--text-muted);
@@ -219,7 +224,10 @@ input:focus, select:focus, textarea:focus {
   position: absolute; left: 6px; bottom: 6px; background: #C8435A; color: #fff;
   font-size: 11px; font-weight: 700; border-radius: 99px; padding: 2px 8px;
 }
+.ha-coin-actions { display: flex; justify-content: center; gap: 14px; margin-top: 6px; }
 .ha-coin-replace { display: block; text-align: center; font-size: 12px; color: var(--accent); font-weight: 600; margin-top: 6px; cursor: pointer; }
+.ha-coin-actions .ha-coin-replace { margin-top: 0; }
+.ha-coin-delete { background: none; border: none; color: #C8435A; font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; }
 .ha-add-photo { min-height: 40px; padding: 8px 12px; display: inline-grid; }
 .ha-photo-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin-top: 8px; }
 .ha-photo-item { position: relative; }
@@ -255,6 +263,27 @@ input:focus, select:focus, textarea:focus {
   button, input, select, textarea, .ha-click { transition: none; }
 }
 
+/* ── Bannière de mise à jour PWA ──────────────────────────────────────────── */
+.ha-update-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 70;
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  background: var(--accent); color: #fff; font-size: 13.5px; font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0,0,0,.14);
+}
+.ha-update-banner button {
+  background: #fff; color: var(--heading); border: none; border-radius: 8px;
+  padding: 6px 12px; font-size: 13px; font-weight: 700; min-height: 36px;
+}
+.ha-update-banner button:hover { filter: brightness(0.96); }
+.ha-update-flash {
+  position: fixed; top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 50%; transform: translateX(-50%); z-index: 70;
+  background: var(--card); border: 1px solid var(--border); color: var(--text-2);
+  font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 99px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); pointer-events: none; white-space: nowrap;
+}
+
 /* ── Anti-débordement / mobile PWA ─────────────────────────────────────────── */
 html, body, #root { width: 100%; max-width: 100%; }
 #root { overflow-x: hidden; }              /* rien ne dépasse la largeur de l'écran */
@@ -285,8 +314,8 @@ img, svg, video, table { max-width: 100%; }
 .ha-cal-dot.nonmed { background: #6B6560; }
 .ha-cal-dot.miss-no { background: #C62828; }
 .ha-cal-dot.miss-ok { background: #D4FF00; border: 1px solid #9BB800; }
-.ha-cal-scroll { overflow-x: auto; margin: 0 -4px 16px; }
-.ha-cal { min-width: 640px; }
+.ha-cal-scroll { overflow-x: auto; width: 100%; max-width: 100%; margin: 0 0 16px; }
+.ha-cal { min-width: 0; width: 100%; }
 .ha-cal-headrow, .ha-cal-lane, .ha-cal-days {
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px;
 }
@@ -329,9 +358,96 @@ img, svg, video, table { max-width: 100%; }
 .ha-cal-day.is-out { opacity: .45; }
 .ha-cal-day.is-today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .ha-cal-num { font-size: 12.5px; font-weight: 700; }
+
+.ha-cal-horaire { width: 100%; min-width: 0; }
+.ha-cal-h-row {
+  display: grid;
+  grid-template-columns: 48px repeat(7, minmax(0, 1fr));
+  width: 100%;
+}
+.ha-cal-h-gutter { position: relative; }
+.ha-cal-h-label {
+  display: block; padding: 10px 6px 0 0; text-align: right;
+  font-size: 10px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .03em; line-height: 1.2;
+}
+.ha-cal-h-head {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 4px 10px; border: none; background: transparent;
+  border-radius: 10px; color: var(--text);
+}
+.ha-cal-h-head.is-we { color: var(--accent); }
+.ha-cal-h-head.is-today {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.ha-cal-h-dow {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--text-muted);
+}
+.ha-cal-h-head.is-we .ha-cal-h-dow, .ha-cal-h-head.is-we .ha-cal-h-date { color: var(--accent); }
+.ha-cal-h-date {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.45rem; font-weight: 600; color: var(--heading); line-height: 1.1;
+}
+.ha-cal-h-allday { align-items: stretch; border-top: 1px solid var(--border); padding: 6px 0 4px; }
+.ha-cal-h-allday-body { grid-column: 2 / -1; min-width: 0; }
+.ha-cal-horaire .ha-cal-lane { min-height: 28px; }
+.ha-cal-horaire .ha-cal-ev {
+  font-size: 12.5px; padding: 5px 8px; white-space: normal; line-height: 1.25;
+}
+.ha-cal-h-allday-hit .ha-cal-day { min-height: 28px; }
+.ha-cal-h-body { border-top: 1px solid var(--border); padding: 10px 0 16px; }
+.ha-cal-h-hours { position: relative; }
+.ha-cal-h-tick {
+  position: absolute; right: 4px; transform: translateY(-50%);
+  font-size: 10.5px; font-weight: 600; color: var(--text-muted); white-space: nowrap;
+}
+.ha-cal-h-tick:first-child { transform: none; }
+.ha-cal-h-tick:last-child { transform: translateY(-100%); }
+.ha-cal-h-days {
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  position: relative;
+}
+.ha-cal-h-col {
+  position: relative;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--card);
+  overflow: hidden;
+}
+.ha-cal-h-col.is-we { background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+.ha-cal-h-col.is-today { box-shadow: inset 0 0 0 1px var(--accent); }
+.ha-cal-h-line {
+  position: absolute; left: 0; right: 0;
+  border-top: 1px solid var(--border);
+  pointer-events: none;
+}
+.ha-cal-h-now {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: #C62828; z-index: 2; pointer-events: none;
+}
+.ha-cal-h-now::before {
+  content: '';
+  position: absolute; left: 2px; top: -4px;
+  width: 10px; height: 10px; border-radius: 50%; background: #C62828;
+}
+.ha-cal-h-ev {
+  position: absolute; z-index: 1;
+  border-radius: 6px; padding: 4px 6px;
+  font-size: 12px; font-weight: 700; text-align: left;
+  overflow: hidden; line-height: 1.25;
+  white-space: normal;
+}
+.ha-cal-h-ev.mission.is-incomplet { background: #C62828; color: #fff; }
+.ha-cal-h-ev.mission.is-complet { background: #D4FF00; color: #1A2200; }
 [data-theme="dark"] .ha-cal-ev.mission.is-incomplet { background: #E24B4B; color: #fff; }
 [data-theme="dark"] .ha-cal-ev.mission.is-complet { background: #E8FF4A; color: #141800; }
 [data-theme="dark"] .ha-cal-ev.dispo-ambu { background: #2B8AD4; }
 [data-theme="dark"] .ha-cal-ev.dispo-infi { background: #5A9A2A; }
 [data-theme="dark"] .ha-cal-ev.dispo-dual { background: linear-gradient(90deg, #2B8AD4 0%, #5A9A2A 100%); }
 [data-theme="dark"] .ha-cal-ev.dispo-nonmed, [data-theme="dark"] .ha-cal-ev.dispo-autre { background: #8A837C; }
+[data-theme="dark"] .ha-cal-h-ev.mission.is-incomplet { background: #E24B4B; color: #fff; }
+[data-theme="dark"] .ha-cal-h-ev.mission.is-complet { background: #E8FF4A; color: #141800; }

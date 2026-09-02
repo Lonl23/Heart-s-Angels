@@ -6,7 +6,7 @@
 // se contente de la lire et de fournir des valeurs de repli.
 const runtime = (typeof window !== 'undefined' && window.__APP_CONFIG__) || {}
 const d = {
-  organisation: { nom: "Application", forme: "", pays: "BE", langue: "fr", devise: "EUR", tauxKm: 0.4201, accent: "#1BB0CE", logoUrl: "" },
+  organisation: { nom: "Application", forme: "", pays: "BE", langue: "fr", devise: "EUR", tauxKm: 0.4201, accent: "#1BB0CE", logoUrl: "/icons/ha-logo-512-v4.png" },
   domaine: "",
   supabase: { url: "https://vppmvjqbzdeftrhdoert.supabase.co", anonKey: "sb_publishable_A_Bu4P4-Fn-sy3xF58U4Cg_kJ_aLSIH" },
 }

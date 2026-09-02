@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { Logo } from '@/components/ui'
 
 export default function DemandeSouhait() {
   const [f, setF] = useState({
@@ -29,7 +30,7 @@ export default function DemandeSouhait() {
   if (done) return (
     <Wrap>
       <div style={{ textAlign:'center', padding:'20px 0' }}>
-        <div style={{ fontSize:'2.4rem', marginBottom:10 }}>💛</div>
+        <Logo size={64} style={{ margin:'0 auto 12px' }} />
         <h1 style={{ fontSize:'1.6rem', color:'var(--heading)' }}>Merci pour votre demande</h1>
         <p style={{ color:'var(--text-2)', marginTop:8 }}>Notre équipe la prendra en charge et reviendra vers vous.</p>
       </div>
@@ -38,7 +39,8 @@ export default function DemandeSouhait() {
 
   return (
     <Wrap>
-      <h1 style={{ fontSize:'1.7rem', color:'var(--heading)', marginBottom:4 }}>Demande de souhait</h1>
+      <Logo size={56} style={{ margin:'0 auto 12px' }} />
+      <h1 style={{ fontSize:'1.7rem', color:'var(--heading)', marginBottom:4, textAlign:'center' }}>Demande de souhait</h1>
       <p style={{ color:'var(--text-muted)', fontSize:13.5, marginBottom:20 }}>Formulaire confidentiel — les informations médicales sont réservées à notre équipe.</p>
       <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <Section t="Le patient">

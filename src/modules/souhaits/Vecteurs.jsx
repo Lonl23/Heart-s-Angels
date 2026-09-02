@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { Btn, F, Sel, inp, lbl } from '@/components/ui'
 import {
   ROLES_MISSION, lblRoleMission, teinteDepuisQuals, roleSuggere, qualsImplicites,
-  rolesRequisEffectifs, phraseIlManque, rolesEncoreManquants,
+  rolesRequisEffectifs, rolesRequisVecteur, phraseIlManque, rolesEncoreManquants,
 } from '@/modules/fiche/ficheSchema'
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'v' + Date.now() + Math.random().toString(16).slice(2))
@@ -25,18 +25,22 @@ export default function Vecteurs({ souhaitId, m, setM }) {
   useEffect(() => { charger() }, [souhaitId])
 
   async function charger() {
-    const [{ data: sh }, { data: eq }, { data: pers }] = await Promise.all([
+    const [{ data: sh }, { data: eq }, rpc] = await Promise.all([
       supabase.from('souhaits').select('date_souhaitee,date_fin').eq('id', souhaitId).single(),
       supabase.from('souhait_personnel').select('*, profiles(prenom,nom,role,fiche)').eq('souhait_id', souhaitId),
       supabase.rpc('personnel_disponible_souhait', { p_souhait: souhaitId }),
     ])
-    setDates({ d0: sh?.date_souhaitee || null, d1: sh?.date_fin || sh?.date_souhaitee || null })
+    const d0 = sh?.date_souhaitee || null
+    const d1 = sh?.date_fin || sh?.date_souhaitee || null
+    setDates({ d0, d1 })
     setEquipe(eq || [])
-    setPool(Array.isArray(pers) ? pers : [])
+    let pers = normaliserPool(rpc.data)
+    if (!pers.length) pers = await poolDepuisProfils(d0, d1)
+    setPool(pers.map(p => ({ ...p, quals: asQuals(p.quals) })))
   }
 
   function majVecteur(id, patch) { setM(o => ({ ...o, vecteurs: (o.vecteurs||[]).map(v => v.id===id ? { ...v, ...patch } : v) })) }
-  function ajouterVecteur() { setM(o => ({ ...o, vecteurs: [...(o.vecteurs||[]), { id:uid(), nom:'', type_transport:'', plaque:'' }] })) }
+  function ajouterVecteur() { setM(o => ({ ...o, vecteurs: [...(o.vecteurs||[]), { id:uid(), nom:'', type_transport:'', plaque:'', roles_requis:[] }] })) }
   function retirerVecteur(id) {
     setM(o => {
       const vc = { ...(o.vecteur_checklists||{}) }
@@ -48,29 +52,6 @@ export default function Vecteurs({ souhaitId, m, setM }) {
   async function flushMission() { await supabase.from('souhaits').update({ mission: m }).eq('id', souhaitId) }
 
   const dejaIds = new Set(equipe.map(e => e.user_id))
-  const rolesDeja = equipe.map(e => e.role_mission).filter(Boolean)
-  const requis = m.roles_requis || []
-  const requisEffectifs = rolesRequisEffectifs(requis)
-  const personnesCouverture = (() => {
-    const seen = new Set()
-    const out = []
-    for (const e of equipe) {
-      if (seen.has(e.user_id)) continue
-      seen.add(e.user_id)
-      const p = pool.find(x => x.user_id === e.user_id)
-      out.push({ quals: p?.quals || qualsImplicites(e.profiles?.role, e.profiles?.fiche) })
-    }
-    for (const p of pool) {
-      if (seen.has(p.user_id)) continue
-      if (p.dispo === 'plein' && !p.conflit) {
-        seen.add(p.user_id)
-        out.push({ quals: p.quals || [] })
-      }
-    }
-    return out
-  })()
-  const encore = rolesEncoreManquants(requis, personnesCouverture)
-  const phraseManque = phraseIlManque(encore)
 
   async function affecter(vid, userId) {
     if (!userId) return
@@ -85,7 +66,9 @@ export default function Vecteurs({ souhaitId, m, setM }) {
     }
     await flushMission()
     const v = (m.vecteurs||[]).find(x => x.id === vid)
-    const role = roleSuggere(p?.quals || [], requisEffectifs, rolesDeja)
+    const requisV = rolesRequisVecteur(v, m.roles_requis)
+    const rolesDejaV = equipe.filter(e => e.vecteur_id === vid).map(e => e.role_mission).filter(Boolean)
+    const role = roleSuggere(p?.quals || [], requisV, rolesDejaV)
     const { error } = await supabase.from('souhait_personnel')
       .upsert({
         souhait_id: souhaitId,
@@ -103,11 +86,15 @@ export default function Vecteurs({ souhaitId, m, setM }) {
     charger()
   }
 
-  function toggleRole(v) {
-    setM(o => {
-      const cur = o.roles_requis || []
-      return { ...o, roles_requis: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v] }
-    })
+  function toggleRoleVecteur(vid, role) {
+    setM(o => ({
+      ...o,
+      vecteurs: (o.vecteurs || []).map(v => {
+        if (v.id !== vid) return v
+        const cur = Array.isArray(v.roles_requis) ? v.roles_requis : (o.roles_requis || [])
+        return { ...v, roles_requis: cur.includes(role) ? cur.filter(x => x !== role) : [...cur, role] }
+      }),
+    }))
   }
 
   const libres = pool.filter(p => !dejaIds.has(p.user_id) && p.dispo === 'plein' && !p.conflit)
@@ -115,8 +102,6 @@ export default function Vecteurs({ souhaitId, m, setM }) {
 
   return (
     <div>
-      <CardRoles roles={requis} onToggle={toggleRole} />
-
       {!dates.d0 && (
         <div className="ha-flash ha-flash-warn" style={{ marginBottom:14 }}>Indiquez les dates du souhait (fiche bénéficiaire) pour croiser avec les disponibilités.</div>
       )}
@@ -130,7 +115,7 @@ export default function Vecteurs({ souhaitId, m, setM }) {
       )}
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:10, flexWrap:'wrap' }}>
-        <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Un vecteur = un véhicule et son équipage. Les personnes affectées voient la mission dans Mes missions. Le rôle (infi / ambulancier) se pose tout seul selon le besoin.</div>
+        <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Un vecteur = un véhicule et son équipage. Cochez les qualifications sur chaque véhicule. Les personnes affectées voient la mission dans Mes missions. Le rôle (infi / ambulancier) se pose tout seul selon le besoin de ce vecteur.</div>
         <Btn onClick={ajouterVecteur}>+ Vecteur</Btn>
       </div>
 
@@ -139,6 +124,14 @@ export default function Vecteurs({ souhaitId, m, setM }) {
       <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
         {vecteurs.map((v, i) => {
           const membres = equipe.filter(e => e.vecteur_id === v.id)
+          const rolesAffiches = Array.isArray(v.roles_requis) ? v.roles_requis : (m.roles_requis || [])
+          const requisEffectifsV = rolesRequisVecteur(v, m.roles_requis)
+          const rolesDejaV = membres.map(e => e.role_mission).filter(Boolean)
+          const personnes = membres.map(e => {
+            const p = pool.find(x => x.user_id === e.user_id)
+            return { quals: p?.quals || qualsImplicites(e.profiles?.role, e.profiles?.fiche) }
+          })
+          const phraseManque = phraseIlManque(rolesEncoreManquants(requisEffectifsV, personnes))
           return (
             <div key={v.id} style={{ border:'1.5px solid var(--border)', borderRadius:14, padding:'14px 16px', background:'var(--card)' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
@@ -151,9 +144,11 @@ export default function Vecteurs({ souhaitId, m, setM }) {
                 <F label="Plaque" value={v.plaque} set={val=>majVecteur(v.id,{plaque:val})} />
               </div>
 
+              <CardRoles roles={rolesAffiches} onToggle={role => toggleRoleVecteur(v.id, role)} compact />
+
               <div style={{ marginTop:8 }}>
                 <div style={{ fontSize:12, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>Équipage</div>
-                <AjoutMembre pool={pool} dejaIds={dejaIds} requis={requisEffectifs} rolesDeja={rolesDeja}
+                <AjoutMembre pool={pool} dejaIds={dejaIds} requis={requisEffectifsV} rolesDeja={rolesDejaV}
                   phraseManque={phraseManque} onAdd={u => affecter(v.id, u)} />
                 <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:8 }}>
                   {membres.filter(e => e.user_id && (e.profiles?.prenom || e.profiles?.nom)).map(e => {
@@ -190,16 +185,98 @@ export default function Vecteurs({ souhaitId, m, setM }) {
   )
 }
 
+function asQuals(q) {
+  if (Array.isArray(q)) return q
+  if (typeof q === 'string') {
+    try { const p = JSON.parse(q); return Array.isArray(p) ? p : [] } catch { return [] }
+  }
+  return []
+}
+
+function normaliserPool(data) {
+  if (data == null) return []
+  let v = data
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v) } catch { return [] }
+  }
+  if (Array.isArray(v)) {
+    if (v.length && Array.isArray(v[0])) return v.flat().filter(x => x && x.user_id)
+    const wrapped = v[0] && v[0].personnel_disponible_souhait
+    if (Array.isArray(wrapped)) return v.flatMap(x => x.personnel_disponible_souhait || [])
+    return v.filter(x => x && x.user_id)
+  }
+  if (Array.isArray(v.personnel_disponible_souhait)) return v.personnel_disponible_souhait
+  return []
+}
+
+function joursCouverts(d0, d1) {
+  const out = []
+  if (!d0) return out
+  let d = d0
+  const fin = d1 || d0
+  while (d <= fin) {
+    out.push(d)
+    const t = new Date(d + 'T12:00:00')
+    t.setDate(t.getDate() + 1)
+    const y = t.getFullYear(), m = String(t.getMonth() + 1).padStart(2, '0'), day = String(t.getDate()).padStart(2, '0')
+    d = `${y}-${m}-${day}`
+  }
+  return out
+}
+
+function statutDispo(disposUser, d0, d1) {
+  if (!d0) return 'inconnu'
+  const need = joursCouverts(d0, d1)
+  const covered = new Set()
+  for (const dis of disposUser) {
+    const a = dis.date_debut > d0 ? dis.date_debut : d0
+    const b = dis.date_fin < (d1 || d0) ? dis.date_fin : (d1 || d0)
+    if (a > b) continue
+    for (const j of joursCouverts(a, b)) covered.add(j)
+  }
+  if (covered.size >= need.length) return 'plein'
+  if (covered.size > 0) return 'partiel'
+  return 'non'
+}
+
+async function poolDepuisProfils(d0, d1) {
+  const [{ data: profils }, { data: dispos }] = await Promise.all([
+    supabase.from('profiles').select('id,prenom,nom,role,fiche').neq('role', 'partenaire').eq('actif', true).order('nom'),
+    d0
+      ? supabase.from('disponibilites').select('user_id,date_debut,date_fin').lte('date_debut', d1).gte('date_fin', d0)
+      : Promise.resolve({ data: [] }),
+  ])
+  const byUser = {}
+  for (const d of dispos || []) (byUser[d.user_id] ||= []).push(d)
+  return (profils || []).map(p => ({
+    user_id: p.id,
+    prenom: p.prenom,
+    nom: p.nom,
+    role: p.role,
+    quals: qualsImplicites(p.role, p.fiche),
+    dispo: statutDispo(byUser[p.id] || [], d0, d1),
+    conflit: false,
+  }))
+}
+
 function AjoutMembre({ pool, dejaIds, requis, rolesDeja, phraseManque, onAdd }) {
   const [u, setU] = useState('')
-  const candidats = pool.filter(p => !dejaIds.has(p.user_id))
+  const need = rolesRequisEffectifs(requis)
+  const matchNeed = p => (p.quals || []).some(q => need.includes(q))
+  const candidats = pool.filter(p => !dejaIds.has(p.user_id) && matchNeed(p))
+  const autres = pool.filter(p => !dejaIds.has(p.user_id) && !matchNeed(p))
   const groupes = [
     { k:'plein', l:'Disponibles sur toute la période', items: candidats.filter(p => p.dispo === 'plein' && !p.conflit) },
     { k:'partiel', l:'Disponibilité partielle', items: candidats.filter(p => p.dispo === 'partiel' && !p.conflit) },
     { k:'conflit', l:'Déjà sur une autre mission', items: candidats.filter(p => p.conflit) },
     { k:'non', l:'Pas de disponibilité indiquée', items: candidats.filter(p => p.dispo === 'non' && !p.conflit) },
-  ].filter(g => g.items.length > 0)
-  const need = rolesRequisEffectifs(requis)
+    { k:'inconnu', l:'Autres volontaires', items: candidats.filter(p => p.dispo === 'inconnu' && !p.conflit) },
+  ]
+  const places = new Set(groupes.flatMap(g => g.items.map(p => p.user_id)))
+  const rest = candidats.filter(p => !places.has(p.user_id))
+  if (rest.length) groupes.push({ k:'autre', l:'Autres volontaires', items: rest })
+  if (autres.length) groupes.push({ k:'hors-qual', l:'Autres (qualification différente)', items: autres })
+  const groupesVisibles = groupes.filter(g => g.items.length > 0)
   const rapides = (groupes.find(g => g.k === 'plein')?.items || []).filter(p => {
     const q = p.quals || []
     return need.some(r => q.includes(r))
@@ -228,7 +305,7 @@ function AjoutMembre({ pool, dejaIds, requis, rolesDeja, phraseManque, onAdd }) 
           <label style={lbl}>{phraseManque || 'Autre volontaire'}</label>
           <select value={u} onChange={e=>setU(e.target.value)} style={inp}>
             <option value="">— Choisir —</option>
-            {groupes.map(g => (
+            {groupesVisibles.map(g => (
               <optgroup key={g.k} label={g.l}>
                 {g.items.map(p => (
                   <option key={p.user_id} value={p.user_id}>
@@ -245,11 +322,22 @@ function AjoutMembre({ pool, dejaIds, requis, rolesDeja, phraseManque, onAdd }) 
   )
 }
 
-function CardRoles({ roles, onToggle }) {
+function CardRoles({ roles, onToggle, compact }) {
   return (
-    <div style={{ border:'1.5px solid var(--border)', borderRadius:14, padding:'14px 16px', background:'var(--card)', marginBottom:16 }}>
-      <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:6 }}>Équipage requis</div>
-      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>Cochez les qualifications nécessaires. Rien de coché = un ambulancier et un infirmier. Si seul chauffeur est coché, on ne rajoute pas le défaut. Un ambulancier avec permis et sélection médicale couvre aussi chauffeur. Un infi+ambu n’occupe qu’un côté (celui où il manque le plus de monde).</div>
+    <div style={{
+      border: compact ? '1px solid var(--border)' : '1.5px solid var(--border)',
+      borderRadius: compact ? 10 : 14,
+      padding: compact ? '10px 12px' : '14px 16px',
+      background: compact ? 'var(--bg-alt)' : 'var(--card)',
+      marginTop: compact ? 12 : 0,
+      marginBottom: compact ? 0 : 16,
+    }}>
+      <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:6, fontSize: compact ? 13 : undefined }}>Équipage requis</div>
+      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
+        {compact
+          ? 'Cochez les qualifications de ce véhicule. Rien de coché = un ambulancier et un infirmier. Un infi+ambu n’occupe qu’un côté (celui où il manque le plus de monde).'
+          : 'Cochez les qualifications nécessaires. Rien de coché = un ambulancier et un infirmier. Si seul chauffeur est coché, on ne rajoute pas le défaut. Un ambulancier avec permis et sélection médicale couvre aussi chauffeur. Un infi+ambu n’occupe qu’un côté (celui où il manque le plus de monde).'}
+      </div>
       <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
         {ROLES_MISSION.map(o => {
           const on = roles.includes(o.v)

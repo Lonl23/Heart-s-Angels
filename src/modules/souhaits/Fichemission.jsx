@@ -2,14 +2,11 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
 import { CHECKLISTS } from './missionSchema'
+import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
 const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
-
-const MED_ROLES = ['medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris']
-const MED_QUAL = ['ambulancier', 'infirmier', 'medecin']
-const estMed = p => !!p && (MED_ROLES.includes(p.role) || p.fiche?.type_benevole === 'medical' || (p.fiche?.qualifications || []).some(q => MED_QUAL.includes(q)))
 
 export default function FicheMission({ souhaitId, onClose }) {
   const [s, setS] = useState(null)
@@ -61,7 +58,7 @@ export default function FicheMission({ souhaitId, onClose }) {
 
       <div className="fiche" ref={ficheRef}>
         {fiches.map((f, idx) => {
-          const med = f.v ? f.crew.some(c => estMed(c.profiles)) : true
+          const med = f.v ? f.crew.some(c => personneEstMedicale(c)) : true
           return <FicheVecteur key={idx} s={s} m={m} f={f} med={med} meds={meds} total={fiches.length} first={idx===0} />
         })}
       </div>
@@ -179,6 +176,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
           )}
 
           <Sec t="✅ Checklist véhicule — à cocher" plain>
+            <div className="muted" style={{ marginBottom:8 }}>Au départ : scanner chaque bouteille d’O₂ et chaque sac (QR). Puis cocher :</div>
             {v ? ['base','retour_base'].map(sec => (
               <div key={sec} className="cl-wrap">
                 <div className="cl-title">{CHECKLISTS[sec].titre}</div>

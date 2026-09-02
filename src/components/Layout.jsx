@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
-import config from '@/app.config'
+import { useSwUpdate } from '@/hooks/useSwUpdate'
+import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
 
 const NAV = [
@@ -38,7 +39,8 @@ function toggleTheme() {
 }
 
 export default function Layout() {
-  const { profile, signOut, can, canAccess } = useAuth()
+  const { profile, signOut, can, canAccess, peutGererStock } = useAuth()
+  const { checkForUpdate, checking } = useSwUpdate()
   const nav = useNavigate()
   const loc = useLocation()
   const [collapsed, setCollapsed] = useState(localStorage.getItem('nav_collapsed') === '1')
@@ -58,7 +60,11 @@ export default function Layout() {
   function onTheme() { toggleTheme(); setDark(d => !d) }
   async function handleLogout() { await signOut(); nav('/login') }
 
-  const items = [...NAV.filter(n => n.key==='missions' ? true : canAccess(n.key)), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', icon:'⚙️' }] : [])]
+  const items = [...NAV.filter(n => {
+    if (n.key === 'missions') return true
+    if (n.key === 'stock') return canAccess(n.key) && peutGererStock()
+    return canAccess(n.key)
+  }), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', icon:'⚙️' }] : [])]
   const collapsedEff = isDesktop && collapsed
   const W = collapsedEff ? 66 : 250
 
@@ -70,8 +76,8 @@ export default function Layout() {
         padding:'14px 10px', overflow:'hidden', transition:'width .18s, transform .2s',
         transform: mobileOpen ? 'translateX(0)' : undefined,
       }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, padding:'2px 6px 14px' }}>
-          {!collapsedEff && <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{config.organisation.nom}</span>}
+        <div style={{ display:'flex', alignItems:'center', justifyContent: collapsedEff ? 'center' : 'space-between', flexDirection: collapsedEff ? 'column' : 'row', gap:8, padding:'2px 6px 14px' }}>
+          <Logo size={collapsedEff ? 36 : 56} />
           <button onClick={toggleCollapse} title={collapsed?'Déplier le menu':'Replier le menu'} className="ha-collapse-btn" style={iconBtn}>{collapsedEff ? '»' : '«'}</button>
         </div>
 
@@ -93,8 +99,9 @@ export default function Layout() {
               <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{profile?.prenom} {profile?.nom}<br/><span style={{ color:'var(--accent)', fontWeight:600 }}>Ma fiche ›</span></span>
             )}
           </NavLink>
-          <button onClick={onTheme} title={dark ? 'Passer au thème clair' : 'Passer au thème sombre'} style={rowBtn(collapsedEff)}>{dark ? '☀︎' : '☾'}{!collapsedEff && (dark ? ' Thème clair' : ' Thème sombre')}</button>
-          <button onClick={handleLogout} title="Déconnexion" style={{ ...rowBtn(collapsedEff), color:'#C8435A' }}>↩︎{!collapsedEff && ' Déconnexion'}</button>
+          <button type="button" onClick={onTheme} title={dark ? 'Passer au thème clair' : 'Passer au thème sombre'} style={rowBtn(collapsedEff)}>{dark ? '☀︎' : '☾'}{!collapsedEff && (dark ? ' Thème clair' : ' Thème sombre')}</button>
+          <button type="button" onClick={checkForUpdate} disabled={checking} title="Rechercher des mises à jour" style={rowBtn(collapsedEff)}>↻{!collapsedEff && (checking ? ' Recherche…' : ' Rechercher des mises à jour')}</button>
+          <button type="button" onClick={handleLogout} title="Déconnexion" style={{ ...rowBtn(collapsedEff), color:'#C8435A' }}>↩︎{!collapsedEff && ' Déconnexion'}</button>
           {!collapsedEff && <div style={{ fontSize:10, color:'var(--text-faint)', padding:'10px 8px 0', lineHeight:1.4 }}>{COPYRIGHT}</div>}
         </div>
       </aside>
@@ -102,9 +109,10 @@ export default function Layout() {
       {mobileOpen && <div onClick={()=>setMobileOpen(false)} className="ha-scrim" style={{ position:'fixed', inset:0, background:'var(--overlay)', zIndex:55 }} />}
 
       <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', height:'100vh', minHeight:0 }}>
-        <header style={{ position:'sticky', top:0, zIndex:30, display:'flex', alignItems:'center', gap:12, padding:'10px 16px', background:'var(--surface)', borderBottom:'1px solid var(--border)' }}>
+        <header style={{ position:'sticky', top:0, zIndex:30, display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--surface)', borderBottom:'1px solid var(--border)' }}>
           <button onClick={()=>setMobileOpen(o=>!o)} className="ha-burger" aria-label="Menu" style={iconBtn}>☰</button>
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)' }}>{pageTitle(loc.pathname)}</div>
+          <Logo size={40} className="ha-header-logo" />
+          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pageTitle(loc.pathname)}</div>
         </header>
         <main style={{ flex:1, minWidth:0, width:'100%', overflowX:'hidden', overflowY:'auto', minHeight:0 }}><Outlet /></main>
       </div>
@@ -116,10 +124,11 @@ export default function Layout() {
             transform: translateX(-100%);
           }
           .ha-collapse-btn { display:none !important; }
+          .ha-header-logo { display:block; }
         }
         @media (min-width: 900px) {
           .ha-sidebar { position: relative; height:100vh; transform:none !important; }
-          .ha-burger, .ha-scrim { display:none !important; }
+          .ha-burger, .ha-scrim, .ha-header-logo { display:none !important; }
         }
       `}</style>
     </div>

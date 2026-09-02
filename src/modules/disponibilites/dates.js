@@ -94,5 +94,77 @@ export function packLanes(events, weekStart) {
 
 export function hhmm(t) {
   if (!t) return ''
-  return String(t).slice(0, 5)
+  const s = String(t)
+  if (s.includes('T')) return s.split('T')[1].slice(0, 5)
+  return s.slice(0, 5)
+}
+
+/** Minutes depuis minuit (accepte « 08:30 » ou un datetime ISO). */
+export function minutesOf(t) {
+  const s = hhmm(t)
+  if (!s) return null
+  const [h, m] = s.split(':').map(Number)
+  if (Number.isNaN(h)) return null
+  return h * 60 + (m || 0)
+}
+
+export function jourDe(t, fallback) {
+  if (!t) return fallback || null
+  const s = String(t)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  return fallback || null
+}
+
+/** Créneau sur la grille : RDV base → cette heure jusqu’à 24 h. */
+export function creneauMission(m, dayIso) {
+  if (!m) return null
+  if (m.rdv_base) {
+    const jour = jourDe(m.rdv_base, m.date_debut)
+    if (jour && dayIso !== jour) return null
+    const start = minutesOf(m.rdv_base) ?? 0
+    return { start, end: 24 * 60 }
+  }
+  if (m.courte_duree && (hhmm(m.heure_debut) || hhmm(m.heure_fin))) {
+    const f = m.date_fin || m.date_debut
+    if (m.date_debut && dayIso && (dayIso < m.date_debut || dayIso > f)) return null
+    const start = minutesOf(m.heure_debut) ?? 0
+    let end = minutesOf(m.heure_fin)
+    if (end == null || end <= start) end = 24 * 60
+    return { start, end }
+  }
+  return null
+}
+
+export function estHoraire(m) {
+  return !!(m?.rdv_base || (m?.courte_duree && (hhmm(m.heure_debut) || hhmm(m.heure_fin))))
+}
+
+/** Grille semaine : toujours 00 h → 24 h. */
+export const H_CAL_DEBUT = 0
+export const H_CAL_FIN = 24
+export const PX_HEURE = 48
+
+export function plageCalendrier() {
+  return { h0: H_CAL_DEBUT, h1: H_CAL_FIN }
+}
+
+/** Colonnes d’overlap pour les missions horaires d’un jour. */
+export function packTimedDay(events, dayIso) {
+  const list = (events || [])
+    .map(m => {
+      const c = creneauMission(m, dayIso)
+      if (!c) return null
+      return { ev: m, start: c.start, end: c.end }
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.start - b.start || a.end - b.end)
+  const colEnd = []
+  for (const it of list) {
+    let c = colEnd.findIndex(t => t <= it.start)
+    if (c < 0) { c = colEnd.length; colEnd.push(it.end) }
+    else colEnd[c] = it.end
+    it.col = c
+  }
+  const n = Math.max(1, colEnd.length)
+  return list.map(it => ({ ...it, cols: n }))
 }
