@@ -143,15 +143,25 @@ export function itemsChecklistManquants(section, etat, opts) {
 
 export const STATUTS_BASE = [
   { v: 'en_route', l: 'En chemin' },
-  { v: 'arrive',   l: 'Arrivé à la base' },
+  { v: 'arrive',   l: 'Sur place Base' },
   { v: 'pret',     l: 'Prêt' },
 ]
 
 export const lblStatutBase = v => STATUTS_BASE.find(s => s.v === v)?.l || ''
 
-/** Parcours terrain : sur place, puis départ vers le lieu suivant. */
+/** Véhicule encore à la base : pas un statut d’équipage partagé. */
+export const ETAPE_A_LA_BASE = {
+  id: 'a_la_base',
+  l: 'À la base',
+  chip: 'À la base',
+  lieu: 'base',
+  itin: 'base',
+  checklist: 'base',
+  patient: false,
+}
+
+/** Parcours du vecteur (partagé). « Sur place Base » est personnel, pas ici. */
 export const PARCOURS_TERRAIN = [
-  { id:'base_sur_place',   l:'Sur place Base',            chip:'Sur place Base',     lieu:'base',     itin:'base',         checklist:'base',        patient:false },
   { id:'depart_pec',       l:'Départ vers prise en charge', chip:'Départ → PEC',    lieu:'pec',      itin:'pec',          checklist:'base',        patient:false },
   { id:'pec_sur_place',    l:'Sur place prise en charge', chip:'Sur place PEC',      lieu:'pec',      itin:'pec',          checklist:'pec',         patient:true },
   { id:'depart_dest',      l:'Départ vers destination',   chip:'Départ → dest.',     lieu:'dest',     itin:'destination',  checklist:'pec',         patient:true },
@@ -163,7 +173,6 @@ export const PARCOURS_TERRAIN = [
 ]
 
 const ETAPE_LEGACY = {
-  vehicule: 'base_sur_place',
   pec: 'pec_sur_place',
   retour_pec: 'dest_sur_place',
   retour_base: 'depart_base',
@@ -176,19 +185,26 @@ const ETAPE_LEGACY = {
 }
 
 export function normaliserEtape(etape) {
-  if (!etape) return 'base_sur_place'
+  if (!etape || etape === 'vehicule' || etape === 'base_sur_place' || etape === 'a_la_base') return 'a_la_base'
   if (ETAPE_LEGACY[etape]) return ETAPE_LEGACY[etape]
   if (PARCOURS_TERRAIN.some(e => e.id === etape)) return etape
-  return 'base_sur_place'
+  return 'a_la_base'
+}
+
+export function estALaBase(etape) {
+  return normaliserEtape(etape) === 'a_la_base'
 }
 
 export function etapeParId(etape) {
   const id = normaliserEtape(etape)
-  return PARCOURS_TERRAIN.find(e => e.id === id) || PARCOURS_TERRAIN[0]
+  if (id === 'a_la_base') return ETAPE_A_LA_BASE
+  return PARCOURS_TERRAIN.find(e => e.id === id) || ETAPE_A_LA_BASE
 }
 
 export function idxEtape(etape) {
-  return PARCOURS_TERRAIN.findIndex(e => e.id === normaliserEtape(etape))
+  const id = normaliserEtape(etape)
+  if (id === 'a_la_base') return -1
+  return PARCOURS_TERRAIN.findIndex(e => e.id === id)
 }
 
 export function etapeSuivante(etape) {

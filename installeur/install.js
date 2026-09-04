@@ -65,6 +65,7 @@ async function main() {
     await client.query(lireSQL('22_checklist_extras.sql'))
     await client.query(lireSQL('23_parcours_terrain.sql'))
     await client.query(lireSQL('24_parcours_statuts.sql'))
+    await client.query(lireSQL('25_statut_base_personnel.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

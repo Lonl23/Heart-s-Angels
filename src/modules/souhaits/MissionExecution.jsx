@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Btn, inp, fmtAdresse, Loading, Flash, Pill } from '@/components/ui'
 import {
   STATUTS_BASE, lblStatutBase, itemsChecklistVisibles, itemsChecklistManquants,
-  PARCOURS_TERRAIN, normaliserEtape, etapeParId, idxEtape, etapeSuivante, lblEtapeTerrain,
+  PARCOURS_TERRAIN, normaliserEtape, etapeParId, idxEtape, etapeSuivante, lblEtapeTerrain, estALaBase,
 } from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { stInfo } from './Souhaits'
@@ -32,7 +32,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState(null)
-  const [etape, setEtape] = useState('base_sur_place')
+  const [etape, setEtape] = useState('a_la_base')
   const [annot, setAnnot] = useState(null)
   const chipOn = useRef(null)
 
@@ -154,16 +154,14 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
   async function aller(next) {
     const n = normaliserEtape(next)
-    const fromIdx = idxEtape(etape)
-    const toIdx = idxEtape(n)
-    if (!locked && fromIdx === 0 && toIdx > 0 && !cotesOk) {
+    if (!locked && idxEtape(etape) < 1 && n !== 'a_la_base' && !cotesOk) {
       setErr('Photographiez les 4 côtés du véhicule avant de partir.')
       return
     }
     setEtape(n)
     setErr(null)
     if (locked) return
-    const doitDemarrer = n !== 'base_sur_place'
+    const doitDemarrer = n !== 'a_la_base'
       && vecteurStatut !== 'en_cours' && vecteurStatut !== 'realise'
       && sh?.statut !== 'realise'
     if (doitDemarrer) {
@@ -387,6 +385,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const pecMedicalACharge = vecteurMedical && !userMedical
   const pecSansMedical = !vecteurMedical
   const def = etapeParId(etape)
+  const aLaBase = estALaBase(etape)
   const suivant = etapeSuivante(etape)
   const locked = statut === 'realise' || vecteurStatut === 'realise'
   const monStatut = aff?.statut_base || m?.personnel_statuts?.[user?.id] || rpc?.statut_base || ''
@@ -399,8 +398,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const manquantsHint = miss.length ? miss.join(', ') : null
   const showMAR = def.patient && userMedical && vecteurMedical && complet
   const showScanConso = (def.patient && userMedical && vecteurMedical) || etape === 'base_rentre'
-  const showPerso = etape === 'base_sur_place'
-  const showPhotosDepart = etape === 'base_sur_place' || etape === 'depart_pec'
+  const showPerso = aLaBase
+  const showPhotosDepart = aLaBase || etape === 'depart_pec'
   const showCloture = etape === 'base_rentre'
   const showPecNotes = def.checklist === 'pec'
 
@@ -416,7 +415,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
         <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
           <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
           {vecteur && (
-            <Pill color="#185FA5" bg="#E6F1FB">{lblEtapeTerrain(etape, vecteurStatut)}</Pill>
+            <Pill color="#185FA5" bg="#E6F1FB">
+              {aLaBase ? (lblStatutBase(monStatut) || 'À la base') : lblEtapeTerrain(etape, vecteurStatut)}
+            </Pill>
           )}
         </div>
       </div>
@@ -448,6 +449,29 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
       {vecteur && (
         <>
+          {showPerso && (
+            <Section titre="Votre statut à la base">
+              <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'0 0 12px' }}>
+                Personnel : En chemin, Sur place Base ou Prêt. Ça ne change pas le statut du véhicule.
+              </p>
+              <div className="ha-statuts-base">
+                {STATUTS_BASE.map(s => (
+                  <button
+                    key={s.v}
+                    type="button"
+                    disabled={locked}
+                    className={'ha-check-btn' + (monStatut === s.v ? ' is-on' : '')}
+                    onClick={()=>setMonStatutBase(s.v)}
+                  >
+                    <span className="ha-check-mark">{monStatut === s.v ? '✓' : ''}</span>
+                    <span>{s.l}</span>
+                  </button>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          <div className="ha-parcours-k">Parcours du véhicule</div>
           <div className="ha-parcours" role="list">
             {PARCOURS_TERRAIN.map((e, i) => (
               <button
@@ -462,10 +486,20 @@ export default function MissionExecution({ souhaitId, onBack }) {
             ))}
           </div>
           <div className="ha-statut-now">
-            <div className="ha-statut-now-k">Statut du véhicule</div>
-            <div className="ha-statut-now-l">{def.l}</div>
-            {suivant && !locked && (
-              <div className="ha-statut-now-n">Ensuite : {suivant.l}</div>
+            {aLaBase ? (
+              <>
+                <div className="ha-statut-now-k">Votre statut</div>
+                <div className="ha-statut-now-l">{lblStatutBase(monStatut) || '—'}</div>
+                <div className="ha-statut-now-n">Chacun son statut à la base. Le véhicule part ensuite tous ensemble.</div>
+              </>
+            ) : (
+              <>
+                <div className="ha-statut-now-k">Statut du véhicule</div>
+                <div className="ha-statut-now-l">{def.l}</div>
+                {suivant && !locked && (
+                  <div className="ha-statut-now-n">Ensuite : {suivant.l}</div>
+                )}
+              </>
             )}
           </div>
 
@@ -484,27 +518,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
             )}
           </Section>
 
-          {showPerso && (
-            <Section titre="Mon statut à la base">
-              <div className="ha-statuts-base">
-                {STATUTS_BASE.map(s => (
-                  <button
-                    key={s.v}
-                    type="button"
-                    disabled={locked}
-                    className={'ha-check-btn' + (monStatut === s.v ? ' is-on' : '')}
-                    onClick={()=>setMonStatutBase(s.v)}
-                  >
-                    <span className="ha-check-mark">{monStatut === s.v ? '✓' : ''}</span>
-                    <span>{s.l}</span>
-                  </button>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          <Section titre={etape === 'base_sur_place' ? 'Itinéraire du jour' : def.l}>
-            <Itineraire d={itin} compact={etape === 'base_sur_place'} only={etape === 'base_sur_place' ? undefined : def.itin} />
+          <Section titre={aLaBase ? 'Itinéraire du jour' : def.l}>
+            <Itineraire d={itin} compact={aLaBase} only={aLaBase ? undefined : def.itin} />
           </Section>
 
           {showPhotosDepart && (
