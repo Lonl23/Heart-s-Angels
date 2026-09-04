@@ -66,6 +66,7 @@ async function main() {
     await client.query(lireSQL('23_parcours_terrain.sql'))
     await client.query(lireSQL('24_parcours_statuts.sql'))
     await client.query(lireSQL('25_statut_base_personnel.sql'))
+    await client.query(lireSQL('26_stock_logistique.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

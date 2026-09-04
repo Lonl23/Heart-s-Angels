@@ -57,3 +57,39 @@ export function cheminLieux(lieux, id) {
 export function enfantsDe(lieux, parentId) {
   return (lieux || []).filter(l => (l.parent_id || null) === (parentId || null)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
 }
+
+export const TYPES_MOUVEMENT = [
+  { v:'', l:'Tous les mouvements' },
+  { v:'entree', l:'Entrée / réception' },
+  { v:'sortie', l:'Sortie' },
+  { v:'transfert', l:'Transfert' },
+  { v:'peremption', l:'Péremption' },
+  { v:'usage', l:'Usage (durable)' },
+  { v:'emport', l:'Emport mission' },
+  { v:'ajustement', l:'Inventaire / correction' },
+  { v:'releve_o2', l:'Relevé oxygène' },
+]
+export const lblMouv = v => TYPES_MOUVEMENT.find(t => t.v === v)?.l || v
+
+export const STATUTS_COMMANDE = [
+  { v:'a_commander', l:'À commander' },
+  { v:'commandee', l:'Commandée' },
+  { v:'recue', l:'Reçue' },
+  { v:'annulee', l:'Annulée' },
+]
+export const lblCommande = v => STATUTS_COMMANDE.find(t => t.v === v)?.l || v
+
+export function couleurMouv(type) {
+  if (type === 'entree') return '#3B6D11'
+  if (type === 'sortie' || type === 'peremption') return '#A32D2D'
+  if (type === 'transfert' || type === 'emport') return '#185FA5'
+  if (type === 'ajustement' || type === 'releve_o2') return '#BA7517'
+  return 'var(--text-muted)'
+}
+
+export function fmtQuand(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('fr-BE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+}

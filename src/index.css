@@ -470,3 +470,21 @@ img, svg, video, table { max-width: 100%; }
 [data-theme="dark"] .ha-cal-ev.dispo-nonmed, [data-theme="dark"] .ha-cal-ev.dispo-autre { background: #8A837C; }
 [data-theme="dark"] .ha-cal-h-ev.mission.is-incomplet { background: #E24B4B; color: #fff; }
 [data-theme="dark"] .ha-cal-h-ev.mission.is-complet { background: #E8FF4A; color: #141800; }
+
+.ha-stock-row { display: flex; gap: 12px; align-items: center; }
+.ha-stock-photo {
+  flex-shrink: 0; border-radius: 10px; overflow: hidden;
+  background: var(--bg-alt); border: 1px solid var(--border);
+}
+.ha-stock-photo img, .ha-stock-photo-ph { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ha-stock-photo-empty { background: repeating-linear-gradient(-45deg, var(--bg-alt), var(--bg-alt) 6px, var(--border) 6px, var(--border) 7px); }
+.ha-stock-photo-champ { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+.ha-stock-photo-btn {
+  display: inline-block; padding: 7px 12px; border-radius: 9px; font-size: 13px; font-weight: 600;
+  background: var(--bg-alt); color: var(--text-2); border: 1px solid var(--border); cursor: pointer;
+}
+.ha-stock-photo-btn input { display: none; }
+.ha-stock-photo-del {
+  background: none; border: none; color: #C8435A; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; padding: 0; text-align: left;
+}
