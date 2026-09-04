@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, fmtAdresse } from '@/components/ui'
+import { Card, fmtAdresse, AdresseAffichee } from '@/components/ui'
 import { GROUPES, CHECKLISTS, itemsChecklistTous, lblEtapeTerrain } from './missionSchema'
 
 export default function MissionSummary({ souhaitId, infoOnly=false }) {
@@ -18,7 +18,7 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
   if (!m) return null
 
   const fmt = (f, v) => {
-    if (f.t === 'address') { const a = fmtAdresse(v); return a || null }
+    if (f.t === 'address') { return fmtAdresse(v) ? <AdresseAffichee value={v} compact /> : null }
     if (f.t === 'toggle') return v ? 'Oui' : null
     if (f.t === 'datetime' && v) return new Date(v).toLocaleString('fr-BE')
     if (f.t === 'date' && v) return new Date(v).toLocaleDateString('fr-BE')

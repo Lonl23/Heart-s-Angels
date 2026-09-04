@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Btn, inp, fmtAdresse, Loading, Flash } from '@/components/ui'
+import { Btn, inp, fmtAdresse, Loading, Flash, AdresseAffichee } from '@/components/ui'
 import {
   STATUT_SUR_PLACE, estSurPlace, itemsChecklistVisibles, itemsChecklistManquants,
   normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
@@ -617,7 +617,8 @@ function Itineraire({ d, compact, only }) {
   return (
     <div style={{ display:'flex', flexDirection:'column', gap: compact ? 8 : 12 }}>
       {show('base') && <Bloc titre="Base">
-        <Ligne k="Lieu" v={[d.base?.nom, fmtAdresse(d.base?.adresse)].filter(Boolean).join(' — ')} />
+        <Ligne k="Base" v={d.base?.nom} />
+        {fmtAdresse(d.base?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.base.adresse} />} /> : null}
         <Ligne k="Rendez-vous" v={fmtDt(d.base?.rdv)} />
         <Ligne k="Départ" v={fmtDt(d.base?.depart)} />
         {d.consignes_equipage && <Ligne k="Consignes" v={d.consignes_equipage} />}
@@ -625,7 +626,7 @@ function Itineraire({ d, compact, only }) {
       {show('pec') && <Bloc titre="Prise en charge">
         <Ligne k="Lieu" v={d.pec?.type} />
         {d.pec?.institution && <Ligne k="Institution" v={d.pec.institution} />}
-        <Ligne k="Adresse" v={fmtAdresse(d.pec?.adresse)} />
+        {fmtAdresse(d.pec?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.pec.adresse} />} /> : null}
         {(d.pec?.service || d.pec?.etage || d.pec?.aile || d.pec?.chambre) &&
           <Ligne k="Localisation" v={[d.pec?.service && `Service ${d.pec.service}`, d.pec?.etage && `Étage ${d.pec.etage}`, d.pec?.aile && `Aile ${d.pec.aile}`, d.pec?.chambre && `Ch. ${d.pec.chambre}`].filter(Boolean).join(' · ')} />}
         <Ligne k="Heure souhaitée" v={fmtDt(d.pec?.heure)} />
@@ -633,7 +634,7 @@ function Itineraire({ d, compact, only }) {
         {d.pec?.precisions && <Ligne k="Précisions" v={d.pec.precisions} />}
       </Bloc>}
       {show('destination') && <Bloc titre="Destination">
-        <Ligne k="Adresse" v={fmtAdresse(d.destination?.adresse)} />
+        {fmtAdresse(d.destination?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.destination.adresse} />} /> : null}
         {d.destination?.precisions && <Ligne k="Précisions" v={d.destination.precisions} />}
         <Ligne k="Heure souhaitée" v={fmtDt(d.destination?.heure)} />
       </Bloc>}

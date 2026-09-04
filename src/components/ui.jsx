@@ -190,16 +190,66 @@ export function fmtAdresse(a) {
   return [l1, l2, a.pays].filter(Boolean).join(', ')
 }
 
+export function texteGps(a) {
+  if (!a) return ''
+  if (typeof a === 'string') return a.trim()
+  return fmtAdresse(a)
+}
+
+export function urlGoogleMaps(a) {
+  const q = texteGps(a)
+  if (!q) return ''
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`
+}
+
+export function urlWaze(a) {
+  const q = texteGps(a)
+  if (!q) return ''
+  return `https://waze.com/ul?q=${encodeURIComponent(q)}&navigate=yes`
+}
+
+export function LiensGps({ adresse, texte, onClick }) {
+  const q = texte || texteGps(adresse)
+  if (!q) return null
+  const stop = e => { e.stopPropagation(); onClick?.(e) }
+  return (
+    <span className="ha-gps" onClick={stop}>
+      <a className="ha-gps-btn" href={urlGoogleMaps(q)} target="_blank" rel="noopener noreferrer" onClick={stop}>Google Maps</a>
+      <a className="ha-gps-btn is-waze" href={urlWaze(q)} target="_blank" rel="noopener noreferrer" onClick={stop}>Waze</a>
+    </span>
+  )
+}
+
+export function AdresseAffichee({ value, texte, label, compact }) {
+  const t = texte || texteGps(value)
+  if (!t) return null
+  return (
+    <div className={'ha-addr' + (compact ? ' is-compact' : '')}>
+      {label && <div className="ha-addr-lab">{label}</div>}
+      <div className="ha-addr-txt">{t}</div>
+      <LiensGps adresse={value} texte={t} />
+    </div>
+  )
+}
+
 export function AddressFields({ value, set }) {
   const a = value && typeof value === 'object' ? value : {}
   const up = (k, v) => set({ ...a, [k]: v })
+  const txt = fmtAdresse(a)
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'0 10px' }}>
-      <F label="Rue" value={a.rue||''} set={v=>up('rue',v)} />
-      <F label="Numéro" value={a.numero||''} set={v=>up('numero',v)} />
-      <F label="Code postal" value={a.cp||''} set={v=>up('cp',v)} />
-      <F label="Localité" value={a.localite||''} set={v=>up('localite',v)} />
-      <div style={{ gridColumn:'1 / -1' }}><F label="Pays" value={a.pays||''} set={v=>up('pays',v)} /></div>
+    <div>
+      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'0 10px' }}>
+        <F label="Rue" value={a.rue||''} set={v=>up('rue',v)} />
+        <F label="Numéro" value={a.numero||''} set={v=>up('numero',v)} />
+        <F label="Code postal" value={a.cp||''} set={v=>up('cp',v)} />
+        <F label="Localité" value={a.localite||''} set={v=>up('localite',v)} />
+        <div style={{ gridColumn:'1 / -1' }}><F label="Pays" value={a.pays||''} set={v=>up('pays',v)} /></div>
+      </div>
+      {txt && (
+        <div style={{ margin: '-4px 0 10px' }}>
+          <LiensGps adresse={a} />
+        </div>
+      )}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { Page, Card, Empty, Loading, Pill } from '@/components/ui'
+import { Page, Card, Empty, Loading, Pill, LiensGps } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { stInfo } from './souhaits/Souhaits'
 import { lblStatutBase, lblEtapeTerrain } from './souhaits/missionSchema'
@@ -76,9 +76,14 @@ export default function MesMissions() {
                         {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>
                       {m.tel_a_appeler && (
-                        <div style={{ fontSize:13.5, marginTop:8 }}>
+                        <div style={{ fontSize:13.5, marginTop:8 }} onClick={e => e.stopPropagation()}>
                           <a href={`tel:${String(m.tel_a_appeler).replace(/\s/g,'')}`} style={{ color:'var(--accent)', fontWeight:600, textDecoration:'none' }}>📞 {m.tel_a_appeler}</a>
                           {m.tel_a_appeler_libelle && <span style={{ color:'var(--text-muted)', fontSize:12.5 }}> · {m.tel_a_appeler_libelle}</span>}
+                        </div>
+                      )}
+                      {m.lieu && (
+                        <div style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
+                          <LiensGps texte={m.lieu} />
                         </div>
                       )}
                     </div>

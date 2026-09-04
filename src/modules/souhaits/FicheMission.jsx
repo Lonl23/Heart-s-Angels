@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, fmtAdresse } from '@/components/ui'
+import { Btn, fmtAdresse, AdresseAffichee } from '@/components/ui'
 import { CHECKLISTS, itemsChecklistTous } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
@@ -91,18 +91,18 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
             <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />
             <Fld l="Autorisation photos" v={m.autorisation_photos ? 'Oui' : ''} />
-            <Fld l="Adresse du domicile du patient" v={fmtAdresse(m.patient_adresse)} wide />
+            <Fld l="Adresse du domicile du patient" v={fmtAdresse(m.patient_adresse) ? <AdresseAffichee value={m.patient_adresse} /> : null} wide />
           </Sec>
           <Sec t="🏁 Base">
             <Fld l="Base" v={m.base_nom} />
-            <Fld l="Adresse" v={fmtAdresse(m.base_adresse)} />
+            <Fld l="Adresse" v={fmtAdresse(m.base_adresse) ? <AdresseAffichee value={m.base_adresse} /> : null} />
             <Fld l="Rendez-vous" v={dt(m.rdv_base)} />
             <Fld l="Départ" v={dt(m.depart_base)} />
           </Sec>
           <Sec t="🧑‍🦽 Prise en charge">
             <Fld l="Lieu" v={m.pec_type} />
             <Fld l="Institution" v={m.pec_institution} />
-            <Fld l="Adresse" v={fmtAdresse(pecAdr)} wide />
+            <Fld l="Adresse" v={fmtAdresse(pecAdr) ? <AdresseAffichee value={pecAdr} /> : null} wide />
             <Fld l="Service" v={m.pec_service} third />
             <Fld l="Étage" v={m.pec_etage} third />
             <Fld l="Aile / route" v={m.pec_aile} third />
@@ -112,7 +112,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Précisions" v={m.pec_precisions} wide />
           </Sec>
           <Sec t="📍 Destination">
-            <Fld l="Adresse" v={fmtAdresse(m.dest_adresse)} wide />
+            <Fld l="Adresse" v={fmtAdresse(m.dest_adresse) ? <AdresseAffichee value={m.dest_adresse} /> : null} wide />
             <Fld l="Précisions" v={m.dest_precisions} wide />
             <Fld l="Heure souhaitée sur place" v={dt(m.arrivee_destination)} />
           </Sec>

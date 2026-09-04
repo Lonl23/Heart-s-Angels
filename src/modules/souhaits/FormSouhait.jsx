@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, Btn, F, TA, Sel, PhoneF, AddressFields, Modal, phoneValide } from '@/components/ui'
+import { Card, Btn, F, TA, Sel, PhoneF, AddressFields, Modal, phoneValide, LiensGps } from '@/components/ui'
 import { STATUTS, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } from './Souhaits'
 import { GenrePicker, NissF } from '@/modules/annuaire/genre'
 import {
@@ -308,6 +308,7 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>Le souhait</div>
         <TA label="Description *" value={f.description} set={v => set('description', v)} rows={3} />
         <F label="Lieu (affiché au calendrier, sans nom de patient)" value={f.localisation} set={v => set('localisation', v)} />
+        {f.localisation && <div style={{ margin: '-4px 0 10px' }}><LiensGps texte={f.localisation} /></div>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
           <F label="Du" type="date" value={f.date_souhaitee} set={v => setF(s => ({ ...s, date_souhaitee: v, date_fin: (!s.date_fin || s.date_fin < v) ? v : s.date_fin }))} />
           <F label="Au (si plusieurs jours)" type="date" value={f.date_fin || f.date_souhaitee} set={v => set('date_fin', v)} />

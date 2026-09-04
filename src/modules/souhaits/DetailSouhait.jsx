@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, Btn, TA, Pill, Tabs, Flash, StatutFlow, Loading, fmtAdresse } from '@/components/ui'
+import { Card, Btn, TA, Pill, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
 import { STATUTS, stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } from './Souhaits'
@@ -169,7 +169,6 @@ function Resume({ s, souhaitId }) {
   }, [souhaitId, s.annuaire_externe_id, s.partenaire_id])
   const L = ({ k, v }) => v ? <div style={{ marginBottom:8 }}><div style={{ fontSize:12, color:'var(--text-muted)' }}>{k}</div><div style={{ fontSize:13.5, color:'var(--text)', whiteSpace:'pre-wrap' }}>{v}</div></div> : null
   const tels = fmtTelephones({ tel_gsm: s.beneficiaire_tel_gsm, tel_fixe: s.beneficiaire_tel_fixe })
-  const adr = fmtAdresse(s.beneficiaire_adresse)
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <Card>
@@ -186,10 +185,20 @@ function Resume({ s, souhaitId }) {
         {s.beneficiaire_ddn && <L k="Né(e) le" v={new Date(s.beneficiaire_ddn).toLocaleDateString('fr-BE')} />}
         {s.beneficiaire_niss && <L k="Numéro national" v={formaterNiss(s.beneficiaire_niss)} />}
         {tels && <L k="Téléphone" v={tels} />}
-        {adr && <L k="Adresse légale" v={adr} />}
+        {fmtAdresse(s.beneficiaire_adresse) && (
+          <div style={{ marginBottom: 8 }}>
+            <AdresseAffichee label="Adresse légale" value={s.beneficiaire_adresse} />
+          </div>
+        )}
         {s.beneficiaire_contact && <L k="Contact / famille" v={s.beneficiaire_contact} />}
         <L k="Souhait" v={s.description} />
-        <L k="Lieu" v={s.localisation} />
+        {s.localisation && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lieu</div>
+            <div style={{ fontSize: 13.5 }}>{s.localisation}</div>
+            <LiensGps texte={s.localisation} />
+          </div>
+        )}
         <L k="Besoins spécifiques" v={s.besoins_specifiques} />
       </Card>
       {s.notes_medicales && <Flash kind="err"><strong>Notes médicales — </strong>{s.notes_medicales}</Flash>}

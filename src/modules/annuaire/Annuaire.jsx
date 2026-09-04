@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, F, TA, Sel, PhoneF, AddressFields, fmtAdresse, lbl, Empty } from '@/components/ui'
+import { Page, Card, Btn, F, TA, Sel, PhoneF, AddressFields, fmtAdresse, lbl, Empty, AdresseAffichee, LiensGps } from '@/components/ui'
 import { CATEGORIES, ACCOMPAGNANT_FIELDS, POINT_CONTACT_FIELDS, catInfo, emptyToNull, normaliserNiss, fmtTelephones, formaterNiss } from './annuaireSchema'
 import { GenrePicker, GenreIcon, NissF } from './genre'
 import { assurerPartenaireDepuisAnnuaire, upsertPointContact } from './annuaireApi'
@@ -176,7 +176,11 @@ function ContactCard({ r, cat, institutions, onOpen, onDelete }) {
         {tels && <span>📞 {tels}</span>}
         {d.telephone && !tels && <span>📞 {d.telephone}</span>}
         {d.email && <span>✉️ {d.email}</span>}
-        {adr && <span>📍 {adr}</span>}
+        {adr && (
+          <span onClick={e => e.stopPropagation()}>
+            <AdresseAffichee value={d.adresse} compact />
+          </span>
+        )}
       </div>
       {cat === 'beneficiaire' && <Accompagnants beneficiaireId={r.id} compact />}
     </Card>
@@ -315,6 +319,7 @@ function Accompagnants({ beneficiaireId, compact }) {
                   {r.date_naissance && <span>Né(e) le {new Date(r.date_naissance).toLocaleDateString('fr-BE')} · </span>}
                   {tels}{tels && adr ? ' · ' : ''}{adr}
                 </div>
+                {d.adresse && <div style={{ marginTop: 4 }}><LiensGps adresse={d.adresse} /></div>}
               </div>
               <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                 <button type="button" onClick={() => setForm(toForm(r))} style={miniBtn} aria-label="Modifier">✎</button>
