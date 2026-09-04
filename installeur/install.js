@@ -69,6 +69,7 @@ async function main() {
     await client.query(lireSQL('26_stock_logistique.sql'))
     await client.query(lireSQL('27_stock_excel.sql'))
     await client.query(lireSQL('28_annuaire_beneficiaires.sql'))
+    await client.query(lireSQL('29_stock_lots.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

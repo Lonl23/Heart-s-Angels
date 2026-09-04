@@ -1,8 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, F, Sel, Tabs, Pill, Empty, Loading, Flash, inp } from '@/components/ui'
+import { Page, Card, Btn, F, Sel, Tabs, Pill, Empty, Loading, Flash, inp, lbl } from '@/components/ui'
 import { TYPES_LIEU, MODES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, cheminLieux, enfantsDe, resteLabel } from './stock/stockSchema'
+import VueLots from './stock/VueLots'
+import { aggregerLots, lotConnuPour, fmtDlc } from './stock/lotsStock'
 import { ApercuEtiq, telechargerWord, telechargerPng, copierPng, telechargerCsv } from './stock/QrImg'
 import Scanner from './stock/Scanner'
 import { PhotoArticle, PhotoArticleChamp } from './stock/photoStock'
@@ -141,7 +143,7 @@ export default function Stock() {
   }
 
   return (
-    <Page title="Stock" subtitle="Photo, lots, DLC, mouvements, transferts, fournisseurs et rappels de commande."
+    <Page title="Stock" subtitle="Suivi par n° de lot et DLC, emplacement, quantité restante, mouvements et commandes."
       action={<div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
         <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
         <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer inventaire</Btn>
@@ -173,7 +175,7 @@ export default function Stock() {
       {lieuCible && scan === 'ranger' && (
         <div style={{ fontSize:13.5, marginBottom:10, color:'var(--heading)' }}>Lieu cible : <strong>{lieuCible.nom}</strong> — scannez les articles à y placer.</div>
       )}
-      {recv && <FormReception cat={recv} lieux={lieux} onDone={() => { setRecv(null); load() }} onOk={ok} onErr={setErr} />}
+      {recv && <FormReception cat={recv} lieux={lieux} unites={unites} onDone={() => { setRecv(null); load() }} onOk={ok} onErr={setErr} />}
       {xfer && <FormTransfert unite={xfer} lieux={lieux} onDone={() => { setXfer(null); load() }} onOk={ok} onErr={setErr} />}
       {sortie && <FormSortie unite={sortie} onDone={() => { setSortie(null); load() }} onOk={ok} onErr={setErr} />}
       <Tabs items={[
@@ -464,7 +466,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
   )
 }
 
-function FormReception({ cat, lieux, onDone, onOk, onErr }) {
+function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
   const [f, setF] = useState({
     qte: cat.mode === 'boite' ? (cat.qte_defaut || '') : '1',
     lot:'', dlc:'', lieu_id: lieux[0]?.id || '',
@@ -472,6 +474,52 @@ function FormReception({ cat, lieux, onDone, onOk, onErr }) {
   })
   const [saving, setSaving] = useState(false)
   const [created, setCreated] = useState(null)
+  const [dlcLiee, setDlcLiee] = useState(false)
+  const [hintLot, setHintLot] = useState('')
+  const [warnDlc, setWarnDlc] = useState('')
+
+  function appliquerLotConnu(connu, dlcSaisie) {
+    if (!connu?.dlc) {
+      setDlcLiee(false)
+      setHintLot(connu?.nb
+        ? `Lot déjà en stock (${connu.nb} unité${connu.nb > 1 ? 's' : ''}) — saisissez la DLC, elle restera liée à ce n°.`
+        : '')
+      setWarnDlc('')
+      return
+    }
+    setDlcLiee(true)
+    setHintLot(`DLC du lot : ${fmtDlc(connu.dlc)} — même n° de lot = même péremption.`)
+    if (dlcSaisie && dlcSaisie !== connu.dlc) {
+      setWarnDlc(`La DLC saisie (${fmtDlc(dlcSaisie)}) diffère. On utilise ${fmtDlc(connu.dlc)}.`)
+    } else {
+      setWarnDlc(connu.dlc_incoherente
+        ? `Attention : des unités de ce lot ont des DLC différentes (${connu.dlcs.map(fmtDlc).join(', ')}).`
+        : '')
+    }
+    setF(s => s.dlc === connu.dlc ? s : { ...s, dlc: connu.dlc })
+  }
+
+  async function onLotChange(v) {
+    setF(s => ({ ...s, lot: v }))
+    const connu = lotConnuPour(unites, cat.id, v)
+    appliquerLotConnu(connu, f.dlc)
+  }
+
+  async function onLotBlur() {
+    const lot = (f.lot || '').trim()
+    if (!lot) { setDlcLiee(false); setHintLot(''); setWarnDlc(''); return }
+    let connu = lotConnuPour(unites, cat.id, lot)
+    if (!connu) {
+      const { data } = await supabase.from('stock_unites')
+        .select('date_peremption, qte_restante, etat, lot')
+        .eq('catalogue_id', cat.id)
+        .limit(80)
+      const same = (data || []).filter(u => (u.lot || '').trim().toLowerCase() === lot.toLowerCase())
+      if (same.length) connu = lotConnuPour(same.map(u => ({ ...u, catalogue_id: cat.id })), cat.id, lot)
+    }
+    appliquerLotConnu(connu, f.dlc)
+  }
+
   async function save() {
     if (cat.mode === 'boite' && !(Number(f.qte) > 0)) { onErr?.('Indiquez combien il y a dans la boîte.'); return }
     setSaving(true)
@@ -485,7 +533,14 @@ function FormReception({ cat, lieux, onDone, onOk, onErr }) {
       p_pression: cat.mode === 'oxygene' ? (Number(f.pression) || PRESSION_PLEINE) : 200,
     })
     setSaving(false)
-    if (error || data?.ok === false) { onErr?.(error?.message || data?.error); return }
+    if (error || data?.ok === false) {
+      if (data?.dlc_connue) {
+        setF(s => ({ ...s, dlc: data.dlc_connue }))
+        setDlcLiee(true)
+      }
+      onErr?.(error?.message || data?.error)
+      return
+    }
     setCreated(data.unite)
     onOk?.('Réception enregistrée — imprimez l’étiquette.')
   }
@@ -513,10 +568,21 @@ function FormReception({ cat, lieux, onDone, onOk, onErr }) {
           </div>
         </div>
       )}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-        <F label="N° de lot" value={f.lot} set={v=>setF(s=>({ ...s, lot:v }))} />
-        <F label="Péremption" type="date" value={f.dlc} set={v=>setF(s=>({ ...s, dlc:v }))} />
+      <div className="ha-stock-recv-lot" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div style={{ marginBottom:10 }}>
+          <label style={lbl}>N° de lot</label>
+          <input value={f.lot} onChange={e=>onLotChange(e.target.value)} onBlur={onLotBlur}
+            placeholder="ex. A23-481" autoComplete="off" style={inp} />
+        </div>
+        <div style={{ marginBottom:10 }}>
+          <label style={lbl}>{dlcLiee ? 'Péremption — liée au lot' : 'Péremption (DLC)'}</label>
+          <input type="date" value={f.dlc || ''} readOnly={dlcLiee}
+            onChange={e => { if (!dlcLiee) setF(s => ({ ...s, dlc: e.target.value })) }}
+            style={{ ...inp, background: dlcLiee ? 'var(--bg-alt)' : inp.background }} />
+        </div>
       </div>
+      {hintLot && <div style={{ fontSize:12.5, color:'var(--heading)', margin:'-4px 0 10px' }}>{hintLot}</div>}
+      {warnDlc && <div style={{ fontSize:12.5, color:'#A32D2D', margin:'-4px 0 10px' }}>{warnDlc}</div>}
       <Sel label="Ranger dans" value={f.lieu_id} set={v=>setF(s=>({ ...s, lieu_id:v }))} options={optsLieu} />
       <Btn onClick={save} disabled={saving} style={{ width:'100%' }}>{saving ? '…' : 'Créer et imprimer le QR'}</Btn>
     </Card>
@@ -526,10 +592,22 @@ function FormReception({ cat, lieux, onDone, onOk, onErr }) {
 function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }) {
   const [etiq, setEtiq] = useState(null)
   const [filtre, setFiltre] = useState('')
+  const [vue, setVue] = useState('lots')
+  const [rpcLots, setRpcLots] = useState(null)
+  useEffect(() => {
+    let cancel = false
+    supabase.rpc('stock_lots').then(({ data }) => {
+      if (!cancel && data?.ok) setRpcLots(data.lots)
+      else if (!cancel) setRpcLots(null)
+    })
+    return () => { cancel = true }
+  }, [unites])
+  const lots = rpcLots ?? aggregerLots(unites, lieux)
   const vis = unites.filter(u => {
     const q = filtre.trim().toLowerCase()
     if (!q) return true
-    return [u.nom, u.lot, u.lieu_nom, u.qr_token].some(x => (x || '').toLowerCase().includes(q))
+    const chemin = cheminLieux(lieux, u.lieu_id)
+    return [u.nom, u.lot, u.lieu_nom, chemin, u.qr_token, u.date_peremption].some(x => (x || '').toLowerCase().includes(q))
   })
   async function supprimer(u) {
     if (!confirm(`Supprimer « ${u.nom || 'cette pièce'} » et son QR ? L’historique de mouvements est conservé.`)) return
@@ -545,19 +623,39 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }
     onOk?.('Article marqué périmé.')
     onChange()
   }
+  function voirPiecesDuLot(lot) {
+    setFiltre(lot)
+    setVue('pieces')
+  }
   return (
     <div>
       {etiq && <CarteQr unite={etiq} onClose={() => setEtiq(null)} onOk={onOk} />}
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
-        <Btn kind="soft" onClick={() => telechargerCsv(vis.map(etiqUnite))} disabled={!vis.length}>CSV P-touch ({vis.length})</Btn>
-        <Btn kind="soft" onClick={() => telechargerWord(vis.map(etiqUnite))} disabled={!vis.length}>Word — visibles</Btn>
-        <Btn kind="soft" onClick={() => telechargerWord(unites.map(etiqUnite))} disabled={!unites.length}>Word — tous</Btn>
+      <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap', marginBottom:12, alignItems:'center' }}>
+        <div className="ha-stock-vue">
+          <button type="button" className={'ha-tab-like' + (vue === 'lots' ? ' is-on' : '')} onClick={() => setVue('lots')}>Par lot</button>
+          <button type="button" className={'ha-tab-like' + (vue === 'pieces' ? ' is-on' : '')} onClick={() => setVue('pieces')}>Pièces (QR)</button>
+        </div>
+        {vue === 'pieces' && (
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <Btn kind="soft" onClick={() => telechargerCsv(vis.map(etiqUnite))} disabled={!vis.length}>CSV P-touch ({vis.length})</Btn>
+            <Btn kind="soft" onClick={() => telechargerWord(vis.map(etiqUnite))} disabled={!vis.length}>Word — visibles</Btn>
+            <Btn kind="soft" onClick={() => telechargerWord(unites.map(etiqUnite))} disabled={!unites.length}>Word — tous</Btn>
+          </div>
+        )}
       </div>
       <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>
-        Photo du type, lot et DLC. Transfert, sortie et péremption restent tracés dans Mouvements.
+        {vue === 'lots'
+          ? 'Un n° de lot = une DLC. Quantité restante et emplacements (où c’est rangé). Les QR restent une pièce / une boîte.'
+          : 'Chaque QR est une pièce ou une boîte. Transfert, sortie et péremption restent tracés dans Mouvements.'}
       </p>
-      <input value={filtre} onChange={e=>setFiltre(e.target.value)} placeholder="Rechercher…" style={{ ...inp, marginBottom:12 }} />
-      {vis.length === 0 ? <Empty title="Aucune pièce" hint="Réceptionnez un type d’article pour générer un QR." /> : (
+      <label className="ha-stock-search-lab" htmlFor="stock-recherche-lot">Rechercher un n° de lot</label>
+      <input id="stock-recherche-lot" value={filtre} onChange={e=>setFiltre(e.target.value)}
+        placeholder="N° de lot, article ou lieu…" autoComplete="off" style={{ ...inp, marginBottom:12 }} />
+      {vue === 'lots' ? (
+        <VueLots lots={lots} filtre={filtre} onVoirPieces={voirPiecesDuLot} />
+      ) : vis.length === 0 ? (
+        <Empty title="Aucune pièce" hint="Réceptionnez un type d’article pour générer un QR, ou cherchez un autre n° de lot." />
+      ) : (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {vis.map(u => {
             const perimeDlc = u.date_peremption && u.date_peremption < new Date().toISOString().slice(0,10)
@@ -569,7 +667,7 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }
                     <div style={{ fontWeight:600 }}>{u.nom}</div>
                     <div style={{ fontSize:12.5, color: (u.mode === 'oxygene' && Number(u.pression_bar) <= PRESSION_ALERTE) || perimeDlc ? '#A32D2D' : 'var(--text-muted)' }}>
                       {resteLabel(u)}{u.lot ? ` · lot ${u.lot}` : ''} · {cheminLieux(lieux, u.lieu_id) || u.lieu_nom || 'sans lieu'}
-                      {u.date_peremption ? ` · DLC ${u.date_peremption}` : ''}
+                      {u.date_peremption ? ` · DLC ${fmtDlc(u.date_peremption)}` : ''}
                     </div>
                     {u.etat !== 'dispo' && <div style={{ marginTop:4 }}><Pill color="#A32D2D" bg="#FCEBEB">{u.etat}</Pill></div>}
                     <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
