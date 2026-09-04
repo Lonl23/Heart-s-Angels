@@ -146,7 +146,7 @@ export function phoneValide(raw) {
   return d.length === 8 || d.length === 9
 }
 
-export function PhoneF({ label, value, set, required, placeholder = '+32 477.07.11.34' }) {
+export function PhoneF({ label, value, set, required, placeholder = '+32 xxx.xx.xx.xx' }) {
   const [v, setV] = useState(value ?? '')
   const [err, setErr] = useState(false)
   useEffect(() => { setV(value ?? '') }, [value])
