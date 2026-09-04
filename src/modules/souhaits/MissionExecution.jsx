@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Btn, inp, fmtAdresse, Loading, Flash, Pill } from '@/components/ui'
+import { Btn, inp, fmtAdresse, Loading, Flash } from '@/components/ui'
 import {
-  STATUTS_BASE, lblStatutBase, itemsChecklistVisibles, itemsChecklistManquants,
-  PARCOURS_TERRAIN, normaliserEtape, etapeParId, idxEtape, etapeSuivante, lblEtapeTerrain, estALaBase,
+  STATUT_SUR_PLACE, estSurPlace, itemsChecklistVisibles, itemsChecklistManquants,
+  normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
+  estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
 } from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
-import { stInfo } from './Souhaits'
 import MedicamentsMAR from './MedicamentsMAR'
 import { COTES, CoinPhotos, PhotoAnnotator, TicketPhoto, uploadMissionPhoto } from './TerrainPhotos'
 import ScanConso from '@/modules/stock/ScanConso'
@@ -34,12 +34,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [err, setErr] = useState(null)
   const [etape, setEtape] = useState('a_la_base')
   const [annot, setAnnot] = useState(null)
-  const chipOn = useRef(null)
 
   useEffect(() => { load() }, [souhaitId, complet, user?.id])
-  useEffect(() => {
-    chipOn.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
-  }, [etape])
+  useEffect(() => { window.scrollTo(0, 0) }, [etape])
 
   async function load() {
     if (!user?.id) return
@@ -363,7 +360,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
   if (err && !sh) return <div style={{ padding:24 }}><Flash kind="err">{err}</Flash><Btn kind="soft" onClick={onBack}>← Retour</Btn></div>
 
   const statut = sh?.statut
-  const st = stInfo(statut)
   const titre = complet
     ? `${sh?.beneficiaire_prenom || ''} ${sh?.beneficiaire_nom || ''}`.trim()
     : (sh?.beneficiaire_prenom || 'Mission')
@@ -387,46 +383,47 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const def = etapeParId(etape)
   const aLaBase = estALaBase(etape)
   const suivant = etapeSuivante(etape)
+  const precedent = etapePrecedente(etape)
   const locked = statut === 'realise' || vecteurStatut === 'realise'
   const monStatut = aff?.statut_base || m?.personnel_statuts?.[user?.id] || rpc?.statut_base || ''
+  const jeSuisSurPlace = estSurPlace(monStatut)
   const roleAff = aff?.role_mission || rpc?.role_mission
+  const ecran = numEcranTerrain(etape)
   const cta = suivant
-    ? { l: suivant.l, go: () => aller(suivant.id), kind: 'start' }
-    : { l: plusieursVecteurs ? 'Ce véhicule est rentré' : 'Terminer la mission', go: terminer, kind: 'done' }
+    ? { l: 'Suivant', hint: suivant.l, go: () => aller(suivant.id), kind: 'start' }
+    : { l: plusieursVecteurs ? 'Ce véhicule est rentré' : 'Terminer la mission', hint: null, go: terminer, kind: 'done' }
   const clKey = def.checklist
   const miss = clKey ? itemsChecklistManquants(clKey, checks[clKey], clOpts) : []
   const manquantsHint = miss.length ? miss.join(', ') : null
-  const showMAR = def.patient && userMedical && vecteurMedical && complet
-  const showScanConso = (def.patient && userMedical && vecteurMedical) || etape === 'base_rentre'
-  const showPerso = aLaBase
-  const showPhotosDepart = aLaBase || etape === 'depart_pec'
+  const showMAR = userMedical && vecteurMedical && complet && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)
+  const showScanConso = (userMedical && vecteurMedical && def.patient && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)) || etape === 'base_rentre'
   const showCloture = etape === 'base_rentre'
   const showPecNotes = def.checklist === 'pec'
 
   return (
     <div className="ha-terrain" style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px 110px' }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:8 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:4 }}>
         <Btn kind="soft" onClick={onBack}>← Mes missions</Btn>
-        <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : 'Enregistrement auto'}</span>
+        <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : ''}</span>
       </div>
 
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
-        <h1 style={{ fontSize:'1.45rem', color:'var(--heading)', margin:'4px 0 2px' }}>{titre || 'Mission'}</h1>
-        <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
-          <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
-          {vecteur && (
-            <Pill color="#185FA5" bg="#E6F1FB">
-              {aLaBase ? (lblStatutBase(monStatut) || 'À la base') : lblEtapeTerrain(etape, vecteurStatut)}
-            </Pill>
-          )}
-        </div>
-      </div>
-      <p style={{ color:'var(--text-muted)', fontSize:14, margin:'4px 0 8px', lineHeight:1.45 }}>{sh?.description}</p>
-      {roleAff && (
-        <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:8 }}>
-          Votre rôle : <strong>{lblRoleMission(roleAff) || roleAff}</strong>
-          {userMedical ? '' : ' · logistique'}
-        </div>
+      {vecteur && (
+        <>
+          <div className="ha-wizard-top">
+            <div className="ha-wizard-count">{ecran} / {NB_ECRANS_TERRAIN}</div>
+            <div className="ha-wizard-progress" aria-hidden="true">
+              <span style={{ width: `${(ecran / NB_ECRANS_TERRAIN) * 100}%` }} />
+            </div>
+          </div>
+          <h1 className="ha-wizard-title">{aLaBase ? 'Sur place' : def.l}</h1>
+          <p className="ha-wizard-sub">
+            {titre || 'Mission'}
+            {roleAff ? ` · ${lblRoleMission(roleAff) || roleAff}` : ''}
+          </p>
+        </>
+      )}
+      {!vecteur && (
+        <h1 style={{ fontSize:'1.45rem', color:'var(--heading)', margin:'4px 0 8px' }}>{titre || 'Mission'}</h1>
       )}
       {err && <Flash kind="err">{err}</Flash>}
 
@@ -449,129 +446,89 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
       {vecteur && (
         <>
-          {showPerso && (
-            <Section titre="Votre statut à la base">
-              <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'0 0 12px' }}>
-                Personnel : En chemin, Sur place Base ou Prêt. Ça ne change pas le statut du véhicule.
-              </p>
-              <div className="ha-statuts-base">
-                {STATUTS_BASE.map(s => (
-                  <button
-                    key={s.v}
-                    type="button"
-                    disabled={locked}
-                    className={'ha-check-btn' + (monStatut === s.v ? ' is-on' : '')}
-                    onClick={()=>setMonStatutBase(s.v)}
-                  >
-                    <span className="ha-check-mark">{monStatut === s.v ? '✓' : ''}</span>
-                    <span>{s.l}</span>
-                  </button>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          <div className="ha-parcours-k">Parcours du véhicule</div>
-          <div className="ha-parcours" role="list">
-            {PARCOURS_TERRAIN.map((e, i) => (
-              <button
-                key={e.id}
-                type="button"
-                ref={etape === e.id ? chipOn : undefined}
-                className={'ha-parcours-chip' + (etape === e.id ? ' is-on' : '') + (idxEtape(etape) > i ? ' is-done' : '')}
-                onClick={() => aller(e.id)}
-              >
-                {e.chip}
-              </button>
-            ))}
-          </div>
-          <div className="ha-statut-now">
-            {aLaBase ? (
-              <>
-                <div className="ha-statut-now-k">Votre statut</div>
-                <div className="ha-statut-now-l">{lblStatutBase(monStatut) || '—'}</div>
-                <div className="ha-statut-now-n">Chacun son statut à la base. Le véhicule part ensuite tous ensemble.</div>
-              </>
-            ) : (
-              <>
-                <div className="ha-statut-now-k">Statut du véhicule</div>
-                <div className="ha-statut-now-l">{def.l}</div>
-                {suivant && !locked && (
-                  <div className="ha-statut-now-n">Ensuite : {suivant.l}</div>
+          {aLaBase && (
+            <>
+              <Section titre="Vous">
+                <button
+                  type="button"
+                  disabled={locked}
+                  className={'ha-check-btn' + (jeSuisSurPlace ? ' is-on' : '')}
+                  onClick={() => setMonStatutBase(jeSuisSurPlace ? null : STATUT_SUR_PLACE)}
+                >
+                  <span className="ha-check-mark">{jeSuisSurPlace ? '✓' : ''}</span>
+                  <span>Sur place</span>
+                </button>
+                {crewVecteur.length > 0 && (
+                  <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:12, lineHeight:1.5 }}>
+                    {crewVecteur.map(e => {
+                      const ici = estSurPlace(e.statut_base || m?.personnel_statuts?.[e.user_id])
+                      const nom = e.profiles?.prenom || e.prenom || 'Volontaire'
+                      return `${nom}${ici ? ' · sur place' : ''}`
+                    }).join('  ·  ')}
+                  </div>
                 )}
-              </>
-            )}
-          </div>
-
-          <Section titre={vecteur.nom ? `Votre véhicule — ${vecteur.nom}` : 'Votre véhicule'}>
-            <div style={{ fontSize:14, color:'var(--text)' }}>
-              {[vecteur.type_transport, vecteur.plaque].filter(Boolean).join(' · ') || 'Véhicule de votre équipage'}
-            </div>
-            {crewVecteur.length > 0 && (
-              <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:8, lineHeight:1.45 }}>
-                {crewVecteur.map(e => {
-                  const stb = e.statut_base || m?.personnel_statuts?.[e.user_id] || ''
-                  const nom = e.profiles?.prenom || e.prenom || 'Volontaire'
-                  return `${nom}${stb ? ` · ${lblStatutBase(stb)}` : ''}`
-                }).join('  ·  ')}
-              </div>
-            )}
-          </Section>
-
-          <Section titre={aLaBase ? 'Itinéraire du jour' : def.l}>
-            <Itineraire d={itin} compact={aLaBase} only={aLaBase ? undefined : def.itin} />
-          </Section>
-
-          {showPhotosDepart && (
-            <Section titre="Photos des 4 côtés — prise du véhicule">
-              <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
-              {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés sont demandés avant de quitter la base.</div>}
-            </Section>
+              </Section>
+              <Section titre="Véhicule">
+                <div style={{ fontSize:14, color:'var(--text)', marginBottom:10 }}>
+                  {[vecteur.nom, vecteur.type_transport, vecteur.plaque].filter(Boolean).join(' · ') || 'Véhicule de votre équipage'}
+                </div>
+                <Itineraire d={itin} only="base" />
+              </Section>
+              <Section titre="Photos des 4 côtés">
+                <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
+                {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés avant de partir.</div>}
+              </Section>
+              <Section titre="Checklist départ">
+                <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
+                  checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
+                <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
+                <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                  <MiniNum l="KMs départ" v={vecteur.kms_depart} set={val=>saveKms({ kms_depart: val })} />
+                  <MiniNum l="Essence %" v={vecteur.essence_pct} set={val=>saveKms({ essence_pct: val })} />
+                </div>
+              </Section>
+            </>
           )}
 
-          {def.checklist === 'base' && (
-            <Section titre="Checklist départ">
-              <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
-                checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
-              <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
-              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                <MiniNum l="KMs départ" v={vecteur.kms_depart} set={val=>saveKms({ kms_depart: val })} />
-                <MiniNum l="Essence %" v={vecteur.essence_pct} set={val=>saveKms({ essence_pct: val })} />
-              </div>
-            </Section>
-          )}
-
-          {def.checklist === 'pec' && itemsVis.pec.length > 0 && (
-            <Section titre="Checklist prise en charge">
-              <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
-            </Section>
-          )}
-          {showPecNotes && pecMedicalACharge && (
-            <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
-          )}
-          {showPecNotes && pecSansMedical && (
-            <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Pas de checklist patient sur ce véhicule — équipage non médical.</p>
-          )}
-
-          {def.checklist === 'retour_pec' && itemsVis.retour_pec.length > 0 && (
-            <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'Checklist retour'}>
-              <CheckBlock items={itemsVis.retour_pec} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
-            </Section>
-          )}
-          {def.checklist === 'retour_pec' && pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
-            <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Retour patient : à charge du médical de ce véhicule.</p>
-          )}
-
-          {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
-          {showScanConso && !showCloture && (
-            <Section titre="Matériel utilisé">
-              <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
-            </Section>
+          {!aLaBase && !showCloture && (
+            <>
+              {vecteur.nom && (
+                <div style={{ fontSize:13, color:'var(--text-muted)', margin:'8px 0 0' }}>{vecteur.nom}{vecteur.plaque ? ` · ${vecteur.plaque}` : ''}</div>
+              )}
+              <Section titre={def.itin === 'pec' ? 'Prise en charge' : def.itin === 'destination' ? 'Destination' : def.itin === 'retour' ? 'Retour' : 'Base'}>
+                <Itineraire d={itin} only={def.itin} />
+              </Section>
+              {def.checklist === 'pec' && itemsVis.pec.length > 0 && (
+                <Section titre="À cocher">
+                  <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
+                </Section>
+              )}
+              {showPecNotes && pecMedicalACharge && (
+                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
+              )}
+              {showPecNotes && pecSansMedical && (
+                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Pas de checklist patient sur ce véhicule.</p>
+              )}
+              {def.checklist === 'retour_pec' && itemsVis.retour_pec.length > 0 && (
+                <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'À cocher'}>
+                  <CheckBlock items={itemsVis.retour_pec} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
+                </Section>
+              )}
+              {def.checklist === 'retour_pec' && pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
+                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Retour patient : à charge du médical de ce véhicule.</p>
+              )}
+              {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
+              {showScanConso && (
+                <Section titre="Matériel utilisé">
+                  <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
+                </Section>
+              )}
+            </>
           )}
 
           {showCloture && (
             <>
-              <Section titre="Photos des 4 côtés — remise du véhicule">
+              <Section titre="Photos des 4 côtés — remise">
                 <CoinPhotos
                   coins={photos.coins_retour || {}}
                   hint="Photographiez à nouveau les 4 côtés. Marquez tout dégât apparu pendant la mission."
@@ -598,7 +555,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
         </>
       )}
 
-      {!complet && <div style={{ fontSize:12, color:'var(--text-faint)', marginTop:12 }}>Aucune information médicale n'est accessible depuis cette vue.</div>}
+      {!complet && vecteur && <div style={{ fontSize:12, color:'var(--text-faint)', marginTop:12 }}>Aucune information médicale n'est accessible depuis cette vue.</div>}
 
       {vecteur && cta && !locked && statut !== 'realise' && (
         <div className="ha-terrain-bar">
@@ -607,7 +564,15 @@ export default function MissionExecution({ souhaitId, onBack }) {
               Encore à cocher : {manquantsHint}.
             </div>
           )}
-          <button type="button" className={'ha-terrain-cta ' + cta.kind} onClick={cta.go}>{cta.l}</button>
+          <div className="ha-wizard-actions">
+            {precedent && (
+              <button type="button" className="ha-terrain-cta back" onClick={() => aller(precedent.id)}>Retour</button>
+            )}
+            <button type="button" className={'ha-terrain-cta ' + cta.kind} onClick={cta.go}>
+              {cta.l}
+              {cta.hint ? <span className="ha-cta-hint">{cta.hint}</span> : null}
+            </button>
+          </div>
         </div>
       )}
       {vecteurStatut === 'realise' && statut !== 'realise' && (

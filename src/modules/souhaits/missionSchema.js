@@ -141,35 +141,31 @@ export function itemsChecklistManquants(section, etat, opts) {
   return itemsChecklistVisibles(section, opts).filter(it => !etat?.[it])
 }
 
-export const STATUTS_BASE = [
-  { v: 'en_route', l: 'En chemin' },
-  { v: 'arrive',   l: 'Sur place Base' },
-  { v: 'pret',     l: 'Prêt' },
-]
-
-export const lblStatutBase = v => STATUTS_BASE.find(s => s.v === v)?.l || ''
+export const STATUT_SUR_PLACE = 'arrive'
+export function estSurPlace(v) { return v === STATUT_SUR_PLACE }
+export function lblStatutBase(v) { return v === STATUT_SUR_PLACE ? 'Sur place' : '' }
 
 /** Véhicule encore à la base : pas un statut d’équipage partagé. */
 export const ETAPE_A_LA_BASE = {
   id: 'a_la_base',
-  l: 'À la base',
-  chip: 'À la base',
+  l: 'Sur place',
+  chip: 'Sur place',
   lieu: 'base',
   itin: 'base',
   checklist: 'base',
   patient: false,
 }
 
-/** Parcours du vecteur (partagé). « Sur place Base » est personnel, pas ici. */
+/** Parcours du vecteur (partagé). « Sur place » personnel n’est pas ici. */
 export const PARCOURS_TERRAIN = [
-  { id:'depart_pec',       l:'Départ vers prise en charge', chip:'Départ → PEC',    lieu:'pec',      itin:'pec',          checklist:'base',        patient:false },
-  { id:'pec_sur_place',    l:'Sur place prise en charge', chip:'Sur place PEC',      lieu:'pec',      itin:'pec',          checklist:'pec',         patient:true },
-  { id:'depart_dest',      l:'Départ vers destination',   chip:'Départ → dest.',     lieu:'dest',     itin:'destination',  checklist:'pec',         patient:true },
-  { id:'dest_sur_place',   l:'Sur place destination',     chip:'Sur place dest.',    lieu:'dest',     itin:'destination',  checklist:null,          patient:true },
-  { id:'depart_retour',    l:'Départ retour',             chip:'Départ retour',      lieu:'retour',   itin:'retour',       checklist:null,          patient:true },
-  { id:'retour_sur_place', l:'Sur place retour',          chip:'Sur place retour',   lieu:'retour',   itin:'retour',       checklist:'retour_pec',  patient:true },
-  { id:'depart_base',      l:'Départ retour base',        chip:'Départ → base',      lieu:'base_fin', itin:'base',         checklist:'retour_pec',  patient:false },
-  { id:'base_rentre',      l:'Rentré base',               chip:'Rentré base',        lieu:'base_fin', itin:'base',         checklist:'retour_base', patient:false },
+  { id:'depart_pec',       l:'Départ vers prise en charge', lieu:'pec',      itin:'pec',          checklist:null,          patient:false },
+  { id:'pec_sur_place',    l:'Sur place prise en charge',   lieu:'pec',      itin:'pec',          checklist:'pec',         patient:true },
+  { id:'depart_dest',      l:'Départ vers destination',     lieu:'dest',     itin:'destination',  checklist:null,          patient:true },
+  { id:'dest_sur_place',   l:'Sur place destination',       lieu:'dest',     itin:'destination',  checklist:null,          patient:true },
+  { id:'depart_retour',    l:'Départ retour',               lieu:'retour',   itin:'retour',       checklist:null,          patient:true },
+  { id:'retour_sur_place', l:'Sur place retour',            lieu:'retour',   itin:'retour',       checklist:'retour_pec',  patient:true },
+  { id:'depart_base',      l:'Départ retour base',          lieu:'base_fin', itin:'base',         checklist:null,          patient:false },
+  { id:'base_rentre',      l:'Rentré base',                 lieu:'base_fin', itin:'base',         checklist:'retour_base', patient:false },
 ]
 
 const ETAPE_LEGACY = {
@@ -211,9 +207,22 @@ export function etapeSuivante(etape) {
   return PARCOURS_TERRAIN[idxEtape(etape) + 1] || null
 }
 
+export function etapePrecedente(etape) {
+  const i = idxEtape(etape)
+  if (i < 0) return null
+  if (i === 0) return ETAPE_A_LA_BASE
+  return PARCOURS_TERRAIN[i - 1]
+}
+
 export function lblEtapeTerrain(etape, vecteurStatut) {
   if (vecteurStatut === 'realise') return 'Rentré base'
   return etapeParId(etape).l
+}
+
+export const NB_ECRANS_TERRAIN = PARCOURS_TERRAIN.length + 1
+
+export function numEcranTerrain(etape) {
+  return idxEtape(etape) + 2
 }
 
 export const O2_LIGNES = ['B10','B10','B5','B5','B2']

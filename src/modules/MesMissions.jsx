@@ -41,7 +41,7 @@ export default function MesMissions() {
   const nbCours = items.filter(m => m.statut === 'en_cours').length
 
   return (
-    <Page title="Mes missions" subtitle="Sur le terrain, un statut après l’autre : base, prise en charge, destination, retour, rentrée.">
+    <Page title="Mes missions" subtitle="Un écran après l’autre : Sur place, puis le trajet, jusqu’à la rentrée.">
       {err && <div style={{ color:'#A32D2D', fontSize:13, marginBottom:10 }}>{err}</div>}
       <div className="ha-tabs" style={{ marginBottom:16 }}>
         {FILTRES.map(f => (
