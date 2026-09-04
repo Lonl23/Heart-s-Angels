@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
-import { CHECKLISTS } from './missionSchema'
+import { CHECKLISTS, itemsChecklistTous } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 
@@ -180,7 +180,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
             {v ? ['base','retour_base'].map(sec => (
               <div key={sec} className="cl-wrap">
                 <div className="cl-title">{CHECKLISTS[sec].titre}</div>
-                {CHECKLISTS[sec].items.map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
+                {itemsChecklistTous(sec, m).map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
               </div>
             )) : <div className="muted">Définissez des vecteurs pour la checklist véhicule.</div>}
           </Sec>
@@ -190,7 +190,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
               {['pec','retour_pec'].map(sec => (
                 <div key={sec} className="cl-wrap">
                   <div className="cl-title">{CHECKLISTS[sec].titre}</div>
-                  {CHECKLISTS[sec].items.map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
+                  {itemsChecklistTous(sec, m).map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
                 </div>
               ))}
             </Sec>

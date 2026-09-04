@@ -143,7 +143,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
     role: profile?.role,
     fiche: profile?.fiche,
   })
-  const clOpts = { userMedical, vecteurMedical }
+  const clOpts = {
+    userMedical,
+    vecteurMedical,
+    mission: complet ? m : { checklist_extras: rpc?.checklist_extras },
+  }
   const vecteurStatut = (vecteurId && m?.vecteur_statuts?.[vecteurId]) || rpc?.vecteur_statut || null
   const vecteursEquipes = new Set(
     complet

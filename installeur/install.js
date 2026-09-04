@@ -62,6 +62,7 @@ async function main() {
     await client.query(lireSQL('19_calendrier_rdv_base.sql'))
     await client.query(lireSQL('20_roles_par_vecteur.sql'))
     await client.query(lireSQL('21_statuts_terrain.sql'))
+    await client.query(lireSQL('22_checklist_extras.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

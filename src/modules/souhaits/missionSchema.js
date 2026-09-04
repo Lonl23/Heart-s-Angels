@@ -93,21 +93,48 @@ export const CHECKLISTS = {
   },
 }
 
-export function itemChecklistEstMedical(section, item) {
+export function extrasChecklist(mission, section) {
+  const raw = mission?.checklist_extras?.[section]
+  if (!Array.isArray(raw)) return []
+  return raw.map(x => {
+    if (typeof x === 'string') return { id: x, libelle: x, medical: CHECKLISTS[section]?.kind === 'medical' }
+    const libelle = (x?.libelle || '').trim()
+    if (!libelle) return null
+    return { id: x.id || libelle, libelle, medical: !!x.medical }
+  }).filter(Boolean)
+}
+
+export function itemsChecklistTous(section, mission) {
+  const def = CHECKLISTS[section]
+  if (!def) return []
+  const seen = new Set(def.items)
+  const extra = extrasChecklist(mission, section).map(x => x.libelle).filter(l => !seen.has(l))
+  return [...def.items, ...extra]
+}
+
+export function itemChecklistEstMedical(section, item, mission) {
   const def = CHECKLISTS[section]
   if (!def) return false
-  if (def.kind === 'medical') return true
-  if (def.kind === 'logistique') return false
-  return (def.medicalItems || []).includes(item)
+  if ((def.items || []).includes(item)) {
+    if (def.kind === 'medical') return true
+    if (def.kind === 'logistique') return false
+    return (def.medicalItems || []).includes(item)
+  }
+  const ex = extrasChecklist(mission, section).find(x => x.libelle === item)
+  if (ex) return !!ex.medical || def.kind === 'medical'
+  return def.kind === 'medical'
 }
 
 /** Items que CETTE personne doit cocher sur CE vecteur (jamais le médical si pas médical, ou si le vecteur n’a pas de médical). */
-export function itemsChecklistVisibles(section, { userMedical, vecteurMedical } = {}) {
+export function itemsChecklistVisibles(section, { userMedical, vecteurMedical, mission } = {}) {
   const def = CHECKLISTS[section]
   if (!def) return []
-  if (def.kind === 'medical') return (vecteurMedical && userMedical) ? def.items : []
-  if (def.kind === 'logistique') return def.items
-  return def.items.filter(it => !itemChecklistEstMedical(section, it) || (vecteurMedical && userMedical))
+  const items = itemsChecklistTous(section, mission)
+  return items.filter(it => {
+    const med = itemChecklistEstMedical(section, it, mission)
+    if (!med) return true
+    return !!(vecteurMedical && userMedical)
+  })
 }
 
 export function itemsChecklistManquants(section, etat, opts) {

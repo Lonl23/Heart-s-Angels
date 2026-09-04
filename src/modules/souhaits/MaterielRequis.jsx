@@ -3,6 +3,14 @@ import { supabase } from '@/lib/supabase'
 import { Card, Btn, F, Sel, Empty } from '@/components/ui'
 import { VOLUMES_O2 } from '@/modules/stock/stockSchema'
 import { nid, libelleRequis } from '@/modules/stock/materielRequis'
+import { CHECKLISTS, extrasChecklist } from './missionSchema'
+
+const SECTIONS_CL = [
+  { v:'base',        l:'Départ (base)' },
+  { v:'pec',         l:'Prise en charge' },
+  { v:'retour_pec',  l:'Retour patient' },
+  { v:'retour_base', l:'Retour base' },
+]
 
 export default function MaterielRequis({ m, setM }) {
   const list = Array.isArray(m?.materiel_requis) ? m.materiel_requis : []
@@ -94,6 +102,63 @@ export default function MaterielRequis({ m, setM }) {
           </div>
         </Card>
       )}
+
+      <ChecklistExtras m={m} setM={setM} />
     </div>
+  )
+}
+
+function ChecklistExtras({ m, setM }) {
+  const [add, setAdd] = useState({ section:'base', libelle:'', medical:false })
+  const extras = m?.checklist_extras || {}
+  function setExtras(next) { setM(o => ({ ...o, checklist_extras: next })) }
+  function ajouter() {
+    const libelle = add.libelle.trim()
+    if (!libelle) { alert('Indiquez le matériel ou l’élément à cocher.'); return }
+    const deja = extrasChecklist(m, add.section)
+    if (deja.some(x => x.libelle.toLowerCase() === libelle.toLowerCase()) || (CHECKLISTS[add.section]?.items || []).includes(libelle)) {
+      alert('Cet élément est déjà dans la checklist.'); return
+    }
+    const medical = add.section === 'pec' || (add.section === 'retour_pec' && add.medical)
+    setExtras({ ...extras, [add.section]: [...deja, { id: nid(), libelle, medical }] })
+    setAdd(a => ({ ...a, libelle:'' }))
+  }
+  function retirer(section, id) {
+    setExtras({ ...extras, [section]: extrasChecklist(m, section).filter(x => x.id !== id) })
+  }
+  return (
+    <Card style={{ marginTop:14 }}>
+      <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:6 }}>À cocher sur le terrain</div>
+      <p style={{ margin:'0 0 12px', fontSize:13.5, color:'var(--text-muted)' }}>
+        Ajoutez du matériel (ou un autre point) à une checklist. L’équipage le verra dans Mes missions, en plus des cases standard (GPS, VISA…).
+      </p>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, alignItems:'end' }}>
+        <Sel label="Checklist" value={add.section} set={v=>setAdd(a=>({ ...a, section:v, medical: v==='pec' }))} options={SECTIONS_CL} />
+        <F label="Matériel / élément" value={add.libelle} set={v=>setAdd(a=>({ ...a, libelle:v }))} placeholder="Coussin, brancard, couverture…" />
+        {add.section === 'retour_pec' && (
+          <Sel label="Qui coche" value={add.medical ? 'medical' : 'logistique'} set={v=>setAdd(a=>({ ...a, medical: v==='medical' }))}
+            options={[{ v:'logistique', l:'Tout l’équipage' }, { v:'medical', l:'Médical seulement' }]} />
+        )}
+        <Btn onClick={ajouter}>+ Ajouter à la checklist</Btn>
+      </div>
+      {SECTIONS_CL.map(s => {
+        const extra = extrasChecklist(m, s.v)
+        if (!extra.length) return null
+        return (
+          <div key={s.v} style={{ marginTop:14 }}>
+            <div style={{ fontSize:12.5, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:.4, marginBottom:6 }}>{s.l}</div>
+            {extra.map(x => (
+              <div key={x.id} style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', padding:'6px 0', borderBottom:'1px solid var(--border)' }}>
+                <div>
+                  <div style={{ fontWeight:600 }}>{x.libelle}</div>
+                  <div style={{ fontSize:12, color:'var(--text-muted)' }}>{x.medical || s.v === 'pec' ? 'Coché par le médical' : 'Coché par l’équipage'}</div>
+                </div>
+                <Btn kind="danger" onClick={() => retirer(s.v, x.id)} style={{ padding:'5px 10px' }}>Retirer</Btn>
+              </div>
+            ))}
+          </div>
+        )
+      })}
+    </Card>
   )
 }

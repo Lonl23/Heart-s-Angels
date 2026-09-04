@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, fmtAdresse } from '@/components/ui'
-import { GROUPES, CHECKLISTS } from './missionSchema'
+import { GROUPES, CHECKLISTS, itemsChecklistTous } from './missionSchema'
 
 export default function MissionSummary({ souhaitId, infoOnly=false }) {
   const [m, setM] = useState(null)
@@ -35,8 +35,8 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
       const etat = vc[sec] || g[sec] || {}
       return {
         titre: [v.nom, def.titre].filter(Boolean).join(' · '),
-        faits: def.items.filter(it => etat[it]).length,
-        total: def.items.length,
+        faits: itemsChecklistTous(sec, m).filter(it => etat[it]).length,
+        total: itemsChecklistTous(sec, m).length,
       }
     })
   }).filter(c => c.faits > 0)

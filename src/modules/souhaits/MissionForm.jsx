@@ -13,7 +13,7 @@ const TABS = [
   { id:'administratif', label:'Administratif', groupes:['administratif'] },
   { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'] },
   { id:'vecteurs',      label:'Vecteurs & équipages' },
-  { id:'materiel',      label:'Matériel' },
+  { id:'materiel',      label:'Matériel & checklists' },
   { id:'medical',       label:'Médical', groupes:['medical'] },
   { id:'traitements',   label:'Traitements' },
   { id:'suivi',         label:'Suivi interne' },
@@ -53,7 +53,7 @@ export default function MissionForm({ souhaitId }) {
 
   return (
     <div>
-      <Flash>Ici on encode et on prépare. Les checklists, le MAR et le démarrage / la clôture se font dans Mes missions, sur tablette ou téléphone.</Flash>
+      <Flash>Ici on encode et on prépare. Dans Matériel, vous pouvez ajouter des points aux checklists ; l’équipage les coche dans Mes missions.</Flash>
       <Tabs
         value={tab}
         onChange={setTab}
