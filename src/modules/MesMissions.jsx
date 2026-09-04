@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { Page, Card, Empty, Loading, Pill } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { stInfo } from './souhaits/Souhaits'
-import { lblStatutBase } from './souhaits/missionSchema'
+import { lblStatutBase, lblEtapeTerrain } from './souhaits/missionSchema'
 import MissionExecution from './souhaits/MissionExecution'
 
 const FILTRES = [
@@ -41,7 +41,7 @@ export default function MesMissions() {
   const nbCours = items.filter(m => m.statut === 'en_cours').length
 
   return (
-    <Page title="Mes missions" subtitle="Sur le terrain, étape par étape : votre véhicule, puis la prise en charge, le retour, la base.">
+    <Page title="Mes missions" subtitle="Sur le terrain, un statut après l’autre : base, prise en charge, destination, retour, rentrée.">
       {err && <div style={{ color:'#A32D2D', fontSize:13, marginBottom:10 }}>{err}</div>}
       <div className="ha-tabs" style={{ marginBottom:16 }}>
         {FILTRES.map(f => (
@@ -73,6 +73,7 @@ export default function MesMissions() {
                         {m.vehicule ? ` · ${m.vehicule}` : ''}
                         {m.role_mission ? ` · ${m.role_mission}` : ''}
                         {lblStatutBase(m.statut_base) ? ` · ${lblStatutBase(m.statut_base)}` : ''}
+                        {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>
                     </div>
                     <Pill color={st.c} bg={st.bg}>{st.l}</Pill>

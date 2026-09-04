@@ -178,30 +178,30 @@ input:focus, select:focus, textarea:focus {
 .ha-terrain-cta.start { background: #1BB0CE; }
 .ha-terrain-cta.done { background: #3B6D11; }
 
-.ha-etapes {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 4px;
+.ha-parcours {
+  display: flex; gap: 6px; overflow-x: auto; margin: 10px -14px 6px;
+  padding: 2px 14px 10px; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
-.ha-etape {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--border);
-  background: var(--card); color: var(--text-2); min-height: 64px;
+.ha-parcours-chip {
+  flex: 0 0 auto; white-space: nowrap; border-radius: 99px; padding: 8px 12px;
+  border: 1.5px solid var(--border); background: var(--card); color: var(--text-2);
+  font-size: 12.5px; font-weight: 650; cursor: pointer;
 }
-.ha-etape.is-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--card)); color: var(--heading); }
-.ha-etape.is-done .ha-etape-n { background: #3B6D11; color: #fff; }
+.ha-parcours-chip.is-on {
+  border-color: var(--accent); background: var(--accent); color: #fff;
+}
+.ha-parcours-chip.is-done { border-color: #3B6D11; color: #3B6D11; }
+.ha-statut-now {
+  background: var(--card); border: 1.5px solid var(--accent); border-radius: 16px;
+  padding: 14px 16px; margin: 4px 0 8px;
+}
+.ha-statut-now-k { font-size: 11.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+.ha-statut-now-l { font-size: 1.45rem; font-weight: 800; color: var(--heading); line-height: 1.2; margin-top: 2px; }
+.ha-statut-now-n { font-size: 13.5px; color: var(--text-muted); margin-top: 4px; }
 .ha-statuts-base { display: flex; flex-direction: column; gap: 8px; }
 @media (min-width: 420px) {
   .ha-statuts-base { display: grid; grid-template-columns: repeat(3, 1fr); }
-}
-.ha-etape-n {
-  width: 22px; height: 22px; border-radius: 99px; font-size: 12px; font-weight: 700;
-  display: grid; place-items: center; background: var(--bg-alt); color: var(--text-muted);
-}
-.ha-etape.is-on .ha-etape-n { background: var(--accent); color: #fff; }
-.ha-etape-l { display: block; font-size: 11.5px; font-weight: 700; line-height: 1.2; text-align: center; }
-.ha-etape-s { display: none; }
-@media (min-width: 520px) {
-  .ha-etape { flex-direction: row; justify-content: flex-start; padding: 10px 12px; text-align: left; }
-  .ha-etape-s { display: block; font-size: 11px; color: var(--text-muted); font-weight: 500; }
 }
 
 .ha-coins { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

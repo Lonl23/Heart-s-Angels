@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Btn, inp, fmtAdresse, Loading, Flash, Pill } from '@/components/ui'
-import { STATUTS_BASE, lblStatutBase, itemsChecklistVisibles, itemsChecklistManquants } from './missionSchema'
+import {
+  STATUTS_BASE, lblStatutBase, itemsChecklistVisibles, itemsChecklistManquants,
+  PARCOURS_TERRAIN, normaliserEtape, etapeParId, idxEtape, etapeSuivante, lblEtapeTerrain,
+} from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { stInfo } from './Souhaits'
 import MedicamentsMAR from './MedicamentsMAR'
@@ -12,30 +15,9 @@ import ScanEmport from '@/modules/stock/ScanEmport'
 
 const fmtDt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }) : '—'
 
-const ETAPES = [
-  { id:'vehicule',    l:'Véhicule',        sous:'Prise à la base' },
-  { id:'pec',         l:'Prise en charge', sous:'Sur place' },
-  { id:'retour_pec',  l:'Retour patient',  sous:'Fin de PEC' },
-  { id:'retour_base', l:'Retour base',     sous:'Rentrée' },
-]
-
-const ETAPE_IDX = Object.fromEntries(ETAPES.map((e, i) => [e.id, i]))
-
 function etapeDefaut(saved, vecteurStatut) {
-  if (saved && ETAPES.some(e => e.id === saved)) return saved
-  if (vecteurStatut === 'realise') return 'retour_base'
-  if (vecteurStatut === 'en_cours') return 'pec'
-  return 'vehicule'
-}
-
-function lblEtapeVehicule(etape, vecteurStatut) {
-  if (vecteurStatut === 'realise') return 'Rentrée'
-  return ({
-    vehicule: 'À la base',
-    pec: 'Prise en charge',
-    retour_pec: 'Retour patient',
-    retour_base: 'Retour base',
-  })[etape] || 'À la base'
+  if (vecteurStatut === 'realise') return 'base_rentre'
+  return normaliserEtape(saved)
 }
 
 export default function MissionExecution({ souhaitId, onBack }) {
@@ -50,10 +32,14 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState(null)
-  const [etape, setEtape] = useState('vehicule')
+  const [etape, setEtape] = useState('base_sur_place')
   const [annot, setAnnot] = useState(null)
+  const chipOn = useRef(null)
 
   useEffect(() => { load() }, [souhaitId, complet, user?.id])
+  useEffect(() => {
+    chipOn.current?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+  }, [etape])
 
   async function load() {
     if (!user?.id) return
@@ -167,30 +153,47 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
 
   async function aller(next) {
-    setEtape(next)
+    const n = normaliserEtape(next)
+    const fromIdx = idxEtape(etape)
+    const toIdx = idxEtape(n)
+    if (!locked && fromIdx === 0 && toIdx > 0 && !cotesOk) {
+      setErr('Photographiez les 4 côtés du véhicule avant de partir.')
+      return
+    }
+    setEtape(n)
+    setErr(null)
+    if (locked) return
+    const doitDemarrer = n !== 'base_sur_place'
+      && vecteurStatut !== 'en_cours' && vecteurStatut !== 'realise'
+      && sh?.statut !== 'realise'
+    if (doitDemarrer) {
+      await avancer('en_cours', n)
+      return
+    }
     if (complet) {
-      const nextM = { ...(m || {}), etape_terrain: next }
-      if (vecteurId) nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: next }
+      const nextM = { ...(m || {}), etape_terrain: n }
+      if (vecteurId) nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: n }
       await saveMission(nextM)
     } else {
-      await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: next })
-      setRpc(x => x ? { ...x, etape_terrain: next } : x)
+      const { data, error } = await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: n })
+      if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Étape non enregistrée.'); return }
+      setRpc(x => x ? { ...x, etape_terrain: n } : x)
     }
   }
 
-  async function avancer(statut) {
+  async function avancer(statut, etapeCible) {
     setErr(null)
     const maintenant = new Date().toISOString()
+    const etapeToSave = normaliserEtape(etapeCible || (statut === 'realise' ? 'base_rentre' : etape))
+    if (statut === 'realise') setEtape('base_rentre')
     if (complet) {
       const nextM = { ...(m || {}) }
       const vs = { ...(nextM.vecteur_statuts || {}) }
       if (vecteurId) {
         vs[vecteurId] = statut
         nextM.vecteur_statuts = vs
-        nextM.vecteur_etapes = {
-          ...(nextM.vecteur_etapes || {}),
-          [vecteurId]: statut === 'en_cours' ? 'pec' : 'retour_base',
-        }
+        nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: etapeToSave }
+        nextM.etape_terrain = etapeToSave
         if (statut === 'realise') {
           nextM.vecteur_clotures = { ...(nextM.vecteur_clotures || {}), [vecteurId]: maintenant }
         }
@@ -215,8 +218,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
     }
     const { data, error } = await supabase.rpc('avancer_mission', { p_souhait: souhaitId, p_statut: statut })
     if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Impossible de changer le statut.'); return }
+    await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: etapeToSave })
     setSh(x => ({ ...x, statut: data?.statut || statut }))
-    setRpc(x => x ? { ...x, statut: data?.statut || statut, vecteur_statut: data?.vecteur_statut || statut } : x)
+    setRpc(x => x ? { ...x, statut: data?.statut || statut, vecteur_statut: data?.vecteur_statut || statut, etape_terrain: etapeToSave } : x)
     flash()
   }
 
@@ -353,15 +357,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
 
   const cotesOk = COTES.every(c => photos?.coins?.[c.id]?.path)
-  async function partir() {
-    if (!cotesOk) { setErr('Photographiez les 4 côtés du véhicule avant de partir.'); return }
-    if (vecteurStatut !== 'en_cours' && vecteurStatut !== 'realise' && sh?.statut !== 'realise') {
-      await avancer('en_cours')
-    }
-    await aller('pec')
-  }
   async function terminer() {
-    await avancer('realise')
+    await avancer('realise', 'base_rentre')
   }
 
   if (loading) return <div style={{ padding:24 }}><Loading /></div>
@@ -389,47 +386,23 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
   const pecMedicalACharge = vecteurMedical && !userMedical
   const pecSansMedical = !vecteurMedical
-  const cta = {
-    vehicule: { l: 'Véhicule pris — on part', go: partir, kind: 'start' },
-    pec: {
-      l: pecSansMedical || pecMedicalACharge ? 'C’est bon — on continue' : 'Prise en charge faite',
-      go: () => aller('retour_pec'),
-      kind: 'start',
-    },
-    retour_pec: {
-      l: pecSansMedical || pecMedicalACharge ? 'On rentre à la base' : 'Retour patient fait — rentrer',
-      go: () => aller('retour_base'),
-      kind: 'start',
-    },
-    retour_base: {
-      l: plusieursVecteurs ? 'Ce véhicule est rentré' : 'Terminer la mission',
-      go: terminer,
-      kind: 'done',
-    },
-  }[etape]
+  const def = etapeParId(etape)
+  const suivant = etapeSuivante(etape)
   const locked = statut === 'realise' || vecteurStatut === 'realise'
   const monStatut = aff?.statut_base || m?.personnel_statuts?.[user?.id] || rpc?.statut_base || ''
   const roleAff = aff?.role_mission || rpc?.role_mission
-
-  const manquantsHint = (() => {
-    if (etape === 'vehicule') {
-      const miss = itemsChecklistManquants('base', checks.base, clOpts)
-      return miss.length ? miss.join(', ') : null
-    }
-    if (etape === 'pec' && userMedical && vecteurMedical) {
-      const miss = itemsChecklistManquants('pec', checks.pec, clOpts)
-      return miss.length ? miss.join(', ') : null
-    }
-    if (etape === 'retour_pec' && userMedical && vecteurMedical) {
-      const miss = itemsChecklistManquants('retour_pec', checks.retour_pec, clOpts)
-      return miss.length ? miss.join(', ') : null
-    }
-    if (etape === 'retour_base') {
-      const miss = itemsChecklistManquants('retour_base', checks.retour_base, clOpts)
-      return miss.length ? miss.join(', ') : null
-    }
-    return null
-  })()
+  const cta = suivant
+    ? { l: suivant.l, go: () => aller(suivant.id), kind: 'start' }
+    : { l: plusieursVecteurs ? 'Ce véhicule est rentré' : 'Terminer la mission', go: terminer, kind: 'done' }
+  const clKey = def.checklist
+  const miss = clKey ? itemsChecklistManquants(clKey, checks[clKey], clOpts) : []
+  const manquantsHint = miss.length ? miss.join(', ') : null
+  const showMAR = def.patient && userMedical && vecteurMedical && complet
+  const showScanConso = (def.patient && userMedical && vecteurMedical) || etape === 'base_rentre'
+  const showPerso = etape === 'base_sur_place'
+  const showPhotosDepart = etape === 'base_sur_place' || etape === 'base_depart'
+  const showCloture = etape === 'base_rentre'
+  const showPecNotes = def.checklist === 'pec'
 
   return (
     <div className="ha-terrain" style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px 110px' }}>
@@ -443,7 +416,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
         <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
           <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
           {vecteur && (
-            <Pill color="#185FA5" bg="#E6F1FB">{lblEtapeVehicule(etape, vecteurStatut)}</Pill>
+            <Pill color="#185FA5" bg="#E6F1FB">{lblEtapeTerrain(etape, vecteurStatut)}</Pill>
           )}
         </div>
       </div>
@@ -475,21 +448,25 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
       {vecteur && (
         <>
-          <div className="ha-etapes">
-            {ETAPES.map((e, i) => (
+          <div className="ha-parcours" role="list">
+            {PARCOURS_TERRAIN.map((e, i) => (
               <button
                 key={e.id}
                 type="button"
-                className={'ha-etape' + (etape===e.id ? ' is-on' : '') + ((ETAPE_IDX[etape] ?? 0) > i ? ' is-done' : '')}
-                onClick={()=>aller(e.id)}
+                ref={etape === e.id ? chipOn : undefined}
+                className={'ha-parcours-chip' + (etape === e.id ? ' is-on' : '') + (idxEtape(etape) > i ? ' is-done' : '')}
+                onClick={() => aller(e.id)}
               >
-                <span className="ha-etape-n">{i+1}</span>
-                <span>
-                  <span className="ha-etape-l">{e.l}</span>
-                  <span className="ha-etape-s">{e.sous}</span>
-                </span>
+                {e.chip}
               </button>
             ))}
+          </div>
+          <div className="ha-statut-now">
+            <div className="ha-statut-now-k">Statut du véhicule</div>
+            <div className="ha-statut-now-l">{def.l}</div>
+            {suivant && !locked && (
+              <div className="ha-statut-now-n">Ensuite : {suivant.l}</div>
+            )}
           </div>
 
           <Section titre={vecteur.nom ? `Votre véhicule — ${vecteur.nom}` : 'Votre véhicule'}>
@@ -507,85 +484,77 @@ export default function MissionExecution({ souhaitId, onBack }) {
             )}
           </Section>
 
-          {etape === 'vehicule' && (
-            <>
-              <Section titre="Mon statut à la base">
-                <div className="ha-statuts-base">
-                  {STATUTS_BASE.map(s => (
-                    <button
-                      key={s.v}
-                      type="button"
-                      disabled={locked}
-                      className={'ha-check-btn' + (monStatut === s.v ? ' is-on' : '')}
-                      onClick={()=>setMonStatutBase(s.v)}
-                    >
-                      <span className="ha-check-mark">{monStatut === s.v ? '✓' : ''}</span>
-                      <span>{s.l}</span>
-                    </button>
-                  ))}
-                </div>
-              </Section>
-              <Section titre="Itinéraire du jour"><Itineraire d={itin} compact /></Section>
-              <Section titre="Photos des 4 côtés — prise du véhicule">
-                <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
-                {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés sont demandés avant de quitter la base.</div>}
-              </Section>
-              <Section titre="Checklist départ">
-                <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
-                  checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
-                <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
-                <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                  <MiniNum l="KMs départ" v={vecteur.kms_depart} set={val=>saveKms({ kms_depart: val })} />
-                  <MiniNum l="Essence %" v={vecteur.essence_pct} set={val=>saveKms({ essence_pct: val })} />
-                </div>
-              </Section>
-            </>
+          {showPerso && (
+            <Section titre="Mon statut à la base">
+              <div className="ha-statuts-base">
+                {STATUTS_BASE.map(s => (
+                  <button
+                    key={s.v}
+                    type="button"
+                    disabled={locked}
+                    className={'ha-check-btn' + (monStatut === s.v ? ' is-on' : '')}
+                    onClick={()=>setMonStatutBase(s.v)}
+                  >
+                    <span className="ha-check-mark">{monStatut === s.v ? '✓' : ''}</span>
+                    <span>{s.l}</span>
+                  </button>
+                ))}
+              </div>
+            </Section>
           )}
 
-          {etape === 'pec' && (
-            <>
-              <Section titre="Lieu de prise en charge"><Itineraire d={itin} only="pec" /></Section>
-              {itemsVis.pec.length > 0 && (
-                <Section titre="Checklist prise en charge">
-                  <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
-                </Section>
-              )}
-              {pecMedicalACharge && (
-                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
-              )}
-              {pecSansMedical && (
-                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Pas de checklist patient sur ce véhicule — équipage non médical.</p>
-              )}
-              {userMedical && vecteurMedical && complet && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
-              {userMedical && vecteurMedical && (
-                <Section titre="Matériel utilisé">
-                  <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
-                </Section>
-              )}
-            </>
+          <Section titre={etape === 'base_sur_place' ? 'Itinéraire du jour' : def.l}>
+            <Itineraire d={itin} compact={etape === 'base_sur_place'} only={etape === 'base_sur_place' ? undefined : def.itin} />
+          </Section>
+
+          {showPhotosDepart && (
+            <Section titre="Photos des 4 côtés — prise du véhicule">
+              <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
+              {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés sont demandés avant de quitter la base.</div>}
+            </Section>
           )}
 
-          {etape === 'retour_pec' && (
-            <>
-              <Section titre="Destination / retour"><Itineraire d={itin} only="retour" /></Section>
-              {itemsVis.retour_pec.length > 0 && (
-                <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'Checklist retour'}>
-                  <CheckBlock items={itemsVis.retour_pec} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
-                </Section>
-              )}
-              {pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
-                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Retour patient : à charge du médical de ce véhicule.</p>
-              )}
-              {userMedical && vecteurMedical && complet && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
-              {userMedical && vecteurMedical && (
-                <Section titre="Matériel utilisé">
-                  <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
-                </Section>
-              )}
-            </>
+          {def.checklist === 'base' && (
+            <Section titre="Checklist départ">
+              <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
+                checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
+              <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                <MiniNum l="KMs départ" v={vecteur.kms_depart} set={val=>saveKms({ kms_depart: val })} />
+                <MiniNum l="Essence %" v={vecteur.essence_pct} set={val=>saveKms({ essence_pct: val })} />
+              </div>
+            </Section>
           )}
 
-          {etape === 'retour_base' && (
+          {def.checklist === 'pec' && itemsVis.pec.length > 0 && (
+            <Section titre="Checklist prise en charge">
+              <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
+            </Section>
+          )}
+          {showPecNotes && pecMedicalACharge && (
+            <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
+          )}
+          {showPecNotes && pecSansMedical && (
+            <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Pas de checklist patient sur ce véhicule — équipage non médical.</p>
+          )}
+
+          {def.checklist === 'retour_pec' && itemsVis.retour_pec.length > 0 && (
+            <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'Checklist retour'}>
+              <CheckBlock items={itemsVis.retour_pec} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
+            </Section>
+          )}
+          {def.checklist === 'retour_pec' && pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
+            <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Retour patient : à charge du médical de ce véhicule.</p>
+          )}
+
+          {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
+          {showScanConso && !showCloture && (
+            <Section titre="Matériel utilisé">
+              <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
+            </Section>
+          )}
+
+          {showCloture && (
             <>
               <Section titre="Photos des 4 côtés — remise du véhicule">
                 <CoinPhotos
@@ -654,7 +623,7 @@ function itineraryFromMission(m) {
 
 function Itineraire({ d, compact, only }) {
   if (!d) return <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Trajet non renseigné.</div>
-  const show = k => !only || only === k || (only === 'retour' && (k === 'destination' || k === 'retour'))
+  const show = k => !only || only === k
   return (
     <div style={{ display:'flex', flexDirection:'column', gap: compact ? 8 : 12 }}>
       {show('base') && <Bloc titre="Base">

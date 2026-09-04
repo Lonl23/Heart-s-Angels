@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Card, Empty, Loading } from '@/components/ui'
+import { lblEtapeTerrain } from '@/modules/souhaits/missionSchema'
 
 const CARDS = [
   { to:'/app/missions',      key:'missions',      icon:'🚑', label:'Mes missions',   desc:'Terrain : checklists, démarrer, terminer' },
@@ -43,6 +44,7 @@ export default function Dashboard() {
                       <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>
                         {m.date_souhaitee ? new Date(m.date_souhaitee).toLocaleDateString('fr-BE') : 'Date à définir'}
                         {m.vehicule ? ` · ${m.vehicule}` : ''}
+                        {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>
                     </div>
                     <span style={{ color:'var(--accent)', fontWeight:600, fontSize:13 }}>Ouvrir ›</span>

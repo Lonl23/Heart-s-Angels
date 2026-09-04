@@ -149,4 +149,52 @@ export const STATUTS_BASE = [
 
 export const lblStatutBase = v => STATUTS_BASE.find(s => s.v === v)?.l || ''
 
+/** Parcours terrain d’un vecteur : un statut = où on est, le suivant = le bouton. */
+export const PARCOURS_TERRAIN = [
+  { id:'base_sur_place',   l:'Sur place base',            chip:'Sur place base',     lieu:'base',     itin:'base',         checklist:'base',        patient:false },
+  { id:'base_depart',      l:'Départ',                    chip:'Départ',             lieu:'base',     itin:'base',         checklist:'base',        patient:false },
+  { id:'pec_route',        l:'Prise en charge',           chip:'Prise en charge',    lieu:'pec',      itin:'pec',          checklist:null,          patient:false },
+  { id:'pec_sur_place',    l:'Sur place prise en charge', chip:'Sur place PEC',      lieu:'pec',      itin:'pec',          checklist:'pec',         patient:true },
+  { id:'pec_depart',       l:'Départ',                    chip:'Départ PEC',         lieu:'pec',      itin:'pec',          checklist:'pec',         patient:true },
+  { id:'dest_route',       l:'Destination',               chip:'Destination',        lieu:'dest',     itin:'destination',  checklist:null,          patient:true },
+  { id:'dest_sur_place',   l:'Sur place destination',     chip:'Sur place dest.',    lieu:'dest',     itin:'destination',  checklist:null,          patient:true },
+  { id:'dest_depart',      l:'Départ',                    chip:'Départ dest.',       lieu:'dest',     itin:'destination',  checklist:null,          patient:true },
+  { id:'retour_route',     l:'Retour',                    chip:'Retour',             lieu:'retour',   itin:'retour',       checklist:null,          patient:true },
+  { id:'retour_sur_place', l:'Sur place retour',          chip:'Sur place retour',   lieu:'retour',   itin:'retour',       checklist:'retour_pec',  patient:true },
+  { id:'retour_base',      l:'Retour base',               chip:'Retour base',        lieu:'base_fin', itin:'base',         checklist:null,          patient:false },
+  { id:'base_rentre',      l:'Rentré base',               chip:'Rentré base',        lieu:'base_fin', itin:'base',         checklist:'retour_base', patient:false },
+]
+
+const ETAPE_LEGACY = {
+  vehicule: 'base_sur_place',
+  pec: 'pec_sur_place',
+  retour_pec: 'dest_sur_place',
+  retour_base: 'retour_base',
+}
+
+export function normaliserEtape(etape) {
+  if (!etape) return 'base_sur_place'
+  if (ETAPE_LEGACY[etape]) return ETAPE_LEGACY[etape]
+  if (PARCOURS_TERRAIN.some(e => e.id === etape)) return etape
+  return 'base_sur_place'
+}
+
+export function etapeParId(etape) {
+  const id = normaliserEtape(etape)
+  return PARCOURS_TERRAIN.find(e => e.id === id) || PARCOURS_TERRAIN[0]
+}
+
+export function idxEtape(etape) {
+  return PARCOURS_TERRAIN.findIndex(e => e.id === normaliserEtape(etape))
+}
+
+export function etapeSuivante(etape) {
+  return PARCOURS_TERRAIN[idxEtape(etape) + 1] || null
+}
+
+export function lblEtapeTerrain(etape, vecteurStatut) {
+  if (vecteurStatut === 'realise') return 'Rentré base'
+  return etapeParId(etape).l
+}
+
 export const O2_LIGNES = ['B10','B10','B5','B5','B2']
