@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, Btn, TA, Pill, Tabs, Flash, StatutFlow, Loading } from '@/components/ui'
+import { Card, Btn, TA, Pill, Tabs, Flash, StatutFlow, Loading, fmtAdresse } from '@/components/ui'
+import { GenreIcon } from '@/modules/annuaire/genre'
+import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
 import { STATUTS, stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } from './Souhaits'
 import FormSouhait from './FormSouhait'
 import FicheMission from './FicheMission'
@@ -72,7 +74,10 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, flexWrap:'wrap', marginBottom:14 }}>
         <div>
           <Btn kind="soft" onClick={onBack}>← Tous les souhaits</Btn>
-          <h1 style={{ fontSize:'1.6rem', color:'var(--heading)', margin:'10px 0 4px' }}>{s.beneficiaire_prenom} {s.beneficiaire_nom}</h1>
+          <h1 style={{ fontSize:'1.6rem', color:'var(--heading)', margin:'10px 0 4px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+            {s.beneficiaire_genre && <GenreIcon genre={s.beneficiaire_genre} size={26} title={libelleGenre(s.beneficiaire_genre)} />}
+            {s.beneficiaire_prenom} {s.beneficiaire_nom}
+          </h1>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
             {s.date_souhaitee && <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{new Date(s.date_souhaitee).toLocaleDateString('fr-BE')}</span>}
@@ -151,11 +156,23 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
 function Resume({ s, souhaitId }) {
   const L = ({ k, v }) => v ? <div style={{ marginBottom:8 }}><div style={{ fontSize:12, color:'var(--text-muted)' }}>{k}</div><div style={{ fontSize:13.5, color:'var(--text)', whiteSpace:'pre-wrap' }}>{v}</div></div> : null
+  const tels = fmtTelephones({ tel_gsm: s.beneficiaire_tel_gsm, tel_fixe: s.beneficiaire_tel_fixe })
+  const adr = fmtAdresse(s.beneficiaire_adresse)
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <Card>
         <L k="Bénéficiaire" v={`${s.beneficiaire_prenom||''} ${s.beneficiaire_nom||''}`.trim()} />
+        {s.beneficiaire_genre && (
+          <div style={{ marginBottom:8, display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ fontSize:12, color:'var(--text-muted)' }}>Genre</div>
+            <GenreIcon genre={s.beneficiaire_genre} title={libelleGenre(s.beneficiaire_genre)} />
+            <span style={{ fontSize:13.5 }}>{libelleGenre(s.beneficiaire_genre)}</span>
+          </div>
+        )}
         {s.beneficiaire_ddn && <L k="Né(e) le" v={new Date(s.beneficiaire_ddn).toLocaleDateString('fr-BE')} />}
+        {s.beneficiaire_niss && <L k="Numéro national" v={formaterNiss(s.beneficiaire_niss)} />}
+        {tels && <L k="Téléphone" v={tels} />}
+        {adr && <L k="Adresse légale" v={adr} />}
         {s.beneficiaire_contact && <L k="Contact / famille" v={s.beneficiaire_contact} />}
         <L k="Souhait" v={s.description} />
         <L k="Lieu" v={s.localisation} />

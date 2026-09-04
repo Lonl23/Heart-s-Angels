@@ -11,7 +11,7 @@ const CARDS = [
   { to:'/app/defraiements',  key:'defraiements',  icon:'🧾', label:'Défraiements',   desc:'Frais, validation, paiement' },
   { to:'/app/disponibilites',key:'disponibilites',icon:'📅', label:'Disponibilités', desc:'Agenda : vos jours et les missions (sans nom de patient)' },
   { to:'/app/stock',         key:'stock',         icon:'📦', label:'Stock',          desc:'Matériel et mouvements' },
-  { to:'/app/annuaire',      key:'annuaire',      icon:'📇', label:'Annuaire',       desc:'Contacts et institutions' },
+  { to:'/app/annuaire',      key:'annuaire',      icon:'📇', label:'Annuaire',       desc:'Bénéficiaires, contacts rattachés, institutions' },
 ]
 
 export default function Dashboard() {

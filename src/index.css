@@ -303,6 +303,19 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 4px 16px rgba(0,0,0,.12); pointer-events: none; white-space: nowrap;
 }
 
+.ha-genre-picker { margin-bottom: 10px; }
+.ha-genre-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ha-genre-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 12px; min-height: 42px; border-radius: 10px;
+  border: 1.5px solid var(--border); background: var(--surface);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.ha-genre-btn svg { width: 22px; height: 22px; max-width: none; flex-shrink: 0; display: block; }
+.ha-genre-btn.is-on { box-shadow: 0 0 0 3px var(--ring); }
+.ha-genre-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; }
+.ha-genre-icon svg { width: 100%; height: 100%; max-width: none; display: block; }
+
 /* ── Anti-débordement / mobile PWA ─────────────────────────────────────────── */
 html, body, #root { width: 100%; max-width: 100%; }
 #root { overflow-x: hidden; }              /* rien ne dépasse la largeur de l'écran */
@@ -488,7 +501,6 @@ img, svg, video, table { max-width: 100%; }
   background: none; border: none; color: #C8435A; font-size: 12.5px; font-weight: 600;
   cursor: pointer; padding: 0; text-align: left;
 }
-
 .ha-scan-dock {
   position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 80;
   background: var(--card); color: var(--text);

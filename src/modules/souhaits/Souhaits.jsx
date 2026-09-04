@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
+import { upsertBeneficiaire, upsertContactRattache } from '@/modules/annuaire/annuaireApi'
 
 export const STATUTS = {
   nouveau:     { l:'Nouveau',        c:'#7A5AF8', bg:'#EEE9FE' },
@@ -274,15 +275,48 @@ function Demandes({ onOpen }) {
   }
   async function refuser(d) { if (!confirm('Refuser cette demande ? Elle disparaîtra de la liste active.')) return; await supabase.from('demandes_souhaits').update({ statut:'refusee' }).eq('id', d.id); load() }
   async function accepter(d) {
+    let annuaireId = null
+    try {
+      annuaireId = await upsertBeneficiaire({
+        nom: d.patient_nom,
+        prenom: d.patient_prenom,
+        date_naissance: d.patient_ddn,
+        genre: d.patient_genre,
+        tel_gsm: d.patient_tel_gsm,
+        tel_fixe: d.patient_tel_fixe,
+        adresse: d.patient_adresse,
+        telephone: d.patient_tel_gsm || d.patient_tel_fixe,
+      }, { created_by: profile?.id })
+      if (annuaireId && (d.contact_prenom || d.contact_nom)) {
+        await upsertContactRattache(annuaireId, {
+          prenom: d.contact_prenom,
+          nom: d.contact_nom,
+          lien: d.contact_relation,
+          date_naissance: d.contact_ddn,
+          tel_gsm: d.contact_telephone,
+          tel_fixe: d.contact_tel_fixe,
+          adresse: d.contact_adresse,
+          email: d.contact_email,
+        }, { created_by: profile?.id })
+      }
+    } catch (e) {
+      alert('Annuaire : ' + (e.message || e))
+      return
+    }
     const { data: s, error } = await supabase.from('souhaits').insert({
-      beneficiaire_nom:d.patient_nom, beneficiaire_prenom:d.patient_prenom, beneficiaire_ddn:d.patient_ddn||null,
-      beneficiaire_contact:`${d.contact_prenom||''} ${d.contact_nom||''} ${d.contact_telephone||d.contact_email||''}`.trim(),
-      description:d.souhait_description, localisation:d.souhait_lieu, besoins_specifiques:d.equipement_medical,
-      notes_medicales:[d.mobilite&&`Mobilité: ${d.mobilite}`, d.allergies&&`Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
-      date_souhaitee:d.souhait_date||null, statut: 'nouveau', created_by:profile?.id,
+      beneficiaire_nom: d.patient_nom, beneficiaire_prenom: d.patient_prenom, beneficiaire_ddn: d.patient_ddn || null,
+      beneficiaire_contact: `${d.contact_prenom || ''} ${d.contact_nom || ''} ${d.contact_telephone || d.contact_email || ''}`.trim(),
+      beneficiaire_annuaire_id: annuaireId,
+      beneficiaire_genre: d.patient_genre || null,
+      beneficiaire_tel_gsm: d.patient_tel_gsm || null,
+      beneficiaire_tel_fixe: d.patient_tel_fixe || null,
+      beneficiaire_adresse: d.patient_adresse || null,
+      description: d.souhait_description, localisation: d.souhait_lieu, besoins_specifiques: d.equipement_medical,
+      notes_medicales: [d.mobilite && `Mobilité: ${d.mobilite}`, d.allergies && `Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
+      date_souhaitee: d.souhait_date || null, statut: 'nouveau', created_by: profile?.id,
     }).select().single()
     if (error) { alert('Erreur : ' + error.message); return }
-    await supabase.from('demandes_souhaits').update({ statut:'acceptee', souhait_id:s.id }).eq('id', d.id)
+    await supabase.from('demandes_souhaits').update({ statut: 'acceptee', souhait_id: s.id }).eq('id', d.id)
     onOpen(s.id)
   }
 
