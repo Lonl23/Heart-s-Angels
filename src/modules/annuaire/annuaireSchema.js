@@ -27,8 +27,8 @@ export const CATEGORIES = [
   { v:'institution', l:'Institutions médicales', icon:'🏥', titre:'Institution médicale', fields:[
     { k:'nom', l:'Nom', t:'text' },
     { k:'type_institution', l:'Type', t:'select', options:['','Hôpital','MR / MRS','Clinique','Centre de soins','Domicile','Autre'] },
-    { k:'telephone', l:'Téléphone', t:'phone' },
-    { k:'email', l:'E-mail', t:'text' },
+    { k:'telephone', l:'Numéro général', t:'phone' },
+    { k:'email', l:'E-mail général', t:'text' },
     { k:'adresse', l:'Adresse', t:'address' },
     { k:'notes', l:'Notes', t:'textarea' },
   ]},
@@ -36,8 +36,8 @@ export const CATEGORIES = [
     { k:'nom', l:'Nom / organisation', t:'text' },
     { k:'domaine', l:'Domaine', t:'text' },
     { k:'contact_personne', l:'Personne de contact', t:'text' },
-    { k:'telephone', l:'Téléphone', t:'phone' },
-    { k:'email', l:'E-mail', t:'text' },
+    { k:'telephone', l:'Numéro général', t:'phone' },
+    { k:'email', l:'E-mail général', t:'text' },
     { k:'adresse', l:'Adresse', t:'address' },
     { k:'notes', l:'Notes', t:'textarea' },
   ]},
@@ -50,6 +50,15 @@ export const CATEGORIES = [
     { k:'adresse', l:'Adresse', t:'address' },
     { k:'notes', l:'Notes', t:'textarea' },
   ]},
+]
+
+export const POINT_CONTACT_FIELDS = [
+  { k:'prenom', l:'Prénom', t:'text' },
+  { k:'nom', l:'Nom', t:'text' },
+  { k:'fonction', l:'Fonction', t:'text', placeholder: 'Infirmier chef, assistante sociale…' },
+  { k:'tel_gsm', l:'GSM', t:'phone' },
+  { k:'tel_fixe', l:'Fixe', t:'phone' },
+  { k:'email', l:'E-mail', t:'text' },
 ]
 
 export const ACCOMPAGNANT_FIELDS = [

@@ -314,6 +314,8 @@ function Demandes({ onOpen }) {
       description: d.souhait_description, localisation: d.souhait_lieu, besoins_specifiques: d.equipement_medical,
       notes_medicales: [d.mobilite && `Mobilité: ${d.mobilite}`, d.allergies && `Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
       date_souhaitee: d.souhait_date || null, statut: 'nouveau', created_by: profile?.id,
+      origine: (d.partenaire_id || d.source === 'partenaire') ? 'institution' : 'prive',
+      partenaire_id: d.partenaire_id || null,
     }).select().single()
     if (error) { alert('Erreur : ' + error.message); return }
     await supabase.from('demandes_souhaits').update({ statut: 'acceptee', souhait_id: s.id }).eq('id', d.id)

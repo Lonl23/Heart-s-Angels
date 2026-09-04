@@ -34,6 +34,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [err, setErr] = useState(null)
   const [etape, setEtape] = useState('a_la_base')
   const [annot, setAnnot] = useState(null)
+  const [appel, setAppel] = useState(null)
 
   useEffect(() => { load() }, [souhaitId, complet, user?.id])
   useEffect(() => { window.scrollTo(0, 0) }, [etape])
@@ -73,6 +74,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
         }
         setMeds(all)
       }
+      const { data: ap } = await supabase.rpc('coordonnees_appel', { p_souhait: souhaitId })
+      setAppel(ap?.ok ? ap : null)
     } else {
       setAff(me)
       const { data, error } = await supabase.rpc('ma_mission', { p_souhait: souhaitId })
@@ -90,6 +93,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
         description: data.description,
         date_souhaitee: data.date_souhaitee,
       })
+      setAppel({ tel: data.tel_a_appeler, libelle: data.tel_a_appeler_libelle, ok: !!data.tel_a_appeler })
       setEtape(etapeDefaut(data.etape_terrain, data.vecteur_statut))
     }
     setLoading(false)
@@ -420,6 +424,12 @@ export default function MissionExecution({ souhaitId, onBack }) {
             {titre || 'Mission'}
             {roleAff ? ` · ${lblRoleMission(roleAff) || roleAff}` : ''}
           </p>
+          {appel?.tel && (
+            <p style={{ fontSize: 14.5, margin: '2px 0 10px' }}>
+              <a href={`tel:${String(appel.tel).replace(/\s/g, '')}`} style={{ color: 'var(--accent)', fontWeight: 700, textDecoration: 'none' }}>📞 {appel.tel}</a>
+              {appel.libelle && <span style={{ color: 'var(--text-muted)', fontSize: 12.5 }}> · {appel.libelle}</span>}
+            </p>
+          )}
         </>
       )}
       {!vecteur && (

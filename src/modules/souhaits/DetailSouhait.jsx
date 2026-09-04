@@ -155,12 +155,26 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 }
 
 function Resume({ s, souhaitId }) {
+  const [extNom, setExtNom] = useState('')
+  const [appel, setAppel] = useState(null)
+  useEffect(() => {
+    supabase.rpc('coordonnees_appel', { p_souhait: souhaitId }).then(({ data }) => setAppel(data?.ok ? data : null))
+    if (s.annuaire_externe_id) {
+      supabase.from('annuaire').select('nom').eq('id', s.annuaire_externe_id).maybeSingle()
+        .then(({ data }) => { if (data?.nom) setExtNom(data.nom) })
+    } else if (s.partenaire_id) {
+      supabase.from('partenaires').select('nom').eq('id', s.partenaire_id).maybeSingle()
+        .then(({ data }) => { if (data?.nom) setExtNom(data.nom) })
+    }
+  }, [souhaitId, s.annuaire_externe_id, s.partenaire_id])
   const L = ({ k, v }) => v ? <div style={{ marginBottom:8 }}><div style={{ fontSize:12, color:'var(--text-muted)' }}>{k}</div><div style={{ fontSize:13.5, color:'var(--text)', whiteSpace:'pre-wrap' }}>{v}</div></div> : null
   const tels = fmtTelephones({ tel_gsm: s.beneficiaire_tel_gsm, tel_fixe: s.beneficiaire_tel_fixe })
   const adr = fmtAdresse(s.beneficiaire_adresse)
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <Card>
+        <L k="Origine" v={s.origine === 'institution' ? `Institution${extNom ? ` · ${extNom}` : ''}` : 'Demande privée'} />
+        {appel?.tel && <L k="N° à appeler" v={`${appel.tel}${appel.libelle ? ` (${appel.libelle})` : ''}`} />}
         <L k="Bénéficiaire" v={`${s.beneficiaire_prenom||''} ${s.beneficiaire_nom||''}`.trim()} />
         {s.beneficiaire_genre && (
           <div style={{ marginBottom:8, display:'flex', alignItems:'center', gap:8 }}>

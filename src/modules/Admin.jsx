@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Page, Card, Btn, F, Sel, Pill } from '@/components/ui'
+import { Page, Card, Btn, F, Sel, Pill, PhoneF } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
 import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
 import { ACCES, TYPES_BENEVOLE } from '@/modules/acces/accesSchema'
@@ -153,15 +153,34 @@ function Partenaires() {
   const orgNom = id => orgs.find(o => o.id === id)?.nom || '—'
 
   async function saveOrg(f) {
-    const p = { nom:f.nom, type:f.type||null, ville:f.ville||null, contact_nom:f.contact_nom||null, contact_email:f.contact_email||null, contact_tel:f.contact_tel||null }
+    const p = {
+      nom: f.nom,
+      type: f.type || null,
+      ville: f.ville || null,
+      contact_nom: f.contact_nom || null,
+      contact_email: f.email_general || f.contact_email || null,
+      contact_tel: f.tel_general || f.contact_tel || null,
+      email_general: f.email_general || f.contact_email || null,
+      tel_general: f.tel_general || f.contact_tel || null,
+    }
     if (f.id) await supabase.from('partenaires').update(p).eq('id', f.id)
     else await supabase.from('partenaires').insert(p)
     setOrgForm(null); load()
   }
   async function inviter(f) {
     if (!f.partenaire_id) { flash('Choisissez une organisation.', false); return }
+    const org = orgs.find(o => o.id === f.partenaire_id)
+    const email = (f.email || org?.email_general || org?.contact_email || '').trim()
+    if (!email) { flash('Indiquez l’e-mail général de l’institution.', false); return }
     const code = genCode()
-    const { error } = await supabase.from('invitations').insert({ code, email:f.email.trim(), prenom:f.prenom, nom:f.nom, role:'partenaire', partenaire_id:f.partenaire_id })
+    const { error } = await supabase.from('invitations').insert({
+      code,
+      email,
+      prenom: f.prenom || org?.nom || 'Institution',
+      nom: f.nom || org?.nom || '',
+      role: 'partenaire',
+      partenaire_id: f.partenaire_id,
+    })
     if (error) { flash(error.message, false); return }
     setCptForm(null); setLastCode(code); load()
   }
@@ -246,7 +265,7 @@ function FormInvit({ form, setForm, onSave, roles, orgs }) {
         <F label="Prénom" value={form.prenom} set={v=>set('prenom',v)} required />
         <F label="Nom" value={form.nom} set={v=>set('nom',v)} required />
       </div>
-      <F label="E-mail (identifiant de connexion)" type="email" value={form.email} set={v=>set('email',v)} required />
+      <F label="E-mail (identifiant de connexion — e-mail général de l’institution)" type="email" value={form.email} set={v=>set('email',v)} required />
       {roles && <Sel label="Rôle" value={form.role} set={v=>set('role',v)} options={roles.map(r=>({v:r,l:r}))} />}
       {orgs && <Sel label="Organisation" value={form.partenaire_id||''} set={v=>set('partenaire_id',v)} options={[{v:'',l:'— Choisir —'}, ...orgs.map(o=>({v:o.id,l:o.nom}))]} />}
       {err && <div style={{ color:'#C8435A', fontSize:13, marginBottom:8 }}>{err}</div>}
@@ -272,9 +291,9 @@ function FormOrg({ form, setForm, onSave }) {
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <F label="Contact (nom)" value={form.contact_nom} set={v=>set('contact_nom',v)} />
-        <F label="Contact (tél.)" value={form.contact_tel} set={v=>set('contact_tel',v)} />
+        <PhoneF label="Numéro général" value={form.tel_general || form.contact_tel} set={v=>set('tel_general',v)} />
       </div>
-      <F label="Contact (e-mail)" value={form.contact_email} set={v=>set('contact_email',v)} />
+      <F label="E-mail général (identifiant de connexion)" type="email" value={form.email_general || form.contact_email} set={v=>set('email_general',v)} />
       <Btn onClick={go} disabled={busy} style={{ width:'100%' }}>{busy?'…':'✓ Enregistrer'}</Btn>
     </Card>
   )

@@ -12,11 +12,14 @@ export default function FicheMission({ souhaitId, onClose }) {
   const [s, setS] = useState(null)
   const [meds, setMeds] = useState([])
   const [equipe, setEquipe] = useState([])
+  const [appel, setAppel] = useState(null)
   const ficheRef = useRef(null)
 
   useEffect(() => { (async () => {
     const { data: so } = await supabase.from('souhaits').select('*').eq('id', souhaitId).single()
     setS(so)
+    const { data: ap } = await supabase.rpc('coordonnees_appel', { p_souhait: souhaitId })
+    setAppel(ap?.ok ? ap : null)
     const { data: ints } = await supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId)
     let all = ints || []
     const { data: dem } = await supabase.from('demandes_souhaits').select('id').eq('souhait_id', souhaitId).limit(1)
@@ -59,7 +62,7 @@ export default function FicheMission({ souhaitId, onClose }) {
       <div className="fiche" ref={ficheRef}>
         {fiches.map((f, idx) => {
           const med = f.v ? f.crew.some(c => personneEstMedicale(c)) : true
-          return <FicheVecteur key={idx} s={s} m={m} f={f} med={med} meds={meds} total={fiches.length} first={idx===0} />
+          return <FicheVecteur key={idx} s={s} m={m} f={f} med={med} meds={meds} total={fiches.length} first={idx===0} appel={appel} />
         })}
       </div>
 
@@ -68,7 +71,7 @@ export default function FicheMission({ souhaitId, onClose }) {
   )
 }
 
-function FicheVecteur({ s, m, f, med, meds, total, first }) {
+function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
   const v = f.v
   const pecAdr = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
   const vecteurLabel = v ? `Vecteur ${f.i + 1} — ${v.nom || '—'}${v.type_transport ? ` · ${v.type_transport}` : ''}${v.plaque ? ` · ${v.plaque}` : ''}` : 'Toutes affectations'
@@ -80,7 +83,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
       <div className="page recto">
         <Wm />
         <div className="content">
-          <Masthead s={s} face="RECTO" vecteurLabel={vecteurLabel} med={med} />
+          <Masthead s={s} face="RECTO" vecteurLabel={vecteurLabel} med={med} appel={appel} />
           <Sec t="Administratif">
             <Fld l="Registre national" v={m.registre_national} />
             <Fld l="Récolteur de souhait" v={m.recolteur} />
@@ -131,7 +134,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
       <div className="page">
         <Wm />
         <div className="content">
-          <Masthead s={s} face="VERSO" vecteurLabel={vecteurLabel} med={med} />
+          <Masthead s={s} face="VERSO" vecteurLabel={vecteurLabel} med={med} appel={appel} />
 
           {med && (
             <>
@@ -205,13 +208,14 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
   )
 }
 
-function Masthead({ s, face, vecteurLabel, med }) {
+function Masthead({ s, face, vecteurLabel, med, appel }) {
   return (
     <div className="masthead">
       <div>
         <div className="kicker">Heart's Angels · Fiche de mission</div>
         <div className="name">{s.beneficiaire_prenom} {s.beneficiaire_nom}{s.beneficiaire_ddn && <small> — né(e) le {d(s.beneficiaire_ddn)}</small>}</div>
         {s.description && <div className="wish">« {s.description} »</div>}
+        {appel?.tel && <div className="vlabel">📞 {appel.tel}{appel.libelle ? ` · ${appel.libelle}` : ''}</div>}
         <div className="vlabel">{vecteurLabel} · {med ? 'équipage médical' : 'équipage non médical'}</div>
       </div>
       <div className="badge"><span className="face">{face}</span>{s.date_souhaitee && <div className="date">🗓 {d(s.date_souhaitee)}</div>}</div>

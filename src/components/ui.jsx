@@ -114,38 +114,71 @@ export function Loading({ text='Chargement…' }) {
   return <p style={{ color:'var(--text-muted)', padding:'8px 0' }}>{text}</p>
 }
 
-// Formate un numéro : +indicatif puis groupé xxx.xx.xx.xx
-export function formatPhone(raw) {
-  if (!raw) return ''
-  let s = String(raw).trim().replace(/[^\d+]/g, '')
-  let cc = '', rest = s
-  if (s.startsWith('+')) {
-    const digits = s.slice(1)
-    const three = ['352','377','378','379','380','381','382','383','385','386','387','389','420','421','423','350','356','357']
-    const one = ['1','7']
-    let n = 2
-    if (three.includes(digits.slice(0,3))) n = 3
-    else if (one.includes(digits.slice(0,1))) n = 1
-    cc = '+' + digits.slice(0, n); rest = digits.slice(n)
-  } else if (s.startsWith('00')) {
-    return formatPhone('+' + s.slice(2))
-  }
-  const groups = []
-  if (rest.length) { groups.push(rest.slice(0,3)); let r = rest.slice(3); while (r.length) { groups.push(r.slice(0,2)); r = r.slice(2) } }
-  const nat = groups.join('.')
-  return cc ? `${cc} ${nat}`.trim() : nat
+// Formats belges autorisés : +32 xxx.xx.xx.xx (9 chiffres, GSM) ou +32 xx.xx.xx.xx (8 chiffres, fixe).
+export const PHONE_AIDE = 'Formats : +32 xxx.xx.xx.xx (GSM) ou +32 xx.xx.xx.xx (fixe)'
+
+export function digitsPhoneBE(raw) {
+  let s = String(raw || '').replace(/\D/g, '')
+  if (s.startsWith('00')) s = s.slice(2)
+  if (s.startsWith('32')) s = s.slice(2)
+  if (s.startsWith('0')) s = s.slice(1)
+  return s
 }
 
-export function PhoneF({ label, value, set, required, placeholder='+32 477.07.11.34' }) {
+export function formatPhone(raw) {
+  if (!raw || !String(raw).trim()) return ''
+  const d = digitsPhoneBE(raw)
+  if (!d) return ''
+  const grouper = (head, rest) => {
+    const parts = head ? [head] : []
+    for (let i = 0; i < rest.length; i += 2) parts.push(rest.slice(i, i + 2))
+    return `+32 ${parts.filter(Boolean).join('.')}`
+  }
+  if (d.length >= 9) return grouper(d.slice(0, 3), d.slice(3, 9))
+  if (d.length === 8) return grouper(d.slice(0, 2), d.slice(2, 8))
+  if (d[0] === '4' && d.length > 2) return grouper(d.slice(0, 3), d.slice(3))
+  return grouper('', d)
+}
+
+export function phoneValide(raw) {
+  if (!raw || !String(raw).trim()) return true
+  const d = digitsPhoneBE(raw)
+  return d.length === 8 || d.length === 9
+}
+
+export function PhoneF({ label, value, set, required, placeholder = '+32 477.07.11.34' }) {
   const [v, setV] = useState(value ?? '')
+  const [err, setErr] = useState(false)
   useEffect(() => { setV(value ?? '') }, [value])
+  function commit() {
+    const f = formatPhone(v)
+    setV(f)
+    set(f)
+    setErr(!!f && !phoneValide(f))
+  }
   return (
-    <div style={{ marginBottom:10 }}>
+    <div style={{ marginBottom: 10 }}>
       <label style={lbl}>{label}{required && ' *'}</label>
       <input type="tel" value={v} placeholder={placeholder}
-        onChange={e=>setV(e.target.value)}
-        onBlur={()=>{ const f = formatPhone(v); setV(f); set(f) }}
-        style={inp} />
+        onChange={e => { setV(e.target.value); setErr(false) }}
+        onBlur={commit}
+        style={{ ...inp, borderColor: err ? '#C8435A' : undefined }} />
+      <div style={{ fontSize: 11.5, color: err ? '#C8435A' : 'var(--text-faint)', marginTop: 3 }}>{PHONE_AIDE}</div>
+    </div>
+  )
+}
+
+export function Modal({ title, onClose, children, footer, wide }) {
+  return (
+    <div className="ha-modal-scrim" onClick={onClose} role="presentation">
+      <div className={'ha-modal' + (wide ? ' is-wide' : '')} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="ha-modal-head">
+          <div className="ha-modal-title">{title}</div>
+          <button type="button" className="ha-modal-x" onClick={onClose} aria-label="Fermer">✕</button>
+        </div>
+        <div className="ha-modal-body">{children}</div>
+        {footer && <div className="ha-modal-foot">{footer}</div>}
+      </div>
     </div>
   )
 }

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, TA, Sel, PhoneF, AddressFields, fmtAdresse, lbl, Empty } from '@/components/ui'
-import { CATEGORIES, ACCOMPAGNANT_FIELDS, catInfo, emptyToNull, normaliserNiss, fmtTelephones, formaterNiss } from './annuaireSchema'
+import { CATEGORIES, ACCOMPAGNANT_FIELDS, POINT_CONTACT_FIELDS, catInfo, emptyToNull, normaliserNiss, fmtTelephones, formaterNiss } from './annuaireSchema'
 import { GenrePicker, GenreIcon, NissF } from './genre'
+import { assurerPartenaireDepuisAnnuaire, upsertPointContact } from './annuaireApi'
+import { genCodeInvitation } from '@/lib/motDePasse'
 
 const COLS = ['nom', 'prenom', 'beneficiaire_id', 'institution_id', 'niss', 'tel_gsm', 'tel_fixe', 'genre', 'date_naissance', 'lien', 'telephone']
 
@@ -192,14 +194,22 @@ function FicheContact({ cat, form, setForm, institutions, onDone }) {
     const rec = toRecord(cat, form)
     if (form.id) {
       const { error } = await supabase.from('annuaire').update(rec).eq('id', form.id)
+      if (error) { setSaving(false); setErr(error.message); return }
+      if (cat === 'institution' || cat === 'externe_souhait') {
+        const { data: row } = await supabase.from('annuaire').select('*').eq('id', form.id).single()
+        try { await assurerPartenaireDepuisAnnuaire(row) } catch (e) { setSaving(false); setErr(e.message); return }
+      }
       setSaving(false)
-      if (error) { setErr(error.message); return }
       onDone()
       return
     }
     const { data, error } = await supabase.from('annuaire').insert({ ...rec, created_by: profile?.id }).select('id').single()
+    if (error) { setSaving(false); setErr(error.message); return }
+    if ((cat === 'institution' || cat === 'externe_souhait') && data?.id) {
+      const { data: row } = await supabase.from('annuaire').select('*').eq('id', data.id).single()
+      try { await assurerPartenaireDepuisAnnuaire(row) } catch (e) { /* org created later */ }
+    }
     setSaving(false)
-    if (error) { setErr(error.message); return }
     if (cat === 'beneficiaire' && data?.id) {
       setForm(s => ({ ...s, id: data.id }))
       return
@@ -222,6 +232,16 @@ function FicheContact({ cat, form, setForm, institutions, onDone }) {
       )}
       {cat === 'beneficiaire' && !form.id && (
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Enregistrez d’abord le bénéficiaire pour y rattacher des contacts.</div>
+      )}
+      {(cat === 'institution' || cat === 'externe_souhait') && form.id && (
+        <>
+          <Card style={{ marginBottom: 14 }}>
+            <PointsDeContact institutionId={form.id} />
+          </Card>
+          <Card>
+            <AccesInstitution form={form} />
+          </Card>
+        </>
       )}
     </Page>
   )
@@ -305,6 +325,122 @@ function Accompagnants({ beneficiaireId, compact }) {
         })}
         {rows.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aucun contact rattaché.</div>}
       </div>
+    </div>
+  )
+}
+
+function PointsDeContact({ institutionId }) {
+  const { profile } = useAuth()
+  const [rows, setRows] = useState([])
+  const [form, setForm] = useState(null)
+  useEffect(() => { load() }, [institutionId])
+  async function load() {
+    const { data } = await supabase.from('annuaire').select('*')
+      .eq('institution_id', institutionId)
+      .in('categorie', ['point_contact', 'medical'])
+      .order('nom')
+    setRows(data || [])
+  }
+  async function save() {
+    try {
+      await upsertPointContact(institutionId, {
+        ...form,
+        fonction: form.fonction || form.lien,
+        telephone: form.tel_gsm || form.tel_fixe || form.telephone,
+      }, { created_by: profile?.id })
+      setForm(null)
+      load()
+    } catch (e) { alert(e.message || e) }
+  }
+  async function suppr(r) {
+    if (!confirm('Retirer ce point de contact ?')) return
+    await supabase.from('annuaire').delete().eq('id', r.id)
+    load()
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 600, color: 'var(--heading)' }}>Points de contact</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Infirmier chef, assistante sociale, autre membre de l’institution.</div>
+        </div>
+        <Btn kind="soft" onClick={() => setForm({})}>+ Point de contact</Btn>
+      </div>
+      {form && (
+        <Card style={{ marginBottom: 10, background: 'var(--bg-alt)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '0 14px' }}>
+            {POINT_CONTACT_FIELDS.map(f => <Champ key={f.k} f={f} val={form[f.k]} set={v => setForm(s => ({ ...s, [f.k]: v }))} institutions={[]} />)}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}><Btn onClick={save}>✓ Enregistrer</Btn><Btn kind="soft" onClick={() => setForm(null)}>Annuler</Btn></div>
+        </Card>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {rows.map(r => {
+          const d = r.data || {}
+          const tels = fmtTelephones(r, d)
+          return (
+            <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px' }}>
+              <div style={{ fontSize: 13.5 }}>
+                <div>{r.prenom} {r.nom} {(r.lien || d.fonction) && <span style={{ color: 'var(--text-muted)' }}>— {r.lien || d.fonction}</span>}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{tels}{tels && d.email ? ' · ' : ''}{d.email}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button type="button" onClick={() => setForm({ ...toForm(r), fonction: r.lien || d.fonction || '' })} style={miniBtn}>✎</button>
+                <button type="button" onClick={() => suppr(r)} style={{ ...miniBtn, color: '#C8435A' }}>✕</button>
+              </div>
+            </div>
+          )
+        })}
+        {rows.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aucun point de contact.</div>}
+      </div>
+    </div>
+  )
+}
+
+function AccesInstitution({ form }) {
+  const { profile } = useAuth()
+  const [code, setCode] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const email = (form.email || '').trim()
+  async function generer() {
+    if (!email) { setErr('Renseignez d’abord l’e-mail général, puis enregistrez la fiche.'); return }
+    setBusy(true); setErr(null)
+    try {
+      const { data: row } = await supabase.from('annuaire').select('*').eq('id', form.id).single()
+      const partenaireId = await assurerPartenaireDepuisAnnuaire(row)
+      const nouveau = genCodeInvitation()
+      const { error } = await supabase.from('invitations').insert({
+        code: nouveau,
+        email,
+        prenom: form.contact_personne || form.nom || 'Institution',
+        nom: form.nom || '',
+        role: 'partenaire',
+        partenaire_id: partenaireId,
+        cree_par: profile?.id,
+      })
+      if (error) { setErr(error.message); setBusy(false); return }
+      setCode(nouveau)
+    } catch (e) { setErr(e.message || String(e)) }
+    setBusy(false)
+  }
+  return (
+    <div>
+      <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 6 }}>Espace institution</div>
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+        Connexion avec l’e-mail général et un mot de passe (10 caractères, majuscule, minuscule, chiffre, caractère spécial), ou avec un code généré ici.
+      </p>
+      {email ? <div style={{ fontSize: 13, marginBottom: 10 }}>E-mail de connexion : <strong>{email}</strong></div>
+        : <div style={{ fontSize: 13, color: '#BA7517', marginBottom: 10 }}>Ajoutez un e-mail général pour ouvrir l’espace.</div>}
+      <Btn onClick={generer} disabled={busy || !email}>{busy ? '…' : 'Générer un code d’accès'}</Btn>
+      {err && <div style={{ color: '#C8435A', fontSize: 13, marginTop: 8 }}>{err}</div>}
+      {code && (
+        <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-alt)', borderRadius: 10 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Code à transmettre (valable 7 jours) :</div>
+          <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 18, letterSpacing: 1, color: 'var(--accent-blue)' }}>{code}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>L’institution s’inscrit via « J’ai un code d’invitation » avec l’e-mail général.</div>
+        </div>
+      )}
     </div>
   )
 }

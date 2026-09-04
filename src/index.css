@@ -517,6 +517,44 @@ img, svg, video, table { max-width: 100%; }
   .ha-stock-recv-lot { grid-template-columns: 1fr !important; }
 }
 
+.ha-modal-scrim {
+  position: fixed; inset: 0; z-index: 90; background: var(--overlay);
+  display: flex; align-items: flex-end; justify-content: center; padding: 12px;
+}
+.ha-modal {
+  background: var(--card); border-radius: 16px 16px 12px 12px;
+  padding: 0; width: min(560px, 100%); max-height: 92vh;
+  display: flex; flex-direction: column; box-shadow: 0 16px 48px rgba(20,18,16,.28);
+}
+.ha-modal.is-wide { width: min(680px, 100%); }
+.ha-modal-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
+}
+.ha-modal-title { font-weight: 700; color: var(--heading); font-size: 1.05rem; }
+.ha-modal-x {
+  background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px;
+  width: 32px; height: 32px; cursor: pointer; color: var(--text-2); font-size: 15px;
+}
+.ha-modal-body { padding: 14px 16px; overflow: auto; }
+.ha-modal-foot {
+  display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px 14px;
+  border-top: 1px solid var(--border);
+}
+.ha-pick-row {
+  display: block; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 6px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  cursor: pointer; color: inherit; font: inherit;
+}
+.ha-pick-row:hover, .ha-pick-row:focus { border-color: var(--accent); background: var(--bg-alt); }
+.ha-chip-sum {
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--bg-alt);
+}
+@media (min-width: 700px) {
+  .ha-modal-scrim { align-items: center; }
+  .ha-modal { border-radius: 16px; }
+}
+
 .ha-scan-dock {
   position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 80;
   background: var(--card); color: var(--text);
