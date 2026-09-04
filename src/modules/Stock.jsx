@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Tabs, Pill, Empty, Loading, Flash, inp } from '@/components/ui'
@@ -9,6 +9,7 @@ import { PhotoArticle, PhotoArticleChamp } from './stock/photoStock'
 import OngletMouvements from './stock/OngletMouvements'
 import OngletFournisseurs from './stock/OngletFournisseurs'
 import OngletAlertes from './stock/OngletAlertes'
+import { exporterStockExcel, lireInventaireExcel, resumeImport } from './stock/excelStock'
 
 export default function Stock() {
   const { peutGererStock } = useAuth()
@@ -27,6 +28,9 @@ export default function Stock() {
   const [recv, setRecv] = useState(null)
   const [xfer, setXfer] = useState(null)
   const [sortie, setSortie] = useState(null)
+  const [excelBusy, setExcelBusy] = useState(false)
+  const [apercu, setApercu] = useState(null)
+  const fileRef = useRef()
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -52,6 +56,55 @@ export default function Stock() {
     setLoading(false)
   }
   function ok(msg) { setFlash(msg); setErr(null); setTimeout(() => setFlash(null), 2500) }
+
+  async function exporterExcel() {
+    setExcelBusy(true)
+    setErr(null)
+    try {
+      const { data, error } = await supabase.rpc('stock_export')
+      if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Export impossible'); return }
+      const nom = await exporterStockExcel(data, lieux)
+      ok('Fichier téléchargé : ' + nom)
+    } catch (e) {
+      setErr(e.message || 'Export Excel impossible')
+    } finally {
+      setExcelBusy(false)
+    }
+  }
+
+  async function onFichierInventaire(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setErr(null)
+    try {
+      const parsed = await lireInventaireExcel(file)
+      setApercu({ nom: file.name, parsed })
+    } catch (ex) {
+      setErr(ex.message || 'Fichier illisible')
+      setApercu(null)
+    }
+  }
+
+  async function appliquerInventaire() {
+    if (!apercu?.parsed?.aRemplir?.length) {
+      setErr('Aucune quantité comptée dans le fichier.')
+      return
+    }
+    setExcelBusy(true)
+    setErr(null)
+    try {
+      const { data, error } = await supabase.rpc('stock_inventaire_importer', { p_lignes: apercu.parsed.aRemplir })
+      if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Import impossible'); return }
+      ok(data.message || 'Inventaire appliqué.')
+      setApercu(null)
+      load()
+    } catch (ex) {
+      setErr(ex.message || 'Import impossible')
+    } finally {
+      setExcelBusy(false)
+    }
+  }
 
   async function onScan(token) {
     if (scan === 'ranger') {
@@ -90,11 +143,33 @@ export default function Stock() {
   return (
     <Page title="Stock" subtitle="Photo, lots, DLC, mouvements, transferts, fournisseurs et rappels de commande."
       action={<div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
+        <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer inventaire</Btn>
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFichierInventaire} style={{ display:'none' }} />
         <Btn kind="soft" onClick={() => { setLieuCible(null); setScan('ranger') }}>Ranger (scan)</Btn>
         <Btn onClick={() => setScan('inventaire')}>Inventaire (scan lieu)</Btn>
       </div>}>
       {flash && <Flash>{flash}</Flash>}
       {err && <Flash kind="err">{err}</Flash>}
+      {apercu && (
+        <Card style={{ marginBottom:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap', alignItems:'flex-start' }}>
+            <div>
+              <strong>{apercu.nom}</strong>
+              <div style={{ fontSize:13.5, color:'var(--text-muted)', marginTop:4 }}>{resumeImport(apercu.parsed)}</div>
+              <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:6 }}>
+                Les cellules vides ne sont pas touchées. Ne modifiez pas les colonnes id et qr.
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <Btn kind="soft" onClick={() => setApercu(null)} disabled={excelBusy}>Annuler</Btn>
+              <Btn onClick={appliquerInventaire} disabled={excelBusy || !apercu.parsed.aRemplir.length}>
+                {excelBusy ? '…' : 'Appliquer les comptes'}
+              </Btn>
+            </div>
+          </div>
+        </Card>
+      )}
       {lieuCible && scan === 'ranger' && (
         <div style={{ fontSize:13.5, marginBottom:10, color:'var(--heading)' }}>Lieu cible : <strong>{lieuCible.nom}</strong> — scannez les articles à y placer.</div>
       )}
