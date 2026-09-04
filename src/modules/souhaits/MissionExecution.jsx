@@ -400,7 +400,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const showMAR = def.patient && userMedical && vecteurMedical && complet
   const showScanConso = (def.patient && userMedical && vecteurMedical) || etape === 'base_rentre'
   const showPerso = etape === 'base_sur_place'
-  const showPhotosDepart = etape === 'base_sur_place' || etape === 'base_depart'
+  const showPhotosDepart = etape === 'base_sur_place' || etape === 'depart_pec'
   const showCloture = etape === 'base_rentre'
   const showPecNotes = def.checklist === 'pec'
 
