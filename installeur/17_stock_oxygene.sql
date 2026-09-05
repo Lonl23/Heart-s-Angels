@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  Oxygène : bouteilles 2 / 5 / 10 L, une à une, 200 bar à la livraison.
+--  Oxygène : bouteilles B2 / B5 / B10 (2 / 5 / 10 L), une à une, 200 bar à la livraison.
 --  Capacité ≈ volume × pression. Alerte DLC ou pression ≤ 50 bar.
 --  Idempotent. Après 16_stock_qr.sql.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -383,9 +383,9 @@ grant execute on function public.notifier_conso_souhait(uuid) to authenticated;
 insert into public.stock_catalogue (nom, categorie, mode, unite, volume_l)
 select v.nom, 'oxygène', 'oxygene', 'L', v.vol
 from (values
-  ('Oxygène 2 L', 2),
-  ('Oxygène 5 L', 5),
-  ('Oxygène 10 L', 10)
+  ('O2 B2L', 2),
+  ('O2 B5L', 5),
+  ('O2 B10L', 10)
 ) as v(nom, vol)
 where not exists (select 1 from public.stock_catalogue c where c.mode = 'oxygene' and c.volume_l = v.vol);
 

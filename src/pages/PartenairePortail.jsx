@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { COPYRIGHT } from '@/copyright'
-import { Card, Btn, F, TA, Sel, Pill, inp, lbl, Empty, Loading, Logo } from '@/components/ui'
+import { Card, Btn, F, TA, Pill, Empty, Loading, Logo, PhoneF, AddressFields } from '@/components/ui'
+import { GenrePicker } from '@/modules/annuaire/genre'
 
 const STATUT = {
   nouvelle:  { l:'Reçue',       c:'#BA7517', bg:'#FAEEDA' },
@@ -25,7 +26,7 @@ export default function PartenairePortail() {
       <header style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'var(--surface)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:20 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <Logo size={40} />
-          <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>Espace partenaire</span>
+          <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>Espace institution</span>
         </div>
         <Btn kind="soft" onClick={async()=>{ await signOut(); nav('/login') }}>Déconnexion</Btn>
       </header>
@@ -93,7 +94,9 @@ function ListeDemandes({ profile, onNew, onOpen }) {
 // ── Nouvelle demande (patient + souhait + médical + médicaments) ──────────────
 const empty = {
   patient_prenom:'', patient_nom:'', patient_ddn:'', etablissement:'', medecin_referent:'',
+  patient_genre:'', patient_tel_gsm:'', patient_tel_fixe:'', patient_adresse:null,
   contact_prenom:'', contact_nom:'', contact_relation:'', contact_email:'', contact_telephone:'',
+  contact_tel_fixe:'', contact_ddn:'', contact_adresse:null,
   souhait_description:'', souhait_date:'', souhait_lieu:'',
   mobilite:'', equipement_medical:'', allergies:'', urgence:false,
   consent_patient:false, consent_rgpd:false,
@@ -117,6 +120,13 @@ function NouvelleDemande({ profile, onDone }) {
     const { data: dem, error } = await supabase.from('demandes_souhaits').insert({
       ...f, source:'partenaire', partenaire_id: profile?.partenaire_id, cree_par: profile?.id,
       patient_ddn: f.patient_ddn || null, souhait_date: f.souhait_date || null,
+      patient_genre: f.patient_genre || null,
+      patient_tel_gsm: f.patient_tel_gsm || null,
+      patient_tel_fixe: f.patient_tel_fixe || null,
+      patient_adresse: f.patient_adresse || null,
+      contact_tel_fixe: f.contact_tel_fixe || null,
+      contact_ddn: f.contact_ddn || null,
+      contact_adresse: f.contact_adresse || null,
     }).select().single()
     if (error) { setErr('Erreur : ' + error.message); setSaving(false); return }
     const valides = meds.filter(m => m.medicament.trim())
@@ -144,9 +154,18 @@ function NouvelleDemande({ profile, onDone }) {
           <F label="Prénom" value={f.patient_prenom} set={v=>set('patient_prenom',v)} required />
           <F label="Nom" value={f.patient_nom} set={v=>set('patient_nom',v)} required />
         </div>
+        <GenrePicker value={f.patient_genre} set={v=>set('patient_genre',v)} />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <F label="Date de naissance" type="date" value={f.patient_ddn} set={v=>set('patient_ddn',v)} />
           <F label="Établissement / lieu" value={f.etablissement} set={v=>set('etablissement',v)} />
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <PhoneF label="GSM" value={f.patient_tel_gsm} set={v=>set('patient_tel_gsm',v)} />
+          <PhoneF label="Fixe" value={f.patient_tel_fixe} set={v=>set('patient_tel_fixe',v)} />
+        </div>
+        <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse légale</div>
+          <AddressFields value={f.patient_adresse} set={v=>set('patient_adresse',v)} />
         </div>
         <F label="Médecin référent" value={f.medecin_referent} set={v=>set('medecin_referent',v)} />
       </Card>
@@ -158,10 +177,18 @@ function NouvelleDemande({ profile, onDone }) {
           <F label="Nom" value={f.contact_nom} set={v=>set('contact_nom',v)} required />
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-          <F label="Lien avec le patient" value={f.contact_relation} set={v=>set('contact_relation',v)} />
-          <F label="Téléphone" value={f.contact_telephone} set={v=>set('contact_telephone',v)} />
+          <F label="Lien d'affiliation" value={f.contact_relation} set={v=>set('contact_relation',v)} />
+          <F label="Date de naissance" type="date" value={f.contact_ddn} set={v=>set('contact_ddn',v)} />
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <PhoneF label="GSM" value={f.contact_telephone} set={v=>set('contact_telephone',v)} />
+          <PhoneF label="Fixe" value={f.contact_tel_fixe} set={v=>set('contact_tel_fixe',v)} />
         </div>
         <F label="E-mail" type="email" value={f.contact_email} set={v=>set('contact_email',v)} required />
+        <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse légale</div>
+          <AddressFields value={f.contact_adresse} set={v=>set('contact_adresse',v)} />
+        </div>
       </Card>
 
       <Card style={{ marginBottom:14 }}>

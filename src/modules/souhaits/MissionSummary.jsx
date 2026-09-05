@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, fmtAdresse } from '@/components/ui'
-import { GROUPES, CHECKLISTS } from './missionSchema'
+import { Card, fmtAdresse, AdresseAffichee } from '@/components/ui'
+import { GROUPES, CHECKLISTS, itemsChecklistTous, lblEtapeTerrain, lblAutorisationPhotos } from './missionSchema'
 
 export default function MissionSummary({ souhaitId, infoOnly=false }) {
   const [m, setM] = useState(null)
@@ -18,7 +18,8 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
   if (!m) return null
 
   const fmt = (f, v) => {
-    if (f.t === 'address') { const a = fmtAdresse(v); return a || null }
+    if (f.t === 'address') { return fmtAdresse(v) ? <AdresseAffichee value={v} compact /> : null }
+    if (f.t === 'photos') return lblAutorisationPhotos(v) || null
     if (f.t === 'toggle') return v ? 'Oui' : null
     if (f.t === 'datetime' && v) return new Date(v).toLocaleString('fr-BE')
     if (f.t === 'date' && v) return new Date(v).toLocaleDateString('fr-BE')
@@ -35,17 +36,34 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
       const etat = vc[sec] || g[sec] || {}
       return {
         titre: [v.nom, def.titre].filter(Boolean).join(' · '),
-        faits: def.items.filter(it => etat[it]).length,
-        total: def.items.length,
+        faits: itemsChecklistTous(sec, m).filter(it => etat[it]).length,
+        total: itemsChecklistTous(sec, m).length,
       }
     })
   }).filter(c => c.faits > 0)
 
-  const rien = groupesRemplis.length === 0 && meds.length === 0 && clRempli.length === 0
+  const rien = groupesRemplis.length === 0 && meds.length === 0 && clRempli.length === 0 && !(m.vecteurs || []).length && !m.rapport_medical && !m.rapport_observations
   if (rien) return <Card><div style={{ color:'var(--text-muted)', fontSize:13.5 }}>Dossier encore vide. Ouvrez « Préparer le dossier » pour encoder le trajet, les vecteurs et le médical.</div></Card>
+
+  const suiviVecteurs = (m.vecteurs || []).map(v => ({
+    id: v.id,
+    nom: v.nom || v.plaque || 'Véhicule',
+    etape: lblEtapeTerrain(m.vecteur_etapes?.[v.id] || m.etape_terrain, m.vecteur_statuts?.[v.id]),
+  }))
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      {suiviVecteurs.length > 0 && (
+        <Card>
+          <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Où est le véhicule</div>
+          {suiviVecteurs.map(v => (
+            <div key={v.id || v.nom} style={{ display:'flex', justifyContent:'space-between', gap:10, marginBottom:6, fontSize:14 }}>
+              <span style={{ color:'var(--text-muted)' }}>{v.nom}</span>
+              <span style={{ fontWeight:700, color:'var(--heading)' }}>{v.etape}</span>
+            </div>
+          ))}
+        </Card>
+      )}
       {groupesRemplis.map(g => (
         <Card key={g.id}>
           <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>{g.label}</div>

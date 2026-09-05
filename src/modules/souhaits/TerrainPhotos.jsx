@@ -186,16 +186,23 @@ export function CoinPhotos({ coins, onCapture, onAnnotate, onDelete, disabled, h
   )
 }
 
-export function TicketPhoto({ meta, onCapture, disabled }) {
+export function TicketPhoto({ meta, onCapture, disabled, hint, label }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])
   return (
     <div>
       <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>
-        Photographiez le ticket de caisse du carburant (plein ou appoint).
+        {hint || 'Photographiez le ticket de caisse du carburant (plein ou appoint).'}
       </div>
       {meta?.path
         ? (
           <div style={{ maxWidth: 280 }}>
-            <PhotoThumb meta={meta} />
+            <PhotoThumb meta={meta} onOpen={() => url && window.open(url, '_blank', 'noopener')} />
+            {url && (
+              <a href={url} target="_blank" rel="noreferrer" style={{ display:'block', fontSize:13, fontWeight:600, color:'var(--accent)', margin:'8px 0 4px', textDecoration:'none' }}>
+                Ouvrir / partager le ticket
+              </a>
+            )}
             <label className="ha-coin-replace">
               <input type="file" accept="image/*" capture="environment" disabled={disabled}
                 onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(f) }} />
@@ -207,9 +214,45 @@ export function TicketPhoto({ meta, onCapture, disabled }) {
           <label className="ha-coin-empty" style={{ maxWidth: 280 }}>
             <input type="file" accept="image/*" capture="environment" disabled={disabled}
               onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(f) }} />
-            <span>📷 Ticket carburant</span>
+            <span>📷 {label || 'Ticket carburant'}</span>
           </label>
         )}
+    </div>
+  )
+}
+
+export function ticketsCarburantMission(m) {
+  const photos = m?.terrain_photos || {}
+  const vecteurs = Array.isArray(m?.vecteurs) && m.vecteurs.length
+    ? m.vecteurs
+    : Object.keys(photos).map(id => ({ id }))
+  return vecteurs.map(v => {
+    const p = photos[v.id] || {}
+    return {
+      id: v.id,
+      nom: [v.nom, v.plaque].filter(Boolean).join(' · ') || 'Véhicule',
+      essence: v.essence_pct,
+      matin: p.ticket_carburant_matin,
+      soir: p.ticket_carburant,
+    }
+  }).filter(x => x.matin?.path || x.soir?.path)
+}
+
+export function TicketVue({ meta, titre }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])
+  if (!meta?.path) return null
+  return (
+    <div style={{ marginBottom: 12 }}>
+      {titre && <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>{titre}</div>}
+      {url
+        ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={titre || 'Ticket'} style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 10, border: '1px solid var(--border)', display: 'block' }} /></a>
+        : <div className="ha-photo-ph" style={{ height: 120, borderRadius: 10 }} />}
+      {url && (
+        <a href={url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6, fontSize: 13.5, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
+          Ouvrir / envoyer le ticket
+        </a>
+      )}
     </div>
   )
 }

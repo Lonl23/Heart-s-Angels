@@ -1,41 +1,28 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Btn, inp, fmtAdresse, Loading, Flash, Pill } from '@/components/ui'
-import { STATUTS_BASE, lblStatutBase, itemsChecklistVisibles, itemsChecklistManquants } from './missionSchema'
+import { Btn, inp, fmtAdresse, Loading, Flash, AdresseAffichee } from '@/components/ui'
+import {
+  STATUT_SUR_PLACE, estSurPlace, itemsChecklistVisibles, itemsChecklistManquants,
+  normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
+  estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
+  marquerHeureEtape, marquerHeurePersonnel, injectionsDetresse,
+  medecinPluri, nomPluri,
+} from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
-import { stInfo } from './Souhaits'
+import { fmtDatesSouhait } from './datesSouhait'
 import MedicamentsMAR from './MedicamentsMAR'
 import { COTES, CoinPhotos, PhotoAnnotator, TicketPhoto, uploadMissionPhoto } from './TerrainPhotos'
 import ScanConso from '@/modules/stock/ScanConso'
 import ScanEmport from '@/modules/stock/ScanEmport'
+import { PopupDetresse } from './ProtocoleDetresse'
+import { BandeauMedecin } from './EquipePluri'
 
 const fmtDt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }) : '—'
 
-const ETAPES = [
-  { id:'vehicule',    l:'Véhicule',        sous:'Prise à la base' },
-  { id:'pec',         l:'Prise en charge', sous:'Sur place' },
-  { id:'retour_pec',  l:'Retour patient',  sous:'Fin de PEC' },
-  { id:'retour_base', l:'Retour base',     sous:'Rentrée' },
-]
-
-const ETAPE_IDX = Object.fromEntries(ETAPES.map((e, i) => [e.id, i]))
-
 function etapeDefaut(saved, vecteurStatut) {
-  if (saved && ETAPES.some(e => e.id === saved)) return saved
-  if (vecteurStatut === 'realise') return 'retour_base'
-  if (vecteurStatut === 'en_cours') return 'pec'
-  return 'vehicule'
-}
-
-function lblEtapeVehicule(etape, vecteurStatut) {
-  if (vecteurStatut === 'realise') return 'Rentrée'
-  return ({
-    vehicule: 'À la base',
-    pec: 'Prise en charge',
-    retour_pec: 'Retour patient',
-    retour_base: 'Retour base',
-  })[etape] || 'À la base'
+  if (vecteurStatut === 'realise') return 'base_rentre'
+  return normaliserEtape(saved)
 }
 
 export default function MissionExecution({ souhaitId, onBack }) {
@@ -50,10 +37,13 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState(null)
-  const [etape, setEtape] = useState('vehicule')
+  const [etape, setEtape] = useState('a_la_base')
   const [annot, setAnnot] = useState(null)
+  const [appel, setAppel] = useState(null)
+  const [detresse, setDetresse] = useState(false)
 
   useEffect(() => { load() }, [souhaitId, complet, user?.id])
+  useEffect(() => { window.scrollTo(0, 0) }, [etape])
 
   async function load() {
     if (!user?.id) return
@@ -90,6 +80,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
         }
         setMeds(all)
       }
+      const { data: ap } = await supabase.rpc('coordonnees_appel', { p_souhait: souhaitId })
+      setAppel(ap?.ok ? ap : null)
     } else {
       setAff(me)
       const { data, error } = await supabase.rpc('ma_mission', { p_souhait: souhaitId })
@@ -106,6 +98,15 @@ export default function MissionExecution({ souhaitId, onBack }) {
         beneficiaire_prenom: data.beneficiaire_prenom,
         description: data.description,
         date_souhaitee: data.date_souhaitee,
+        date_fin: data.date_fin,
+        dates_possibles: data.dates_possibles,
+      })
+      setAppel({
+        tel: data.tel_a_appeler,
+        libelle: data.tel_a_appeler_libelle,
+        ok: !!data.tel_a_appeler,
+        medecin_tel: data.medecin_tel || '',
+        medecin_nom: data.medecin_nom || '',
       })
       setEtape(etapeDefaut(data.etape_terrain, data.vecteur_statut))
     }
@@ -143,7 +144,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
     role: profile?.role,
     fiche: profile?.fiche,
   })
-  const clOpts = { userMedical, vecteurMedical }
+  const clOpts = {
+    userMedical,
+    vecteurMedical,
+    mission: complet ? m : { checklist_extras: rpc?.checklist_extras },
+  }
   const vecteurStatut = (vecteurId && m?.vecteur_statuts?.[vecteurId]) || rpc?.vecteur_statut || null
   const vecteursEquipes = new Set(
     complet
@@ -163,30 +168,56 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
 
   async function aller(next) {
-    setEtape(next)
+    const n = normaliserEtape(next)
+    if (!locked && idxEtape(etape) < 1 && n !== 'a_la_base') {
+      if (!cotesOk) {
+        setErr('Photographiez les 4 côtés du véhicule avant de partir.')
+        return
+      }
+      const essenceN = Number(String(vecteur?.essence_pct ?? '').replace(',', '.'))
+      const besoinPlein = Number.isFinite(essenceN) && essenceN < 100
+      if (besoinPlein && !photos?.ticket_carburant_matin?.path) {
+        if (!confirm('Le réservoir n’est pas à 100 % et le ticket du plein du matin n’est pas photographié. Ce ticket sert au remboursement auprès du prêteur du véhicule. Partir quand même ?')) return
+      }
+    }
+    setEtape(n)
+    setErr(null)
+    if (locked) return
+    const doitDemarrer = n !== 'a_la_base'
+      && vecteurStatut !== 'en_cours' && vecteurStatut !== 'realise'
+      && sh?.statut !== 'realise'
+    if (doitDemarrer) {
+      await avancer('en_cours', n)
+      return
+    }
     if (complet) {
-      const nextM = { ...(m || {}), etape_terrain: next }
-      if (vecteurId) nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: next }
+      let nextM = { ...(m || {}), etape_terrain: n }
+      if (vecteurId) {
+        nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: n }
+        nextM = marquerHeureEtape(nextM, vecteurId, n)
+      }
       await saveMission(nextM)
     } else {
-      await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: next })
-      setRpc(x => x ? { ...x, etape_terrain: next } : x)
+      const { data, error } = await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: n })
+      if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Étape non enregistrée.'); return }
+      setRpc(x => x ? { ...x, etape_terrain: n } : x)
     }
   }
 
-  async function avancer(statut) {
+  async function avancer(statut, etapeCible) {
     setErr(null)
     const maintenant = new Date().toISOString()
+    const etapeToSave = normaliserEtape(etapeCible || (statut === 'realise' ? 'base_rentre' : etape))
+    if (statut === 'realise') setEtape('base_rentre')
     if (complet) {
-      const nextM = { ...(m || {}) }
+      let nextM = { ...(m || {}) }
       const vs = { ...(nextM.vecteur_statuts || {}) }
       if (vecteurId) {
         vs[vecteurId] = statut
         nextM.vecteur_statuts = vs
-        nextM.vecteur_etapes = {
-          ...(nextM.vecteur_etapes || {}),
-          [vecteurId]: statut === 'en_cours' ? 'pec' : 'retour_base',
-        }
+        nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: etapeToSave }
+        nextM.etape_terrain = etapeToSave
+        nextM = marquerHeureEtape(nextM, vecteurId, etapeToSave)
         if (statut === 'realise') {
           nextM.vecteur_clotures = { ...(nextM.vecteur_clotures || {}), [vecteurId]: maintenant }
         }
@@ -211,8 +242,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
     }
     const { data, error } = await supabase.rpc('avancer_mission', { p_souhait: souhaitId, p_statut: statut })
     if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Impossible de changer le statut.'); return }
+    await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: etapeToSave })
     setSh(x => ({ ...x, statut: data?.statut || statut }))
-    setRpc(x => x ? { ...x, statut: data?.statut || statut, vecteur_statut: data?.vecteur_statut || statut } : x)
+    setRpc(x => x ? { ...x, statut: data?.statut || statut, vecteur_statut: data?.vecteur_statut || statut, etape_terrain: etapeToSave } : x)
     flash()
   }
 
@@ -245,10 +277,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
     const prev = aff?.statut_base
     setAff(x => ({ ...(x || {}), statut_base: val }))
     if (complet) {
-      const next = {
+      let next = {
         ...(m || {}),
         personnel_statuts: { ...(m?.personnel_statuts || {}), [user.id]: val },
       }
+      if (val === STATUT_SUR_PLACE) next = marquerHeurePersonnel(next, user.id)
       const { error: colErr } = await supabase.from('souhait_personnel')
         .update({ statut_base: val }).eq('souhait_id', souhaitId).eq('user_id', user.id)
       if (colErr && !/statut_base|schema cache|column/i.test(colErr.message)) {
@@ -290,20 +323,22 @@ export default function MissionExecution({ souhaitId, onBack }) {
       const next = { ...(m || {}) }
       const tp = { ...(next.terrain_photos || {}) }
       const cur = { ...(tp[vecteurId] || {}) }
-      if (groupe === 'ticket') cur.ticket_carburant = meta
+      if (groupe === 'ticket' || groupe === 'ticket_matin') cur[slot] = meta
       else cur[groupe] = { ...(cur[groupe] || {}), [slot]: meta }
       tp[vecteurId] = cur
       await saveMission({ ...next, terrain_photos: tp })
       return
     }
-    const rpcSlot = groupe === 'ticket' ? 'ticket_carburant' : (groupe === 'coins_retour' ? ('r_' + slot) : slot)
+    const rpcSlot = (groupe === 'ticket' || groupe === 'ticket_matin')
+      ? slot
+      : (groupe === 'coins_retour' ? ('r_' + slot) : slot)
     const { data, error } = await supabase.rpc('sauver_photo_terrain', {
       p_souhait: souhaitId, p_vecteur: vecteurId, p_slot: rpcSlot, p_meta: meta, p_action: action,
     })
     if (error || data?.ok === false) { setErr(error?.message || data?.error); return }
     setRpc(x => {
       const photos = { ...(x.photos || {}) }
-      if (groupe === 'ticket') photos.ticket_carburant = meta
+      if (groupe === 'ticket' || groupe === 'ticket_matin') photos[slot] = meta
       else photos[groupe] = { ...(photos[groupe] || {}), [slot]: meta }
       return { ...x, photos }
     })
@@ -324,10 +359,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
       await persistPhoto(slot, null, 'set', groupe)
     } catch (e) { setErr(e.message || 'Suppression impossible.') }
   }
-  async function captureTicket(file) {
+  async function captureTicket(file, slot = 'ticket_carburant') {
     try {
-      const meta = await uploadMissionPhoto(souhaitId, vecteurId, 'ticket_carburant', file)
-      await persistPhoto('ticket_carburant', meta, 'set', 'ticket')
+      const meta = await uploadMissionPhoto(souhaitId, vecteurId, slot, file)
+      await persistPhoto(slot, meta, 'set', slot === 'ticket_carburant_matin' ? 'ticket_matin' : 'ticket')
     } catch (e) { setErr(e.message || 'Photo impossible.') }
   }
   async function saveAnnot(nextMeta) {
@@ -348,23 +383,28 @@ export default function MissionExecution({ souhaitId, onBack }) {
     flash()
   }
 
-  const cotesOk = COTES.every(c => photos?.coins?.[c.id]?.path)
-  async function partir() {
-    if (!cotesOk) { setErr('Photographiez les 4 côtés du véhicule avant de partir.'); return }
-    if (vecteurStatut !== 'en_cours' && vecteurStatut !== 'realise' && sh?.statut !== 'realise') {
-      await avancer('en_cours')
+  async function injecterDetresse(inj) {
+    if (!complet) { setErr('Injection réservée à l’équipage médical.'); return false }
+    const next = {
+      ...(m || {}),
+      injections_detresse: [...injectionsDetresse(m), inj],
     }
-    await aller('pec')
+    const { error } = await supabase.from('souhaits').update({ mission: next }).eq('id', souhaitId)
+    if (error) { setErr(error.message); return false }
+    setM(next)
+    flash()
+    return true
   }
+
+  const cotesOk = COTES.every(c => photos?.coins?.[c.id]?.path)
   async function terminer() {
-    await avancer('realise')
+    await avancer('realise', 'base_rentre')
   }
 
   if (loading) return <div style={{ padding:24 }}><Loading /></div>
   if (err && !sh) return <div style={{ padding:24 }}><Flash kind="err">{err}</Flash><Btn kind="soft" onClick={onBack}>← Retour</Btn></div>
 
   const statut = sh?.statut
-  const st = stInfo(statut)
   const titre = complet
     ? `${sh?.beneficiaire_prenom || ''} ${sh?.beneficiaire_nom || ''}`.trim()
     : (sh?.beneficiaire_prenom || 'Mission')
@@ -385,70 +425,80 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
   const pecMedicalACharge = vecteurMedical && !userMedical
   const pecSansMedical = !vecteurMedical
-  const cta = {
-    vehicule: { l: 'Véhicule pris — on part', go: partir, kind: 'start' },
-    pec: {
-      l: pecSansMedical || pecMedicalACharge ? 'C’est bon — on continue' : 'Prise en charge faite',
-      go: () => aller('retour_pec'),
-      kind: 'start',
-    },
-    retour_pec: {
-      l: pecSansMedical || pecMedicalACharge ? 'On rentre à la base' : 'Retour patient fait — rentrer',
-      go: () => aller('retour_base'),
-      kind: 'start',
-    },
-    retour_base: {
-      l: plusieursVecteurs ? 'Ce véhicule est rentré' : 'Terminer la mission',
-      go: terminer,
-      kind: 'done',
-    },
-  }[etape]
+  const def = etapeParId(etape)
+  const aLaBase = estALaBase(etape)
+  const suivant = etapeSuivante(etape)
+  const precedent = etapePrecedente(etape)
   const locked = statut === 'realise' || vecteurStatut === 'realise'
   const monStatut = aff?.statut_base || m?.personnel_statuts?.[user?.id] || rpc?.statut_base || ''
+  const jeSuisSurPlace = estSurPlace(monStatut)
   const roleAff = aff?.role_mission || rpc?.role_mission
-
-  const manquantsHint = (() => {
-    if (etape === 'vehicule') {
-      const miss = itemsChecklistManquants('base', checks.base, clOpts)
-      return miss.length ? miss.join(', ') : null
-    }
-    if (etape === 'pec' && userMedical && vecteurMedical) {
-      const miss = itemsChecklistManquants('pec', checks.pec, clOpts)
-      return miss.length ? miss.join(', ') : null
-    }
-    if (etape === 'retour_pec' && userMedical && vecteurMedical) {
-      const miss = itemsChecklistManquants('retour_pec', checks.retour_pec, clOpts)
-      return miss.length ? miss.join(', ') : null
-    }
-    if (etape === 'retour_base') {
-      const miss = itemsChecklistManquants('retour_base', checks.retour_base, clOpts)
-      return miss.length ? miss.join(', ') : null
-    }
-    return null
-  })()
+  const ecran = numEcranTerrain(etape)
+  const cta = suivant
+    ? { l: 'Suivant', hint: suivant.l, go: () => aller(suivant.id), kind: 'start' }
+    : { l: plusieursVecteurs ? 'Ce véhicule est rentré' : 'Terminer la mission', hint: null, go: terminer, kind: 'done' }
+  const clKey = def.checklist
+  const miss = clKey ? itemsChecklistManquants(clKey, checks[clKey], clOpts) : []
+  const essenceN = Number(String(vecteur?.essence_pct ?? '').replace(',', '.'))
+  const essenceConnue = vecteur && vecteur.essence_pct !== '' && vecteur.essence_pct != null && Number.isFinite(essenceN)
+  const besoinPleinMatin = !!(essenceConnue && essenceN < 100)
+  const extrasManquants = (aLaBase && besoinPleinMatin && !photos?.ticket_carburant_matin?.path)
+    ? ['ticket du plein du matin']
+    : []
+  const manquantsHint = [...miss, ...extrasManquants].join(', ') || null
+  const showMAR = userMedical && vecteurMedical && complet && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)
+  const showScanConso = (userMedical && vecteurMedical && def.patient && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)) || etape === 'base_rentre'
+  const showCloture = etape === 'base_rentre'
+  const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
+  const showPecNotes = def.checklist === 'pec'
+  const med = medecinPluri(complet ? m : null)
+  const medTel = (med?.tel || '').trim() || rpc?.medecin_tel || appel?.medecin_tel || ''
+  const medNom = nomPluri(med) || rpc?.medecin_nom || appel?.medecin_nom || ''
 
   return (
     <div className="ha-terrain" style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px 110px' }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:8 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:4 }}>
         <Btn kind="soft" onClick={onBack}>← Mes missions</Btn>
-        <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : 'Enregistrement auto'}</span>
+        <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : ''}</span>
       </div>
+      <BandeauMedecin tel={medTel} nom={medNom} />
 
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
-        <h1 style={{ fontSize:'1.45rem', color:'var(--heading)', margin:'4px 0 2px' }}>{titre || 'Mission'}</h1>
-        <div style={{ display:'flex', gap:6, flexWrap:'wrap', justifyContent:'flex-end' }}>
-          <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
-          {vecteur && (
-            <Pill color="#185FA5" bg="#E6F1FB">{lblEtapeVehicule(etape, vecteurStatut)}</Pill>
+      {vecteur && (
+        <>
+          <div className="ha-wizard-top">
+            <div className="ha-wizard-count">{ecran} / {NB_ECRANS_TERRAIN}</div>
+            <div className="ha-wizard-progress" aria-hidden="true">
+              <span style={{ width: `${(ecran / NB_ECRANS_TERRAIN) * 100}%` }} />
+            </div>
+          </div>
+          <h1 className="ha-wizard-title">{aLaBase ? 'Sur place' : def.l}</h1>
+          <p className="ha-wizard-sub">
+            {titre || 'Mission'}
+            {roleAff ? ` · ${lblRoleMission(roleAff) || roleAff}` : ''}
+            {sh && fmtDatesSouhait(sh) !== 'Date à définir' ? ` · ${fmtDatesSouhait(sh)}` : ''}
+          </p>
+          {appel?.tel && (
+            <p style={{ fontSize: 14.5, margin: '2px 0 10px' }}>
+              <a href={`tel:${String(appel.tel).replace(/\s/g, '')}`} style={{ color: 'var(--accent)', fontWeight: 700, textDecoration: 'none' }}>📞 {appel.tel}</a>
+              {appel.libelle && <span style={{ color: 'var(--text-muted)', fontSize: 12.5 }}> · {appel.libelle}</span>}
+            </p>
           )}
-        </div>
-      </div>
-      <p style={{ color:'var(--text-muted)', fontSize:14, margin:'4px 0 8px', lineHeight:1.45 }}>{sh?.description}</p>
-      {roleAff && (
-        <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:8 }}>
-          Votre rôle : <strong>{lblRoleMission(roleAff) || roleAff}</strong>
-          {userMedical ? '' : ' · logistique'}
-        </div>
+          {userMedical && complet && (
+            <button type="button" className="ha-detresse-btn" onClick={() => setDetresse(true)}>
+              Protocole de détresse
+            </button>
+          )}
+        </>
+      )}
+      {!vecteur && (
+        <>
+          <h1 style={{ fontSize:'1.45rem', color:'var(--heading)', margin:'4px 0 8px' }}>{titre || 'Mission'}</h1>
+          {userMedical && complet && (
+            <button type="button" className="ha-detresse-btn" onClick={() => setDetresse(true)}>
+              Protocole de détresse
+            </button>
+          )}
+        </>
       )}
       {err && <Flash kind="err">{err}</Flash>}
 
@@ -471,60 +521,37 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
       {vecteur && (
         <>
-          <div className="ha-etapes">
-            {ETAPES.map((e, i) => (
-              <button
-                key={e.id}
-                type="button"
-                className={'ha-etape' + (etape===e.id ? ' is-on' : '') + ((ETAPE_IDX[etape] ?? 0) > i ? ' is-done' : '')}
-                onClick={()=>aller(e.id)}
-              >
-                <span className="ha-etape-n">{i+1}</span>
-                <span>
-                  <span className="ha-etape-l">{e.l}</span>
-                  <span className="ha-etape-s">{e.sous}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <Section titre={vecteur.nom ? `Votre véhicule — ${vecteur.nom}` : 'Votre véhicule'}>
-            <div style={{ fontSize:14, color:'var(--text)' }}>
-              {[vecteur.type_transport, vecteur.plaque].filter(Boolean).join(' · ') || 'Véhicule de votre équipage'}
-            </div>
-            {crewVecteur.length > 0 && (
-              <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:8, lineHeight:1.45 }}>
-                {crewVecteur.map(e => {
-                  const stb = e.statut_base || m?.personnel_statuts?.[e.user_id] || ''
-                  const nom = e.profiles?.prenom || e.prenom || 'Volontaire'
-                  return `${nom}${stb ? ` · ${lblStatutBase(stb)}` : ''}`
-                }).join('  ·  ')}
-              </div>
-            )}
-          </Section>
-
-          {etape === 'vehicule' && (
+          {aLaBase && (
             <>
-              <Section titre="Mon statut à la base">
-                <div className="ha-statuts-base">
-                  {STATUTS_BASE.map(s => (
-                    <button
-                      key={s.v}
-                      type="button"
-                      disabled={locked}
-                      className={'ha-check-btn' + (monStatut === s.v ? ' is-on' : '')}
-                      onClick={()=>setMonStatutBase(s.v)}
-                    >
-                      <span className="ha-check-mark">{monStatut === s.v ? '✓' : ''}</span>
-                      <span>{s.l}</span>
-                    </button>
-                  ))}
-                </div>
+              <Section titre="Vous">
+                <button
+                  type="button"
+                  disabled={locked}
+                  className={'ha-check-btn' + (jeSuisSurPlace ? ' is-on' : '')}
+                  onClick={() => setMonStatutBase(jeSuisSurPlace ? null : STATUT_SUR_PLACE)}
+                >
+                  <span className="ha-check-mark">{jeSuisSurPlace ? '✓' : ''}</span>
+                  <span>Sur place</span>
+                </button>
+                {crewVecteur.length > 0 && (
+                  <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:12, lineHeight:1.5 }}>
+                    {crewVecteur.map(e => {
+                      const ici = estSurPlace(e.statut_base || m?.personnel_statuts?.[e.user_id])
+                      const nom = e.profiles?.prenom || e.prenom || 'Volontaire'
+                      return `${nom}${ici ? ' · sur place' : ''}`
+                    }).join('  ·  ')}
+                  </div>
+                )}
               </Section>
-              <Section titre="Itinéraire du jour"><Itineraire d={itin} compact /></Section>
-              <Section titre="Photos des 4 côtés — prise du véhicule">
+              <Section titre="Véhicule">
+                <div style={{ fontSize:14, color:'var(--text)', marginBottom:10 }}>
+                  {[vecteur.nom, vecteur.type_transport, vecteur.plaque].filter(Boolean).join(' · ') || 'Véhicule de votre équipage'}
+                </div>
+                <Itineraire d={itin} only="base" />
+              </Section>
+              <Section titre="Photos des 4 côtés">
                 <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
-                {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés sont demandés avant de quitter la base.</div>}
+                {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés avant de partir.</div>}
               </Section>
               <Section titre="Checklist départ">
                 <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
@@ -534,56 +561,58 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   <MiniNum l="KMs départ" v={vecteur.kms_depart} set={val=>saveKms({ kms_depart: val })} />
                   <MiniNum l="Essence %" v={vecteur.essence_pct} set={val=>saveKms({ essence_pct: val })} />
                 </div>
+                <PleinMatin
+                  essenceConnue={essenceConnue}
+                  essenceN={essenceN}
+                  besoinPlein={besoinPleinMatin}
+                  meta={photos.ticket_carburant_matin}
+                  onCapture={f => captureTicket(f, 'ticket_carburant_matin')}
+                  disabled={locked || !vecteurId}
+                />
               </Section>
             </>
           )}
 
-          {etape === 'pec' && (
+          {!aLaBase && !showCloture && (
             <>
-              <Section titre="Lieu de prise en charge"><Itineraire d={itin} only="pec" /></Section>
-              {itemsVis.pec.length > 0 && (
-                <Section titre="Checklist prise en charge">
+              {vecteur.nom && (
+                <div style={{ fontSize:13, color:'var(--text-muted)', margin:'8px 0 0' }}>{vecteur.nom}{vecteur.plaque ? ` · ${vecteur.plaque}` : ''}</div>
+              )}
+              <Section titre={def.itin === 'pec' ? 'Prise en charge' : def.itin === 'destination' ? 'Destination' : def.itin === 'retour' ? 'Retour' : 'Base'}>
+                <Itineraire d={itin} only={def.itin} />
+              </Section>
+              {def.checklist === 'pec' && itemsVis.pec.length > 0 && (
+                <Section titre="À cocher">
                   <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
                 </Section>
               )}
-              {pecMedicalACharge && (
+              {showPecNotes && pecMedicalACharge && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
               )}
-              {pecSansMedical && (
-                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Pas de checklist patient sur ce véhicule — équipage non médical.</p>
+              {showPecNotes && pecSansMedical && (
+                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Pas de checklist patient sur ce véhicule.</p>
               )}
-              {userMedical && vecteurMedical && complet && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
-              {userMedical && vecteurMedical && (
-                <Section titre="Matériel utilisé">
-                  <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
-                </Section>
-              )}
-            </>
-          )}
-
-          {etape === 'retour_pec' && (
-            <>
-              <Section titre="Destination / retour"><Itineraire d={itin} only="retour" /></Section>
-              {itemsVis.retour_pec.length > 0 && (
-                <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'Checklist retour'}>
+              {def.checklist === 'retour_pec' && itemsVis.retour_pec.length > 0 && (
+                <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'À cocher'}>
                   <CheckBlock items={itemsVis.retour_pec} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
                 </Section>
               )}
-              {pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
+              {def.checklist === 'retour_pec' && pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Retour patient : à charge du médical de ce véhicule.</p>
               )}
-              {userMedical && vecteurMedical && complet && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
-              {userMedical && vecteurMedical && (
+              {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
+              {showScanConso && (
                 <Section titre="Matériel utilisé">
                   <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
                 </Section>
               )}
+              {showRapportMedical && <RapportMedical m={m} onSave={saveMission} />}
             </>
           )}
 
-          {etape === 'retour_base' && (
+          {showCloture && (
             <>
-              <Section titre="Photos des 4 côtés — remise du véhicule">
+              <Section titre="Photos des 4 côtés — remise">
                 <CoinPhotos
                   coins={photos.coins_retour || {}}
                   hint="Photographiez à nouveau les 4 côtés. Marquez tout dégât apparu pendant la mission."
@@ -593,14 +622,20 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   disabled={locked || !vecteurId}
                 />
               </Section>
-              <Section titre="Ticket de caisse carburant">
-                <TicketPhoto meta={photos.ticket_carburant} onCapture={captureTicket} disabled={locked || !vecteurId} />
+              <Section titre="Ticket de caisse — plein du retour">
+                <TicketPhoto
+                  meta={photos.ticket_carburant}
+                  onCapture={f => captureTicket(f, 'ticket_carburant')}
+                  disabled={locked || !vecteurId}
+                  hint="Si vous faites le plein au retour, photographiez aussi ce ticket."
+                  label="Ticket du retour"
+                />
               </Section>
               <Section titre="Checklist retour base">
                 <CheckBlock items={itemsVis.retour_base} etat={checks.retour_base} onToggle={(it,on)=>toggleCheck('retour_base', it, on)} />
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
-              {userMedical && vecteurMedical && complet && <RapportMedical m={m} onSave={saveMission} />}
+              {showRapportMedical && <RapportMedical m={m} onSave={saveMission} />}
               <Section titre="Matériel utilisé">
                 <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
               </Section>
@@ -610,7 +645,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
         </>
       )}
 
-      {!complet && <div style={{ fontSize:12, color:'var(--text-faint)', marginTop:12 }}>Aucune information médicale n'est accessible depuis cette vue.</div>}
+      {!complet && vecteur && <div style={{ fontSize:12, color:'var(--text-faint)', marginTop:12 }}>Aucune information médicale n'est accessible depuis cette vue.</div>}
 
       {vecteur && cta && !locked && statut !== 'realise' && (
         <div className="ha-terrain-bar">
@@ -619,7 +654,15 @@ export default function MissionExecution({ souhaitId, onBack }) {
               Encore à cocher : {manquantsHint}.
             </div>
           )}
-          <button type="button" className={'ha-terrain-cta ' + cta.kind} onClick={cta.go}>{cta.l}</button>
+          <div className="ha-wizard-actions">
+            {precedent && (
+              <button type="button" className="ha-terrain-cta back" onClick={() => aller(precedent.id)}>Retour</button>
+            )}
+            <button type="button" className={'ha-terrain-cta ' + cta.kind} onClick={cta.go}>
+              {cta.l}
+              {cta.hint ? <span className="ha-cta-hint">{cta.hint}</span> : null}
+            </button>
+          </div>
         </div>
       )}
       {vecteurStatut === 'realise' && statut !== 'realise' && (
@@ -632,6 +675,15 @@ export default function MissionExecution({ souhaitId, onBack }) {
       {statut === 'realise' && <div className="ha-terrain-bar"><div style={{ fontWeight:700, color:'#3B6D11', textAlign:'center', padding:'10px' }}>Mission clôturée</div></div>}
 
       {annot && <PhotoAnnotator meta={annot.meta} onSave={saveAnnot} onClose={()=>setAnnot(null)} />}
+      {detresse && (
+        <PopupDetresse
+          m={complet ? m : {}}
+          locked={locked}
+          profile={profile}
+          onInjecter={injecterDetresse}
+          onClose={() => setDetresse(false)}
+        />
+      )}
     </div>
   )
 }
@@ -650,11 +702,12 @@ function itineraryFromMission(m) {
 
 function Itineraire({ d, compact, only }) {
   if (!d) return <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Trajet non renseigné.</div>
-  const show = k => !only || only === k || (only === 'retour' && (k === 'destination' || k === 'retour'))
+  const show = k => !only || only === k
   return (
     <div style={{ display:'flex', flexDirection:'column', gap: compact ? 8 : 12 }}>
       {show('base') && <Bloc titre="Base">
-        <Ligne k="Lieu" v={[d.base?.nom, fmtAdresse(d.base?.adresse)].filter(Boolean).join(' — ')} />
+        <Ligne k="Base" v={d.base?.nom} />
+        {fmtAdresse(d.base?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.base.adresse} />} /> : null}
         <Ligne k="Rendez-vous" v={fmtDt(d.base?.rdv)} />
         <Ligne k="Départ" v={fmtDt(d.base?.depart)} />
         {d.consignes_equipage && <Ligne k="Consignes" v={d.consignes_equipage} />}
@@ -662,7 +715,7 @@ function Itineraire({ d, compact, only }) {
       {show('pec') && <Bloc titre="Prise en charge">
         <Ligne k="Lieu" v={d.pec?.type} />
         {d.pec?.institution && <Ligne k="Institution" v={d.pec.institution} />}
-        <Ligne k="Adresse" v={fmtAdresse(d.pec?.adresse)} />
+        {fmtAdresse(d.pec?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.pec.adresse} />} /> : null}
         {(d.pec?.service || d.pec?.etage || d.pec?.aile || d.pec?.chambre) &&
           <Ligne k="Localisation" v={[d.pec?.service && `Service ${d.pec.service}`, d.pec?.etage && `Étage ${d.pec.etage}`, d.pec?.aile && `Aile ${d.pec.aile}`, d.pec?.chambre && `Ch. ${d.pec.chambre}`].filter(Boolean).join(' · ')} />}
         <Ligne k="Heure souhaitée" v={fmtDt(d.pec?.heure)} />
@@ -670,7 +723,7 @@ function Itineraire({ d, compact, only }) {
         {d.pec?.precisions && <Ligne k="Précisions" v={d.pec.precisions} />}
       </Bloc>}
       {show('destination') && <Bloc titre="Destination">
-        <Ligne k="Adresse" v={fmtAdresse(d.destination?.adresse)} />
+        {fmtAdresse(d.destination?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.destination.adresse} />} /> : null}
         {d.destination?.precisions && <Ligne k="Précisions" v={d.destination.precisions} />}
         <Ligne k="Heure souhaitée" v={fmtDt(d.destination?.heure)} />
       </Bloc>}
@@ -710,7 +763,7 @@ function RapportMedical({ m, onSave }) {
   return (
     <Section titre="Rapport médical">
       <textarea value={txt} onChange={e=>setTxt(e.target.value)} onBlur={()=>onSave({ ...m, rapport_medical: txt })}
-        rows={4} style={{ ...inp, resize:'vertical' }} placeholder="Déroulement, observations cliniques…" />
+        rows={4} style={{ ...inp, resize:'vertical' }} placeholder="Déroulement, observations cliniques… Vous pouvez le rédiger dès le départ vers la base." />
     </Section>
   )
 }
@@ -752,6 +805,48 @@ function MiniNum({ l, v, set }) {
       <label style={{ display:'block', fontSize:12, color:'var(--text-muted)', marginBottom:4 }}>{l}</label>
       <input type="number" inputMode="decimal" value={v??''} onChange={e=>set(e.target.value)}
         style={{ ...inp, width:120, minHeight:44, fontSize:16 }} />
+    </div>
+  )
+}
+
+function PleinMatin({ essenceConnue, essenceN, besoinPlein, meta, onCapture, disabled }) {
+  if (!essenceConnue && !meta?.path) {
+    return (
+      <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>
+        Indiquez le pourcentage d’essence. S’il n’est pas à 100 %, allez faire le plein et photographiez le ticket — il sera envoyé au prêteur du véhicule pour remboursement.
+      </p>
+    )
+  }
+  if (!besoinPlein && !meta?.path) {
+    return (
+      <p style={{ fontSize:13.5, color:'#3B6D11', margin:'12px 0 0' }}>
+        Réservoir à {essenceN} % — pas de plein du matin, donc pas de ticket à capturer.
+      </p>
+    )
+  }
+  return (
+    <div style={{ marginTop:14 }}>
+      {besoinPlein
+        ? (
+          <>
+            <div style={{ fontSize:14, fontWeight:700, color:'#BA7517', marginBottom:6 }}>Plein du matin à faire</div>
+            <p style={{ fontSize:13.5, color:'var(--text-2)', margin:'0 0 10px', lineHeight:1.45 }}>
+              Le véhicule n’est pas à 100 % ({essenceN} %). Allez faire le plein, photographiez le ticket de caisse, puis indiquez 100 % ci-dessus. Ce ticket servira au remboursement auprès de la société qui prête l’ambulance.
+            </p>
+          </>
+        )
+        : (
+          <p style={{ fontSize:13.5, color:'#3B6D11', margin:'0 0 10px' }}>
+            Ticket du plein du matin enregistré{essenceConnue ? ` · essence indiquée ${essenceN} %` : ''}.
+          </p>
+        )}
+      <TicketPhoto
+        meta={meta}
+        onCapture={onCapture}
+        disabled={disabled}
+        hint="Ticket du plein du matin — à transmettre au prêteur."
+        label="Ticket du matin"
+      />
     </div>
   )
 }

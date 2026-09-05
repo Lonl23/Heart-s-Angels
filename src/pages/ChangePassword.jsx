@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { lbl, inp, Logo } from '@/components/ui'
+import { motDePasseErreur, MDP_AIDE } from '@/lib/motDePasse'
 
 export default function ChangePassword() {
   const { user, reload, signOut } = useAuth()
@@ -12,8 +13,9 @@ export default function ChangePassword() {
 
   async function submit(e) {
     e.preventDefault(); setErr(null)
-    if (p1.length < 6) return setErr('Mot de passe trop court (≥ 6 caractères).')
     if (p1 !== p2) return setErr('Les deux mots de passe ne correspondent pas.')
+    const faible = motDePasseErreur(p1)
+    if (faible) return setErr(faible)
     setBusy(true)
     const { error } = await supabase.auth.updateUser({ password: p1 })
     if (error) { setBusy(false); return setErr(error.message) }
@@ -30,7 +32,7 @@ export default function ChangePassword() {
         <p style={{ color:'var(--text-muted)', fontSize:13.5 }}>Première connexion : définissez un mot de passe personnel, connu de vous seul.</p>
         <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:12, marginTop:10 }}>
           <div>
-            <label style={lbl}>Nouveau mot de passe</label>
+            <label style={lbl}>Nouveau mot de passe ({MDP_AIDE})</label>
             <input type="password" value={p1} onChange={e=>setP1(e.target.value)} autoComplete="new-password" required style={inp} />
           </div>
           <div>

@@ -46,6 +46,7 @@ export default function Login() {
           <button type="submit" disabled={busy} style={{ padding:12, background:'var(--accent)', color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:600 }}>{busy?'Connexion…':'Se connecter'}</button>
         </form>
         <div style={{ textAlign:'center', marginTop:16 }}><Link to="/inscription" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>J'ai un code d'invitation</Link></div>
+        <p style={{ textAlign:'center', fontSize:12, color:'var(--text-muted)', margin:'8px 0 0' }}>Institutions : e-mail général + mot de passe, ou code généré dans l’annuaire.</p>
         <div style={{ textAlign:'center', fontSize:10.5, color:'var(--text-faint)', marginTop:18 }}>{COPYRIGHT}</div>
       </div>
     </div>

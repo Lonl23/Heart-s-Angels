@@ -78,7 +78,7 @@ export function Flash({ kind='ok', children }) {
   return <div className={'ha-flash ha-flash-' + kind}>{children}</div>
 }
 
-export function StatutFlow({ value, info, pipeline, extras=[], onPick }) {
+export function StatutFlow({ value, info, pipeline, extras=[], onPick, locked=false }) {
   return (
     <div className="ha-step">
       {pipeline.map((k, i) => {
@@ -88,8 +88,9 @@ export function StatutFlow({ value, info, pipeline, extras=[], onPick }) {
           <span key={k} style={{ display:'contents' }}>
             {i > 0 && <span className="ha-step-sep">›</span>}
             <button type="button" className={'ha-step-btn' + (on ? ' is-on' : '')}
+              disabled={locked && !on}
               style={on ? { background: st.c, color:'#fff' } : { color: st.c, borderColor: st.c + '55' }}
-              onClick={()=>onPick(k)} title={st.l}>
+              onClick={()=>{ if (locked) return; onPick(k) }} title={locked && !on ? 'Statut verrouillé' : st.l}>
               {st.l}
             </button>
           </span>
@@ -100,8 +101,9 @@ export function StatutFlow({ value, info, pipeline, extras=[], onPick }) {
         const on = value === k
         return (
           <button key={k} type="button" className={'ha-step-btn' + (on ? ' is-on' : '')}
+            disabled={locked && !on}
             style={on ? { background: st.c, color:'#fff' } : { color: st.c, borderColor: st.c + '66' }}
-            onClick={()=>onPick(k)}>
+            onClick={()=>{ if (locked) return; onPick(k) }}>
             {st.l}
           </button>
         )
@@ -114,38 +116,71 @@ export function Loading({ text='Chargement…' }) {
   return <p style={{ color:'var(--text-muted)', padding:'8px 0' }}>{text}</p>
 }
 
-// Formate un numéro : +indicatif puis groupé xxx.xx.xx.xx
-export function formatPhone(raw) {
-  if (!raw) return ''
-  let s = String(raw).trim().replace(/[^\d+]/g, '')
-  let cc = '', rest = s
-  if (s.startsWith('+')) {
-    const digits = s.slice(1)
-    const three = ['352','377','378','379','380','381','382','383','385','386','387','389','420','421','423','350','356','357']
-    const one = ['1','7']
-    let n = 2
-    if (three.includes(digits.slice(0,3))) n = 3
-    else if (one.includes(digits.slice(0,1))) n = 1
-    cc = '+' + digits.slice(0, n); rest = digits.slice(n)
-  } else if (s.startsWith('00')) {
-    return formatPhone('+' + s.slice(2))
-  }
-  const groups = []
-  if (rest.length) { groups.push(rest.slice(0,3)); let r = rest.slice(3); while (r.length) { groups.push(r.slice(0,2)); r = r.slice(2) } }
-  const nat = groups.join('.')
-  return cc ? `${cc} ${nat}`.trim() : nat
+// Formats belges autorisés : +32 xxx.xx.xx.xx (9 chiffres, GSM) ou +32 xx.xx.xx.xx (8 chiffres, fixe).
+export const PHONE_AIDE = 'Formats : +32 xxx.xx.xx.xx (GSM) ou +32 xx.xx.xx.xx (fixe)'
+
+export function digitsPhoneBE(raw) {
+  let s = String(raw || '').replace(/\D/g, '')
+  if (s.startsWith('00')) s = s.slice(2)
+  if (s.startsWith('32')) s = s.slice(2)
+  if (s.startsWith('0')) s = s.slice(1)
+  return s
 }
 
-export function PhoneF({ label, value, set, required, placeholder='+32 477.07.11.34' }) {
+export function formatPhone(raw) {
+  if (!raw || !String(raw).trim()) return ''
+  const d = digitsPhoneBE(raw)
+  if (!d) return ''
+  const grouper = (head, rest) => {
+    const parts = head ? [head] : []
+    for (let i = 0; i < rest.length; i += 2) parts.push(rest.slice(i, i + 2))
+    return `+32 ${parts.filter(Boolean).join('.')}`
+  }
+  if (d.length >= 9) return grouper(d.slice(0, 3), d.slice(3, 9))
+  if (d.length === 8) return grouper(d.slice(0, 2), d.slice(2, 8))
+  if (d[0] === '4' && d.length > 2) return grouper(d.slice(0, 3), d.slice(3))
+  return grouper('', d)
+}
+
+export function phoneValide(raw) {
+  if (!raw || !String(raw).trim()) return true
+  const d = digitsPhoneBE(raw)
+  return d.length === 8 || d.length === 9
+}
+
+export function PhoneF({ label, value, set, required, placeholder = '+32 xxx.xx.xx.xx' }) {
   const [v, setV] = useState(value ?? '')
+  const [err, setErr] = useState(false)
   useEffect(() => { setV(value ?? '') }, [value])
+  function commit() {
+    const f = formatPhone(v)
+    setV(f)
+    set(f)
+    setErr(!!f && !phoneValide(f))
+  }
   return (
-    <div style={{ marginBottom:10 }}>
+    <div style={{ marginBottom: 10 }}>
       <label style={lbl}>{label}{required && ' *'}</label>
       <input type="tel" value={v} placeholder={placeholder}
-        onChange={e=>setV(e.target.value)}
-        onBlur={()=>{ const f = formatPhone(v); setV(f); set(f) }}
-        style={inp} />
+        onChange={e => { setV(e.target.value); setErr(false) }}
+        onBlur={commit}
+        style={{ ...inp, borderColor: err ? '#C8435A' : undefined }} />
+      <div style={{ fontSize: 11.5, color: err ? '#C8435A' : 'var(--text-faint)', marginTop: 3 }}>{PHONE_AIDE}</div>
+    </div>
+  )
+}
+
+export function Modal({ title, onClose, children, footer, wide }) {
+  return (
+    <div className="ha-modal-scrim" onClick={onClose} role="presentation">
+      <div className={'ha-modal' + (wide ? ' is-wide' : '')} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="ha-modal-head">
+          <div className="ha-modal-title">{title}</div>
+          <button type="button" className="ha-modal-x" onClick={onClose} aria-label="Fermer">✕</button>
+        </div>
+        <div className="ha-modal-body">{children}</div>
+        {footer && <div className="ha-modal-foot">{footer}</div>}
+      </div>
     </div>
   )
 }
@@ -157,16 +192,66 @@ export function fmtAdresse(a) {
   return [l1, l2, a.pays].filter(Boolean).join(', ')
 }
 
+export function texteGps(a) {
+  if (!a) return ''
+  if (typeof a === 'string') return a.trim()
+  return fmtAdresse(a)
+}
+
+export function urlGoogleMaps(a) {
+  const q = texteGps(a)
+  if (!q) return ''
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`
+}
+
+export function urlWaze(a) {
+  const q = texteGps(a)
+  if (!q) return ''
+  return `https://waze.com/ul?q=${encodeURIComponent(q)}&navigate=yes`
+}
+
+export function LiensGps({ adresse, texte, onClick }) {
+  const q = texte || texteGps(adresse)
+  if (!q) return null
+  const stop = e => { e.stopPropagation(); onClick?.(e) }
+  return (
+    <span className="ha-gps" onClick={stop}>
+      <a className="ha-gps-btn" href={urlGoogleMaps(q)} target="_blank" rel="noopener noreferrer" onClick={stop}>Google Maps</a>
+      <a className="ha-gps-btn is-waze" href={urlWaze(q)} target="_blank" rel="noopener noreferrer" onClick={stop}>Waze</a>
+    </span>
+  )
+}
+
+export function AdresseAffichee({ value, texte, label, compact }) {
+  const t = texte || texteGps(value)
+  if (!t) return null
+  return (
+    <div className={'ha-addr' + (compact ? ' is-compact' : '')}>
+      {label && <div className="ha-addr-lab">{label}</div>}
+      <div className="ha-addr-txt">{t}</div>
+      <LiensGps adresse={value} texte={t} />
+    </div>
+  )
+}
+
 export function AddressFields({ value, set }) {
   const a = value && typeof value === 'object' ? value : {}
   const up = (k, v) => set({ ...a, [k]: v })
+  const txt = fmtAdresse(a)
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'0 10px' }}>
-      <F label="Rue" value={a.rue||''} set={v=>up('rue',v)} />
-      <F label="Numéro" value={a.numero||''} set={v=>up('numero',v)} />
-      <F label="Code postal" value={a.cp||''} set={v=>up('cp',v)} />
-      <F label="Localité" value={a.localite||''} set={v=>up('localite',v)} />
-      <div style={{ gridColumn:'1 / -1' }}><F label="Pays" value={a.pays||''} set={v=>up('pays',v)} /></div>
+    <div>
+      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'0 10px' }}>
+        <F label="Rue" value={a.rue||''} set={v=>up('rue',v)} />
+        <F label="Numéro" value={a.numero||''} set={v=>up('numero',v)} />
+        <F label="Code postal" value={a.cp||''} set={v=>up('cp',v)} />
+        <F label="Localité" value={a.localite||''} set={v=>up('localite',v)} />
+        <div style={{ gridColumn:'1 / -1' }}><F label="Pays" value={a.pays||''} set={v=>up('pays',v)} /></div>
+      </div>
+      {txt && (
+        <div style={{ margin: '-4px 0 10px' }}>
+          <LiensGps adresse={a} />
+        </div>
+      )}
     </div>
   )
 }

@@ -1,22 +1,31 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
-import { CHECKLISTS } from './missionSchema'
+import { CHECKLISTS, itemsChecklistTous, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse, equipePluri, personnePluriRemplie, lblRolePluri, medecinPluri, nomPluri } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
+import { libelleRequis } from '@/modules/stock/materielRequis'
+import { fmtDatesSouhait } from './datesSouhait'
+import { TicketVue } from './TerrainPhotos'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
 const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
+const escHtml = v => String(v || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))
 
 export default function FicheMission({ souhaitId, onClose }) {
   const [s, setS] = useState(null)
   const [meds, setMeds] = useState([])
   const [equipe, setEquipe] = useState([])
+  const [appel, setAppel] = useState(null)
+  const [apercu, setApercu] = useState(null)
   const ficheRef = useRef(null)
+  const apercuRef = useRef(null)
 
   useEffect(() => { (async () => {
     const { data: so } = await supabase.from('souhaits').select('*').eq('id', souhaitId).single()
     setS(so)
+    const { data: ap } = await supabase.rpc('coordonnees_appel', { p_souhait: souhaitId })
+    setAppel(ap?.ok ? ap : null)
     const { data: ints } = await supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId)
     let all = ints || []
     const { data: dem } = await supabase.from('demandes_souhaits').select('id').eq('souhait_id', souhaitId).limit(1)
@@ -26,22 +35,68 @@ export default function FicheMission({ souhaitId, onClose }) {
     setEquipe(eq || [])
   })() }, [souhaitId])
 
+  useEffect(() => {
+    document.body.classList.toggle('ha-fiche-ouverte', !!apercu)
+    return () => document.body.classList.remove('ha-fiche-ouverte')
+  }, [apercu])
+
   if (!s) return <div style={{ padding:24 }}>Chargement…</div>
   const m = s.mission || {}
   const vecteurs = m.vecteurs || []
-  // une fiche par vecteur ; à défaut, une fiche maîtresse (coordination) complète
+  const titre = `Fiche de mission — ${[s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ')}`.trim()
+  const nomFichier = 'Fiche-mission-' + ([s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ') || 'mission').replace(/[^\p{L}\p{N}]+/gu, '-') + '.html'
+
+  function htmlFiche() {
+    const inner = ficheRef.current ? ficheRef.current.innerHTML : ''
+    return '<!doctype html><html lang="fr"><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+      + '<title>' + escHtml(titre) + '</title>'
+      + '<style>' + printStyles + '</style></head><body>' + inner + '</body></html>'
+  }
+
+  function telechargerFiche() {
+    const blob = new Blob([htmlFiche()], { type: 'text/html;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = nomFichier
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+  }
+
+  function imprimerApercu() {
+    const w = apercuRef.current?.contentWindow
+    if (!w) return
+    try { w.focus(); w.print() } catch (e) { /* */ }
+  }
+
+  // Le document A4 isolé — jamais une capture de l’écran de l’app.
+  // Sur ordinateur : nouvel onglet + dialogue d’impression.
+  // Sur téléphone / PWA : aperçu plein écran de la fiche générée, puis imprimer ce document.
   function imprimer() {
-    const html = ficheRef.current ? ficheRef.current.innerHTML : ''
-    const doc = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche de mission</title><style>' + printStyles + '</style></head><body>' + html + '</body></html>'
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
-    document.body.appendChild(iframe)
-    const idoc = iframe.contentWindow.document
-    idoc.open(); idoc.write(doc); idoc.close()
-    setTimeout(() => {
-      try { iframe.contentWindow.focus(); iframe.contentWindow.print() } catch (e) {}
-      setTimeout(() => { try { document.body.removeChild(iframe) } catch (e) {} }, 1500)
-    }, 350)
+    const doc = htmlFiche()
+    const telephone = !!(window.navigator.standalone
+      || window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(pointer: coarse)').matches
+      || window.innerWidth < 720)
+    if (telephone) {
+      setApercu(doc)
+      return
+    }
+    let w = null
+    try { w = window.open('', '_blank') } catch (e) { w = null }
+    if (w && w !== window) {
+      w.document.open()
+      w.document.write(doc)
+      w.document.close()
+      const go = () => { try { w.focus(); w.print() } catch (e) { /* */ } }
+      if (w.document.readyState === 'complete') setTimeout(go, 350)
+      else w.addEventListener('load', () => setTimeout(go, 350))
+      return
+    }
+    setApercu(doc)
   }
 
   const fiches = vecteurs.length
@@ -50,26 +105,40 @@ export default function FicheMission({ souhaitId, onClose }) {
 
   return (
     <div style={{ background:'var(--bg)', minHeight:'100vh' }}>
-      <div className="no-print" style={{ display:'flex', gap:10, padding:'14px 16px', position:'sticky', top:0, background:'var(--surface)', borderBottom:'1px solid var(--border)', zIndex:5 }}>
+      <div className="no-print" style={{ display:'flex', gap:10, padding:'14px 16px', position:'sticky', top:0, background:'var(--surface)', borderBottom:'1px solid var(--border)', zIndex:5, flexWrap:'wrap' }}>
         <Btn kind="soft" onClick={onClose}>← Retour</Btn>
-        <Btn onClick={imprimer}>🖨 Imprimer / PDF (A4 recto-verso)</Btn>
-        <span style={{ alignSelf:'center', fontSize:12.5, color:'var(--text-muted)' }}>{fiches.length} fiche{fiches.length>1?'s':''} · une par vecteur</span>
+        <Btn onClick={imprimer}>🖨 Imprimer la fiche</Btn>
+        <Btn kind="soft" onClick={telechargerFiche}>Télécharger</Btn>
+        <span style={{ alignSelf:'center', fontSize:12.5, color:'var(--text-muted)' }}>{fiches.length} fiche{fiches.length>1?'s':''} · une par vecteur · document A4, pas une capture d’écran</span>
       </div>
 
       <div className="fiche" ref={ficheRef}>
         {fiches.map((f, idx) => {
           const med = f.v ? f.crew.some(c => personneEstMedicale(c)) : true
-          return <FicheVecteur key={idx} s={s} m={m} f={f} med={med} meds={meds} total={fiches.length} first={idx===0} />
+          return <FicheVecteur key={idx} s={s} m={m} f={f} med={med} meds={meds} total={fiches.length} first={idx===0} appel={appel} />
         })}
       </div>
+
+      {apercu && (
+        <div className="ha-fiche-apercu">
+          <div className="ha-fiche-apercu-bar no-print">
+            <Btn onClick={imprimerApercu}>🖨 Imprimer / PDF</Btn>
+            <Btn kind="soft" onClick={telechargerFiche}>Télécharger</Btn>
+            <Btn kind="soft" onClick={() => setApercu(null)}>Fermer</Btn>
+            <span style={{ fontSize:12.5, color:'var(--text-muted)', alignSelf:'center' }}>C’est la fiche A4 générée. Si l’app capture l’écran, utilisez Télécharger puis imprimez le fichier.</span>
+          </div>
+          <iframe ref={apercuRef} title="Fiche de mission" srcDoc={apercu} />
+        </div>
+      )}
 
       <style>{styles}</style>
     </div>
   )
 }
 
-function FicheVecteur({ s, m, f, med, meds, total, first }) {
+function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
   const v = f.v
+  const photosV = v ? ((m.terrain_photos || {})[v.id] || {}) : {}
   const pecAdr = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
   const vecteurLabel = v ? `Vecteur ${f.i + 1} — ${v.nom || '—'}${v.type_transport ? ` · ${v.type_transport}` : ''}${v.plaque ? ` · ${v.plaque}` : ''}` : 'Toutes affectations'
   const Wm = () => <div className={'wm ' + (med ? 'med' : 'conf')}><span>{med ? 'CONFIDENTIEL\nSECRET MÉDICAL' : 'CONFIDENTIEL'}</span></div>
@@ -80,14 +149,15 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
       <div className="page recto">
         <Wm />
         <div className="content">
-          <Masthead s={s} face="RECTO" vecteurLabel={vecteurLabel} med={med} />
+          <Masthead s={s} face="RECTO" vecteurLabel={vecteurLabel} med={med} appel={appel} />
           <Sec t="Administratif">
+            <Fld l="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : ''} wide />
             <Fld l="Registre national" v={m.registre_national} />
             <Fld l="Récolteur de souhait" v={m.recolteur} />
             <Fld l="Priorité élevée" v={m.priorite_elevee ? 'Oui' : ''} />
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
             <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />
-            <Fld l="Autorisation photos" v={m.autorisation_photos ? 'Oui' : ''} />
+            <Fld l="Autorisation photos" v={lblAutorisationPhotos(m.autorisation_photos)} />
             <Fld l="Adresse du domicile du patient" v={fmtAdresse(m.patient_adresse)} wide />
           </Sec>
           <Sec t="🏁 Base">
@@ -124,6 +194,13 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
             </div>}
             {!v && (m.vecteurs || []).map((vv, i) => <div key={vv.id} className="vec"><div className="vh">Vecteur {i+1} — {vv.nom||'—'}</div></div>)}
           </Sec>
+          {(photosV.ticket_carburant_matin?.path || photosV.ticket_carburant?.path) && (
+            <Sec t="🎫 Tickets carburant (remboursement prêteur)" plain>
+              {v?.essence_pct != null && v.essence_pct !== '' && <div className="muted" style={{ marginBottom:6 }}>Essence au départ : {v.essence_pct} %</div>}
+              {photosV.ticket_carburant_matin?.path && <TicketVue meta={photosV.ticket_carburant_matin} titre="Plein du matin" />}
+              {photosV.ticket_carburant?.path && <TicketVue meta={photosV.ticket_carburant} titre="Plein du retour" />}
+            </Sec>
+          )}
         </div>
       </div>
 
@@ -131,7 +208,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
       <div className="page">
         <Wm />
         <div className="content">
-          <Masthead s={s} face="VERSO" vecteurLabel={vecteurLabel} med={med} />
+          <Masthead s={s} face="VERSO" vecteurLabel={vecteurLabel} med={med} appel={appel} />
 
           {med && (
             <>
@@ -157,6 +234,27 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
                 <Fld l="Cible TA" v={m.cible_ta} third />
                 <Fld l="Cible FC" v={m.cible_fc} third />
               </Sec>
+              <Sec t="👥 Équipe pluridisciplinaire" plain>
+                {(() => {
+                  const rows = equipePluri(m).filter(personnePluriRemplie)
+                  if (!rows.length) return <div className="muted">Non encodée.</div>
+                  return (
+                    <table className="tbl">
+                      <thead><tr><th>Rôle</th><th>Nom</th><th>Téléphone</th><th>Organisme</th></tr></thead>
+                      <tbody>
+                        {rows.map((r, i) => (
+                          <tr key={r.id || i}>
+                            <td>{lblRolePluri(r.role)}</td>
+                            <td>{[r.prenom, r.nom].filter(Boolean).join(' ')}</td>
+                            <td>{r.tel}</td>
+                            <td>{r.organisme}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )
+                })()}
+              </Sec>
               <Sec t="💊 Médicaments" plain>
                 {meds.length === 0 ? <div className="muted">Aucun.</div> : (
                   <table className="tbl">
@@ -172,29 +270,34 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
                   </table>
                 )}
               </Sec>
+              <Sec t="🚨 Protocole de détresse" plain>
+                {(() => {
+                  const proto = protocoleDetresse(m)
+                  const lignes = proto.lignes.filter(r => (r.medicament || '').trim() || (r.dosage || '').trim())
+                  if (!lignes.length) return <div className="muted">Aucun protocole encodé.</div>
+                  return (
+                    <>
+                      <table className="tbl">
+                        <thead><tr><th>Médicament</th><th>Dosage</th><th>Voie</th></tr></thead>
+                        <tbody>
+                          {lignes.map((r, i) => (
+                            <tr key={r.id || i}>
+                              <td>{r.medicament}</td>
+                              <td>{r.dosage}</td>
+                              <td>{lblVoieDetresse(r.voie)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {proto.notes ? <div style={{ marginTop: 6 }}>{proto.notes}</div> : null}
+                    </>
+                  )
+                })()}
+              </Sec>
             </>
           )}
 
-          <Sec t="✅ Checklist véhicule — à cocher" plain>
-            <div className="muted" style={{ marginBottom:8 }}>Au départ : scanner chaque bouteille d’O₂ et chaque sac (QR). Puis cocher :</div>
-            {v ? ['base','retour_base'].map(sec => (
-              <div key={sec} className="cl-wrap">
-                <div className="cl-title">{CHECKLISTS[sec].titre}</div>
-                {CHECKLISTS[sec].items.map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
-              </div>
-            )) : <div className="muted">Définissez des vecteurs pour la checklist véhicule.</div>}
-          </Sec>
-
-          {med && (
-            <Sec t="✅ Checklists prise en charge — à cocher" plain>
-              {['pec','retour_pec'].map(sec => (
-                <div key={sec} className="cl-wrap">
-                  <div className="cl-title">{CHECKLISTS[sec].titre}</div>
-                  {CHECKLISTS[sec].items.map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
-                </div>
-              ))}
-            </Sec>
-          )}
+          <ChecklistsPapier m={m} />
 
           <Sec t="📝 Rapport de mission / observations" plain>
             <div className="rline" /><div className="rline" /><div className="rline" />
@@ -205,22 +308,28 @@ function FicheVecteur({ s, m, f, med, meds, total, first }) {
   )
 }
 
-function Masthead({ s, face, vecteurLabel, med }) {
+function Masthead({ s, face, vecteurLabel, med, appel }) {
   return (
     <div className="masthead">
       <div>
         <div className="kicker">Heart's Angels · Fiche de mission</div>
         <div className="name">{s.beneficiaire_prenom} {s.beneficiaire_nom}{s.beneficiaire_ddn && <small> — né(e) le {d(s.beneficiaire_ddn)}</small>}</div>
         {s.description && <div className="wish">« {s.description} »</div>}
+        {appel?.tel && <div className="vlabel">📞 {appel.tel}{appel.libelle ? ` · ${appel.libelle}` : ''}</div>}
+        {(() => {
+          const med = medecinPluri(s.mission)
+          if (!med?.tel) return null
+          return <div className="vlabel" style={{ color: '#A32D2D', fontWeight: 700 }}>📞 Médecin {med.tel}{nomPluri(med) ? ` · ${nomPluri(med)}` : ''}</div>
+        })()}
         <div className="vlabel">{vecteurLabel} · {med ? 'équipage médical' : 'équipage non médical'}</div>
       </div>
-      <div className="badge"><span className="face">{face}</span>{s.date_souhaitee && <div className="date">🗓 {d(s.date_souhaitee)}</div>}</div>
+      <div className="badge"><span className="face">{face}</span>{fmtDatesSouhait(s) !== 'Date à définir' && <div className="date">🗓 {fmtDatesSouhait(s)}</div>}</div>
     </div>
   )
 }
-function Sec({ t, plain, children }) {
+function Sec({ t, plain, children, allowBreak }) {
   return (
-    <div className="sec">
+    <div className={'sec' + (allowBreak ? ' allow-brk' : '')}>
       <div className="sec-h"><span className="t">{t}</span></div>
       {plain ? children : <div className="grid">{children}</div>}
     </div>
@@ -232,10 +341,42 @@ function Fld({ l, v, wide, third, alert }) {
   return <span className={cls}><span className="l">{l}</span><span className={'v'+(alert?' alert':'')}>{v}</span></span>
 }
 
+function ClListe({ section, m }) {
+  const def = CHECKLISTS[section]
+  const items = itemsChecklistTous(section, m)
+  if (!def) return null
+  return (
+    <div className="cl-wrap">
+      <div className="cl-title">{def.titre}</div>
+      {items.map((it, i) => (
+        <div key={section + '-' + i + '-' + it} className="cl-item"><span className="cl-box" />{it}</div>
+      ))}
+    </div>
+  )
+}
+
+function ChecklistsPapier({ m }) {
+  const materiel = Array.isArray(m.materiel_requis) ? m.materiel_requis : []
+  return (
+    <>
+      <Sec t="🎒 Matériel à emporter — à cocher" plain allowBreak>
+        {materiel.map(r => (
+          <div key={r.id || libelleRequis(r)} className="cl-item"><span className="cl-box" />{libelleRequis(r)}</div>
+        ))}
+        <div className="cl-item write"><span className="cl-box" />Bouteilles O₂ — n° / volume notés : <span className="blank" /></div>
+        <div className="cl-item write"><span className="cl-box" />Sacs emportés — lesquels : <span className="blank" /></div>
+      </Sec>
+      <Sec t="✅ Checklists — à cocher en entier" plain allowBreak>
+        {['base', 'retour_base', 'pec', 'retour_pec'].map(sec => <ClListe key={sec} section={sec} m={m} />)}
+      </Sec>
+    </>
+  )
+}
+
 const styles = `
   .fiche { color:#243033; }
   .fiche-block { }
-  .page { position:relative; background:#fff; color:#243033; width:210mm; min-height:297mm; margin:16px auto; padding:14mm; border:1px solid #E3EBEC; border-radius:8px; font-family:'Karla','Helvetica Neue',Arial,sans-serif; font-size:11.5px; overflow:hidden; }
+  .page { position:relative; background:#fff; color:#243033; width:210mm; min-height:297mm; margin:16px auto; padding:14mm; border:1px solid #E3EBEC; border-radius:8px; font-family:'Karla','Helvetica Neue',Arial,sans-serif; font-size:11.5px; overflow:visible; }
   .page > .content { position:relative; z-index:1; }
   .wm { position:absolute; inset:0; z-index:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
   .wm span { transform:rotate(-45deg); font-size:58px; font-weight:800; letter-spacing:8px; white-space:pre; text-align:center; line-height:1.35; }
@@ -247,9 +388,9 @@ const styles = `
   .masthead .name small { font-weight:400; font-size:12px; color:#B9DCE3; font-family:'Karla',sans-serif; }
   .masthead .wish { font-style:italic; color:#CFE6EB; margin-top:4px; font-size:11.5px; max-width:480px; }
   .masthead .vlabel { margin-top:6px; font-size:10px; color:#8FCAD6; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
-  .masthead .badge { text-align:right; white-space:nowrap; }
+  .masthead .badge { text-align:right; max-width:46%; }
   .masthead .face { display:inline-block; background:#178FA6; color:#fff; padding:3px 12px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:1.5px; }
-  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; }
+  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; white-space:normal; line-height:1.35; }
   .sec { margin-bottom:9px; }
   .sec-h { background:#EDF4F5; border-left:4px solid #7E9B76; padding:5px 11px; border-radius:5px; margin-bottom:7px; }
   .sec-h .t { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:#0E4A5A; }
@@ -266,10 +407,12 @@ const styles = `
   .vec { border:1px solid #E7EEF0; border-left:4px solid #178FA6; border-radius:7px; padding:7px 11px; margin-bottom:6px; }
   .vec .vh { font-weight:700; color:#0E4A5A; font-size:11.5px; }
   .vec .crew { margin-top:3px; color:#39494C; font-size:10.5px; }
-  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; }
+  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; margin-bottom:8px; }
   .cl-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#178FA6; margin:2px 0 4px; }
   .cl-item { padding:2.5px 0; font-size:10.5px; color:#39494C; }
   .cl-box { display:inline-block; width:11px; height:11px; border:1.4px solid #9DB0B3; border-radius:3px; margin-right:7px; vertical-align:-1px; }
+  .cl-item.write .blank { display:inline-block; border-bottom:1px solid #C7D3D5; min-width:140px; height:12px; margin-left:6px; vertical-align:-2px; }
+  .ha-gps, .ha-gps-btn { display:none !important; }
   .vec-cl { margin-bottom:8px; }
   .rline { border-bottom:1px solid #C7D3D5; height:19px; }
   .muted { color:#8CA0A3; }
@@ -304,10 +447,11 @@ const printStyles = `
   .masthead .name small { font-weight:400; font-size:12px; color:#B9DCE3; }
   .masthead .wish { font-style:italic; color:#CFE6EB; margin-top:4px; font-size:11.5px; max-width:480px; }
   .masthead .vlabel { margin-top:6px; font-size:10px; color:#8FCAD6; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
-  .masthead .badge { text-align:right; white-space:nowrap; }
+  .masthead .badge { text-align:right; max-width:46%; }
   .masthead .face { display:inline-block; background:#178FA6; color:#fff; padding:3px 12px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:1.5px; }
-  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; }
+  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; white-space:normal; line-height:1.35; }
   .sec { margin-bottom:9px; page-break-inside:avoid; }
+  .sec.allow-brk { page-break-inside:auto; }
   .sec-h { background:#EDF4F5; border-left:4px solid #7E9B76; padding:5px 11px; border-radius:5px; margin-bottom:7px; }
   .sec-h .t { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:#0E4A5A; }
   .f { display:inline-block; width:49%; vertical-align:top; padding:1px 10px 3px 0; }
@@ -322,11 +466,13 @@ const printStyles = `
   .vec { border:1px solid #E7EEF0; border-left:4px solid #178FA6; border-radius:7px; padding:7px 11px; margin-bottom:6px; page-break-inside:avoid; }
   .vec .vh { font-weight:700; color:#0E4A5A; font-size:11.5px; }
   .vec .crew { margin-top:3px; color:#39494C; font-size:10.5px; }
-  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; }
+  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; margin-bottom:8px; page-break-inside:avoid; }
   .cl-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#178FA6; margin:2px 0 4px; }
   .cl-item { padding:2.5px 0; font-size:10.5px; color:#39494C; }
   .cl-box { display:inline-block; width:11px; height:11px; border:1.4px solid #9DB0B3; border-radius:3px; margin-right:7px; vertical-align:-1px; }
+  .cl-item.write .blank { display:inline-block; border-bottom:1px solid #C7D3D5; min-width:140px; height:12px; margin-left:6px; vertical-align:-2px; }
   .vec-cl { margin-bottom:8px; }
   .rline { border-bottom:1px solid #C7D3D5; height:19px; }
   .muted { color:#8CA0A3; }
+  .ha-gps, .ha-gps-btn { display:none !important; }
 `

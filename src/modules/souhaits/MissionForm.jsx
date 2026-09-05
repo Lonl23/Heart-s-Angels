@@ -1,11 +1,14 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash } from '@/components/ui'
-import { GROUPES } from './missionSchema'
+import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, LiensGps } from '@/components/ui'
+import config from '@/app.config'
+import { GROUPES, AUTORISATION_PHOTOS, normaliserAutorisationPhotos, lblAutorisationPhotos } from './missionSchema'
 import Traitements from './Traitements'
 import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
 import MaterielRequis from './MaterielRequis'
+import { ProtocoleDetresseForm } from './ProtocoleDetresse'
+import EquipePluriForm from './EquipePluri'
 
 const grp = id => GROUPES.find(g => g.id === id)
 
@@ -13,7 +16,7 @@ const TABS = [
   { id:'administratif', label:'Administratif', groupes:['administratif'] },
   { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'] },
   { id:'vecteurs',      label:'Vecteurs & équipages' },
-  { id:'materiel',      label:'Matériel' },
+  { id:'materiel',      label:'Matériel & checklists' },
   { id:'medical',       label:'Médical', groupes:['medical'] },
   { id:'traitements',   label:'Traitements' },
   { id:'suivi',         label:'Suivi interne' },
@@ -31,7 +34,12 @@ export default function MissionForm({ souhaitId }) {
   useEffect(() => { (async () => {
     const { data } = await supabase.from('souhaits').select('mission').eq('id', souhaitId).single()
     chargee.current = false
-    setM(data?.mission || {})
+    const next = prefillBase(data?.mission || {})
+    setM(next)
+    const orig = data?.mission || {}
+    if (next.base_nom !== orig.base_nom || fmtAdresse(next.base_adresse) !== fmtAdresse(orig.base_adresse)) {
+      await supabase.from('souhaits').update({ mission: next }).eq('id', souhaitId)
+    }
   })() }, [souhaitId])
 
   // Enregistrement automatique (débounce) à chaque modification
@@ -53,7 +61,7 @@ export default function MissionForm({ souhaitId }) {
 
   return (
     <div>
-      <Flash>Ici on encode et on prépare. Les checklists, le MAR et le démarrage / la clôture se font dans Mes missions, sur tablette ou téléphone.</Flash>
+      <Flash>Ici on encode et on prépare. Dans Matériel, vous pouvez ajouter des points aux checklists ; l’équipage les coche dans Mes missions.</Flash>
       <Tabs
         value={tab}
         onChange={setTab}
@@ -78,6 +86,7 @@ export default function MissionForm({ souhaitId }) {
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           {cur.groupes.map(gid => {
             if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} />
+            if (gid === 'base') return <BlocBase key={gid} m={m} set={set} />
             const g = grp(gid); if (!g) return null
             return (
               <Card key={gid}>
@@ -91,7 +100,71 @@ export default function MissionForm({ souhaitId }) {
         </div>
       )}
 
+      {tab === 'medical' && <EquipePluriForm m={m} setM={setM} />}
+      {tab === 'medical' && <ProtocoleDetresseForm m={m} setM={setM} />}
+
     </div>
+  )
+}
+
+function prefillBase(m) {
+  const b = (config.bases || [])[0]
+  if (!b) return m
+  if (m.base_nom || fmtAdresse(m.base_adresse)) {
+    if (estSolumob(m.base_nom) && (!fmtAdresse(m.base_adresse) || localiteIncomplete(m.base_adresse))) {
+      return { ...m, base_nom: b.nom, base_adresse: { ...b.adresse } }
+    }
+    return m
+  }
+  return { ...m, base_nom: b.nom, base_adresse: { ...b.adresse } }
+}
+
+function estSolumob(nom) {
+  const n = String(nom || '').toLowerCase()
+  return n.includes('solumob') || n.includes('jemeppe')
+}
+
+function localiteIncomplete(a) {
+  if (!a || typeof a !== 'object') return true
+  const loc = String(a.localite || '').toLowerCase()
+  return loc.includes('jemeppe') && !loc.includes('seraing')
+}
+
+function BlocBase({ m, set }) {
+  const bases = config.bases || []
+  const nomMatch = bases.find(b => b.nom === m.base_nom)
+  const valeurSel = nomMatch ? nomMatch.nom : (m.base_nom ? '__autre__' : (bases[0]?.nom || ''))
+  function choisir(v) {
+    if (v === '__autre__') { set('base_nom', m.base_nom && !nomMatch ? m.base_nom : ''); return }
+    const b = bases.find(x => x.nom === v)
+    if (!b) return
+    set('base_nom', b.nom)
+    set('base_adresse', { ...b.adresse })
+  }
+  return (
+    <Card>
+      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Base</div>
+      <Sel
+        label="Base"
+        value={valeurSel}
+        set={choisir}
+        options={[
+          ...bases.map(b => ({ v: b.nom, l: b.nom })),
+          { v: '__autre__', l: 'Autre (saisir l’adresse)' },
+        ]}
+      />
+      {valeurSel === '__autre__' && (
+        <F label="Nom de la base" value={m.base_nom || ''} set={v => set('base_nom', v)} />
+      )}
+      <div style={{ marginTop: 8 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
+        <AddressFields value={m.base_adresse} set={v => set('base_adresse', v)} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: '0 24px' }}>
+        <Champ f={grp('base').fields.find(f => f.k === 'rdv_base')} val={m.rdv_base} set={v => set('rdv_base', v)} />
+        <Champ f={grp('base').fields.find(f => f.k === 'depart_base')} val={m.depart_base} set={v => set('depart_base', v)} />
+      </div>
+    </Card>
   )
 }
 
@@ -106,6 +179,7 @@ function PriseEnCharge({ m, set }) {
         <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'10px 12px', margin:'6px 0' }}>
           <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse (domicile du patient — reprise de l'Administratif)</div>
           <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— à renseigner dans l\'onglet Administratif —'}</div>
+          {fmtAdresse(m.patient_adresse) && <div style={{ marginTop: 6 }}><LiensGps adresse={m.patient_adresse} /></div>}
         </div>
       ) : (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
@@ -137,6 +211,30 @@ function Champ({ f, val, set }) {
       <span style={{ fontSize:14, color:'var(--text)' }}>{f.l}</span>
     </div>
   )
+  if (f.t === 'photos') {
+    const cur = normaliserAutorisationPhotos(val)
+    const idx = Math.max(0, AUTORISATION_PHOTOS.findIndex(o => o.v === (cur || 'oui')))
+    return (
+      <div className="ha-photos-slider">
+        <div className="ha-photos-slider-label">{f.l}</div>
+        <input
+          type="range" min="0" max="2" step="1"
+          value={cur ? idx : 1}
+          aria-valuetext={lblAutorisationPhotos(cur || 'oui')}
+          onChange={e => set(AUTORISATION_PHOTOS[Number(e.target.value)].v)}
+        />
+        <div className="ha-photos-slider-stops">
+          {AUTORISATION_PHOTOS.map(o => (
+            <button type="button" key={o.v}
+              className={'ha-photos-stop' + (cur === o.v ? ' is-on' : '') + (o.v === 'refus' ? ' is-refus' : '')}
+              onClick={() => set(o.v)}>
+              {o.l}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
   const wrap = c => <div style={{ margin:'8px 0' }}><label style={lbl}>{f.l}</label>{c}</div>
   if (f.t === 'textarea') return <div style={{ gridColumn:'1 / -1' }}>{wrap(<textarea value={val||''} onChange={e=>set(e.target.value)} rows={f.rows||2} style={{ ...inp, resize:'vertical' }} />)}</div>
   if (f.t === 'select') return wrap(<select value={val||''} onChange={e=>set(e.target.value)} style={inp}>{f.options.map(o=><option key={o} value={o}>{o||'—'}</option>)}</select>)
