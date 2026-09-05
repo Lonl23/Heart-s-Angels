@@ -38,6 +38,17 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
+
+@media print {
+  html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
+  .ha-sidebar, .ha-scrim, .ha-update-banner, .ha-update-flash, .no-print { display: none !important; }
+  header { display: none !important; }
+  #root, #root > div, #root > div > div { display: block !important; height: auto !important; overflow: visible !important; transform: none !important; width: 100% !important; }
+  main { overflow: visible !important; height: auto !important; max-height: none !important; }
+  body.ha-fiche-ouverte .fiche { display: none !important; }
+  .ha-fiche-apercu { position: static !important; inset: auto !important; height: auto !important; }
+  .ha-fiche-apercu iframe { height: auto !important; min-height: 100vh; }
+}
 body {
   background: var(--bg);
   color: var(--text);
@@ -622,4 +633,17 @@ img, svg, video, table { max-width: 100%; }
 @media (min-width: 720px) {
   .ha-scan-dock { left: auto; right: 20px; bottom: 20px; width: min(420px, calc(100vw - 40px)); }
   .ha-scan-dock-cam, .ha-scan-dock-video { max-height: 180px; height: 180px; }
+}
+
+.ha-fiche-apercu {
+  position: fixed; inset: 0; z-index: 200; background: #fff;
+  display: flex; flex-direction: column;
+}
+.ha-fiche-apercu-bar {
+  flex-shrink: 0; display: flex; gap: 8px; flex-wrap: wrap;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.ha-fiche-apercu iframe {
+  flex: 1; width: 100%; border: 0; background: #fff; min-height: 0;
 }

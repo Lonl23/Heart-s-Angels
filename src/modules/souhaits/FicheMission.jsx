@@ -8,13 +8,16 @@ import { libelleRequis } from '@/modules/stock/materielRequis'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
 const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
+const escHtml = v => String(v || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))
 
 export default function FicheMission({ souhaitId, onClose }) {
   const [s, setS] = useState(null)
   const [meds, setMeds] = useState([])
   const [equipe, setEquipe] = useState([])
   const [appel, setAppel] = useState(null)
+  const [apercu, setApercu] = useState(null)
   const ficheRef = useRef(null)
+  const apercuRef = useRef(null)
 
   useEffect(() => { (async () => {
     const { data: so } = await supabase.from('souhaits').select('*').eq('id', souhaitId).single()
@@ -30,22 +33,68 @@ export default function FicheMission({ souhaitId, onClose }) {
     setEquipe(eq || [])
   })() }, [souhaitId])
 
+  useEffect(() => {
+    document.body.classList.toggle('ha-fiche-ouverte', !!apercu)
+    return () => document.body.classList.remove('ha-fiche-ouverte')
+  }, [apercu])
+
   if (!s) return <div style={{ padding:24 }}>Chargement…</div>
   const m = s.mission || {}
   const vecteurs = m.vecteurs || []
-  // une fiche par vecteur ; à défaut, une fiche maîtresse (coordination) complète
+  const titre = `Fiche de mission — ${[s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ')}`.trim()
+  const nomFichier = 'Fiche-mission-' + ([s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ') || 'mission').replace(/[^\p{L}\p{N}]+/gu, '-') + '.html'
+
+  function htmlFiche() {
+    const inner = ficheRef.current ? ficheRef.current.innerHTML : ''
+    return '<!doctype html><html lang="fr"><head><meta charset="utf-8">'
+      + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+      + '<title>' + escHtml(titre) + '</title>'
+      + '<style>' + printStyles + '</style></head><body>' + inner + '</body></html>'
+  }
+
+  function telechargerFiche() {
+    const blob = new Blob([htmlFiche()], { type: 'text/html;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = nomFichier
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+  }
+
+  function imprimerApercu() {
+    const w = apercuRef.current?.contentWindow
+    if (!w) return
+    try { w.focus(); w.print() } catch (e) { /* */ }
+  }
+
+  // Le document A4 isolé — jamais une capture de l’écran de l’app.
+  // Sur ordinateur : nouvel onglet + dialogue d’impression.
+  // Sur téléphone / PWA : aperçu plein écran de la fiche générée, puis imprimer ce document.
   function imprimer() {
-    const html = ficheRef.current ? ficheRef.current.innerHTML : ''
-    const doc = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche de mission</title><style>' + printStyles + '</style></head><body>' + html + '</body></html>'
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'
-    document.body.appendChild(iframe)
-    const idoc = iframe.contentWindow.document
-    idoc.open(); idoc.write(doc); idoc.close()
-    setTimeout(() => {
-      try { iframe.contentWindow.focus(); iframe.contentWindow.print() } catch (e) {}
-      setTimeout(() => { try { document.body.removeChild(iframe) } catch (e) {} }, 1500)
-    }, 350)
+    const doc = htmlFiche()
+    const telephone = !!(window.navigator.standalone
+      || window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(pointer: coarse)').matches
+      || window.innerWidth < 720)
+    if (telephone) {
+      setApercu(doc)
+      return
+    }
+    let w = null
+    try { w = window.open('', '_blank') } catch (e) { w = null }
+    if (w && w !== window) {
+      w.document.open()
+      w.document.write(doc)
+      w.document.close()
+      const go = () => { try { w.focus(); w.print() } catch (e) { /* */ } }
+      if (w.document.readyState === 'complete') setTimeout(go, 350)
+      else w.addEventListener('load', () => setTimeout(go, 350))
+      return
+    }
+    setApercu(doc)
   }
 
   const fiches = vecteurs.length
@@ -54,10 +103,11 @@ export default function FicheMission({ souhaitId, onClose }) {
 
   return (
     <div style={{ background:'var(--bg)', minHeight:'100vh' }}>
-      <div className="no-print" style={{ display:'flex', gap:10, padding:'14px 16px', position:'sticky', top:0, background:'var(--surface)', borderBottom:'1px solid var(--border)', zIndex:5 }}>
+      <div className="no-print" style={{ display:'flex', gap:10, padding:'14px 16px', position:'sticky', top:0, background:'var(--surface)', borderBottom:'1px solid var(--border)', zIndex:5, flexWrap:'wrap' }}>
         <Btn kind="soft" onClick={onClose}>← Retour</Btn>
-        <Btn onClick={imprimer}>🖨 Imprimer / PDF (A4 recto-verso)</Btn>
-        <span style={{ alignSelf:'center', fontSize:12.5, color:'var(--text-muted)' }}>{fiches.length} fiche{fiches.length>1?'s':''} · une par vecteur</span>
+        <Btn onClick={imprimer}>🖨 Imprimer la fiche</Btn>
+        <Btn kind="soft" onClick={telechargerFiche}>Télécharger</Btn>
+        <span style={{ alignSelf:'center', fontSize:12.5, color:'var(--text-muted)' }}>{fiches.length} fiche{fiches.length>1?'s':''} · une par vecteur · document A4, pas une capture d’écran</span>
       </div>
 
       <div className="fiche" ref={ficheRef}>
@@ -66,6 +116,18 @@ export default function FicheMission({ souhaitId, onClose }) {
           return <FicheVecteur key={idx} s={s} m={m} f={f} med={med} meds={meds} total={fiches.length} first={idx===0} appel={appel} />
         })}
       </div>
+
+      {apercu && (
+        <div className="ha-fiche-apercu">
+          <div className="ha-fiche-apercu-bar no-print">
+            <Btn onClick={imprimerApercu}>🖨 Imprimer / PDF</Btn>
+            <Btn kind="soft" onClick={telechargerFiche}>Télécharger</Btn>
+            <Btn kind="soft" onClick={() => setApercu(null)}>Fermer</Btn>
+            <span style={{ fontSize:12.5, color:'var(--text-muted)', alignSelf:'center' }}>C’est la fiche A4 générée. Si l’app capture l’écran, utilisez Télécharger puis imprimez le fichier.</span>
+          </div>
+          <iframe ref={apercuRef} title="Fiche de mission" srcDoc={apercu} />
+        </div>
+      )}
 
       <style>{styles}</style>
     </div>
