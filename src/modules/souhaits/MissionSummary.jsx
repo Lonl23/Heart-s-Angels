@@ -41,7 +41,7 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
     })
   }).filter(c => c.faits > 0)
 
-  const rien = groupesRemplis.length === 0 && meds.length === 0 && clRempli.length === 0 && !(m.vecteurs || []).length
+  const rien = groupesRemplis.length === 0 && meds.length === 0 && clRempli.length === 0 && !(m.vecteurs || []).length && !m.rapport_medical && !m.rapport_observations
   if (rien) return <Card><div style={{ color:'var(--text-muted)', fontSize:13.5 }}>Dossier encore vide. Ouvrez « Préparer le dossier » pour encoder le trajet, les vecteurs et le médical.</div></Card>
 
   const suiviVecteurs = (m.vecteurs || []).map(v => ({

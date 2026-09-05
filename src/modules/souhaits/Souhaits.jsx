@@ -48,6 +48,14 @@ export default function Souhaits() {
   const nouveau = loc.pathname.endsWith('/nouveau')
   const preparer = loc.pathname.endsWith('/preparer')
 
+  function ouvrirSouhait(s) {
+    const id = typeof s === 'string' ? s : s?.id
+    const statut = typeof s === 'string' ? null : s?.statut
+    if (!id) return
+    if (statut === 'realise' || statut === 'en_cours') nav(`/app/souhaits/${id}`)
+    else nav(`/app/souhaits/${id}/preparer`)
+  }
+
   useEffect(() => {
     supabase.from('demandes_souhaits').select('id', { count:'exact', head:true }).in('statut', ['nouvelle','en_cours'])
       .then(({ count }) => setNbDemandes(count || 0))
@@ -74,7 +82,7 @@ export default function Souhaits() {
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
       ]} />
-      {tab === 'souhaits' ? <Kanban onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} /> : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
+      {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} /> : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
     </Page>
   )
 }
@@ -173,7 +181,7 @@ function Kanban({ onOpen }) {
       const dist = Math.hypot((e.clientX || o.x) - o.x, (e.clientY || o.y) - o.y)
       if (dist > 16) return
     }
-    onOpen(s.id)
+    onOpen(s)
   }
   function onPointerUp(e, s) { finirPointeur(e, s) }
   function onPointerCancel(e, s) { finirPointeur(e, s, { cancel: true }) }
@@ -199,7 +207,7 @@ function Kanban({ onOpen }) {
     <div>
       <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:14 }}>
         <input className="ha-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un bénéficiaire, un lieu…" />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Sur téléphone, touchez <strong>Préparer</strong>. Sur ordinateur, un clic ouvre le dossier ; glissez la carte pour changer le statut.</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, un clic ouvre le dossier ; glissez la carte pour changer le statut.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -235,7 +243,7 @@ function Kanban({ onOpen }) {
                     <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
                       onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove}
                       onPointerUp={e=>onPointerUp(e,s)} onPointerCancel={e=>onPointerCancel(e,s)}
-                      onOuvrir={() => onOpen(s.id)} />
+                      onOuvrir={() => onOpen(s)} />
                   ))}
                   {list.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici</div>}
                 </div>
@@ -252,7 +260,7 @@ function Kanban({ onOpen }) {
               <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
                 onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove}
                 onPointerUp={e=>onPointerUp(e,s)} onPointerCancel={e=>onPointerCancel(e,s)}
-                onOuvrir={() => onOpen(s.id)} />
+                onOuvrir={() => onOpen(s)} />
             ))}
             {autres.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici pour marquer non réalisé</div>}
           </div>
@@ -271,7 +279,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp, 
   return (
     <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '')} style={{ padding:'12px 14px' }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
-      title="Touchez Préparer. Sur ordinateur, glissez pour changer le statut.">
+      title={s.statut === 'realise' ? 'Ouvrir le rapport de la journée' : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:6, marginBottom:5 }}>
         <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5 }}>{s.beneficiaire_prenom} {s.beneficiaire_nom}</span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
@@ -289,7 +297,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp, 
           onPointerDown={e => e.stopPropagation()}
           onPointerUp={e => e.stopPropagation()}
           onPointerCancel={e => e.stopPropagation()}>
-          Préparer ›
+          {s.statut === 'realise' ? 'Rapport ›' : s.statut === 'en_cours' ? 'Consulter ›' : 'Préparer ›'}
         </button>
       )}
     </Card>
