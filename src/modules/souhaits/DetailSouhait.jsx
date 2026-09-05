@@ -83,7 +83,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
             {s.date_souhaitee && <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{new Date(s.date_souhaitee).toLocaleDateString('fr-BE')}</span>}
           </div>
         </div>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        <div className="ha-souhait-actions">
           <Btn kind="soft" onClick={()=>setFiche(true)}>Imprimer la fiche</Btn>
           <Btn kind={mode==='edit'?'ok':'primary'} onClick={()=>mode==='edit' ? onVoir?.() : onPreparer?.()}>
             {mode==='edit' ? 'Terminer l\'encodage' : 'Préparer le dossier'}

@@ -73,7 +73,7 @@ export default function Souhaits() {
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
       ]} />
-      {tab === 'souhaits' ? <Kanban onOpen={sid => nav(`/app/souhaits/${sid}`)} /> : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
+      {tab === 'souhaits' ? <Kanban onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} /> : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
     </Page>
   )
 }
@@ -133,30 +133,49 @@ function Kanban({ onOpen }) {
 
   function onPointerDown(e, s) {
     if (e.pointerType === 'mouse' && e.button !== 0) return
+    if (e.target?.closest?.('a,button')) return
     const r = e.currentTarget.getBoundingClientRect()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    origin.current = { id: s.id, x: e.clientX, y: e.clientY, r, started: false, target: e.currentTarget }
+    origin.current = {
+      id: s.id, x: e.clientX, y: e.clientY, r,
+      started: false, t: Date.now(),
+      touch: e.pointerType !== 'mouse',
+      target: e.currentTarget, pid: e.pointerId,
+    }
   }
   function onPointerMove(e) {
     const o = origin.current
-    if (!o) return
+    if (!o || o.touch) return
     const dist = Math.hypot(e.clientX - o.x, e.clientY - o.y)
     if (!o.started && dist < 10) return
-    o.started = true
+    if (!o.started) {
+      o.started = true
+      try { o.target.setPointerCapture(o.pid) } catch { /* */ }
+    }
     if (e.cancelable) e.preventDefault()
     setDrag({ id: o.id, x: e.clientX, y: e.clientY, w: o.r.width, ox: o.x - o.r.left, oy: o.y - o.r.top })
     setOver(hitCol(e.clientX, e.clientY))
   }
-  function onPointerUp(e, s) {
+  function finirPointeur(e, s, { cancel } = {}) {
     const o = origin.current
     origin.current = null
-    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* déjà relâché */ }
+    try { (o?.target || e.currentTarget)?.releasePointerCapture?.(o?.pid || e.pointerId) } catch { /* */ }
     const started = o?.started
     const col = started ? hitCol(e.clientX, e.clientY) : null
     setDrag(null); setOver(null)
-    if (started) deposer(s.id, col)
-    else onOpen(s.id)
+    if (!o) return
+    if (started && col && col !== s.statut) {
+      deposer(s.id, col)
+      return
+    }
+    if (cancel) {
+      if (started) return
+      const dist = Math.hypot((e.clientX || o.x) - o.x, (e.clientY || o.y) - o.y)
+      if (dist > 16) return
+    }
+    onOpen(s.id)
   }
+  function onPointerUp(e, s) { finirPointeur(e, s) }
+  function onPointerCancel(e, s) { finirPointeur(e, s, { cancel: true }) }
 
   async function confirmerMotif() {
     const t = motifTxt.trim()
@@ -179,7 +198,7 @@ function Kanban({ onOpen }) {
     <div>
       <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:14 }}>
         <input className="ha-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un bénéficiaire, un lieu…" />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Nouveau → En attente → Prêt : préparation. En cours / Réalisé : le terrain (Mes missions).</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Sur téléphone, touchez <strong>Préparer</strong>. Sur ordinateur, un clic ouvre le dossier ; glissez la carte pour changer le statut.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -199,7 +218,7 @@ function Kanban({ onOpen }) {
         <Empty title="Aucun résultat" hint="Essayez un autre mot, ou effacez la recherche." />
       )}
       {filtered.length > 0 && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,230px),1fr))', gap:12 }}>
+        <div className="ha-kanban-board">
           {PIPELINE.map(col => {
             const st = stInfo(col)
             const list = filtered.filter(s => s.statut === col)
@@ -213,7 +232,9 @@ function Kanban({ onOpen }) {
                 <div className={'ha-kanban-drop' + (over===col ? ' is-over' : '')}>
                   {list.map(s => (
                     <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
-                      onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove} onPointerUp={e=>onPointerUp(e,s)} />
+                      onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove}
+                      onPointerUp={e=>onPointerUp(e,s)} onPointerCancel={e=>onPointerCancel(e,s)}
+                      onOuvrir={() => onOpen(s.id)} />
                   ))}
                   {list.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici</div>}
                 </div>
@@ -228,7 +249,9 @@ function Kanban({ onOpen }) {
           <div className={'ha-kanban-drop' + (over==='non_realise' ? ' is-over' : '')} style={{ minHeight: autres.length ? 48 : 72 }}>
             {autres.map(s => (
               <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
-                onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove} onPointerUp={e=>onPointerUp(e,s)} />
+                onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove}
+                onPointerUp={e=>onPointerUp(e,s)} onPointerCancel={e=>onPointerCancel(e,s)}
+                onOuvrir={() => onOpen(s.id)} />
             ))}
             {autres.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici pour marquer non réalisé</div>}
           </div>
@@ -243,11 +266,11 @@ function Kanban({ onOpen }) {
   )
 }
 
-function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp }) {
+function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onOuvrir }) {
   return (
     <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '')} style={{ padding:'12px 14px' }}
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-      title="Glisser pour changer le statut, cliquer pour ouvrir">
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
+      title="Touchez Préparer. Sur ordinateur, glissez pour changer le statut.">
       <div style={{ display:'flex', justifyContent:'space-between', gap:6, marginBottom:5 }}>
         <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5 }}>{s.beneficiaire_prenom} {s.beneficiaire_nom}</span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
@@ -258,6 +281,15 @@ function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp }
         <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
           {ATTENTE_RAISONS.filter(r=>s.mission.attente[r.v]).map(r=><span key={r.v} style={{ fontSize:10.5, background:'#FAEEDA', color:'#BA7517', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>{r.l}</span>)}
         </div>
+      )}
+      {onOuvrir && (
+        <button type="button" className="ha-kanban-open"
+          onClick={e => { e.preventDefault(); e.stopPropagation(); onOuvrir() }}
+          onPointerDown={e => e.stopPropagation()}
+          onPointerUp={e => e.stopPropagation()}
+          onPointerCancel={e => e.stopPropagation()}>
+          Préparer ›
+        </button>
       )}
     </Card>
   )

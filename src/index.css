@@ -124,11 +124,21 @@ input:focus, select:focus, textarea:focus {
 }
 .ha-check input { margin-top: 3px; accent-color: var(--accent); }
 
+.ha-kanban-board {
+  display: flex; flex-direction: column; gap: 18px;
+}
+@media (min-width: 700px) {
+  .ha-kanban-board {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+}
 .ha-kanban-card {
-  cursor: grab; user-select: none; touch-action: none;
+  cursor: grab; user-select: none; touch-action: manipulation; width: 100%;
 }
 .ha-kanban-card:active { cursor: grabbing; }
-.ha-kanban-card.is-origin { opacity: .38; }
+.ha-kanban-card.is-origin { opacity: .38; touch-action: none; }
 .ha-kanban-ghost {
   position: fixed; z-index: 80; pointer-events: none;
   box-shadow: none; transform: scale(1.03);
@@ -136,13 +146,25 @@ input:focus, select:focus, textarea:focus {
 }
 .ha-kanban-drop {
   display: flex; flex-direction: column; gap: 8px;
-  min-height: 132px; background: var(--bg-alt); border-radius: 12px;
+  min-height: 80px; background: var(--bg-alt); border-radius: 12px;
   padding: 8px; border: 2px dashed transparent;
   transition: border-color var(--ease), background var(--ease);
 }
 .ha-kanban-drop.is-over {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-alt));
+}
+.ha-kanban-open {
+  display: block; width: 100%; margin-top: 10px; padding: 10px 12px;
+  min-height: 44px; border: none; border-radius: 8px;
+  background: var(--accent); color: #fff;
+  font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+  touch-action: manipulation;
+}
+.ha-souhait-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .ha-souhait-actions { width: 100%; }
+  .ha-souhait-actions button { flex: 1; min-width: 140px; min-height: 44px; }
 }
 
 .ha-check-btn {
