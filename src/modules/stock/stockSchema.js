@@ -17,10 +17,15 @@ export const MODES = [
 ]
 export const lblMode = v => MODES.find(t => t.v === v)?.l || v
 
+export function nomTypeO2(volumeL) {
+  const n = Number(volumeL)
+  return Number.isFinite(n) && n > 0 ? `O2 B${n}L` : 'O2'
+}
+
 export const VOLUMES_O2 = [
-  { v:'2', l:'2 L' },
-  { v:'5', l:'5 L' },
-  { v:'10', l:'10 L' },
+  { v:'2', l:'B2 (2 L)' },
+  { v:'5', l:'B5 (5 L)' },
+  { v:'10', l:'B10 (10 L)' },
 ]
 export const PRESSION_PLEINE = 200
 export const PRESSION_ALERTE = 50

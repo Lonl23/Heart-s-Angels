@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Tabs, Pill, Empty, Loading, Flash, inp, lbl } from '@/components/ui'
-import { TYPES_LIEU, MODES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, cheminLieux, enfantsDe, resteLabel } from './stock/stockSchema'
+import { TYPES_LIEU, MODES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, cheminLieux, enfantsDe, resteLabel, nomTypeO2 } from './stock/stockSchema'
 import VueLots from './stock/VueLots'
 import { aggregerLots, lotConnuPour, fmtDlc } from './stock/lotsStock'
 import { ApercuEtiq, telechargerWord, telechargerPng, copierPng, telechargerCsv } from './stock/QrImg'
@@ -230,8 +230,8 @@ function etiqLieu(l) {
   return { titre: l.nom, ligne2: lblLieu(l.type), lot: '', token: l.qr_token }
 }
 function etiqUnite(u) {
-  const titre = u.mode === 'oxygene' && u.volume_l
-    ? `${u.nom || 'Oxygène'} ${Number(u.volume_l)} L`
+  const titre = u.mode === 'oxygene'
+    ? (u.nom || nomTypeO2(u.volume_l))
     : (u.nom || 'Article')
   return {
     titre,
@@ -378,7 +378,7 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
     <div>
       <Btn onClick={() => setEdit({ nom:'', mode:'piece', unite:'pièce', qte_defaut:'', stock_minimal:0, fournisseur_id:'', ref_fournisseur:'' })} style={{ marginBottom:12 }}>+ Type d’article</Btn>
       {edit && <FormCatalogue item={edit} fournisseurs={fournisseurs} onDone={() => { setEdit(null); onChange() }} onOk={onOk} onErr={onErr} />}
-      {cats.length === 0 ? <Empty title="Aucun type" hint="Ex. Gants nitrile M (boîte), Compresse, Oxygène 2 / 5 / 10 L. Ajoutez une photo pour reconnaître l’article." /> : (
+      {cats.length === 0 ? <Empty title="Aucun type" hint="Ex. Gants nitrile M (boîte), Compresse, O2 B2L / B5L / B10L. Ajoutez une photo pour reconnaître l’article." /> : (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {cats.map(c => (
             <Card key={c.id} style={{ padding:'12px 14px' }}>
@@ -425,11 +425,11 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
   async function save() {
     if (f.mode === 'boite' && !(Number(f.qte_defaut) > 0)) { alert('Pour une boîte, indiquez le nombre par défaut dedans (ex. 100).'); return }
     if (f.mode === 'oxygene' && !Number(f.volume_l)) { alert('Choisissez 2, 5 ou 10 L.'); return }
-    if (f.mode === 'oxygene' && !f.nom?.trim()) f.nom = `Oxygène ${Number(f.volume_l)} L`
+    if (f.mode === 'oxygene' && !f.nom?.trim()) f.nom = nomTypeO2(f.volume_l)
     if (!f.nom?.trim()) { alert('Nom requis.'); return }
     setSaving(true)
     const payload = {
-      nom: f.nom.trim() || (f.mode === 'oxygene' ? `Oxygène ${Number(f.volume_l)} L` : ''),
+      nom: f.nom.trim() || (f.mode === 'oxygene' ? nomTypeO2(f.volume_l) : ''),
       categorie: f.mode === 'oxygene' ? 'oxygène' : (f.categorie || null),
       mode: f.mode,
       unite: f.mode === 'oxygene' ? 'L' : (f.unite || 'pièce'),
@@ -460,11 +460,11 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
         <Btn kind="soft" onClick={onDone}>{f.id && !item.id ? 'Terminer' : 'Annuler'}</Btn>
       </div>
       <PhotoArticleChamp path={photoPath} catalogueId={f.id} onChange={setPhotoPath} onErr={onErr} />
-      <F label="Nom" value={f.nom} set={v=>setF(s=>({ ...s, nom:v }))} required placeholder="Gants nitrile M, Compresse, Oxygène 5 L" />
+      <F label="Nom" value={f.nom} set={v=>setF(s=>({ ...s, nom:v }))} required placeholder="Gants nitrile M, Compresse, O2 B5L" />
       <Sel label="Mode QR" value={f.mode} set={v=>setF(s=>({ ...s, mode:v, ...(v==='oxygene' && !s.volume_l ? { volume_l:'5' } : {}) }))} options={MODES} />
       {f.mode === 'boite' && <F label="Nombre par défaut dans une boîte" type="number" value={f.qte_defaut} set={v=>setF(s=>({ ...s, qte_defaut:v }))} required />}
       {f.mode === 'oxygene' && (
-        <Sel label="Volume de la bouteille" value={String(f.volume_l || '5')} set={v=>setF(s=>({ ...s, volume_l:v, nom: s.nom || `Oxygène ${v} L` }))} options={VOLUMES_O2} />
+        <Sel label="Volume de la bouteille" value={String(f.volume_l || '5')} set={v=>setF(s=>({ ...s, volume_l:v, nom: s.nom || nomTypeO2(v) }))} options={VOLUMES_O2} />
       )}
       {f.mode !== 'oxygene' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>

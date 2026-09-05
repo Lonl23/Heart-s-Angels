@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, Btn, F, Sel, Empty } from '@/components/ui'
-import { VOLUMES_O2 } from '@/modules/stock/stockSchema'
+import { VOLUMES_O2, nomTypeO2 } from '@/modules/stock/stockSchema'
 import { nid, libelleRequis } from '@/modules/stock/materielRequis'
 import { CHECKLISTS, extrasChecklist } from './missionSchema'
 
@@ -30,7 +30,7 @@ export default function MaterielRequis({ m, setM }) {
     let row = { id: nid(), kind: add.kind, qte: Math.max(1, Number(add.qte) || 1) }
     if (add.kind === 'o2') {
       row.volume_l = Number(add.volume_l) || 5
-      row.libelle = `Oxygène ${row.volume_l} L`
+      row.libelle = nomTypeO2(row.volume_l)
     } else if (add.kind === 'sac') {
       const s = sacs.find(x => x.id === add.lieu_id)
       if (!s && !add.libelle.trim()) { alert('Choisissez un sac ou tapez son nom.'); return }
@@ -62,8 +62,8 @@ export default function MaterielRequis({ m, setM }) {
         </p>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
           {VOLUMES_O2.map(v => (
-            <Btn key={v.v} kind="soft" onClick={() => setList([...list, { id: nid(), kind:'o2', volume_l: Number(v.v), qte:1, libelle:`Oxygène ${v.v} L` }])}>
-              + O₂ {v.l}
+            <Btn key={v.v} kind="soft" onClick={() => setList([...list, { id: nid(), kind:'o2', volume_l: Number(v.v), qte:1, libelle: nomTypeO2(v.v) }])}>
+              + {nomTypeO2(v.v)}
             </Btn>
           ))}
         </div>
