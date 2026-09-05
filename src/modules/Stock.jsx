@@ -21,6 +21,7 @@ export default function Stock() {
   const [cats, setCats] = useState([])
   const [unites, setUnites] = useState([])
   const [fournisseurs, setFournisseurs] = useState([])
+  const [dotations, setDotations] = useState([])
   const [loading, setLoading] = useState(true)
   const [scan, setScan] = useState(null) // ranger | inventaire | null
   const [lieuCible, setLieuCible] = useState(null)
@@ -37,11 +38,12 @@ export default function Stock() {
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    const [a, b, c, d] = await Promise.all([
+    const [a, b, c, d, e] = await Promise.all([
       supabase.from('stock_lieux').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_catalogue').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_unites').select('*, stock_catalogue(nom,mode,unite,volume_l,photo_path,fournisseur_id), stock_lieux(nom)').order('created_at', { ascending: false }).limit(400),
       supabase.from('stock_fournisseurs').select('*').eq('actif', true).order('nom'),
+      supabase.from('stock_dotation').select('id, lieu_id, catalogue_id'),
     ])
     setLieux(a.data || [])
     setCats(b.data || [])
@@ -55,6 +57,7 @@ export default function Stock() {
       lieu_nom: u.stock_lieux?.nom,
     })))
     setFournisseurs(d.error ? [] : (d.data || []))
+    setDotations(e.error ? [] : (e.data || []))
     setLoading(false)
   }
   function ok(msg) { setFlash(msg); setErr(null); setTimeout(() => setFlash(null), 2500) }
@@ -206,9 +209,9 @@ export default function Stock() {
                 if (cat) { setRecv(cat); setTab('articles') }
               }} />
           )}
-          {tab === 'articles' && <OngletCatalogue cats={cats} lieux={lieux} unites={unites} fournisseurs={fournisseurs} onChange={load} onOk={ok} onErr={setErr} onRecv={setRecv} />}
+          {tab === 'articles' && <OngletCatalogue cats={cats} lieux={lieux} unites={unites} fournisseurs={fournisseurs} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} onRecv={setRecv} />}
           {tab === 'fournisseurs' && <OngletFournisseurs fournisseurs={fournisseurs} cats={cats} onChange={load} onOk={ok} onErr={setErr} />}
-          {tab === 'lieux' && <OngletLieux lieux={lieux} unites={unites} onChange={load} onOk={ok} onErr={setErr} />}
+          {tab === 'lieux' && <OngletLieux lieux={lieux} unites={unites} cats={cats} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} />}
           {tab === 'inventaire' && inv && <OngletInventaire inv={inv} onChange={load} />}
         </>
       )}
@@ -238,7 +241,12 @@ function etiqUnite(u) {
   }
 }
 
-function OngletLieux({ lieux, unites, onChange, onOk, onErr }) {
+function articlesPrevus(dotations, cats, lieuId) {
+  const ids = (dotations || []).filter(d => d.lieu_id === lieuId).map(d => d.catalogue_id)
+  return ids.map(id => (cats || []).find(c => c.id === id)).filter(Boolean)
+}
+
+function OngletLieux({ lieux, unites, cats, dotations, onChange, onOk, onErr }) {
   const [edit, setEdit] = useState(null)
   const [etiq, setEtiq] = useState(null)
   const racines = enfantsDe(lieux, null)
@@ -260,20 +268,21 @@ function OngletLieux({ lieux, unites, onChange, onOk, onErr }) {
         <Btn kind="soft" onClick={() => telechargerWord(lieux.map(etiqLieu))} disabled={!lieux.length}>Word — QR lieux</Btn>
         <Btn kind="soft" onClick={() => telechargerCsv(lieux.map(etiqLieu))} disabled={!lieux.length}>CSV P-touch</Btn>
       </div>
-      <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>Nom sous le QR pour savoir où coller. Ensuite on scanne.</p>
+      <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>Nom sous le QR pour savoir où coller. Le contenu prévu (types d’articles) s’affiche sous chaque poche — lots et quantités plus tard, à l’inventaire.</p>
       {edit && <FormLieu item={edit} lieux={lieux} onDone={() => { setEdit(null); onChange() }} />}
       {etiq && <CarteQr lieu={etiq} onClose={() => setEtiq(null)} onOk={onOk} />}
       {racines.length === 0 ? <Empty title="Aucun lieu" hint="Créez la réserve, une armoire, un sac…" /> : (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {racines.map(l => <NoeudLieu key={l.id} n={l} lieux={lieux} onEdit={setEdit} onQr={setEtiq} onDel={supprimer} />)}
+          {racines.map(l => <NoeudLieu key={l.id} n={l} lieux={lieux} cats={cats} dotations={dotations} onEdit={setEdit} onQr={setEtiq} onDel={supprimer} />)}
         </div>
       )}
     </div>
   )
 }
 
-function NoeudLieu({ n, lieux, onEdit, onQr, onDel, profondeur = 0 }) {
+function NoeudLieu({ n, lieux, cats, dotations, onEdit, onQr, onDel, profondeur = 0 }) {
   const kids = enfantsDe(lieux, n.id)
+  const prevus = articlesPrevus(dotations, cats, n.id)
   return (
     <div>
       <Card style={{ padding:'10px 14px', marginLeft: profondeur * 16 }}>
@@ -281,6 +290,11 @@ function NoeudLieu({ n, lieux, onEdit, onQr, onDel, profondeur = 0 }) {
           <div>
             <div style={{ fontWeight:600 }}>{n.nom}</div>
             <div style={{ fontSize:12, color:'var(--text-muted)' }}>{lblLieu(n.type)}</div>
+            {prevus.length > 0 && (
+              <ul style={{ margin:'6px 0 0', paddingLeft:18, fontSize:13, color:'var(--text-2)' }}>
+                {prevus.map(c => <li key={c.id}>{c.nom}</li>)}
+              </ul>
+            )}
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
             <Btn kind="soft" onClick={() => onQr(n)} style={{ padding:'5px 10px' }}>QR</Btn>
@@ -290,7 +304,7 @@ function NoeudLieu({ n, lieux, onEdit, onQr, onDel, profondeur = 0 }) {
           </div>
         </div>
       </Card>
-      {kids.map(k => <NoeudLieu key={k.id} n={k} lieux={lieux} onEdit={onEdit} onQr={onQr} onDel={onDel} profondeur={profondeur + 1} />)}
+      {kids.map(k => <NoeudLieu key={k.id} n={k} lieux={lieux} cats={cats} dotations={dotations} onEdit={onEdit} onQr={onQr} onDel={onDel} profondeur={profondeur + 1} />)}
     </div>
   )
 }
@@ -347,7 +361,7 @@ function CarteQr({ lieu, unite, onClose, onOk }) {
   )
 }
 
-function OngletCatalogue({ cats, lieux, unites, fournisseurs, onChange, onOk, onErr, onRecv }) {
+function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChange, onOk, onErr, onRecv }) {
   const [edit, setEdit] = useState(null)
   async function supprimer(c) {
     const n = (unites || []).filter(u => u.catalogue_id === c.id).length
@@ -375,12 +389,18 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, onChange, onOk, on
                     <div>
                       <div style={{ fontWeight:600 }}>{c.nom}</div>
                       <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
+                        {c.categorie ? `${c.categorie} · ` : ''}
                         {lblMode(c.mode)}{c.mode === 'boite' && c.qte_defaut ? ` · ${Number(c.qte_defaut)} ${c.unite} / boîte` : ''}
                         {c.mode === 'oxygene' && c.volume_l ? ` · ${Number(c.volume_l)} L · ${PRESSION_PLEINE} bar à la livraison` : ''}
                         {c.stock_minimal ? ` · seuil ${Number(c.stock_minimal)}` : ''}
                         {c.fournisseur_id && fourById[c.fournisseur_id] ? ` · ${fourById[c.fournisseur_id].nom}` : ''}
                         {c.ref_fournisseur ? ` · réf. ${c.ref_fournisseur}` : ''}
                       </div>
+                      {(dotations || []).filter(d => d.catalogue_id === c.id).length > 0 && (
+                        <div style={{ fontSize:12.5, color:'var(--text-2)', marginTop:4 }}>
+                          {(dotations || []).filter(d => d.catalogue_id === c.id).map(d => cheminLieux(lieux, d.lieu_id)).filter(Boolean).join(' · ')}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                       <Btn onClick={() => onRecv?.(c)} style={{ padding:'5px 10px' }}>+ Réception</Btn>

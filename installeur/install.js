@@ -73,6 +73,7 @@ async function main() {
     await client.query(lireSQL('30_souhait_partenaire.sql'))
     await client.query(lireSQL('31_dates_possibles.sql'))
     await client.query(lireSQL('32_ticket_carburant_matin.sql'))
+    await client.query(lireSQL('33_stock_dotation_paramedic.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()
