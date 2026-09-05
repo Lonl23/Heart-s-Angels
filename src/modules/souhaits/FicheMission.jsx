@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, fmtAdresse, AdresseAffichee } from '@/components/ui'
+import { Btn, fmtAdresse } from '@/components/ui'
 import { CHECKLISTS, itemsChecklistTous } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
+import { libelleRequis } from '@/modules/stock/materielRequis'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
 const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
@@ -91,18 +92,18 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
             <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />
             <Fld l="Autorisation photos" v={m.autorisation_photos ? 'Oui' : ''} />
-            <Fld l="Adresse du domicile du patient" v={fmtAdresse(m.patient_adresse) ? <AdresseAffichee value={m.patient_adresse} /> : null} wide />
+            <Fld l="Adresse du domicile du patient" v={fmtAdresse(m.patient_adresse)} wide />
           </Sec>
           <Sec t="🏁 Base">
             <Fld l="Base" v={m.base_nom} />
-            <Fld l="Adresse" v={fmtAdresse(m.base_adresse) ? <AdresseAffichee value={m.base_adresse} /> : null} />
+            <Fld l="Adresse" v={fmtAdresse(m.base_adresse)} />
             <Fld l="Rendez-vous" v={dt(m.rdv_base)} />
             <Fld l="Départ" v={dt(m.depart_base)} />
           </Sec>
           <Sec t="🧑‍🦽 Prise en charge">
             <Fld l="Lieu" v={m.pec_type} />
             <Fld l="Institution" v={m.pec_institution} />
-            <Fld l="Adresse" v={fmtAdresse(pecAdr) ? <AdresseAffichee value={pecAdr} /> : null} wide />
+            <Fld l="Adresse" v={fmtAdresse(pecAdr)} wide />
             <Fld l="Service" v={m.pec_service} third />
             <Fld l="Étage" v={m.pec_etage} third />
             <Fld l="Aile / route" v={m.pec_aile} third />
@@ -112,7 +113,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Précisions" v={m.pec_precisions} wide />
           </Sec>
           <Sec t="📍 Destination">
-            <Fld l="Adresse" v={fmtAdresse(m.dest_adresse) ? <AdresseAffichee value={m.dest_adresse} /> : null} wide />
+            <Fld l="Adresse" v={fmtAdresse(m.dest_adresse)} wide />
             <Fld l="Précisions" v={m.dest_precisions} wide />
             <Fld l="Heure souhaitée sur place" v={dt(m.arrivee_destination)} />
           </Sec>
@@ -178,26 +179,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             </>
           )}
 
-          <Sec t="✅ Checklist véhicule — à cocher" plain>
-            <div className="muted" style={{ marginBottom:8 }}>Au départ : scanner chaque bouteille d’O₂ et chaque sac (QR). Puis cocher :</div>
-            {v ? ['base','retour_base'].map(sec => (
-              <div key={sec} className="cl-wrap">
-                <div className="cl-title">{CHECKLISTS[sec].titre}</div>
-                {itemsChecklistTous(sec, m).map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
-              </div>
-            )) : <div className="muted">Définissez des vecteurs pour la checklist véhicule.</div>}
-          </Sec>
-
-          {med && (
-            <Sec t="✅ Checklists prise en charge — à cocher" plain>
-              {['pec','retour_pec'].map(sec => (
-                <div key={sec} className="cl-wrap">
-                  <div className="cl-title">{CHECKLISTS[sec].titre}</div>
-                  {itemsChecklistTous(sec, m).map(it => <div key={it} className="cl-item"><span className="cl-box" />{it}</div>)}
-                </div>
-              ))}
-            </Sec>
-          )}
+          <ChecklistsPapier m={m} />
 
           <Sec t="📝 Rapport de mission / observations" plain>
             <div className="rline" /><div className="rline" /><div className="rline" />
@@ -222,9 +204,9 @@ function Masthead({ s, face, vecteurLabel, med, appel }) {
     </div>
   )
 }
-function Sec({ t, plain, children }) {
+function Sec({ t, plain, children, allowBreak }) {
   return (
-    <div className="sec">
+    <div className={'sec' + (allowBreak ? ' allow-brk' : '')}>
       <div className="sec-h"><span className="t">{t}</span></div>
       {plain ? children : <div className="grid">{children}</div>}
     </div>
@@ -236,10 +218,42 @@ function Fld({ l, v, wide, third, alert }) {
   return <span className={cls}><span className="l">{l}</span><span className={'v'+(alert?' alert':'')}>{v}</span></span>
 }
 
+function ClListe({ section, m }) {
+  const def = CHECKLISTS[section]
+  const items = itemsChecklistTous(section, m)
+  if (!def) return null
+  return (
+    <div className="cl-wrap">
+      <div className="cl-title">{def.titre}</div>
+      {items.map((it, i) => (
+        <div key={section + '-' + i + '-' + it} className="cl-item"><span className="cl-box" />{it}</div>
+      ))}
+    </div>
+  )
+}
+
+function ChecklistsPapier({ m }) {
+  const materiel = Array.isArray(m.materiel_requis) ? m.materiel_requis : []
+  return (
+    <>
+      <Sec t="🎒 Matériel à emporter — à cocher" plain allowBreak>
+        {materiel.map(r => (
+          <div key={r.id || libelleRequis(r)} className="cl-item"><span className="cl-box" />{libelleRequis(r)}</div>
+        ))}
+        <div className="cl-item write"><span className="cl-box" />Bouteilles O₂ — n° / volume notés : <span className="blank" /></div>
+        <div className="cl-item write"><span className="cl-box" />Sacs emportés — lesquels : <span className="blank" /></div>
+      </Sec>
+      <Sec t="✅ Checklists — à cocher en entier" plain allowBreak>
+        {['base', 'retour_base', 'pec', 'retour_pec'].map(sec => <ClListe key={sec} section={sec} m={m} />)}
+      </Sec>
+    </>
+  )
+}
+
 const styles = `
   .fiche { color:#243033; }
   .fiche-block { }
-  .page { position:relative; background:#fff; color:#243033; width:210mm; min-height:297mm; margin:16px auto; padding:14mm; border:1px solid #E3EBEC; border-radius:8px; font-family:'Karla','Helvetica Neue',Arial,sans-serif; font-size:11.5px; overflow:hidden; }
+  .page { position:relative; background:#fff; color:#243033; width:210mm; min-height:297mm; margin:16px auto; padding:14mm; border:1px solid #E3EBEC; border-radius:8px; font-family:'Karla','Helvetica Neue',Arial,sans-serif; font-size:11.5px; overflow:visible; }
   .page > .content { position:relative; z-index:1; }
   .wm { position:absolute; inset:0; z-index:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
   .wm span { transform:rotate(-45deg); font-size:58px; font-weight:800; letter-spacing:8px; white-space:pre; text-align:center; line-height:1.35; }
@@ -270,10 +284,12 @@ const styles = `
   .vec { border:1px solid #E7EEF0; border-left:4px solid #178FA6; border-radius:7px; padding:7px 11px; margin-bottom:6px; }
   .vec .vh { font-weight:700; color:#0E4A5A; font-size:11.5px; }
   .vec .crew { margin-top:3px; color:#39494C; font-size:10.5px; }
-  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; }
+  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; margin-bottom:8px; }
   .cl-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#178FA6; margin:2px 0 4px; }
   .cl-item { padding:2.5px 0; font-size:10.5px; color:#39494C; }
   .cl-box { display:inline-block; width:11px; height:11px; border:1.4px solid #9DB0B3; border-radius:3px; margin-right:7px; vertical-align:-1px; }
+  .cl-item.write .blank { display:inline-block; border-bottom:1px solid #C7D3D5; min-width:140px; height:12px; margin-left:6px; vertical-align:-2px; }
+  .ha-gps, .ha-gps-btn { display:none !important; }
   .vec-cl { margin-bottom:8px; }
   .rline { border-bottom:1px solid #C7D3D5; height:19px; }
   .muted { color:#8CA0A3; }
@@ -312,6 +328,7 @@ const printStyles = `
   .masthead .face { display:inline-block; background:#178FA6; color:#fff; padding:3px 12px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:1.5px; }
   .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; }
   .sec { margin-bottom:9px; page-break-inside:avoid; }
+  .sec.allow-brk { page-break-inside:auto; }
   .sec-h { background:#EDF4F5; border-left:4px solid #7E9B76; padding:5px 11px; border-radius:5px; margin-bottom:7px; }
   .sec-h .t { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:#0E4A5A; }
   .f { display:inline-block; width:49%; vertical-align:top; padding:1px 10px 3px 0; }
@@ -326,11 +343,13 @@ const printStyles = `
   .vec { border:1px solid #E7EEF0; border-left:4px solid #178FA6; border-radius:7px; padding:7px 11px; margin-bottom:6px; page-break-inside:avoid; }
   .vec .vh { font-weight:700; color:#0E4A5A; font-size:11.5px; }
   .vec .crew { margin-top:3px; color:#39494C; font-size:10.5px; }
-  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; }
+  .cl-wrap { display:inline-block; width:49%; vertical-align:top; padding-right:12px; margin-bottom:8px; page-break-inside:avoid; }
   .cl-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#178FA6; margin:2px 0 4px; }
   .cl-item { padding:2.5px 0; font-size:10.5px; color:#39494C; }
   .cl-box { display:inline-block; width:11px; height:11px; border:1.4px solid #9DB0B3; border-radius:3px; margin-right:7px; vertical-align:-1px; }
+  .cl-item.write .blank { display:inline-block; border-bottom:1px solid #C7D3D5; min-width:140px; height:12px; margin-left:6px; vertical-align:-2px; }
   .vec-cl { margin-bottom:8px; }
   .rline { border-bottom:1px solid #C7D3D5; height:19px; }
   .muted { color:#8CA0A3; }
+  .ha-gps, .ha-gps-btn { display:none !important; }
 `
