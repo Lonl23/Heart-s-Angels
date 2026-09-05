@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
-import { CHECKLISTS, itemsChecklistTous } from './missionSchema'
+import { CHECKLISTS, itemsChecklistTous, lblAutorisationPhotos } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
@@ -157,7 +157,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Priorité élevée" v={m.priorite_elevee ? 'Oui' : ''} />
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
             <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />
-            <Fld l="Autorisation photos" v={m.autorisation_photos ? 'Oui' : ''} />
+            <Fld l="Autorisation photos" v={lblAutorisationPhotos(m.autorisation_photos)} />
             <Fld l="Adresse du domicile du patient" v={fmtAdresse(m.patient_adresse)} wide />
           </Sec>
           <Sec t="🏁 Base">

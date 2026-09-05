@@ -78,7 +78,7 @@ export function Flash({ kind='ok', children }) {
   return <div className={'ha-flash ha-flash-' + kind}>{children}</div>
 }
 
-export function StatutFlow({ value, info, pipeline, extras=[], onPick }) {
+export function StatutFlow({ value, info, pipeline, extras=[], onPick, locked=false }) {
   return (
     <div className="ha-step">
       {pipeline.map((k, i) => {
@@ -88,8 +88,9 @@ export function StatutFlow({ value, info, pipeline, extras=[], onPick }) {
           <span key={k} style={{ display:'contents' }}>
             {i > 0 && <span className="ha-step-sep">›</span>}
             <button type="button" className={'ha-step-btn' + (on ? ' is-on' : '')}
+              disabled={locked && !on}
               style={on ? { background: st.c, color:'#fff' } : { color: st.c, borderColor: st.c + '55' }}
-              onClick={()=>onPick(k)} title={st.l}>
+              onClick={()=>{ if (locked) return; onPick(k) }} title={locked && !on ? 'Statut verrouillé' : st.l}>
               {st.l}
             </button>
           </span>
@@ -100,8 +101,9 @@ export function StatutFlow({ value, info, pipeline, extras=[], onPick }) {
         const on = value === k
         return (
           <button key={k} type="button" className={'ha-step-btn' + (on ? ' is-on' : '')}
+            disabled={locked && !on}
             style={on ? { background: st.c, color:'#fff' } : { color: st.c, borderColor: st.c + '66' }}
-            onClick={()=>onPick(k)}>
+            onClick={()=>{ if (locked) return; onPick(k) }}>
             {st.l}
           </button>
         )

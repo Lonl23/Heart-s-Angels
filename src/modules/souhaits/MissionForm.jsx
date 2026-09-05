@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, LiensGps } from '@/components/ui'
 import config from '@/app.config'
-import { GROUPES } from './missionSchema'
+import { GROUPES, AUTORISATION_PHOTOS, normaliserAutorisationPhotos, lblAutorisationPhotos } from './missionSchema'
 import Traitements from './Traitements'
 import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
@@ -206,6 +206,30 @@ function Champ({ f, val, set }) {
       <span style={{ fontSize:14, color:'var(--text)' }}>{f.l}</span>
     </div>
   )
+  if (f.t === 'photos') {
+    const cur = normaliserAutorisationPhotos(val)
+    const idx = Math.max(0, AUTORISATION_PHOTOS.findIndex(o => o.v === (cur || 'oui')))
+    return (
+      <div className="ha-photos-slider">
+        <div className="ha-photos-slider-label">{f.l}</div>
+        <input
+          type="range" min="0" max="2" step="1"
+          value={cur ? idx : 1}
+          aria-valuetext={lblAutorisationPhotos(cur || 'oui')}
+          onChange={e => set(AUTORISATION_PHOTOS[Number(e.target.value)].v)}
+        />
+        <div className="ha-photos-slider-stops">
+          {AUTORISATION_PHOTOS.map(o => (
+            <button type="button" key={o.v}
+              className={'ha-photos-stop' + (cur === o.v ? ' is-on' : '') + (o.v === 'refus' ? ' is-refus' : '')}
+              onClick={() => set(o.v)}>
+              {o.l}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
   const wrap = c => <div style={{ margin:'8px 0' }}><label style={lbl}>{f.l}</label>{c}</div>
   if (f.t === 'textarea') return <div style={{ gridColumn:'1 / -1' }}>{wrap(<textarea value={val||''} onChange={e=>set(e.target.value)} rows={f.rows||2} style={{ ...inp, resize:'vertical' }} />)}</div>
   if (f.t === 'select') return wrap(<select value={val||''} onChange={e=>set(e.target.value)} style={inp}>{f.options.map(o=><option key={o} value={o}>{o||'—'}</option>)}</select>)

@@ -3,8 +3,9 @@ import { supabase } from '@/lib/supabase'
 import { Card, Btn, TA, Pill, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
-import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } from './Souhaits'
+import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut } from './statuts'
 import { fmtDatesSouhait } from './datesSouhait'
+import FormSouhait from './FormSouhait'
 import FicheMission from './FicheMission'
 import MissionForm from './MissionForm'
 import MissionSummary from './MissionSummary'
@@ -26,17 +27,32 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     setTabFixe(false)
     setTab('resume')
   }, [id])
+  useEffect(() => {
+    if (preparer && s && statutFige(s.statut)) onVoir?.()
+  }, [preparer, s?.id, s?.statut])
   async function load() { const { data } = await supabase.from('souhaits').select('*').eq('id', id).single(); setS(data) }
   function flash(t){ setMsg(t); setTimeout(()=>setMsg(null), 3000) }
 
   async function appliquerStatut(v, missionPatch={}) {
-    const { data: fresh } = await supabase.from('souhaits').select('mission').eq('id', id).single()
-    const mission = { ...(fresh?.mission || s.mission || {}), ...missionPatch }
-    await supabase.from('souhaits').update({ statut:v, mission, date_realisee: v==='realise' ? new Date().toISOString().slice(0,10) : s.date_realisee }).eq('id', id)
-    setS(x => ({ ...x, statut:v, mission })); flash('Statut mis à jour.')
+    if (statutFige(s.statut) && v !== s.statut) {
+      flash('Un souhait réalisé ne peut plus changer de statut.')
+      return
+    }
+    const patch = { statut: v }
+    if (v === 'realise' && !s.date_realisee) patch.date_realisee = new Date().toISOString().slice(0,10)
+    if (Object.keys(missionPatch).length) {
+      const { data: fresh } = await supabase.from('souhaits').select('mission').eq('id', id).single()
+      patch.mission = { ...(fresh?.mission || s.mission || {}), ...missionPatch }
+    }
+    await supabase.from('souhaits').update(patch).eq('id', id)
+    setS(x => ({ ...x, ...patch })); flash('Statut mis à jour.')
   }
   function majStatut(v) {
     if (v === s.statut) return
+    if (!peutChangerStatut(s.statut, v) && v !== 'non_realise') {
+      if (statutFige(s.statut)) flash('Un souhait réalisé ne peut plus changer de statut.')
+      return
+    }
     if (v === 'non_realise') {
       if (!peutPasserNonRealise(s.statut)) return
       setMotif(s.mission?.motif_non_realise || '')
@@ -62,6 +78,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
   }
 
   if (!s) return <div style={{ padding:24 }}><Loading /></div>
+  if (preparer && statutFige(s.statut)) return <div style={{ padding:24 }}><Loading /></div>
   if (fiche) return <FicheMission souhaitId={id} onClose={()=>setFiche(false)} />
   const tabActif = (!tabFixe && s.statut === 'realise') ? 'jour' : tab
 
@@ -91,17 +108,23 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
         </div>
         <div className="ha-souhait-actions">
           <Btn kind="soft" onClick={()=>setFiche(true)}>Imprimer la fiche</Btn>
-          <Btn kind={mode==='edit'?'ok':'primary'} onClick={()=>mode==='edit' ? onVoir?.() : onPreparer?.()}>
-            {mode==='edit' ? 'Terminer l\'encodage' : 'Préparer le dossier'}
-          </Btn>
+          {statutFige(s.statut)
+            ? null
+            : (
+              <Btn kind={mode==='edit'?'ok':'primary'} onClick={()=>mode==='edit' ? onVoir?.() : onPreparer?.()}>
+                {mode==='edit' ? 'Terminer l\'encodage' : 'Préparer le dossier'}
+              </Btn>
+            )}
         </div>
       </div>
 
       <Card style={{ marginBottom:12, padding:'12px 16px' }}>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
-          Préparation {['en_cours','realise'].includes(s.statut) ? '— En cours / Réalisé se posent depuis Mes missions' : ''}
+          {statutFige(s.statut)
+            ? 'Souhait réalisé — le statut ne peut plus être modifié, les heures de mission sont conservées.'
+            : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes missions' : ''}`}
         </div>
-        <StatutFlow value={s.statut} info={stInfo} pipeline={PIPELINE_ENCODE} extras={extras} onPick={majStatut} />
+        <StatutFlow value={s.statut} info={stInfo} pipeline={PIPELINE_ENCODE} extras={extras} onPick={majStatut} locked={statutFige(s.statut)} />
         {s.statut === 'pret' && pretHints.length > 0 && (
           <div style={{ fontSize:12.5, color:'#BA7517', marginTop:8 }}>Avant le terrain, il manque encore : {pretHints.join(', ')}.</div>
         )}

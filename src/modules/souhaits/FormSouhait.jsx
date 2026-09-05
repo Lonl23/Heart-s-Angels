@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Card, Btn, F, TA, Sel, PhoneF, AddressFields, Modal, phoneValide, LiensGps } from '@/components/ui'
-import { STATUTS, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } from './Souhaits'
+import { STATUTS, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } from './statuts'
 import { GenrePicker, NissF } from '@/modules/annuaire/genre'
 import {
   upsertBeneficiaire, upsertContactRattache, upsertInstitution,

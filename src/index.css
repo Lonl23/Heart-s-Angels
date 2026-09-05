@@ -121,6 +121,36 @@ input:focus, select:focus, textarea:focus {
 }
 .ha-step-btn:hover { border-color: var(--text-faint); }
 .ha-step-btn.is-on { color: #fff; border-color: transparent; }
+.ha-step-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.ha-photos-slider { margin: 12px 0 4px; }
+.ha-photos-slider-label { font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px; }
+.ha-photos-slider input[type=range] {
+  width: 100%;
+  accent-color: var(--accent);
+  margin: 0 0 10px;
+}
+.ha-photos-slider-stops {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.ha-photos-stop {
+  padding: 8px 6px; min-height: 44px; border-radius: 10px;
+  border: 1.5px solid var(--border); background: var(--card);
+  font-size: 12px; font-weight: 600; font-family: inherit;
+  cursor: pointer; color: var(--text-2); text-align: center;
+}
+.ha-photos-stop.is-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--card));
+  color: var(--heading);
+}
+.ha-photos-stop.is-refus.is-on {
+  border-color: #A32D2D;
+  background: #FCEBEB;
+  color: #A32D2D;
+}
 .ha-step-sep { color: var(--text-faint); font-size: 12px; user-select: none; }
 
 .ha-search {
@@ -150,6 +180,7 @@ input:focus, select:focus, textarea:focus {
 }
 .ha-kanban-card:active { cursor: grabbing; }
 .ha-kanban-card.is-origin { opacity: .38; touch-action: none; }
+.ha-kanban-card.is-locked { cursor: default; }
 .ha-kanban-ghost {
   position: fixed; z-index: 80; pointer-events: none;
   box-shadow: none; transform: scale(1.03);

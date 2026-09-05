@@ -7,7 +7,7 @@ export const GROUPES = [
     { k:'registre_national', l:'Registre national', t:'text' },
     { k:'patient_adresse', l:'Adresse du domicile du patient', t:'address' },
     { k:'consentement', l:'Consentement', t:'toggle' },
-    { k:'autorisation_photos', l:'Autorisation photos', t:'toggle' },
+    { k:'autorisation_photos', l:'Autorisation photos', t:'photos' },
     { k:'priorite_elevee', l:'Priorité élevée', t:'toggle' },
     { k:'date_demande', l:'Date demande', t:'date' },
     { k:'origine', l:'Origine', t:'text' },
@@ -226,3 +226,23 @@ export function numEcranTerrain(etape) {
 }
 
 export const O2_LIGNES = ['B10','B10','B5','B5','B2']
+
+export const AUTORISATION_PHOTOS = [
+  { v:'refus', l:'Refus catégorique' },
+  { v:'oui', l:'Oui' },
+  { v:'sans_visage', l:'Oui, sans le visage' },
+]
+
+/** Ancien booléen true/false → 3 niveaux. */
+export function normaliserAutorisationPhotos(v) {
+  if (v === true || v === 'oui' || v === 'true' || v === 'Oui') return 'oui'
+  if (v === 'sans_visage' || v === 'oui_sans_visage' || v === 'sans visage') return 'sans_visage'
+  if (v === false || v === 'non' || v === 'refus' || v === 'false' || v === 'Refus catégorique') return 'refus'
+  if (v == null || v === '') return ''
+  return 'refus'
+}
+
+export function lblAutorisationPhotos(v) {
+  const n = normaliserAutorisationPhotos(v)
+  return AUTORISATION_PHOTOS.find(x => x.v === n)?.l || ''
+}
