@@ -246,3 +246,60 @@ export function lblAutorisationPhotos(v) {
   const n = normaliserAutorisationPhotos(v)
   return AUTORISATION_PHOTOS.find(x => x.v === n)?.l || ''
 }
+
+export function maintenantIso() {
+  return new Date().toISOString()
+}
+
+/** Première heure à laquelle ce vecteur a atteint cette étape (ne s’écrase pas). */
+export function marquerHeureEtape(mission, vecteurId, etapeId, iso) {
+  if (!vecteurId || !etapeId) return mission || {}
+  const next = { ...(mission || {}) }
+  const all = { ...(next.vecteur_etape_heures || {}) }
+  const cur = { ...(all[vecteurId] || {}) }
+  if (!cur[etapeId]) cur[etapeId] = iso || maintenantIso()
+  all[vecteurId] = cur
+  next.vecteur_etape_heures = all
+  return next
+}
+
+export function heuresEtapeVecteur(mission, vecteurId) {
+  if (!mission?.vecteur_etape_heures || !vecteurId) return {}
+  return mission.vecteur_etape_heures[vecteurId] || {}
+}
+
+/** Première heure « Sur place » du volontaire. */
+export function marquerHeurePersonnel(mission, userId, iso) {
+  if (!userId) return mission || {}
+  const next = { ...(mission || {}) }
+  const h = { ...(next.personnel_heures || {}) }
+  if (!h[userId]) h[userId] = iso || maintenantIso()
+  next.personnel_heures = h
+  return next
+}
+
+export const VOIES_DETRESSE = [
+  { v: 'IV', l: 'IV' },
+  { v: 'IM', l: 'IM' },
+  { v: 'SC', l: 'SC' },
+  { v: 'SL', l: 'SL' },
+  { v: 'IN', l: 'IN' },
+  { v: 'IO', l: 'IO' },
+  { v: 'PO', l: 'Per os' },
+  { v: 'nebulisation', l: 'Nébulisation' },
+  { v: 'autre', l: 'Autre' },
+]
+export const lblVoieDetresse = v => VOIES_DETRESSE.find(x => x.v === v)?.l || v || ''
+
+export function protocoleDetresse(mission) {
+  const raw = mission?.protocole_detresse
+  if (Array.isArray(raw)) return { lignes: raw, notes: '' }
+  if (raw && typeof raw === 'object') {
+    return { lignes: Array.isArray(raw.lignes) ? raw.lignes : [], notes: raw.notes || '' }
+  }
+  return { lignes: [], notes: '' }
+}
+
+export function injectionsDetresse(mission) {
+  return Array.isArray(mission?.injections_detresse) ? mission.injections_detresse : []
+}

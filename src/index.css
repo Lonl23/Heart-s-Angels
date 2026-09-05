@@ -268,6 +268,23 @@ input:focus, select:focus, textarea:focus {
 .ha-wizard-title { font-size: 1.5rem; font-weight: 800; color: var(--heading); margin: 10px 0 2px; line-height: 1.2; }
 .ha-wizard-sub { font-size: 13.5px; color: var(--text-muted); margin: 0 0 4px; }
 
+.ha-detresse-btn {
+  width: 100%; min-height: 48px; margin: 10px 0 4px; padding: 12px 14px;
+  border: none; border-radius: 12px; background: #A32D2D; color: #fff;
+  font-weight: 800; font-size: 15.5px; letter-spacing: .2px; cursor: pointer;
+  font-family: inherit;
+}
+.ha-detresse-btn:active { filter: brightness(.92); }
+.ha-detresse-row {
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap: 8px; align-items: end;
+}
+.ha-detresse-prevue {
+  border-left: 3px solid #A32D2D; padding: 4px 0 8px 10px; margin-bottom: 6px;
+}
+@media (max-width: 620px) {
+  .ha-detresse-row { grid-template-columns: 1fr; }
+}
+
 .ha-parcours-k {
   font-size: 11.5px; font-weight: 700; color: var(--text-muted);
   text-transform: uppercase; letter-spacing: .4px; margin: 12px 0 4px;

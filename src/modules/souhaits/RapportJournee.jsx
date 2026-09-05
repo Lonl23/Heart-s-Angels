@@ -5,7 +5,10 @@ import { Card, Btn, TA, Pill, Loading, fmtAdresse, AdresseAffichee } from '@/com
 import { lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
 import { ticketsCarburantMission, TicketVue } from './TerrainPhotos'
-import { lblStatutBase, lblEtapeTerrain, lblAutorisationPhotos, estSurPlace } from './missionSchema'
+import {
+  lblStatutBase, lblEtapeTerrain, lblAutorisationPhotos, estSurPlace,
+  PARCOURS_TERRAIN, heuresEtapeVecteur, protocoleDetresse, injectionsDetresse, lblVoieDetresse,
+} from './missionSchema'
 
 function fmtDt(v) {
   if (!v) return ''
@@ -23,6 +26,13 @@ function prisesAdministrees(md) {
 
 function vide(v) {
   return v == null || v === ''
+}
+
+function heureStatut(etapeId, heures, m, cloture) {
+  if (heures?.[etapeId]) return heures[etapeId]
+  if (etapeId === 'depart_pec') return m?.demarre_le
+  if (etapeId === 'base_rentre') return cloture || m?.cloture_le
+  return null
 }
 
 export default function RapportJournee({ s, souhaitId, flash, onMission }) {
@@ -163,6 +173,7 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
         {equipe.map(e => {
           const stPerso = m.personnel_statuts?.[e.user_id]
           const surPlace = estSurPlace(stPerso)
+          const heureSurPlace = m.personnel_heures?.[e.user_id]
           const role = lblRoleMission(e.role_mission) || e.role_mission
           return (
             <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', fontSize: 13.5, marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
@@ -172,9 +183,14 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
                   {[role, e.vehicule, e.profiles?.role].filter(Boolean).join(' · ') || 'Rôle non précisé'}
                 </div>
               </div>
-              <Pill color={surPlace ? '#3B6D11' : '#7A7470'} bg={surPlace ? '#EAF3DE' : '#F3F1EF'}>
-                {lblStatutBase(stPerso) || (stPerso ? stPerso : 'Statut personnel non indiqué')}
-              </Pill>
+              <div style={{ textAlign: 'right' }}>
+                <Pill color={surPlace ? '#3B6D11' : '#7A7470'} bg={surPlace ? '#EAF3DE' : '#F3F1EF'}>
+                  {lblStatutBase(stPerso) || (stPerso ? stPerso : 'Statut personnel non indiqué')}
+                </Pill>
+                <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Sur place : {fmtDt(heureSurPlace) || '—'}
+                </div>
+              </div>
             </div>
           )
         })}
@@ -183,7 +199,7 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
       <Card>
         <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Vecteurs — étapes et horaires</div>
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>
-          Horaires enregistrés sur le terrain. Ils ne sont pas modifiés ici.
+          Heure de chaque statut enregistrée sur le terrain (première fois). Ils ne sont pas modifiés ici.
         </p>
         {vecteurs.length === 0 && (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aucun vecteur encodé.</div>
@@ -192,18 +208,27 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
           const vStatut = m.vecteur_statuts?.[v.id]
           const etape = lblEtapeTerrain(m.vecteur_etapes?.[v.id] || m.etape_terrain, vStatut)
           const cloture = m.vecteur_clotures?.[v.id]
+          const heures = heuresEtapeVecteur(m, v.id)
           return (
             <div key={v.id} style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--bg-alt)', borderRadius: 10 }}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>
                 {[v.nom, v.type_transport, v.plaque].filter(Boolean).join(' · ') || 'Véhicule'}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '6px 14px', fontSize: 13 }}>
-                <Ligne k="Étape" v={etape || '—'} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '6px 14px', fontSize: 13, marginBottom: 8 }}>
+                <Ligne k="Étape actuelle" v={etape || '—'} />
                 <Ligne k="Statut vecteur" v={vStatut === 'realise' ? 'Rentré base' : (vStatut || '—')} />
                 <Ligne k="Clôture vecteur" v={fmtDt(cloture) || '—'} />
                 <Ligne k="KM départ" v={vide(v.kms_depart) ? '—' : v.kms_depart} />
                 <Ligne k="KM retour" v={vide(v.kms_retour) ? '—' : v.kms_retour} />
                 <Ligne k="Essence au départ" v={vide(v.essence_pct) ? '—' : `${v.essence_pct} %`} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .4, margin: '8px 0 6px' }}>
+                Horaires des statuts
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '6px 14px', fontSize: 13 }}>
+                {PARCOURS_TERRAIN.map(e => (
+                  <Ligne key={e.id} k={e.l} v={fmtDt(heureStatut(e.id, heures, m, cloture)) || '—'} />
+                ))}
               </div>
             </div>
           )
@@ -263,6 +288,45 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
           placeholder="Véhicule, matériel, incidents pratiques…"
         />
         <Btn onClick={sauverTerrain} disabled={saving}>{saving ? '…' : 'Enregistrer le compte-rendu'}</Btn>
+      </Card>
+
+      <Card>
+        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Protocole de détresse</div>
+        {(() => {
+          const proto = protocoleDetresse(m)
+          const lignes = proto.lignes.filter(r => (r.medicament || '').trim() || (r.dosage || '').trim())
+          const injs = injectionsDetresse(m)
+          return (
+            <>
+              {lignes.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Aucun protocole encodé.</div>
+              ) : (
+                lignes.map((r, i) => (
+                  <div key={r.id || i} style={{ borderLeft: '3px solid #A32D2D', padding: '2px 0 6px 10px', marginBottom: 6 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{r.medicament || '—'}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                      {[r.dosage && `Dosage ${r.dosage}`, r.voie && `voie ${lblVoieDetresse(r.voie)}`].filter(Boolean).join(' · ') || 'Dosage / voie non précisés'}
+                    </div>
+                  </div>
+                ))
+              )}
+              {proto.notes ? <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 10px', whiteSpace: 'pre-wrap' }}>{proto.notes}</p> : null}
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .4, margin: '10px 0 6px' }}>
+                Injections
+              </div>
+              {injs.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aucune injection enregistrée.</div>
+              ) : injs.map(inj => (
+                <div key={inj.id} style={{ fontSize: 13.5, marginBottom: 8, padding: '8px 10px', background: '#FCEBEB', borderRadius: 10 }}>
+                  <div style={{ fontWeight: 700, color: '#A32D2D' }}>Injecté {fmtDt(inj.injecte_le) || '—'}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginTop: 4 }}>
+                    {[inj.par_nom, inj.medecin_coordinateur_prevenu && 'médecin coordinateur prévenu', inj.coordinateur_medical_prevenu && 'coordinateur médical (président) prévenu', inj.traitements_revus && 'traitements revus'].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              ))}
+            </>
+          )
+        })()}
       </Card>
 
       <Card>

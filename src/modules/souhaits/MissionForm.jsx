@@ -7,6 +7,7 @@ import Traitements from './Traitements'
 import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
 import MaterielRequis from './MaterielRequis'
+import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 
 const grp = id => GROUPES.find(g => g.id === id)
 
@@ -97,6 +98,8 @@ export default function MissionForm({ souhaitId }) {
           })}
         </div>
       )}
+
+      {tab === 'medical' && <ProtocoleDetresseForm m={m} setM={setM} />}
 
     </div>
   )

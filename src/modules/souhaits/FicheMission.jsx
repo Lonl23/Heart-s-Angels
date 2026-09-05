@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
-import { CHECKLISTS, itemsChecklistTous, lblAutorisationPhotos } from './missionSchema'
+import { CHECKLISTS, itemsChecklistTous, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
@@ -248,6 +248,30 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
                     </tbody>
                   </table>
                 )}
+              </Sec>
+              <Sec t="🚨 Protocole de détresse" plain>
+                {(() => {
+                  const proto = protocoleDetresse(m)
+                  const lignes = proto.lignes.filter(r => (r.medicament || '').trim() || (r.dosage || '').trim())
+                  if (!lignes.length) return <div className="muted">Aucun protocole encodé.</div>
+                  return (
+                    <>
+                      <table className="tbl">
+                        <thead><tr><th>Médicament</th><th>Dosage</th><th>Voie</th></tr></thead>
+                        <tbody>
+                          {lignes.map((r, i) => (
+                            <tr key={r.id || i}>
+                              <td>{r.medicament}</td>
+                              <td>{r.dosage}</td>
+                              <td>{lblVoieDetresse(r.voie)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {proto.notes ? <div style={{ marginTop: 6 }}>{proto.notes}</div> : null}
+                    </>
+                  )
+                })()}
               </Sec>
             </>
           )}

@@ -6,6 +6,7 @@ import {
   STATUT_SUR_PLACE, estSurPlace, itemsChecklistVisibles, itemsChecklistManquants,
   normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
   estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
+  marquerHeureEtape, marquerHeurePersonnel, injectionsDetresse,
 } from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
@@ -13,6 +14,7 @@ import MedicamentsMAR from './MedicamentsMAR'
 import { COTES, CoinPhotos, PhotoAnnotator, TicketPhoto, uploadMissionPhoto } from './TerrainPhotos'
 import ScanConso from '@/modules/stock/ScanConso'
 import ScanEmport from '@/modules/stock/ScanEmport'
+import { PopupDetresse } from './ProtocoleDetresse'
 
 const fmtDt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }) : '—'
 
@@ -36,6 +38,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [etape, setEtape] = useState('a_la_base')
   const [annot, setAnnot] = useState(null)
   const [appel, setAppel] = useState(null)
+  const [detresse, setDetresse] = useState(false)
 
   useEffect(() => { load() }, [souhaitId, complet, user?.id])
   useEffect(() => { window.scrollTo(0, 0) }, [etape])
@@ -180,8 +183,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
       return
     }
     if (complet) {
-      const nextM = { ...(m || {}), etape_terrain: n }
-      if (vecteurId) nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: n }
+      let nextM = { ...(m || {}), etape_terrain: n }
+      if (vecteurId) {
+        nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: n }
+        nextM = marquerHeureEtape(nextM, vecteurId, n)
+      }
       await saveMission(nextM)
     } else {
       const { data, error } = await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: n })
@@ -196,13 +202,14 @@ export default function MissionExecution({ souhaitId, onBack }) {
     const etapeToSave = normaliserEtape(etapeCible || (statut === 'realise' ? 'base_rentre' : etape))
     if (statut === 'realise') setEtape('base_rentre')
     if (complet) {
-      const nextM = { ...(m || {}) }
+      let nextM = { ...(m || {}) }
       const vs = { ...(nextM.vecteur_statuts || {}) }
       if (vecteurId) {
         vs[vecteurId] = statut
         nextM.vecteur_statuts = vs
         nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: etapeToSave }
         nextM.etape_terrain = etapeToSave
+        nextM = marquerHeureEtape(nextM, vecteurId, etapeToSave)
         if (statut === 'realise') {
           nextM.vecteur_clotures = { ...(nextM.vecteur_clotures || {}), [vecteurId]: maintenant }
         }
@@ -262,10 +269,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
     const prev = aff?.statut_base
     setAff(x => ({ ...(x || {}), statut_base: val }))
     if (complet) {
-      const next = {
+      let next = {
         ...(m || {}),
         personnel_statuts: { ...(m?.personnel_statuts || {}), [user.id]: val },
       }
+      if (val === STATUT_SUR_PLACE) next = marquerHeurePersonnel(next, user.id)
       const { error: colErr } = await supabase.from('souhait_personnel')
         .update({ statut_base: val }).eq('souhait_id', souhaitId).eq('user_id', user.id)
       if (colErr && !/statut_base|schema cache|column/i.test(colErr.message)) {
@@ -367,6 +375,19 @@ export default function MissionExecution({ souhaitId, onBack }) {
     flash()
   }
 
+  async function injecterDetresse(inj) {
+    if (!complet) { setErr('Injection réservée à l’équipage médical.'); return false }
+    const next = {
+      ...(m || {}),
+      injections_detresse: [...injectionsDetresse(m), inj],
+    }
+    const { error } = await supabase.from('souhaits').update({ mission: next }).eq('id', souhaitId)
+    if (error) { setErr(error.message); return false }
+    setM(next)
+    flash()
+    return true
+  }
+
   const cotesOk = COTES.every(c => photos?.coins?.[c.id]?.path)
   async function terminer() {
     await avancer('realise', 'base_rentre')
@@ -450,10 +471,22 @@ export default function MissionExecution({ souhaitId, onBack }) {
               {appel.libelle && <span style={{ color: 'var(--text-muted)', fontSize: 12.5 }}> · {appel.libelle}</span>}
             </p>
           )}
+          {userMedical && complet && (
+            <button type="button" className="ha-detresse-btn" onClick={() => setDetresse(true)}>
+              Protocole de détresse
+            </button>
+          )}
         </>
       )}
       {!vecteur && (
-        <h1 style={{ fontSize:'1.45rem', color:'var(--heading)', margin:'4px 0 8px' }}>{titre || 'Mission'}</h1>
+        <>
+          <h1 style={{ fontSize:'1.45rem', color:'var(--heading)', margin:'4px 0 8px' }}>{titre || 'Mission'}</h1>
+          {userMedical && complet && (
+            <button type="button" className="ha-detresse-btn" onClick={() => setDetresse(true)}>
+              Protocole de détresse
+            </button>
+          )}
+        </>
       )}
       {err && <Flash kind="err">{err}</Flash>}
 
@@ -630,6 +663,15 @@ export default function MissionExecution({ souhaitId, onBack }) {
       {statut === 'realise' && <div className="ha-terrain-bar"><div style={{ fontWeight:700, color:'#3B6D11', textAlign:'center', padding:'10px' }}>Mission clôturée</div></div>}
 
       {annot && <PhotoAnnotator meta={annot.meta} onSave={saveAnnot} onClose={()=>setAnnot(null)} />}
+      {detresse && (
+        <PopupDetresse
+          m={complet ? m : {}}
+          locked={locked}
+          profile={profile}
+          onInjecter={injecterDetresse}
+          onClose={() => setDetresse(false)}
+        />
+      )}
     </div>
   )
 }
