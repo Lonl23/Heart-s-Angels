@@ -1,6 +1,6 @@
 -- ════════════════════════════════════════════════════════════════════════════
 --  Contenu prévu des emplacements (types d’articles, sans lots ni quantités)
---  + répertoire du petit sac à dos paramedic d’après les fiches papier.
+--  + répertoire du sac paramedic d’après les fiches papier.
 --  Idempotent. Après 32_ticket_carburant_matin.sql.
 -- ════════════════════════════════════════════════════════════════════════════
 
@@ -81,7 +81,9 @@ declare
   p_kit uuid;
   a uuid;
 begin
-  sac := public._stock_assurer_lieu('Petit sac à dos paramedic', 'sac', null);
+  update public.stock_lieux set nom = 'Sac paramedic'
+    where actif and parent_id is null and lower(nom) = lower('Petit sac à dos paramedic');
+  sac := public._stock_assurer_lieu('Sac paramedic', 'sac', null);
   p_bas := public._stock_assurer_lieu('Poche extérieure bas', 'pochette', sac);
   p_para := public._stock_assurer_lieu('Poche extérieure paramedic', 'pochette', sac);
   p_gauche := public._stock_assurer_lieu('Poche extérieure gauche', 'pochette', sac);
