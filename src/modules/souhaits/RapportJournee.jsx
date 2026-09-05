@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Card, Btn, TA, Pill, Loading, fmtAdresse, AdresseAffichee } from '@/components/ui'
 import { lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
+import { ticketsCarburantMission, TicketVue } from './TerrainPhotos'
 
 function fmtDt(v) {
   if (!v) return ''
@@ -122,6 +123,7 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
   const pec = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
   const pecTxt = fmtAdresse(pec)
   const donnes = meds.map(md => ({ md, prises: prisesAdministrees(md) })).filter(x => x.prises.length)
+  const tickets = ticketsCarburantMission(m)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -186,6 +188,22 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
               {e.profiles?.prenom} {e.profiles?.nom}
               {e.role_mission && <span style={{ color: 'var(--text-muted)' }}> — {lblRoleMission(e.role_mission) || e.role_mission}</span>}
               {e.vehicule && <span style={{ color: 'var(--text-muted)' }}> · {e.vehicule}</span>}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {tickets.length > 0 && (
+        <Card>
+          <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 4 }}>Tickets carburant — remboursement</div>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>
+            À envoyer à la société qui prête l’ambulance (plein du matin si le véhicule n’était pas à 100 %).
+          </p>
+          {tickets.map(t => (
+            <div key={t.id} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>{t.nom}{t.essence != null && t.essence !== '' ? ` · essence au départ ${t.essence} %` : ''}</div>
+              {t.matin?.path && <TicketVue meta={t.matin} titre="Plein du matin" />}
+              {t.soir?.path && <TicketVue meta={t.soir} titre="Plein du retour" />}
             </div>
           ))}
         </Card>

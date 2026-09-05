@@ -6,6 +6,7 @@ import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
 import { fmtDatesSouhait } from './datesSouhait'
+import { TicketVue } from './TerrainPhotos'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
 const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
@@ -137,6 +138,7 @@ export default function FicheMission({ souhaitId, onClose }) {
 
 function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
   const v = f.v
+  const photosV = v ? ((m.terrain_photos || {})[v.id] || {}) : {}
   const pecAdr = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
   const vecteurLabel = v ? `Vecteur ${f.i + 1} — ${v.nom || '—'}${v.type_transport ? ` · ${v.type_transport}` : ''}${v.plaque ? ` · ${v.plaque}` : ''}` : 'Toutes affectations'
   const Wm = () => <div className={'wm ' + (med ? 'med' : 'conf')}><span>{med ? 'CONFIDENTIEL\nSECRET MÉDICAL' : 'CONFIDENTIEL'}</span></div>
@@ -192,6 +194,13 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             </div>}
             {!v && (m.vecteurs || []).map((vv, i) => <div key={vv.id} className="vec"><div className="vh">Vecteur {i+1} — {vv.nom||'—'}</div></div>)}
           </Sec>
+          {(photosV.ticket_carburant_matin?.path || photosV.ticket_carburant?.path) && (
+            <Sec t="🎫 Tickets carburant (remboursement prêteur)" plain>
+              {v?.essence_pct != null && v.essence_pct !== '' && <div className="muted" style={{ marginBottom:6 }}>Essence au départ : {v.essence_pct} %</div>}
+              {photosV.ticket_carburant_matin?.path && <TicketVue meta={photosV.ticket_carburant_matin} titre="Plein du matin" />}
+              {photosV.ticket_carburant?.path && <TicketVue meta={photosV.ticket_carburant} titre="Plein du retour" />}
+            </Sec>
+          )}
         </div>
       </div>
 

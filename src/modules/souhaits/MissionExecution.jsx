@@ -158,9 +158,16 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
   async function aller(next) {
     const n = normaliserEtape(next)
-    if (!locked && idxEtape(etape) < 1 && n !== 'a_la_base' && !cotesOk) {
-      setErr('Photographiez les 4 côtés du véhicule avant de partir.')
-      return
+    if (!locked && idxEtape(etape) < 1 && n !== 'a_la_base') {
+      if (!cotesOk) {
+        setErr('Photographiez les 4 côtés du véhicule avant de partir.')
+        return
+      }
+      const essenceN = Number(String(vecteur?.essence_pct ?? '').replace(',', '.'))
+      const besoinPlein = Number.isFinite(essenceN) && essenceN < 100
+      if (besoinPlein && !photos?.ticket_carburant_matin?.path) {
+        if (!confirm('Le réservoir n’est pas à 100 % et le ticket du plein du matin n’est pas photographié. Ce ticket sert au remboursement auprès du prêteur du véhicule. Partir quand même ?')) return
+      }
     }
     setEtape(n)
     setErr(null)
@@ -300,20 +307,22 @@ export default function MissionExecution({ souhaitId, onBack }) {
       const next = { ...(m || {}) }
       const tp = { ...(next.terrain_photos || {}) }
       const cur = { ...(tp[vecteurId] || {}) }
-      if (groupe === 'ticket') cur.ticket_carburant = meta
+      if (groupe === 'ticket' || groupe === 'ticket_matin') cur[slot] = meta
       else cur[groupe] = { ...(cur[groupe] || {}), [slot]: meta }
       tp[vecteurId] = cur
       await saveMission({ ...next, terrain_photos: tp })
       return
     }
-    const rpcSlot = groupe === 'ticket' ? 'ticket_carburant' : (groupe === 'coins_retour' ? ('r_' + slot) : slot)
+    const rpcSlot = (groupe === 'ticket' || groupe === 'ticket_matin')
+      ? slot
+      : (groupe === 'coins_retour' ? ('r_' + slot) : slot)
     const { data, error } = await supabase.rpc('sauver_photo_terrain', {
       p_souhait: souhaitId, p_vecteur: vecteurId, p_slot: rpcSlot, p_meta: meta, p_action: action,
     })
     if (error || data?.ok === false) { setErr(error?.message || data?.error); return }
     setRpc(x => {
       const photos = { ...(x.photos || {}) }
-      if (groupe === 'ticket') photos.ticket_carburant = meta
+      if (groupe === 'ticket' || groupe === 'ticket_matin') photos[slot] = meta
       else photos[groupe] = { ...(photos[groupe] || {}), [slot]: meta }
       return { ...x, photos }
     })
@@ -334,10 +343,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
       await persistPhoto(slot, null, 'set', groupe)
     } catch (e) { setErr(e.message || 'Suppression impossible.') }
   }
-  async function captureTicket(file) {
+  async function captureTicket(file, slot = 'ticket_carburant') {
     try {
-      const meta = await uploadMissionPhoto(souhaitId, vecteurId, 'ticket_carburant', file)
-      await persistPhoto('ticket_carburant', meta, 'set', 'ticket')
+      const meta = await uploadMissionPhoto(souhaitId, vecteurId, slot, file)
+      await persistPhoto(slot, meta, 'set', slot === 'ticket_carburant_matin' ? 'ticket_matin' : 'ticket')
     } catch (e) { setErr(e.message || 'Photo impossible.') }
   }
   async function saveAnnot(nextMeta) {
@@ -401,7 +410,13 @@ export default function MissionExecution({ souhaitId, onBack }) {
     : { l: plusieursVecteurs ? 'Ce véhicule est rentré' : 'Terminer la mission', hint: null, go: terminer, kind: 'done' }
   const clKey = def.checklist
   const miss = clKey ? itemsChecklistManquants(clKey, checks[clKey], clOpts) : []
-  const manquantsHint = miss.length ? miss.join(', ') : null
+  const essenceN = Number(String(vecteur?.essence_pct ?? '').replace(',', '.'))
+  const essenceConnue = vecteur && vecteur.essence_pct !== '' && vecteur.essence_pct != null && Number.isFinite(essenceN)
+  const besoinPleinMatin = !!(essenceConnue && essenceN < 100)
+  const extrasManquants = (aLaBase && besoinPleinMatin && !photos?.ticket_carburant_matin?.path)
+    ? ['ticket du plein du matin']
+    : []
+  const manquantsHint = [...miss, ...extrasManquants].join(', ') || null
   const showMAR = userMedical && vecteurMedical && complet && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)
   const showScanConso = (userMedical && vecteurMedical && def.patient && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)) || etape === 'base_rentre'
   const showCloture = etape === 'base_rentre'
@@ -501,6 +516,14 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   <MiniNum l="KMs départ" v={vecteur.kms_depart} set={val=>saveKms({ kms_depart: val })} />
                   <MiniNum l="Essence %" v={vecteur.essence_pct} set={val=>saveKms({ essence_pct: val })} />
                 </div>
+                <PleinMatin
+                  essenceConnue={essenceConnue}
+                  essenceN={essenceN}
+                  besoinPlein={besoinPleinMatin}
+                  meta={photos.ticket_carburant_matin}
+                  onCapture={f => captureTicket(f, 'ticket_carburant_matin')}
+                  disabled={locked || !vecteurId}
+                />
               </Section>
             </>
           )}
@@ -554,8 +577,14 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   disabled={locked || !vecteurId}
                 />
               </Section>
-              <Section titre="Ticket de caisse carburant">
-                <TicketPhoto meta={photos.ticket_carburant} onCapture={captureTicket} disabled={locked || !vecteurId} />
+              <Section titre="Ticket de caisse — plein du retour">
+                <TicketPhoto
+                  meta={photos.ticket_carburant}
+                  onCapture={f => captureTicket(f, 'ticket_carburant')}
+                  disabled={locked || !vecteurId}
+                  hint="Si vous faites le plein au retour, photographiez aussi ce ticket."
+                  label="Ticket du retour"
+                />
               </Section>
               <Section titre="Checklist retour base">
                 <CheckBlock items={itemsVis.retour_base} etat={checks.retour_base} onToggle={(it,on)=>toggleCheck('retour_base', it, on)} />
@@ -722,6 +751,48 @@ function MiniNum({ l, v, set }) {
       <label style={{ display:'block', fontSize:12, color:'var(--text-muted)', marginBottom:4 }}>{l}</label>
       <input type="number" inputMode="decimal" value={v??''} onChange={e=>set(e.target.value)}
         style={{ ...inp, width:120, minHeight:44, fontSize:16 }} />
+    </div>
+  )
+}
+
+function PleinMatin({ essenceConnue, essenceN, besoinPlein, meta, onCapture, disabled }) {
+  if (!essenceConnue && !meta?.path) {
+    return (
+      <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>
+        Indiquez le pourcentage d’essence. S’il n’est pas à 100 %, allez faire le plein et photographiez le ticket — il sera envoyé au prêteur du véhicule pour remboursement.
+      </p>
+    )
+  }
+  if (!besoinPlein && !meta?.path) {
+    return (
+      <p style={{ fontSize:13.5, color:'#3B6D11', margin:'12px 0 0' }}>
+        Réservoir à {essenceN} % — pas de plein du matin, donc pas de ticket à capturer.
+      </p>
+    )
+  }
+  return (
+    <div style={{ marginTop:14 }}>
+      {besoinPlein
+        ? (
+          <>
+            <div style={{ fontSize:14, fontWeight:700, color:'#BA7517', marginBottom:6 }}>Plein du matin à faire</div>
+            <p style={{ fontSize:13.5, color:'var(--text-2)', margin:'0 0 10px', lineHeight:1.45 }}>
+              Le véhicule n’est pas à 100 % ({essenceN} %). Allez faire le plein, photographiez le ticket de caisse, puis indiquez 100 % ci-dessus. Ce ticket servira au remboursement auprès de la société qui prête l’ambulance.
+            </p>
+          </>
+        )
+        : (
+          <p style={{ fontSize:13.5, color:'#3B6D11', margin:'0 0 10px' }}>
+            Ticket du plein du matin enregistré{essenceConnue ? ` · essence indiquée ${essenceN} %` : ''}.
+          </p>
+        )}
+      <TicketPhoto
+        meta={meta}
+        onCapture={onCapture}
+        disabled={disabled}
+        hint="Ticket du plein du matin — à transmettre au prêteur."
+        label="Ticket du matin"
+      />
     </div>
   )
 }
