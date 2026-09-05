@@ -281,8 +281,27 @@ input:focus, select:focus, textarea:focus {
 .ha-detresse-prevue {
   border-left: 3px solid #A32D2D; padding: 4px 0 8px 10px; margin-bottom: 6px;
 }
+.ha-pluri-row {
+  display: grid; grid-template-columns: 140px 1fr 1fr 160px 1fr auto; gap: 8px; align-items: end;
+  padding: 10px 12px; background: var(--bg-alt); border-radius: 12px;
+}
+.ha-medecin-sticky {
+  position: sticky; top: 0; z-index: 25;
+  margin: 8px -14px 10px; padding: 10px 14px;
+  background: #FCEBEB; border-bottom: 1px solid #E8B4B4;
+  box-shadow: 0 6px 12px -8px rgba(163, 45, 45, .35);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px;
+}
+.ha-medecin-k {
+  font-size: 11.5px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: #A32D2D;
+}
+.ha-medecin-tel {
+  font-size: 17px; font-weight: 800; color: #A32D2D; text-decoration: none;
+}
+.ha-medecin-nom { font-size: 13.5px; color: #7A2E2E; }
 @media (max-width: 620px) {
   .ha-detresse-row { grid-template-columns: 1fr; }
+  .ha-pluri-row { grid-template-columns: 1fr; }
 }
 
 .ha-parcours-k {

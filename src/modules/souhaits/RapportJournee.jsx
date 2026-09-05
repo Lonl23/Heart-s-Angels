@@ -8,7 +8,9 @@ import { ticketsCarburantMission, TicketVue } from './TerrainPhotos'
 import {
   lblStatutBase, lblEtapeTerrain, lblAutorisationPhotos, estSurPlace,
   PARCOURS_TERRAIN, heuresEtapeVecteur, protocoleDetresse, injectionsDetresse, lblVoieDetresse,
+  equipePluri,
 } from './missionSchema'
+import { LignesPluri } from './EquipePluri'
 
 function fmtDt(v) {
   if (!v) return ''
@@ -194,6 +196,11 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
             </div>
           )
         })}
+      </Card>
+
+      <Card>
+        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Équipe pluridisciplinaire</div>
+        <LignesPluri rows={equipePluri(m)} />
       </Card>
 
       <Card>

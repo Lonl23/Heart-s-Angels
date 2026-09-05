@@ -5,6 +5,7 @@ import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
 import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut } from './statuts'
 import { fmtDatesSouhait } from './datesSouhait'
+import { medecinPluri, nomPluri } from './missionSchema'
 import FormSouhait from './FormSouhait'
 import FicheMission from './FicheMission'
 import MissionForm from './MissionForm'
@@ -228,6 +229,11 @@ function Resume({ s, souhaitId, onVoirRapport }) {
             <LiensGps texte={s.localisation} />
           </div>
         )}
+        {(() => {
+          const med = medecinPluri(s.mission)
+          if (!med?.tel && !nomPluri(med)) return null
+          return <L k="Médecin (équipe pluri)" v={[nomPluri(med), med.tel].filter(Boolean).join(' · ')} />
+        })()}
         <L k="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : null} />
         <L k="Besoins spécifiques" v={s.besoins_specifiques} />
       </Card>

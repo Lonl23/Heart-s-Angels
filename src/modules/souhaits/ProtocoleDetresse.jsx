@@ -34,7 +34,7 @@ export function ProtocoleDetresseForm({ m, setM }) {
   }
 
   return (
-    <Card>
+    <Card style={{ marginTop: 16 }}>
       <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--heading)', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
         Protocole de détresse
       </div>

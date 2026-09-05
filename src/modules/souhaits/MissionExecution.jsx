@@ -7,6 +7,7 @@ import {
   normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
   estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
   marquerHeureEtape, marquerHeurePersonnel, injectionsDetresse,
+  medecinPluri, nomPluri,
 } from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
@@ -15,6 +16,7 @@ import { COTES, CoinPhotos, PhotoAnnotator, TicketPhoto, uploadMissionPhoto } fr
 import ScanConso from '@/modules/stock/ScanConso'
 import ScanEmport from '@/modules/stock/ScanEmport'
 import { PopupDetresse } from './ProtocoleDetresse'
+import { BandeauMedecin } from './EquipePluri'
 
 const fmtDt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }) : '—'
 
@@ -99,7 +101,13 @@ export default function MissionExecution({ souhaitId, onBack }) {
         date_fin: data.date_fin,
         dates_possibles: data.dates_possibles,
       })
-      setAppel({ tel: data.tel_a_appeler, libelle: data.tel_a_appeler_libelle, ok: !!data.tel_a_appeler })
+      setAppel({
+        tel: data.tel_a_appeler,
+        libelle: data.tel_a_appeler_libelle,
+        ok: !!data.tel_a_appeler,
+        medecin_tel: data.medecin_tel || '',
+        medecin_nom: data.medecin_nom || '',
+      })
       setEtape(etapeDefaut(data.etape_terrain, data.vecteur_statut))
     }
     setLoading(false)
@@ -443,6 +451,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const showCloture = etape === 'base_rentre'
   const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
+  const med = medecinPluri(complet ? m : null)
+  const medTel = (med?.tel || '').trim() || rpc?.medecin_tel || appel?.medecin_tel || ''
+  const medNom = nomPluri(med) || rpc?.medecin_nom || appel?.medecin_nom || ''
 
   return (
     <div className="ha-terrain" style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px 110px' }}>
@@ -450,6 +461,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
         <Btn kind="soft" onClick={onBack}>← Mes missions</Btn>
         <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : ''}</span>
       </div>
+      <BandeauMedecin tel={medTel} nom={medNom} />
 
       {vecteur && (
         <>

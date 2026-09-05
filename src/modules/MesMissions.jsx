@@ -76,6 +76,12 @@ export default function MesMissions() {
                         {lblStatutBase(m.statut_base) ? ` · ${lblStatutBase(m.statut_base)}` : ''}
                         {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>
+                      {m.medecin_tel && (
+                        <div style={{ fontSize:13.5, marginTop:8 }} onClick={e => e.stopPropagation()}>
+                          <a href={`tel:${String(m.medecin_tel).replace(/\s/g,'')}`} style={{ color:'#A32D2D', fontWeight:700, textDecoration:'none' }}>📞 Médecin {m.medecin_tel}</a>
+                          {m.medecin_nom && <span style={{ color:'var(--text-muted)', fontSize:12.5 }}> · {m.medecin_nom}</span>}
+                        </div>
+                      )}
                       {m.tel_a_appeler && (
                         <div style={{ fontSize:13.5, marginTop:8 }} onClick={e => e.stopPropagation()}>
                           <a href={`tel:${String(m.tel_a_appeler).replace(/\s/g,'')}`} style={{ color:'var(--accent)', fontWeight:600, textDecoration:'none' }}>📞 {m.tel_a_appeler}</a>

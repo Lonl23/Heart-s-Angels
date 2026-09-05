@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
-import { CHECKLISTS, itemsChecklistTous, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse } from './missionSchema'
+import { CHECKLISTS, itemsChecklistTous, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse, equipePluri, personnePluriRemplie, lblRolePluri, medecinPluri, nomPluri } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
@@ -234,6 +234,27 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
                 <Fld l="Cible TA" v={m.cible_ta} third />
                 <Fld l="Cible FC" v={m.cible_fc} third />
               </Sec>
+              <Sec t="👥 Équipe pluridisciplinaire" plain>
+                {(() => {
+                  const rows = equipePluri(m).filter(personnePluriRemplie)
+                  if (!rows.length) return <div className="muted">Non encodée.</div>
+                  return (
+                    <table className="tbl">
+                      <thead><tr><th>Rôle</th><th>Nom</th><th>Téléphone</th><th>Organisme</th></tr></thead>
+                      <tbody>
+                        {rows.map((r, i) => (
+                          <tr key={r.id || i}>
+                            <td>{lblRolePluri(r.role)}</td>
+                            <td>{[r.prenom, r.nom].filter(Boolean).join(' ')}</td>
+                            <td>{r.tel}</td>
+                            <td>{r.organisme}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )
+                })()}
+              </Sec>
               <Sec t="💊 Médicaments" plain>
                 {meds.length === 0 ? <div className="muted">Aucun.</div> : (
                   <table className="tbl">
@@ -295,6 +316,11 @@ function Masthead({ s, face, vecteurLabel, med, appel }) {
         <div className="name">{s.beneficiaire_prenom} {s.beneficiaire_nom}{s.beneficiaire_ddn && <small> — né(e) le {d(s.beneficiaire_ddn)}</small>}</div>
         {s.description && <div className="wish">« {s.description} »</div>}
         {appel?.tel && <div className="vlabel">📞 {appel.tel}{appel.libelle ? ` · ${appel.libelle}` : ''}</div>}
+        {(() => {
+          const med = medecinPluri(s.mission)
+          if (!med?.tel) return null
+          return <div className="vlabel" style={{ color: '#A32D2D', fontWeight: 700 }}>📞 Médecin {med.tel}{nomPluri(med) ? ` · ${nomPluri(med)}` : ''}</div>
+        })()}
         <div className="vlabel">{vecteurLabel} · {med ? 'équipage médical' : 'équipage non médical'}</div>
       </div>
       <div className="badge"><span className="face">{face}</span>{fmtDatesSouhait(s) !== 'Date à définir' && <div className="date">🗓 {fmtDatesSouhait(s)}</div>}</div>

@@ -303,3 +303,32 @@ export function protocoleDetresse(mission) {
 export function injectionsDetresse(mission) {
   return Array.isArray(mission?.injections_detresse) ? mission.injections_detresse : []
 }
+
+export const ROLES_PLURI = [
+  { v: 'medecin', l: 'Médecin' },
+  { v: 'infirmier', l: 'Infirmier(ère)' },
+  { v: 'aide_soignant', l: 'Aide-soignant(e)' },
+  { v: 'psychologue', l: 'Psychologue' },
+  { v: 'kine', l: 'Kinésithérapeute' },
+]
+export const lblRolePluri = v => ROLES_PLURI.find(x => x.v === v)?.l || v || ''
+
+export function equipePluri(mission) {
+  return Array.isArray(mission?.equipe_pluri) ? mission.equipe_pluri : []
+}
+
+export function nomPluri(r) {
+  if (!r) return ''
+  return [r.prenom, r.nom].filter(Boolean).join(' ').trim()
+}
+
+export function personnePluriRemplie(r) {
+  if (!r) return false
+  return !!(nomPluri(r) || (r.tel || '').trim() || (r.organisme || '').trim())
+}
+
+/** Premier médecin avec un n° (sinon le premier médecin nommé). */
+export function medecinPluri(mission) {
+  const rows = equipePluri(mission).filter(r => r.role === 'medecin' && personnePluriRemplie(r))
+  return rows.find(r => (r.tel || '').trim()) || rows[0] || null
+}
