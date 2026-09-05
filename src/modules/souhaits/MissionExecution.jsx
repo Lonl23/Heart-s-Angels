@@ -402,6 +402,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const showMAR = userMedical && vecteurMedical && complet && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)
   const showScanConso = (userMedical && vecteurMedical && def.patient && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)) || etape === 'base_rentre'
   const showCloture = etape === 'base_rentre'
+  const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
 
   return (
@@ -533,6 +534,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
                 </Section>
               )}
+              {showRapportMedical && <RapportMedical m={m} onSave={saveMission} />}
             </>
           )}
 
@@ -555,7 +557,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <CheckBlock items={itemsVis.retour_base} etat={checks.retour_base} onToggle={(it,on)=>toggleCheck('retour_base', it, on)} />
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
-              {userMedical && vecteurMedical && complet && <RapportMedical m={m} onSave={saveMission} />}
+              {showRapportMedical && <RapportMedical m={m} onSave={saveMission} />}
               <Section titre="Matériel utilisé">
                 <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
               </Section>
@@ -674,7 +676,7 @@ function RapportMedical({ m, onSave }) {
   return (
     <Section titre="Rapport médical">
       <textarea value={txt} onChange={e=>setTxt(e.target.value)} onBlur={()=>onSave({ ...m, rapport_medical: txt })}
-        rows={4} style={{ ...inp, resize:'vertical' }} placeholder="Déroulement, observations cliniques…" />
+        rows={4} style={{ ...inp, resize:'vertical' }} placeholder="Déroulement, observations cliniques… Vous pouvez le rédiger dès le départ vers la base." />
     </Section>
   )
 }
