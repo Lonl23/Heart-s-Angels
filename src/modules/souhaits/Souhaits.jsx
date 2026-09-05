@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
+import { fmtDatesSouhait } from './datesSouhait'
 import { upsertBeneficiaire, upsertContactRattache } from '@/modules/annuaire/annuaireApi'
 
 export const STATUTS = {
@@ -276,7 +277,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp, 
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
       </div>
       <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
-      <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{s.date_souhaitee ? new Date(s.date_souhaitee).toLocaleDateString('fr-BE') : 'Date à définir'}</div>
+      <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{fmtDatesSouhait(s)}</div>
       {s.statut==='en_attente' && s.mission?.attente && (
         <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
           {ATTENTE_RAISONS.filter(r=>s.mission.attente[r.v]).map(r=><span key={r.v} style={{ fontSize:10.5, background:'#FAEEDA', color:'#BA7517', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>{r.l}</span>)}
@@ -346,6 +347,7 @@ function Demandes({ onOpen }) {
       description: d.souhait_description, localisation: d.souhait_lieu, besoins_specifiques: d.equipement_medical,
       notes_medicales: [d.mobilite && `Mobilité: ${d.mobilite}`, d.allergies && `Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
       date_souhaitee: d.souhait_date || null, statut: 'nouveau', created_by: profile?.id,
+      dates_possibles: d.souhait_date ? [{ debut: d.souhait_date, fin: d.souhait_date }] : [],
       origine: (d.partenaire_id || d.source === 'partenaire') ? 'institution' : 'prive',
       partenaire_id: d.partenaire_id || null,
     }).select().single()

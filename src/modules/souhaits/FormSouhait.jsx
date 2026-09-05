@@ -10,6 +10,7 @@ import {
   ficheVersBeneficiaire, ficheVersContact, assurerPartenaireDepuisAnnuaire,
 } from '@/modules/annuaire/annuaireApi'
 import { formaterNiss, normaliserNiss } from '@/modules/annuaire/annuaireSchema'
+import { periodesDepuisSouhait, normaliserPeriodes, plageGlobale } from './datesSouhait'
 
 const sliceDate = v => (v ? String(v).slice(0, 10) : '')
 
@@ -23,7 +24,8 @@ function etatVide() {
     contact_annuaire_id: null,
     origine: 'prive', partenaire_id: null, annuaire_externe_id: null, partenaire_nom: '',
     description: '', localisation: '', notes_medicales: '', besoins_specifiques: '',
-    date_souhaitee: '', date_fin: '', courte_duree: false, heure_depart: '', heure_retour: '',
+    date_souhaitee: '', date_fin: '', dates_possibles: [{ debut: '', fin: '' }],
+    courte_duree: false, heure_depart: '', heure_retour: '',
     statut: 'nouveau', priorite: 2,
   }
 }
@@ -45,11 +47,41 @@ function depuisSouhait(s) {
     beneficiaire_adresse: s.beneficiaire_adresse || null,
     date_souhaitee: sliceDate(s.date_souhaitee),
     date_fin: sliceDate(s.date_fin),
+    dates_possibles: periodesDepuisSouhait(s),
   }
 }
 
 function nomComplet(prenom, nom) {
   return [prenom, nom].filter(Boolean).join(' ').trim()
+}
+
+function DatesPossibles({ value, set }) {
+  const rows = value?.length ? value : [{ debut: '', fin: '' }]
+  function maj(i, patch) {
+    set(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  }
+  function ajouter() { set([...rows, { debut: '', fin: '' }]) }
+  function retirer(i) {
+    const next = rows.filter((_, j) => j !== i)
+    set(next.length ? next : [{ debut: '', fin: '' }])
+  }
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>
+        Dates possibles — chaque ligne est une option (un jour, ou plusieurs jours d’affilée). Les jours entre deux options restent libres au calendrier.
+      </div>
+      {rows.map((r, i) => (
+        <div key={i} className="ha-date-periode">
+          <F label="Du" type="date" value={r.debut} set={v => maj(i, { debut: v, fin: (!r.fin || r.fin < v) ? v : r.fin })} />
+          <F label="Au" type="date" value={r.fin || r.debut} set={v => maj(i, { fin: (r.debut && v && v < r.debut) ? r.debut : v })} />
+          {rows.length > 1 && (
+            <button type="button" className="ha-date-periode-del" onClick={() => retirer(i)}>Retirer</button>
+          )}
+        </div>
+      ))}
+      <Btn kind="soft" onClick={ajouter}>+ Ajouter une date ou une période</Btn>
+    </div>
+  )
 }
 
 export default function FormSouhait({ initial, onDone, inline = false }) {
@@ -177,6 +209,8 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
       return
     }
     const contactLib = nomComplet(f.contact_prenom, f.contact_nom)
+    const periodes = normaliserPeriodes(f.dates_possibles)
+    const plage = plageGlobale(periodes)
     const payload = {
       beneficiaire_prenom: f.beneficiaire_prenom,
       beneficiaire_nom: f.beneficiaire_nom,
@@ -196,8 +230,9 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
       localisation: f.localisation || null,
       notes_medicales: f.notes_medicales || null,
       besoins_specifiques: f.besoins_specifiques || null,
-      date_souhaitee: f.date_souhaitee || null,
-      date_fin: f.date_fin && f.date_souhaitee && f.date_fin >= f.date_souhaitee ? f.date_fin : (f.date_souhaitee || null),
+      date_souhaitee: plage.date_souhaitee,
+      date_fin: plage.date_fin,
+      dates_possibles: periodes,
       courte_duree: !!f.courte_duree,
       heure_depart: f.courte_duree && f.heure_depart ? f.heure_depart : null,
       heure_retour: f.courte_duree && f.heure_retour ? f.heure_retour : null,
@@ -309,10 +344,7 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
         <TA label="Description *" value={f.description} set={v => set('description', v)} rows={3} />
         <F label="Lieu (affiché au calendrier, sans nom de patient)" value={f.localisation} set={v => set('localisation', v)} />
         {f.localisation && <div style={{ margin: '-4px 0 10px' }}><LiensGps texte={f.localisation} /></div>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-          <F label="Du" type="date" value={f.date_souhaitee} set={v => setF(s => ({ ...s, date_souhaitee: v, date_fin: (!s.date_fin || s.date_fin < v) ? v : s.date_fin }))} />
-          <F label="Au (si plusieurs jours)" type="date" value={f.date_fin || f.date_souhaitee} set={v => set('date_fin', v)} />
-        </div>
+        <DatesPossibles value={f.dates_possibles} set={v => set('dates_possibles', v)} />
         <label className="ha-check" style={{ marginBottom: 10 }}>
           <input type="checkbox" checked={!!f.courte_duree} onChange={e => set('courte_duree', e.target.checked)} />
           <span>Souhait de courte durée (sinon toute la journée, minuit à minuit)</span>

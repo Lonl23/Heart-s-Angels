@@ -5,6 +5,7 @@ import { Page, Card, Empty, Loading, Pill, LiensGps } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { stInfo } from './souhaits/Souhaits'
 import { lblStatutBase, lblEtapeTerrain } from './souhaits/missionSchema'
+import { fmtDatesSouhait } from './souhaits/datesSouhait'
 import MissionExecution from './souhaits/MissionExecution'
 
 const FILTRES = [
@@ -68,7 +69,7 @@ export default function MesMissions() {
                         <div style={{ fontSize:14, color:'var(--text-2)', marginTop:4, lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{m.description}</div>
                       )}
                       <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:6 }}>
-                        {m.date_souhaitee ? new Date(m.date_souhaitee).toLocaleDateString('fr-BE') : 'Date à définir'}
+                        {fmtDatesSouhait(m)}
                         {m.lieu ? ` · ${m.lieu}` : ''}
                         {m.vehicule ? ` · ${m.vehicule}` : ''}
                         {m.role_mission ? ` · ${m.role_mission}` : ''}

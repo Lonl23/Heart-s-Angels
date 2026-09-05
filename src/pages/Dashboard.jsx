@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Card, Empty, Loading } from '@/components/ui'
 import { lblEtapeTerrain } from '@/modules/souhaits/missionSchema'
+import { fmtDatesSouhait } from '@/modules/souhaits/datesSouhait'
 
 const CARDS = [
   { to:'/app/missions',      key:'missions',      icon:'🚑', label:'Mes missions',   desc:'Terrain : checklists, démarrer, terminer' },
@@ -42,7 +43,7 @@ export default function Dashboard() {
                     <div>
                       <div style={{ fontWeight:600, color:'var(--text)' }}>Mission — {m.beneficiaire_prenom}</div>
                       <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>
-                        {m.date_souhaitee ? new Date(m.date_souhaitee).toLocaleDateString('fr-BE') : 'Date à définir'}
+                        {fmtDatesSouhait(m)}
                         {m.vehicule ? ` · ${m.vehicule}` : ''}
                         {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>

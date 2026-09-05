@@ -5,6 +5,7 @@ import { CHECKLISTS, itemsChecklistTous } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
+import { fmtDatesSouhait } from './datesSouhait'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
 const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
@@ -148,6 +149,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
         <div className="content">
           <Masthead s={s} face="RECTO" vecteurLabel={vecteurLabel} med={med} appel={appel} />
           <Sec t="Administratif">
+            <Fld l="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : ''} wide />
             <Fld l="Registre national" v={m.registre_national} />
             <Fld l="Récolteur de souhait" v={m.recolteur} />
             <Fld l="Priorité élevée" v={m.priorite_elevee ? 'Oui' : ''} />
@@ -262,7 +264,7 @@ function Masthead({ s, face, vecteurLabel, med, appel }) {
         {appel?.tel && <div className="vlabel">📞 {appel.tel}{appel.libelle ? ` · ${appel.libelle}` : ''}</div>}
         <div className="vlabel">{vecteurLabel} · {med ? 'équipage médical' : 'équipage non médical'}</div>
       </div>
-      <div className="badge"><span className="face">{face}</span>{s.date_souhaitee && <div className="date">🗓 {d(s.date_souhaitee)}</div>}</div>
+      <div className="badge"><span className="face">{face}</span>{fmtDatesSouhait(s) !== 'Date à définir' && <div className="date">🗓 {fmtDatesSouhait(s)}</div>}</div>
     </div>
   )
 }
@@ -327,9 +329,9 @@ const styles = `
   .masthead .name small { font-weight:400; font-size:12px; color:#B9DCE3; font-family:'Karla',sans-serif; }
   .masthead .wish { font-style:italic; color:#CFE6EB; margin-top:4px; font-size:11.5px; max-width:480px; }
   .masthead .vlabel { margin-top:6px; font-size:10px; color:#8FCAD6; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
-  .masthead .badge { text-align:right; white-space:nowrap; }
+  .masthead .badge { text-align:right; max-width:46%; }
   .masthead .face { display:inline-block; background:#178FA6; color:#fff; padding:3px 12px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:1.5px; }
-  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; }
+  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; white-space:normal; line-height:1.35; }
   .sec { margin-bottom:9px; }
   .sec-h { background:#EDF4F5; border-left:4px solid #7E9B76; padding:5px 11px; border-radius:5px; margin-bottom:7px; }
   .sec-h .t { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:#0E4A5A; }
@@ -386,9 +388,9 @@ const printStyles = `
   .masthead .name small { font-weight:400; font-size:12px; color:#B9DCE3; }
   .masthead .wish { font-style:italic; color:#CFE6EB; margin-top:4px; font-size:11.5px; max-width:480px; }
   .masthead .vlabel { margin-top:6px; font-size:10px; color:#8FCAD6; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
-  .masthead .badge { text-align:right; white-space:nowrap; }
+  .masthead .badge { text-align:right; max-width:46%; }
   .masthead .face { display:inline-block; background:#178FA6; color:#fff; padding:3px 12px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:1.5px; }
-  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; }
+  .masthead .date { margin-top:7px; font-size:10.5px; color:#CFE6EB; white-space:normal; line-height:1.35; }
   .sec { margin-bottom:9px; page-break-inside:avoid; }
   .sec.allow-brk { page-break-inside:auto; }
   .sec-h { background:#EDF4F5; border-left:4px solid #7E9B76; padding:5px 11px; border-radius:5px; margin-bottom:7px; }

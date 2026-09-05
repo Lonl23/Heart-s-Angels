@@ -5,7 +5,7 @@ import { Card, Btn, TA, Pill, Tabs, Flash, StatutFlow, Loading, AdresseAffichee,
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
 import { STATUTS, stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } from './Souhaits'
-import FormSouhait from './FormSouhait'
+import { fmtDatesSouhait } from './datesSouhait'
 import FicheMission from './FicheMission'
 import MissionForm from './MissionForm'
 import MissionSummary from './MissionSummary'
@@ -80,7 +80,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
           </h1>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
-            {s.date_souhaitee && <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{new Date(s.date_souhaitee).toLocaleDateString('fr-BE')}</span>}
+            {fmtDatesSouhait(s) !== 'Date à définir' && <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{fmtDatesSouhait(s)}</span>}
           </div>
         </div>
         <div className="ha-souhait-actions">
@@ -199,6 +199,7 @@ function Resume({ s, souhaitId }) {
             <LiensGps texte={s.localisation} />
           </div>
         )}
+        <L k="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : null} />
         <L k="Besoins spécifiques" v={s.besoins_specifiques} />
       </Card>
       {s.notes_medicales && <Flash kind="err"><strong>Notes médicales — </strong>{s.notes_medicales}</Flash>}

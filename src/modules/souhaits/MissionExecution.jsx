@@ -8,6 +8,7 @@ import {
   estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
 } from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
+import { fmtDatesSouhait } from './datesSouhait'
 import MedicamentsMAR from './MedicamentsMAR'
 import { COTES, CoinPhotos, PhotoAnnotator, TicketPhoto, uploadMissionPhoto } from './TerrainPhotos'
 import ScanConso from '@/modules/stock/ScanConso'
@@ -92,6 +93,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
         beneficiaire_prenom: data.beneficiaire_prenom,
         description: data.description,
         date_souhaitee: data.date_souhaitee,
+        date_fin: data.date_fin,
+        dates_possibles: data.dates_possibles,
       })
       setAppel({ tel: data.tel_a_appeler, libelle: data.tel_a_appeler_libelle, ok: !!data.tel_a_appeler })
       setEtape(etapeDefaut(data.etape_terrain, data.vecteur_statut))
@@ -424,6 +427,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
           <p className="ha-wizard-sub">
             {titre || 'Mission'}
             {roleAff ? ` · ${lblRoleMission(roleAff) || roleAff}` : ''}
+            {sh && fmtDatesSouhait(sh) !== 'Date à définir' ? ` · ${fmtDatesSouhait(sh)}` : ''}
           </p>
           {appel?.tel && (
             <p style={{ fontSize: 14.5, margin: '2px 0 10px' }}>

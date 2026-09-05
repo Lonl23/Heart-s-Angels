@@ -5,37 +5,37 @@ import {
   ROLES_MISSION, lblRoleMission, teinteDepuisQuals, roleSuggere, qualsImplicites,
   rolesRequisEffectifs, rolesRequisVecteur, phraseIlManque, rolesEncoreManquants,
 } from '@/modules/fiche/ficheSchema'
+import { fmtDatesSouhait, joursDesPeriodes, periodesDepuisSouhait, plageGlobale } from './datesSouhait'
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'v' + Date.now() + Math.random().toString(16).slice(2))
 const TYPES = ['', 'Ambulance', 'VSL', 'Voiture', 'Autre']
-
-function fmtDates(d0, d1) {
-  if (!d0) return null
-  const a = new Date(d0 + 'T12:00:00').toLocaleDateString('fr-BE')
-  const b = d1 && d1 !== d0 ? new Date(d1 + 'T12:00:00').toLocaleDateString('fr-BE') : null
-  return b ? `${a} → ${b}` : a
-}
 
 export default function Vecteurs({ souhaitId, m, setM }) {
   const vecteurs = m.vecteurs || []
   const [equipe, setEquipe] = useState([])
   const [pool, setPool] = useState([])
-  const [dates, setDates] = useState({ d0: null, d1: null })
+  const [dates, setDates] = useState({ label: '', jours: [], d0: null, d1: null })
 
   useEffect(() => { charger() }, [souhaitId])
 
   async function charger() {
     const [{ data: sh }, { data: eq }, rpc] = await Promise.all([
-      supabase.from('souhaits').select('date_souhaitee,date_fin').eq('id', souhaitId).single(),
+      supabase.from('souhaits').select('date_souhaitee,date_fin,dates_possibles').eq('id', souhaitId).single(),
       supabase.from('souhait_personnel').select('*, profiles(prenom,nom,role,fiche)').eq('souhait_id', souhaitId),
       supabase.rpc('personnel_disponible_souhait', { p_souhait: souhaitId }),
     ])
-    const d0 = sh?.date_souhaitee || null
-    const d1 = sh?.date_fin || sh?.date_souhaitee || null
-    setDates({ d0, d1 })
+    const periodes = periodesDepuisSouhait(sh)
+    const plage = plageGlobale(periodes)
+    const jours = joursDesPeriodes(periodes)
+    setDates({
+      label: fmtDatesSouhait(sh),
+      jours,
+      d0: plage.date_souhaitee,
+      d1: plage.date_fin,
+    })
     setEquipe(eq || [])
     let pers = normaliserPool(rpc.data)
-    if (!pers.length) pers = await poolDepuisProfils(d0, d1)
+    if (!pers.length) pers = await poolDepuisProfils(jours, plage.date_souhaitee, plage.date_fin)
     setPool(pers.map(p => ({ ...p, quals: asQuals(p.quals) })))
   }
 
@@ -98,7 +98,7 @@ export default function Vecteurs({ souhaitId, m, setM }) {
   }
 
   const libres = pool.filter(p => !dejaIds.has(p.user_id) && p.dispo === 'plein' && !p.conflit)
-  const periode = fmtDates(dates.d0, dates.d1)
+  const periode = dates.label && dates.label !== 'Date à définir' ? dates.label : null
 
   return (
     <div>
@@ -224,22 +224,21 @@ function joursCouverts(d0, d1) {
   return out
 }
 
-function statutDispo(disposUser, d0, d1) {
-  if (!d0) return 'inconnu'
-  const need = joursCouverts(d0, d1)
+function statutDispo(disposUser, jours) {
+  if (!jours?.length) return 'inconnu'
+  const need = new Set(jours)
   const covered = new Set()
   for (const dis of disposUser) {
-    const a = dis.date_debut > d0 ? dis.date_debut : d0
-    const b = dis.date_fin < (d1 || d0) ? dis.date_fin : (d1 || d0)
-    if (a > b) continue
-    for (const j of joursCouverts(a, b)) covered.add(j)
+    for (const j of joursCouverts(dis.date_debut, dis.date_fin)) {
+      if (need.has(j)) covered.add(j)
+    }
   }
-  if (covered.size >= need.length) return 'plein'
+  if (covered.size >= need.size) return 'plein'
   if (covered.size > 0) return 'partiel'
   return 'non'
 }
 
-async function poolDepuisProfils(d0, d1) {
+async function poolDepuisProfils(jours, d0, d1) {
   const [{ data: profils }, { data: dispos }] = await Promise.all([
     supabase.from('profiles').select('id,prenom,nom,role,fiche').neq('role', 'partenaire').eq('actif', true).order('nom'),
     d0
@@ -254,7 +253,7 @@ async function poolDepuisProfils(d0, d1) {
     nom: p.nom,
     role: p.role,
     quals: qualsImplicites(p.role, p.fiche),
-    dispo: statutDispo(byUser[p.id] || [], d0, d1),
+    dispo: statutDispo(byUser[p.id] || [], jours),
     conflit: false,
   }))
 }
