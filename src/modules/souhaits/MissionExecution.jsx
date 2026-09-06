@@ -118,9 +118,12 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
   function flash() { setSaved(true); setTimeout(() => setSaved(false), 1400) }
 
-  async function saveMission(next) {
-    setM(next)
-    const { error } = await supabase.from('souhaits').update({ mission: next }).eq('id', souhaitId)
+  async function saveRapportMedical(next) {
+    const txt = next?.rapport_medical || ''
+    setM(prev => ({ ...(prev || {}), rapport_medical: txt }))
+    const { error } = await supabase.rpc('patch_mission_cle', {
+      p_souhait: souhaitId, p_cle: 'rapport_medical', p_valeur: txt, p_mode: 'set',
+    })
     if (error) setErr(error.message); else flash()
   }
 
@@ -193,18 +196,20 @@ export default function MissionExecution({ souhaitId, onBack }) {
       await avancer('en_cours', n)
       return
     }
+    const { data, error } = await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: n })
+    if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Étape non enregistrée.'); return }
+    setRpc(x => x ? { ...x, etape_terrain: n } : x)
     if (complet) {
-      let nextM = { ...(m || {}), etape_terrain: n }
-      if (vecteurId) {
-        nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: n }
-        nextM = marquerHeureEtape(nextM, vecteurId, n)
-      }
-      await saveMission(nextM)
-    } else {
-      const { data, error } = await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: n })
-      if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Étape non enregistrée.'); return }
-      setRpc(x => x ? { ...x, etape_terrain: n } : x)
+      setM(prev => {
+        let nextM = { ...(prev || {}), etape_terrain: n }
+        if (vecteurId) {
+          nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: n }
+          nextM = marquerHeureEtape(nextM, vecteurId, n)
+        }
+        return nextM
+      })
     }
+    flash()
   }
 
   async function avancer(statut, etapeCible) {
@@ -212,62 +217,46 @@ export default function MissionExecution({ souhaitId, onBack }) {
     const maintenant = new Date().toISOString()
     const etapeToSave = normaliserEtape(etapeCible || (statut === 'realise' ? 'base_rentre' : etape))
     if (statut === 'realise') setEtape('base_rentre')
-    if (complet) {
-      let nextM = { ...(m || {}) }
-      const vs = { ...(nextM.vecteur_statuts || {}) }
-      if (vecteurId) {
-        vs[vecteurId] = statut
-        nextM.vecteur_statuts = vs
-        nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: etapeToSave }
-        nextM.etape_terrain = etapeToSave
-        nextM = marquerHeureEtape(nextM, vecteurId, etapeToSave)
-        if (statut === 'realise') {
-          nextM.vecteur_clotures = { ...(nextM.vecteur_clotures || {}), [vecteurId]: maintenant }
-        }
-      }
-      if (statut === 'en_cours' && !nextM.demarre_le) nextM.demarre_le = maintenant
-      const ids = [...vecteursEquipes]
-      const tousRentes = statut === 'realise' && (ids.length === 0 || ids.every(id => (id === vecteurId ? 'realise' : vs[id]) === 'realise'))
-      const patch = { mission: nextM }
-      if (statut === 'en_cours' && sh?.statut !== 'realise') patch.statut = 'en_cours'
-      if (tousRentes) {
-        patch.statut = 'realise'
-        patch.date_realisee = new Date().toISOString().slice(0, 10)
-        nextM.cloture_le = maintenant
-        patch.mission = nextM
-      }
-      const { error } = await supabase.from('souhaits').update(patch).eq('id', souhaitId)
-      if (error) { setErr(error.message); return }
-      setM(nextM)
-      setSh(x => ({ ...x, ...patch, mission: nextM }))
-      flash()
-      return
-    }
     const { data, error } = await supabase.rpc('avancer_mission', { p_souhait: souhaitId, p_statut: statut })
     if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Impossible de changer le statut.'); return }
     await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: etapeToSave })
     setSh(x => ({ ...x, statut: data?.statut || statut }))
     setRpc(x => x ? { ...x, statut: data?.statut || statut, vecteur_statut: data?.vecteur_statut || statut, etape_terrain: etapeToSave } : x)
+    if (complet) {
+      setM(prev => {
+        let nextM = { ...(prev || {}) }
+        const vs = { ...(nextM.vecteur_statuts || {}) }
+        if (vecteurId) {
+          vs[vecteurId] = statut
+          nextM.vecteur_statuts = vs
+          nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: etapeToSave }
+          nextM.etape_terrain = etapeToSave
+          nextM = marquerHeureEtape(nextM, vecteurId, etapeToSave)
+          if (statut === 'realise') {
+            nextM.vecteur_clotures = { ...(nextM.vecteur_clotures || {}), [vecteurId]: maintenant }
+          }
+        }
+        if (statut === 'en_cours' && !nextM.demarre_le) nextM.demarre_le = maintenant
+        return nextM
+      })
+    }
     flash()
   }
 
   async function toggleCheck(section, item, cur) {
     const nextVal = !cur
-    if (complet) {
-      const next = { ...(m || {}) }
-      if (vecteurId) {
+    const key = section === 'base' ? 'check_base' : section === 'retour_base' ? 'check_retour_base' : section === 'pec' ? 'check_pec' : 'check_retour_pec'
+    setRpc(x => ({ ...x, [key]: { ...(x[key] || {}), [item]: nextVal } }))
+    if (complet && vecteurId) {
+      setM(prev => {
+        const next = { ...(prev || {}) }
         const vc = { ...(next.vecteur_checklists || {}) }
         const curV = vc[vecteurId] || {}
         vc[vecteurId] = { ...curV, [section]: { ...(curV[section] || {}), [item]: nextVal } }
         next.vecteur_checklists = vc
-      } else {
-        next.checklists = { ...(next.checklists || {}), [section]: { ...((next.checklists || {})[section] || {}), [item]: nextVal } }
-      }
-      await saveMission(next)
-      return
+        return next
+      })
     }
-    const key = section === 'base' ? 'check_base' : section === 'retour_base' ? 'check_retour_base' : section === 'pec' ? 'check_pec' : 'check_retour_pec'
-    setRpc(x => ({ ...x, [key]: { ...(x[key] || {}), [item]: nextVal } }))
     const { data, error } = await supabase.rpc('cocher_terrain', { p_souhait: souhaitId, p_section: section, p_item: item, p_val: nextVal })
     if (error || data?.ok === false) {
       setRpc(x => ({ ...x, [key]: { ...(x[key] || {}), [item]: cur } }))
@@ -279,59 +268,42 @@ export default function MissionExecution({ souhaitId, onBack }) {
     setErr(null)
     const prev = aff?.statut_base
     setAff(x => ({ ...(x || {}), statut_base: val }))
-    if (complet) {
-      let next = {
-        ...(m || {}),
-        personnel_statuts: { ...(m?.personnel_statuts || {}), [user.id]: val },
-      }
-      if (val === STATUT_SUR_PLACE) next = marquerHeurePersonnel(next, user.id)
-      const { error: colErr } = await supabase.from('souhait_personnel')
-        .update({ statut_base: val }).eq('souhait_id', souhaitId).eq('user_id', user.id)
-      if (colErr && !/statut_base|schema cache|column/i.test(colErr.message)) {
-        setAff(x => ({ ...(x || {}), statut_base: prev }))
-        setErr(colErr.message)
-        return
-      }
-      await saveMission(next)
-      setEquipe(list => list.map(e => e.user_id === user.id ? { ...e, statut_base: val } : e))
-      return
-    }
     const { data, error } = await supabase.rpc('set_statut_base', { p_souhait: souhaitId, p_statut: val })
     if (error || data?.ok === false) {
       setAff(x => ({ ...(x || {}), statut_base: prev }))
       setErr(error?.message || data?.error || 'Statut non enregistré.')
       return
     }
+    setEquipe(list => list.map(e => e.user_id === user.id ? { ...e, statut_base: val } : e))
     setRpc(x => {
       if (!x) return x
       const equipage = (x.equipage || []).map(e => e.user_id === user.id ? { ...e, statut_base: val } : e)
       return { ...x, statut_base: val, equipage }
     })
+    if (complet) {
+      setM(prevM => {
+        let next = { ...(prevM || {}), personnel_statuts: { ...(prevM?.personnel_statuts || {}), [user.id]: val } }
+        if (val === STATUT_SUR_PLACE) next = marquerHeurePersonnel(next, user.id)
+        return next
+      })
+    }
     flash()
   }
 
   async function saveKms(patch) {
     if (!vecteurId) return
-    if (complet) {
-      await saveMission({ ...m, vecteurs: (m.vecteurs || []).map(v => v.id === vecteurId ? { ...v, ...patch } : v) })
-      return
-    }
     setRpc(x => x?.vecteur ? { ...x, vecteur: { ...x.vecteur, ...patch } } : x)
+    if (complet) {
+      setM(prev => ({
+        ...(prev || {}),
+        vecteurs: (prev?.vecteurs || []).map(v => v.id === vecteurId ? { ...v, ...patch } : v),
+      }))
+    }
     const { error } = await supabase.rpc('maj_releves_vehicule', { p_souhait: souhaitId, p_patch: patch })
     if (error) setErr(error.message); else flash()
   }
 
   async function persistPhoto(slot, meta, action = 'set', groupe = 'coins') {
-    if (complet) {
-      const next = { ...(m || {}) }
-      const tp = { ...(next.terrain_photos || {}) }
-      const cur = { ...(tp[vecteurId] || {}) }
-      if (groupe === 'ticket' || groupe === 'ticket_matin') cur[slot] = meta
-      else cur[groupe] = { ...(cur[groupe] || {}), [slot]: meta }
-      tp[vecteurId] = cur
-      await saveMission({ ...next, terrain_photos: tp })
-      return
-    }
     const rpcSlot = (groupe === 'ticket' || groupe === 'ticket_matin')
       ? slot
       : (groupe === 'coins_retour' ? ('r_' + slot) : slot)
@@ -340,11 +312,24 @@ export default function MissionExecution({ souhaitId, onBack }) {
     })
     if (error || data?.ok === false) { setErr(error?.message || data?.error); return }
     setRpc(x => {
+      if (!x) return x
       const photos = { ...(x.photos || {}) }
       if (groupe === 'ticket' || groupe === 'ticket_matin') photos[slot] = meta
       else photos[groupe] = { ...(photos[groupe] || {}), [slot]: meta }
       return { ...x, photos }
     })
+    if (complet && vecteurId) {
+      setM(prev => {
+        const next = { ...(prev || {}) }
+        const tp = { ...(next.terrain_photos || {}) }
+        const cur = { ...(tp[vecteurId] || {}) }
+        if (groupe === 'ticket' || groupe === 'ticket_matin') cur[slot] = meta
+        else cur[groupe] = { ...(cur[groupe] || {}), [slot]: meta }
+        tp[vecteurId] = cur
+        next.terrain_photos = tp
+        return next
+      })
+    }
     flash()
   }
 
@@ -374,8 +359,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
 
   async function saveObs(txt) {
-    if (complet) { await saveMission({ ...m, rapport_observations: txt }); return }
     setRpc(x => ({ ...x, rapport_observations: txt }))
+    if (complet) setM(prev => ({ ...(prev || {}), rapport_observations: txt }))
     const { error } = await supabase.rpc('noter_mission', { p_souhait: souhaitId, p_observations: txt })
     if (error) setErr(error.message); else flash()
   }
@@ -392,18 +377,19 @@ export default function MissionExecution({ souhaitId, onBack }) {
       role: profile?.role,
       fiche: profile?.fiche,
     })
-    if (!complet || !medical) { setErr('Injection réservée à l’équipage médical.'); return false }
+    if (!medical) { setErr('Injection réservée à l’équipage médical.'); return false }
     if (!etapeProtocoleDetresse(etape)) {
       setErr('Le protocole de détresse n’est disponible qu’entre la prise en charge et le retour base.')
       return false
     }
-    const next = {
-      ...(m || {}),
-      injections_detresse: [...injectionsDetresse(m), inj],
-    }
-    const { error } = await supabase.from('souhaits').update({ mission: next }).eq('id', souhaitId)
-    if (error) { setErr(error.message); return false }
-    setM(next)
+    const { error, data } = await supabase.rpc('patch_mission_cle', {
+      p_souhait: souhaitId, p_cle: 'injections_detresse', p_valeur: inj, p_mode: 'append',
+    })
+    if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Injection non enregistrée.'); return false }
+    setM(prev => ({
+      ...(prev || {}),
+      injections_detresse: [...injectionsDetresse(prev), inj],
+    }))
     flash()
     return true
   }
@@ -619,7 +605,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
                 </Section>
               )}
-              {showRapportMedical && <RapportMedical m={m} onSave={saveMission} />}
+              {showRapportMedical && <RapportMedical m={m} onSave={saveRapportMedical} />}
             </>
           )}
 
@@ -648,7 +634,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <CheckBlock items={itemsVis.retour_base} etat={checks.retour_base} onToggle={(it,on)=>toggleCheck('retour_base', it, on)} />
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
-              {showRapportMedical && <RapportMedical m={m} onSave={saveMission} />}
+              {showRapportMedical && <RapportMedical m={m} onSave={saveRapportMedical} />}
               {showScanConso && (
                 <Section titre="Matériel utilisé">
                   <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
