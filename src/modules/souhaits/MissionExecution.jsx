@@ -7,7 +7,7 @@ import {
   normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
   estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
   marquerHeureEtape, marquerHeurePersonnel, injectionsDetresse,
-  medecinPluri, nomPluri, etapeProtocoleDetresse,
+  medecinPluri, nomPluri, etapeProtocoleDetresse, etapeDuVecteur,
 } from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
@@ -70,9 +70,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
       setSh(full)
       setM(full?.mission || {})
       const vid = me?.vecteur_id || (vs.length === 1 ? vs[0].id : null)
-      const savedEtape = (vid && full?.mission?.vecteur_etapes?.[vid]) || full?.mission?.etape_terrain
       const vstat = vid ? full?.mission?.vecteur_statuts?.[vid] : null
-      setEtape(etapeDefaut(savedEtape, vstat))
+      setEtape(etapeDefaut(etapeDuVecteur(full?.mission, vid, vstat), vstat))
       if (estMedical()) {
         const { data: ints } = await supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId)
         let all = ints || []

@@ -257,6 +257,17 @@ export function lblEtapeTerrain(etape, vecteurStatut) {
   return etapeParId(etape).l
 }
 
+/** Étape de CE vecteur. Ne jamais reprendre l’étape globale (souvent celle d’un autre véhicule). */
+export function etapeDuVecteur(mission, vecteurId, vecteurStatut) {
+  if (vecteurStatut === 'realise') return 'base_rentre'
+  if (vecteurId && mission?.vecteur_etapes && Object.prototype.hasOwnProperty.call(mission.vecteur_etapes, vecteurId)) {
+    return normaliserEtape(mission.vecteur_etapes[vecteurId])
+  }
+  const plusieurs = (mission?.vecteurs || []).filter(v => v?.id).length > 1
+  if (vecteurId && plusieurs) return 'a_la_base'
+  return normaliserEtape(mission?.etape_terrain)
+}
+
 export const NB_ECRANS_TERRAIN = PARCOURS_TERRAIN.length + 1
 
 export function numEcranTerrain(etape) {

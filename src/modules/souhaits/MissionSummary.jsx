@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, fmtAdresse, AdresseAffichee } from '@/components/ui'
-import { GROUPES, CHECKLISTS, itemsChecklistTous, lblEtapeTerrain, lblAutorisationPhotos } from './missionSchema'
+import { GROUPES, CHECKLISTS, itemsChecklistTous, lblEtapeTerrain, etapeDuVecteur, lblAutorisationPhotos } from './missionSchema'
 
 export default function MissionSummary({ souhaitId, infoOnly=false }) {
   const [m, setM] = useState(null)
@@ -48,7 +48,7 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
   const suiviVecteurs = (m.vecteurs || []).map(v => ({
     id: v.id,
     nom: v.nom || v.plaque || 'Véhicule',
-    etape: lblEtapeTerrain(m.vecteur_etapes?.[v.id] || m.etape_terrain, m.vecteur_statuts?.[v.id]),
+    etape: lblEtapeTerrain(etapeDuVecteur(m, v.id, m.vecteur_statuts?.[v.id]), m.vecteur_statuts?.[v.id]),
   }))
 
   return (

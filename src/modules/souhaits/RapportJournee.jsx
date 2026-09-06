@@ -8,7 +8,7 @@ import { ticketsCarburantMission, TicketVue } from './TerrainPhotos'
 import {
   lblStatutBase, lblEtapeTerrain, lblAutorisationPhotos, estSurPlace,
   PARCOURS_TERRAIN, heuresEtapeVecteur, protocoleDetresse, injectionsDetresse, lblVoieDetresse,
-  equipePluri,
+  equipePluri, etapeDuVecteur,
 } from './missionSchema'
 import { LignesPluri } from './EquipePluri'
 
@@ -30,10 +30,9 @@ function vide(v) {
   return v == null || v === ''
 }
 
-function heureStatut(etapeId, heures, m, cloture) {
+function heureStatut(etapeId, heures, cloture) {
   if (heures?.[etapeId]) return heures[etapeId]
-  if (etapeId === 'depart_pec') return m?.demarre_le
-  if (etapeId === 'base_rentre') return cloture || m?.cloture_le
+  if (etapeId === 'base_rentre') return cloture || null
   return null
 }
 
@@ -213,7 +212,7 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
         )}
         {vecteurs.map(v => {
           const vStatut = m.vecteur_statuts?.[v.id]
-          const etape = lblEtapeTerrain(m.vecteur_etapes?.[v.id] || m.etape_terrain, vStatut)
+          const etape = lblEtapeTerrain(etapeDuVecteur(m, v.id, vStatut), vStatut)
           const cloture = m.vecteur_clotures?.[v.id]
           const heures = heuresEtapeVecteur(m, v.id)
           return (
@@ -234,7 +233,7 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '6px 14px', fontSize: 13 }}>
                 {PARCOURS_TERRAIN.map(e => (
-                  <Ligne key={e.id} k={e.l} v={fmtDt(heureStatut(e.id, heures, m, cloture)) || '—'} />
+                  <Ligne key={e.id} k={e.l} v={fmtDt(heureStatut(e.id, heures, cloture)) || '—'} />
                 ))}
               </div>
             </div>
