@@ -27,7 +27,10 @@ function etapeDefaut(saved, vecteurStatut) {
 
 export default function MissionExecution({ souhaitId, onBack }) {
   const { user, profile, peutVoirSouhaitComplet, estMedical } = useAuth()
-  const complet = peutVoirSouhaitComplet()
+  // Écriture / lecture du dossier médical : jamais pour un VNM, même coordinateur.
+  const complet = peutVoirSouhaitComplet() && (
+    estMedical() || personneEstMedicale({ role: profile?.role, fiche: profile?.fiche })
+  )
   const [sh, setSh] = useState(null)
   const [m, setM] = useState(null)
   const [rpc, setRpc] = useState(null)
