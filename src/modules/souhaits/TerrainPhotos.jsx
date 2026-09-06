@@ -37,6 +37,25 @@ export async function signedPhoto(path) {
   return url
 }
 
+/** Image autonome pour un document A4 (data URL). Repli : URL signée. */
+export async function photoDataUrl(path) {
+  const url = await signedPhoto(path)
+  if (!url) return null
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return url
+    const blob = await res.blob()
+    return await new Promise((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(r.result)
+      r.onerror = reject
+      r.readAsDataURL(blob)
+    })
+  } catch {
+    return url
+  }
+}
+
 export async function uploadMissionPhoto(souhaitId, vecteurId, slot, file) {
   const blob = await compressImage(file)
   const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now())

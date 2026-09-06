@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Card, Btn, TA, Pill, Loading, Tabs, fmtAdresse, AdresseAffichee } from '@/components/ui'
 import { lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
-import { ticketsCarburantMission, TicketVue, PhotosCotesVue } from './TerrainPhotos'
+import { ticketsCarburantMission, TicketVue, PhotosCotesVue, photoDataUrl } from './TerrainPhotos'
 import { ApercuPartenaire } from './RapportPartenaire'
 import {
   lblStatutBase, estSurPlace, PARCOURS_TERRAIN, heureEtapeVecteur,
   protocoleDetresse, injectionsDetresse, lblVoieDetresse,
   CHECKLISTS, itemsChecklistTous, snapshotHorairesPartenaire,
 } from './missionSchema'
+import { imprimerHtml, telechargerHtml, imprimerApercuIframe } from './documentA4'
+import { cheminsPhotosMission, htmlRapportAsbl, htmlRapportPartenaire, nomFichierRapport } from './rapportMissionHtml'
 
 function fmtDt(v) {
   if (!v) return ''
@@ -44,9 +46,16 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
   const [notes, setNotes] = useState(s?.mission?.rapport_observations || '')
   const [saving, setSaving] = useState(false)
   const [f, setF] = useState({ deroulement: '', etat_patient: '', observations: '' })
+  const [apercu, setApercu] = useState(null)
+  const [busyDoc, setBusyDoc] = useState(false)
+  const apercuRef = useRef(null)
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
 
   useEffect(() => { charger() }, [souhaitId])
+  useEffect(() => {
+    document.body.classList.toggle('ha-fiche-ouverte', !!apercu)
+    return () => document.body.classList.remove('ha-fiche-ouverte')
+  }, [apercu])
   useEffect(() => {
     setM(s?.mission || {})
     setMedical(s?.mission?.rapport_medical || '')
@@ -138,6 +147,55 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
     })
   }
 
+  async function imagesPourDocument() {
+    const chemins = vue === 'asbl' ? cheminsPhotosMission(m) : []
+    const images = {}
+    await Promise.all(chemins.map(async path => {
+      images[path] = await photoDataUrl(path)
+    }))
+    return images
+  }
+
+  function htmlCourant(images) {
+    if (vue === 'partenaire') {
+      const publie = rows.find(r => r.publie) || rows[0]
+      return htmlRapportPartenaire({
+        s,
+        vecteursHoraires: Array.isArray(publie?.horaires) && publie.horaires.length
+          ? publie.horaires
+          : snapshotHorairesPartenaire(m),
+        deroulement: (publie?.deroulement || f.deroulement || medical).trim(),
+        etat: (publie?.etat_patient || f.etat_patient).trim(),
+        observations: (publie?.observations || f.observations).trim(),
+      })
+    }
+    return htmlRapportAsbl({ s, m, equipe, meds, conso, images, medical, notes })
+  }
+
+  async function ouvrirRapportA4() {
+    setBusyDoc(true)
+    try {
+      const images = await imagesPourDocument()
+      const { html } = htmlCourant(images)
+      imprimerHtml(html, setApercu)
+    } catch (e) {
+      alert('Impossible de préparer le document : ' + (e?.message || e))
+    }
+    setBusyDoc(false)
+  }
+
+  async function telechargerRapportA4() {
+    setBusyDoc(true)
+    try {
+      const images = await imagesPourDocument()
+      const { html } = htmlCourant(images)
+      telechargerHtml(nomFichierRapport(s, vue === 'partenaire' ? 'partenaire' : 'ASBL'), html)
+    } catch (e) {
+      alert('Impossible de préparer le document : ' + (e?.message || e))
+    }
+    setBusyDoc(false)
+  }
+
   if (loading) return <Loading />
 
   const vecteurs = Array.isArray(m.vecteurs) ? m.vecteurs : []
@@ -156,8 +214,14 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
             { v: 'asbl', l: 'Rapport ASBL' },
             { v: 'partenaire', l: 'Rapport partenaire' },
           ]}
-          extra={<Btn kind="soft" onClick={() => window.print()}>Imprimer</Btn>}
         />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '4px 0 12px' }}>
+          <Btn onClick={ouvrirRapportA4} disabled={busyDoc}>{busyDoc ? 'Préparation du document…' : 'Ouvrir le rapport A4'}</Btn>
+          <Btn kind="soft" onClick={telechargerRapportA4} disabled={busyDoc}>Télécharger</Btn>
+          <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+            Document A4 généré — pas une capture d’écran de l’application.
+          </span>
+        </div>
       </div>
 
       {vue === 'asbl' && (
@@ -402,6 +466,20 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
               />
             </Card>
           ))}
+        </div>
+      )}
+
+      {apercu && (
+        <div className="ha-fiche-apercu">
+          <div className="ha-fiche-apercu-bar no-print">
+            <Btn onClick={() => imprimerApercuIframe(apercuRef.current)}>🖨 Imprimer / PDF</Btn>
+            <Btn kind="soft" onClick={telechargerRapportA4}>Télécharger</Btn>
+            <Btn kind="soft" onClick={() => setApercu(null)}>Fermer</Btn>
+            <span style={{ fontSize: 12.5, color: 'var(--text-muted)', alignSelf: 'center' }}>
+              C’est le rapport A4 généré. Si l’app capture l’écran, utilisez Télécharger puis imprimez le fichier.
+            </span>
+          </div>
+          <iframe ref={apercuRef} title="Rapport de mission" srcDoc={apercu} />
         </div>
       )}
     </div>
