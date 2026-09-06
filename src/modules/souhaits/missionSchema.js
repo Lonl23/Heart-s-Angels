@@ -324,7 +324,7 @@ export function nomPluri(r) {
 
 export function personnePluriRemplie(r) {
   if (!r) return false
-  return !!(nomPluri(r) || (r.tel || '').trim() || (r.organisme || '').trim())
+  return !!(nomPluri(r) || (r.tel || '').trim() || (r.organisme || '').trim() || r.annuaire_id)
 }
 
 /** Premier médecin avec un n° (sinon le premier médecin nommé). */

@@ -1,6 +1,14 @@
 import { supabase } from '@/lib/supabase'
 import { emptyToNull, normaliserNiss } from './annuaireSchema'
 
+function digitsTel(raw) {
+  let s = String(raw || '').replace(/\D/g, '')
+  if (s.startsWith('00')) s = s.slice(2)
+  if (s.startsWith('32')) s = s.slice(2)
+  if (s.startsWith('0')) s = s.slice(1)
+  return s
+}
+
 function adresseOuNull(a) {
   if (!a || typeof a !== 'object') return null
   const t = [a.rue, a.numero, a.cp, a.localite, a.pays].some(x => String(x || '').trim())
@@ -276,6 +284,116 @@ export async function assurerPartenaireDepuisAnnuaire(fiche) {
   if (error) throw error
   await supabase.from('annuaire').update({ partenaire_id: data.id }).eq('id', fiche.id)
   return data.id
+}
+
+export const TYPE_MEDICAL_DU_ROLE = {
+  medecin: 'Médecin',
+  infirmier: 'Infirmier',
+  aide_soignant: 'Aide-soignant',
+  psychologue: 'Psychologue',
+  kine: 'Kiné',
+}
+
+export function roleDepuisTypeMedical(t) {
+  const x = String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (x.startsWith('med')) return 'medecin'
+  if (x.startsWith('inf')) return 'infirmier'
+  if (x.includes('aide')) return 'aide_soignant'
+  if (x.startsWith('psy')) return 'psychologue'
+  if (x.startsWith('kin')) return 'kine'
+  return ''
+}
+
+export function telFicheAnnuaire(r) {
+  if (!r) return ''
+  const d = r.data || {}
+  return r.telephone || r.tel_gsm || r.tel_fixe || d.telephone || d.tel_gsm || d.tel_fixe || ''
+}
+
+export async function chercherContactsPluri(q = '') {
+  const { data, error } = await supabase.rpc('chercher_contacts_pluri', { p_q: q || '' })
+  if (error) throw error
+  return Array.isArray(data) ? data : []
+}
+
+export function ficheVersPluri(r, role) {
+  if (!r) return {}
+  return {
+    annuaire_id: r.id,
+    prenom: r.prenom || '',
+    nom: r.nom || '',
+    tel: telFicheAnnuaire(r),
+    organisme: r.organisme || r.data?.organisme || '',
+    role: role || roleDepuisTypeMedical(r.type_lib || r.data?.type_medical) || 'infirmier',
+  }
+}
+
+function memesChiffresTel(a, b) {
+  const da = digitsTel(a)
+  const db = digitsTel(b)
+  return da.length >= 8 && da === db
+}
+
+export function correspondancePluriForte(fiche, { prenom, nom, tel }) {
+  if (!fiche) return false
+  if (memesChiffresTel(tel, telFicheAnnuaire(fiche))) return 'tel'
+  const n1 = [prenom, nom].filter(Boolean).join(' ').trim().toLowerCase()
+  const n2 = [fiche.prenom, fiche.nom].filter(Boolean).join(' ').trim().toLowerCase()
+  if (n1 && n2 && n1 === n2) return 'nom'
+  return false
+}
+
+export async function upsertContactMedical(f, { created_by } = {}) {
+  const prenom = emptyToNull(f.prenom)
+  const nom = emptyToNull(f.nom)
+  const tel = emptyToNull(f.tel) || emptyToNull(f.telephone) || emptyToNull(f.tel_gsm)
+  if (!prenom && !nom && !tel) throw new Error('Nom, prénom ou téléphone requis.')
+  const typeMedical = f.type_medical || TYPE_MEDICAL_DU_ROLE[f.role] || ''
+  const organisme = emptyToNull(f.organisme) || ''
+
+  let existing = null
+  if (f.id || f.annuaire_id) {
+    const id = f.id || f.annuaire_id
+    const { data } = await supabase.from('annuaire').select('*').eq('id', id).maybeSingle()
+    existing = data
+  }
+  if (!existing && tel && digitsTel(tel).length >= 8) {
+    const hits = await chercherContactsPluri(tel)
+    existing = hits.find(r => memesChiffresTel(tel, telFicheAnnuaire(r))) || null
+    if (existing?.id) {
+      const { data } = await supabase.from('annuaire').select('*').eq('id', existing.id).maybeSingle()
+      existing = data || existing
+    }
+  }
+
+  const dataExtra = {
+    ...(existing?.data && typeof existing.data === 'object' ? existing.data : {}),
+    type_medical: typeMedical || existing?.data?.type_medical || '',
+    organisme,
+    telephone: tel || '',
+    tel_gsm: tel || existing?.tel_gsm || '',
+  }
+  const rec = {
+    prenom,
+    nom,
+    telephone: tel,
+    tel_gsm: tel || existing?.tel_gsm || null,
+    data: dataExtra,
+  }
+
+  if (existing?.id) {
+    const { error } = await supabase.from('annuaire').update(rec).eq('id', existing.id)
+    if (error) throw error
+    return existing.id
+  }
+
+  const { data, error } = await supabase.from('annuaire').insert({
+    categorie: 'medical',
+    ...rec,
+    created_by: created_by || null,
+  }).select('id').single()
+  if (error) throw error
+  return data?.id || null
 }
 
 export async function upsertInstitution(f, { created_by } = {}) {

@@ -240,7 +240,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
                   if (!rows.length) return <div className="muted">Non encodée.</div>
                   return (
                     <table className="tbl">
-                      <thead><tr><th>Rôle</th><th>Nom</th><th>Téléphone</th><th>Organisme</th></tr></thead>
+                      <thead><tr><th>Rôle</th><th>Nom</th><th>Téléphone</th><th>Organisme</th><th>Notes</th></tr></thead>
                       <tbody>
                         {rows.map((r, i) => (
                           <tr key={r.id || i}>
@@ -248,6 +248,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
                             <td>{[r.prenom, r.nom].filter(Boolean).join(' ')}</td>
                             <td>{r.tel}</td>
                             <td>{r.organisme}</td>
+                            <td>{r.notes}</td>
                           </tr>
                         ))}
                       </tbody>
