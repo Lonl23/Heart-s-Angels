@@ -80,6 +80,7 @@ async function main() {
     await client.query(lireSQL('37_equipe_pluridisciplinaire.sql'))
     await client.query(lireSQL('38_equipe_pluri_annuaire.sql'))
     await client.query(lireSQL('39_deux_ambulanciers.sql'))
+    await client.query(lireSQL('40_vnm_sans_medical.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

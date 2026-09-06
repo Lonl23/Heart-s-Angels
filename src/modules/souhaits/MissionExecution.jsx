@@ -384,7 +384,12 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
 
   async function injecterDetresse(inj) {
-    if (!complet) { setErr('Injection réservée à l’équipage médical.'); return false }
+    const medical = estMedical() || personneEstMedicale({
+      role_mission: aff?.role_mission || rpc?.role_mission,
+      role: profile?.role,
+      fiche: profile?.fiche,
+    })
+    if (!complet || !medical) { setErr('Injection réservée à l’équipage médical.'); return false }
     if (!etapeProtocoleDetresse(etape)) {
       setErr('Le protocole de détresse n’est disponible qu’entre la prise en charge et le retour base.')
       return false
@@ -409,7 +414,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   if (err && !sh) return <div style={{ padding:24 }}><Flash kind="err">{err}</Flash><Btn kind="soft" onClick={onBack}>← Retour</Btn></div>
 
   const statut = sh?.statut
-  const titre = complet
+  const titre = userMedical && complet
     ? `${sh?.beneficiaire_prenom || ''} ${sh?.beneficiaire_nom || ''}`.trim()
     : (sh?.beneficiaire_prenom || 'Mission')
   const itin = complet ? itineraryFromMission(m) : rpc
@@ -451,7 +456,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
     : []
   const manquantsHint = [...miss, ...extrasManquants].join(', ') || null
   const showMAR = userMedical && vecteurMedical && complet && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)
-  const showScanConso = (userMedical && vecteurMedical && def.patient && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)) || etape === 'base_rentre'
+  const showScanConso = userMedical && vecteurMedical && (
+    (def.patient && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape))
+    || etape === 'base_rentre'
+  )
   const showCloture = etape === 'base_rentre'
   const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
@@ -466,7 +474,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
         <Btn kind="soft" onClick={onBack}>← Mes missions</Btn>
         <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : ''}</span>
       </div>
-      <BandeauMedecin tel={medTel} nom={medNom} />
+      {userMedical && <BandeauMedecin tel={medTel} nom={medNom} />}
 
       {vecteur && (
         <>
@@ -554,8 +562,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés avant de partir.</div>}
               </Section>
               <Section titre="Checklist départ">
-                <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
-                  checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
+                {userMedical && (
+                  <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
+                    checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
+                )}
                 <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
                 <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
                   <MiniNum l="KMs départ" v={vecteur.kms_depart} set={val=>saveKms({ kms_depart: val })} />
@@ -636,16 +646,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
               {showRapportMedical && <RapportMedical m={m} onSave={saveMission} />}
-              <Section titre="Matériel utilisé">
-                <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
-              </Section>
+              {showScanConso && (
+                <Section titre="Matériel utilisé">
+                  <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
+                </Section>
+              )}
               <RapportLogistique value={complet ? (m?.rapport_observations || '') : (rpc?.rapport_observations || '')} onSave={saveObs} />
             </>
           )}
         </>
       )}
 
-      {!complet && vecteur && <div style={{ fontSize:12, color:'var(--text-faint)', marginTop:12 }}>Aucune information médicale n'est accessible depuis cette vue.</div>}
+      {!userMedical && vecteur && <div style={{ fontSize:12, color:'var(--text-faint)', marginTop:12 }}>Aucune information médicale n'est accessible depuis cette vue.</div>}
 
       {vecteur && cta && !locked && statut !== 'realise' && (
         <div className="ha-terrain-bar">

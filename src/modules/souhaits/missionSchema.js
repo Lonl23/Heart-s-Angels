@@ -125,15 +125,47 @@ export function itemChecklistEstMedical(section, item, mission) {
   return def.kind === 'medical'
 }
 
-/** Items que CETTE personne doit cocher sur CE vecteur (jamais le médical si pas médical, ou si le vecteur n’a pas de médical). */
+/**
+ * Volontaire non médical seul à bord : logistique minimale, zéro médical.
+ * Les libellés restent ceux des checklists complètes pour garder les coches déjà enregistrées.
+ */
+export const CHECKLISTS_VNM_SEUL = {
+  base: ['GPS', 'Carte VISA + Essence', 'Dégâts véhicule ou pannes'],
+  pec: [],
+  retour_pec: ['Reprise matériels et sacs'],
+  retour_base: [
+    'Plein du véhicule',
+    'Remise en ordre et nettoyage véhicule',
+    'Remise des clés et papiers',
+    'Dégâts ou pannes durant la mission',
+  ],
+}
+
+function extrasLogistiques(section, mission) {
+  const def = CHECKLISTS[section]
+  if (!def || def.kind === 'medical') return []
+  return extrasChecklist(mission, section)
+    .filter(x => !x.medical)
+    .map(x => x.libelle)
+}
+
+/** Items que CETTE personne doit cocher. Un VNM ne voit jamais d’item médical, même avec un équipage médical à bord. */
 export function itemsChecklistVisibles(section, { userMedical, vecteurMedical, mission } = {}) {
   const def = CHECKLISTS[section]
   if (!def) return []
+  if (!userMedical) {
+    if (!vecteurMedical) {
+      const base = CHECKLISTS_VNM_SEUL[section] || []
+      const extra = extrasLogistiques(section, mission).filter(l => !base.includes(l))
+      return [...base, ...extra]
+    }
+    return itemsChecklistTous(section, mission).filter(it => !itemChecklistEstMedical(section, it, mission))
+  }
   const items = itemsChecklistTous(section, mission)
   return items.filter(it => {
     const med = itemChecklistEstMedical(section, it, mission)
     if (!med) return true
-    return !!(vecteurMedical && userMedical)
+    return !!vecteurMedical
   })
 }
 

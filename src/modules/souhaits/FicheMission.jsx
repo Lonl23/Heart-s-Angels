@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
-import { CHECKLISTS, itemsChecklistTous, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse, equipePluri, personnePluriRemplie, lblRolePluri, medecinPluri, nomPluri } from './missionSchema'
+import { CHECKLISTS, itemsChecklistVisibles, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse, equipePluri, personnePluriRemplie, lblRolePluri, medecinPluri, nomPluri } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
@@ -152,11 +152,11 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
           <Masthead s={s} face="RECTO" vecteurLabel={vecteurLabel} med={med} appel={appel} />
           <Sec t="Administratif">
             <Fld l="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : ''} wide />
-            <Fld l="Registre national" v={m.registre_national} />
+            {med && <Fld l="Registre national" v={m.registre_national} />}
             <Fld l="Récolteur de souhait" v={m.recolteur} />
             <Fld l="Priorité élevée" v={m.priorite_elevee ? 'Oui' : ''} />
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
-            <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />
+            {med && <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />}
             <Fld l="Autorisation photos" v={lblAutorisationPhotos(m.autorisation_photos)} />
             <Fld l="Adresse du domicile du patient" v={fmtAdresse(m.patient_adresse)} wide />
           </Sec>
@@ -298,7 +298,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             </>
           )}
 
-          <ChecklistsPapier m={m} />
+          <ChecklistsPapier m={m} med={med} />
 
           <Sec t="📝 Rapport de mission / observations" plain>
             <div className="rline" /><div className="rline" /><div className="rline" />
@@ -310,18 +310,17 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
 }
 
 function Masthead({ s, face, vecteurLabel, med, appel }) {
+  const medContact = medecinPluri(s.mission)
   return (
     <div className="masthead">
       <div>
         <div className="kicker">Heart's Angels · Fiche de mission</div>
-        <div className="name">{s.beneficiaire_prenom} {s.beneficiaire_nom}{s.beneficiaire_ddn && <small> — né(e) le {d(s.beneficiaire_ddn)}</small>}</div>
+        <div className="name">{s.beneficiaire_prenom} {s.beneficiaire_nom}{med && s.beneficiaire_ddn && <small> — né(e) le {d(s.beneficiaire_ddn)}</small>}</div>
         {s.description && <div className="wish">« {s.description} »</div>}
         {appel?.tel && <div className="vlabel">📞 {appel.tel}{appel.libelle ? ` · ${appel.libelle}` : ''}</div>}
-        {(() => {
-          const med = medecinPluri(s.mission)
-          if (!med?.tel) return null
-          return <div className="vlabel" style={{ color: '#A32D2D', fontWeight: 700 }}>📞 Médecin {med.tel}{nomPluri(med) ? ` · ${nomPluri(med)}` : ''}</div>
-        })()}
+        {med && medContact?.tel && (
+          <div className="vlabel" style={{ color: '#A32D2D', fontWeight: 700 }}>📞 Médecin {medContact.tel}{nomPluri(medContact) ? ` · ${nomPluri(medContact)}` : ''}</div>
+        )}
         <div className="vlabel">{vecteurLabel} · {med ? 'équipage médical' : 'équipage non médical'}</div>
       </div>
       <div className="badge"><span className="face">{face}</span>{fmtDatesSouhait(s) !== 'Date à définir' && <div className="date">🗓 {fmtDatesSouhait(s)}</div>}</div>
@@ -342,10 +341,10 @@ function Fld({ l, v, wide, third, alert }) {
   return <span className={cls}><span className="l">{l}</span><span className={'v'+(alert?' alert':'')}>{v}</span></span>
 }
 
-function ClListe({ section, m }) {
+function ClListe({ section, m, med }) {
   const def = CHECKLISTS[section]
-  const items = itemsChecklistTous(section, m)
-  if (!def) return null
+  const items = itemsChecklistVisibles(section, { userMedical: !!med, vecteurMedical: !!med, mission: m })
+  if (!def || items.length === 0) return null
   return (
     <div className="cl-wrap">
       <div className="cl-title">{def.titre}</div>
@@ -356,19 +355,21 @@ function ClListe({ section, m }) {
   )
 }
 
-function ChecklistsPapier({ m }) {
+function ChecklistsPapier({ m, med }) {
   const materiel = Array.isArray(m.materiel_requis) ? m.materiel_requis : []
   return (
     <>
-      <Sec t="🎒 Matériel à emporter — à cocher" plain allowBreak>
-        {materiel.map(r => (
-          <div key={r.id || libelleRequis(r)} className="cl-item"><span className="cl-box" />{libelleRequis(r)}</div>
-        ))}
-        <div className="cl-item write"><span className="cl-box" />Bouteilles O₂ — n° / volume notés : <span className="blank" /></div>
-        <div className="cl-item write"><span className="cl-box" />Sacs emportés — lesquels : <span className="blank" /></div>
-      </Sec>
+      {med && (
+        <Sec t="🎒 Matériel à emporter — à cocher" plain allowBreak>
+          {materiel.map(r => (
+            <div key={r.id || libelleRequis(r)} className="cl-item"><span className="cl-box" />{libelleRequis(r)}</div>
+          ))}
+          <div className="cl-item write"><span className="cl-box" />Bouteilles O₂ — n° / volume notés : <span className="blank" /></div>
+          <div className="cl-item write"><span className="cl-box" />Sacs emportés — lesquels : <span className="blank" /></div>
+        </Sec>
+      )}
       <Sec t="✅ Checklists — à cocher en entier" plain allowBreak>
-        {['base', 'retour_base', 'pec', 'retour_pec'].map(sec => <ClListe key={sec} section={sec} m={m} />)}
+        {['base', 'retour_base', 'pec', 'retour_pec'].map(sec => <ClListe key={sec} section={sec} m={m} med={med} />)}
       </Sec>
     </>
   )
