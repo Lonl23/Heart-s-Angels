@@ -7,7 +7,7 @@ import {
   normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
   estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
   marquerHeureEtape, marquerHeurePersonnel, injectionsDetresse,
-  medecinPluri, nomPluri,
+  medecinPluri, nomPluri, etapeProtocoleDetresse,
 } from './missionSchema'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
@@ -385,6 +385,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
   async function injecterDetresse(inj) {
     if (!complet) { setErr('Injection réservée à l’équipage médical.'); return false }
+    if (!etapeProtocoleDetresse(etape)) {
+      setErr('Le protocole de détresse n’est disponible qu’entre la prise en charge et le retour base.')
+      return false
+    }
     const next = {
       ...(m || {}),
       injections_detresse: [...injectionsDetresse(m), inj],
@@ -451,6 +455,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const showCloture = etape === 'base_rentre'
   const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
+  const showDetresse = userMedical && complet && vecteur && etapeProtocoleDetresse(etape) && !locked
   const med = medecinPluri(complet ? m : null)
   const medTel = (med?.tel || '').trim() || rpc?.medecin_tel || appel?.medecin_tel || ''
   const medNom = nomPluri(med) || rpc?.medecin_nom || appel?.medecin_nom || ''
@@ -483,7 +488,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
               {appel.libelle && <span style={{ color: 'var(--text-muted)', fontSize: 12.5 }}> · {appel.libelle}</span>}
             </p>
           )}
-          {userMedical && complet && (
+          {showDetresse && (
             <button type="button" className="ha-detresse-btn" onClick={() => setDetresse(true)}>
               Protocole de détresse
             </button>
@@ -493,11 +498,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
       {!vecteur && (
         <>
           <h1 style={{ fontSize:'1.45rem', color:'var(--heading)', margin:'4px 0 8px' }}>{titre || 'Mission'}</h1>
-          {userMedical && complet && (
-            <button type="button" className="ha-detresse-btn" onClick={() => setDetresse(true)}>
-              Protocole de détresse
-            </button>
-          )}
         </>
       )}
       {err && <Flash kind="err">{err}</Flash>}
@@ -675,7 +675,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
       {statut === 'realise' && <div className="ha-terrain-bar"><div style={{ fontWeight:700, color:'#3B6D11', textAlign:'center', padding:'10px' }}>Mission clôturée</div></div>}
 
       {annot && <PhotoAnnotator meta={annot.meta} onSave={saveAnnot} onClose={()=>setAnnot(null)} />}
-      {detresse && (
+      {detresse && showDetresse && (
         <PopupDetresse
           m={complet ? m : {}}
           locked={locked}
