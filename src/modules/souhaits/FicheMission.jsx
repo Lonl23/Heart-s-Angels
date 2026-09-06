@@ -357,6 +357,9 @@ function ClListe({ section, m, med }) {
 
 function ChecklistsPapier({ m, med }) {
   const materiel = Array.isArray(m.materiel_requis) ? m.materiel_requis : []
+  const hasCl = ['base', 'retour_base', 'pec', 'retour_pec'].some(sec =>
+    itemsChecklistVisibles(sec, { userMedical: !!med, vecteurMedical: !!med, mission: m }).length > 0
+  )
   return (
     <>
       {med && (
@@ -368,9 +371,16 @@ function ChecklistsPapier({ m, med }) {
           <div className="cl-item write"><span className="cl-box" />Sacs emportés — lesquels : <span className="blank" /></div>
         </Sec>
       )}
-      <Sec t="✅ Checklists — à cocher en entier" plain allowBreak>
-        {['base', 'retour_base', 'pec', 'retour_pec'].map(sec => <ClListe key={sec} section={sec} m={m} med={med} />)}
-      </Sec>
+      {hasCl && (
+        <Sec t="✅ Checklists — à cocher en entier" plain allowBreak>
+          {['base', 'retour_base', 'pec', 'retour_pec'].map(sec => <ClListe key={sec} section={sec} m={m} med={med} />)}
+        </Sec>
+      )}
+      {!med && (
+        <Sec t="Terrain — véhicule non médical" plain>
+          <div className="cl-item">Photos des 4 côtés, kilomètres et essence uniquement. Pas de checklist médicale ni de matériel à emporter.</div>
+        </Sec>
+      )}
     </>
   )
 }

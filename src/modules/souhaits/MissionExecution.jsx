@@ -26,11 +26,7 @@ function etapeDefaut(saved, vecteurStatut) {
 }
 
 export default function MissionExecution({ souhaitId, onBack }) {
-  const { user, profile, peutVoirSouhaitComplet, estMedical } = useAuth()
-  // Écriture / lecture du dossier médical : jamais pour un VNM, même coordinateur.
-  const complet = peutVoirSouhaitComplet() && (
-    estMedical() || personneEstMedicale({ role: profile?.role, fiche: profile?.fiche })
-  )
+  const { user, profile, peutVoirSouhaitComplet } = useAuth()
   const [sh, setSh] = useState(null)
   const [m, setM] = useState(null)
   const [rpc, setRpc] = useState(null)
@@ -44,8 +40,17 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [annot, setAnnot] = useState(null)
   const [appel, setAppel] = useState(null)
   const [detresse, setDetresse] = useState(false)
+  const [complet, setComplet] = useState(false)
 
-  useEffect(() => { load() }, [souhaitId, complet, user?.id])
+  function medicalDeCetteMission(me) {
+    return personneEstMedicale({
+      role_mission: me?.role_mission,
+      role: profile?.role,
+      fiche: profile?.fiche,
+    })
+  }
+
+  useEffect(() => { load() }, [souhaitId, user?.id, profile?.role, profile?.fiche])
   useEffect(() => { window.scrollTo(0, 0) }, [etape])
 
   async function load() {
@@ -54,7 +59,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
     let { data: me } = await supabase.from('souhait_personnel')
       .select('*').eq('souhait_id', souhaitId).eq('user_id', user.id).maybeSingle()
 
-    if (complet) {
+    const voirComplet = peutVoirSouhaitComplet() && medicalDeCetteMission(me)
+    setComplet(voirComplet)
+
+    if (voirComplet) {
       const [{ data: full, error }, { data: eq }] = await Promise.all([
         supabase.from('souhaits').select('*').eq('id', souhaitId).single(),
         supabase.from('souhait_personnel').select('*, profiles(prenom, role, fiche)').eq('souhait_id', souhaitId),
@@ -72,7 +80,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
       const vid = me?.vecteur_id || (vs.length === 1 ? vs[0].id : null)
       const vstat = vid ? full?.mission?.vecteur_statuts?.[vid] : null
       setEtape(etapeDefaut(etapeDuVecteur(full?.mission, vid, vstat), vstat))
-      if (estMedical()) {
+      if (voirComplet) {
         const { data: ints } = await supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId)
         let all = ints || []
         const { data: dem } = await supabase.from('demandes_souhaits').select('id').eq('souhait_id', souhaitId).limit(1)
@@ -144,11 +152,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const vecteurMedical = complet
     ? vecteurAEquipageMedical(crewVecteur)
     : (rpc?.equipage_medical != null ? !!rpc.equipage_medical : vecteurAEquipageMedical(crewVecteur))
-  const userMedical = estMedical() || personneEstMedicale({
-    role_mission: aff?.role_mission || rpc?.role_mission,
-    role: profile?.role,
-    fiche: profile?.fiche,
-  })
+  const userMedical = medicalDeCetteMission(aff || rpc)
   const clOpts = {
     userMedical,
     vecteurMedical,
@@ -387,11 +391,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
 
   async function injecterDetresse(inj) {
-    const medical = estMedical() || personneEstMedicale({
-      role_mission: aff?.role_mission || rpc?.role_mission,
-      role: profile?.role,
-      fiche: profile?.fiche,
-    })
+    const medical = medicalDeCetteMission(aff || rpc)
     if (!medical) { setErr('Injection réservée à l’équipage médical.'); return false }
     if (!etapeProtocoleDetresse(etape)) {
       setErr('Le protocole de détresse n’est disponible qu’entre la prise en charge et le retour base.')
@@ -437,7 +437,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
     retour_base: itemsChecklistVisibles('retour_base', clOpts),
   }
   const pecMedicalACharge = vecteurMedical && !userMedical
-  const pecSansMedical = !vecteurMedical
   const def = etapeParId(etape)
   const aLaBase = estALaBase(etape)
   const suivant = etapeSuivante(etape)
@@ -564,12 +563,14 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
                 {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés avant de partir.</div>}
               </Section>
-              <Section titre="Checklist départ">
-                {userMedical && (
+              <Section titre={vecteurMedical ? 'Checklist départ' : 'Kilomètres et essence'}>
+                {userMedical && vecteurMedical && (
                   <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
                     checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
                 )}
-                <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
+                {itemsVis.base.length > 0 && (
+                  <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
+                )}
                 <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
                   <MiniNum l="KMs départ" v={vecteur.kms_depart} set={val=>saveKms({ kms_depart: val })} />
                   <MiniNum l="Essence %" v={vecteur.essence_pct} set={val=>saveKms({ essence_pct: val })} />
@@ -609,9 +610,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
               {showPecNotes && pecMedicalACharge && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
               )}
-              {showPecNotes && pecSansMedical && (
-                <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Pas de checklist patient sur ce véhicule.</p>
-              )}
               {def.checklist === 'retour_pec' && itemsVis.retour_pec.length > 0 && (
                 <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'À cocher'}>
                   <CheckBlock items={itemsVis.retour_pec} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
@@ -645,8 +643,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   label="Ticket du retour"
                 />
               </Section>
-              <Section titre="Checklist retour base">
-                <CheckBlock items={itemsVis.retour_base} etat={checks.retour_base} onToggle={(it,on)=>toggleCheck('retour_base', it, on)} />
+              <Section titre={itemsVis.retour_base.length ? 'Checklist retour base' : 'Kilomètres retour'}>
+                {itemsVis.retour_base.length > 0 && (
+                  <CheckBlock items={itemsVis.retour_base} etat={checks.retour_base} onToggle={(it,on)=>toggleCheck('retour_base', it, on)} />
+                )}
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
               {showRapportMedical && <RapportMedical m={m} onSave={saveRapportMedical} />}

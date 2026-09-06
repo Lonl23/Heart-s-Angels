@@ -36,13 +36,18 @@ export const lblRoleMission = v => ROLES_MISSION.find(r => r.v === v)?.l || v
 
 const ROLES_PROFIL_MEDICAUX = ['medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris']
 const QUALS_MEDICALES = ['ambulancier', 'infirmier', 'medecin']
+const ROLES_MISSION_NON_MED = [
+  'volontaire_non_medical', 'chauffeur', 'secouriste', 'kine', 'psychologue', 'autre',
+]
 
-/** Infirmier, médecin, ambulancier (y compris dual infi+ambu). Chauffeur / secouriste / VNM : non. */
+/** Infirmier, médecin, ambulancier (y compris dual infi+ambu). Chauffeur / secouriste / VNM : non.
+ *  Le rôle sur CETTE mission prime : un VNM reste non médical même si sa fiche est médicale. */
 export function personneEstMedicale(p = {}) {
   const role = p.role || p.profiles?.role
   const fiche = p.fiche || p.profiles?.fiche
   const rm = p.role_mission
   if (fiche?.type_benevole === 'non_medical') return false
+  if (ROLES_MISSION_NON_MED.includes(rm)) return false
   if (QUALS_MEDICALES.includes(rm)) return true
   if (ROLES_PROFIL_MEDICAUX.includes(role)) return true
   if (fiche?.type_benevole === 'medical') return true
