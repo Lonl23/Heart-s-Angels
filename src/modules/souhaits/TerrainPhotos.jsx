@@ -238,6 +238,48 @@ export function ticketsCarburantMission(m) {
   }).filter(x => x.matin?.path || x.soir?.path)
 }
 
+/** Galerie lecture seule des 4 côtés (rapport ASBL). */
+export function PhotosCotesVue({ coins, titre }) {
+  return (
+    <div className="ha-rapport-photos">
+      {titre && (
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--heading)', margin: '8px 0 8px' }}>{titre}</div>
+      )}
+      <div className="ha-coins">
+        {COTES.map(c => (
+          <PhotoCoteVue key={c.id} label={c.l} meta={coins?.[c.id]} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PhotoCoteVue({ label, meta }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])
+  const n = (meta?.marks || []).length
+  return (
+    <div className="ha-coin">
+      <div className="ha-coin-label">{label}</div>
+      {url
+        ? (
+          <a href={url} target="_blank" rel="noreferrer" className="ha-photo-thumb">
+            <img src={url} alt={label} />
+            {n > 0 && <span className="ha-photo-badge">{n} dégât{n > 1 ? 's' : ''}</span>}
+          </a>
+        )
+        : (
+          <div className="ha-photo-ph" style={{ minHeight: 88, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+            Non photographié
+          </div>
+        )}
+      {meta?.note && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{meta.note}</div>
+      )}
+    </div>
+  )
+}
+
 export function TicketVue({ meta, titre }) {
   const [url, setUrl] = useState(null)
   useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])

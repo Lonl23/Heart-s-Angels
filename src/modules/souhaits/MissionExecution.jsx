@@ -772,9 +772,12 @@ function RapportMedical({ m, onSave }) {
   const [txt, setTxt] = useState(m?.rapport_medical || '')
   useEffect(() => { setTxt(m?.rapport_medical || '') }, [m?.rapport_medical])
   return (
-    <Section titre="Rapport médical">
+    <Section titre="Comment s’est passée la journée">
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+        Récit de la mission, pas la pathologie du dossier.
+      </p>
       <textarea value={txt} onChange={e=>setTxt(e.target.value)} onBlur={()=>onSave({ ...m, rapport_medical: txt })}
-        rows={4} style={{ ...inp, resize:'vertical' }} placeholder="Déroulement, observations cliniques… Vous pouvez le rédiger dès le départ vers la base." />
+        rows={5} style={{ ...inp, resize:'vertical' }} placeholder="Ex. : belle journée, repas en famille, traitements donnés… Ne recopiez pas la pathologie." />
     </Section>
   )
 }

@@ -48,6 +48,9 @@ html, body, #root { height: 100%; margin: 0; }
   body.ha-fiche-ouverte .fiche { display: none !important; }
   .ha-fiche-apercu { position: static !important; inset: auto !important; height: auto !important; }
   .ha-fiche-apercu iframe { height: auto !important; min-height: 100vh; }
+  .ha-tabs { display: none !important; }
+  .ha-rapport-heures { width: 100%; border-collapse: collapse; }
+  .ha-rapport-photos { page-break-inside: avoid; }
 }
 body {
   background: var(--bg);
@@ -375,6 +378,20 @@ input:focus, select:focus, textarea:focus {
   position: absolute; left: 6px; bottom: 6px; background: #C8435A; color: #fff;
   font-size: 11px; font-weight: 700; border-radius: 99px; padding: 2px 8px;
 }
+.ha-rapport-heures {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin-bottom: 12px;
+}
+.ha-rapport-heures td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.ha-rapport-heures td:first-child { color: var(--text-muted); width: 58%; }
+.ha-rapport-heures td:last-child { font-weight: 600; color: var(--text); }
+.ha-rapport-photos .ha-photo-thumb img { height: 168px; }
 .ha-coin-actions { display: flex; justify-content: center; gap: 14px; margin-top: 6px; }
 .ha-coin-replace { display: block; text-align: center; font-size: 12px; color: var(--accent); font-weight: 600; margin-top: 6px; cursor: pointer; }
 .ha-coin-actions .ha-coin-replace { margin-top: 0; }

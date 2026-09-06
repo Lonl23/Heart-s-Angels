@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { COPYRIGHT } from '@/copyright'
 import { Card, Btn, F, TA, Pill, Empty, Loading, Logo, PhoneF, AddressFields } from '@/components/ui'
-import { GenrePicker } from '@/modules/annuaire/genre'
+import { ApercuPartenaire } from '@/modules/souhaits/RapportPartenaire'
 
 const STATUT = {
   nouvelle:  { l:'Reçue',       c:'#BA7517', bg:'#FAEEDA' },
@@ -296,14 +296,17 @@ function DetailDemande({ id, onBack }) {
       </Card>
 
       <Card>
-        <Sec>Rapport</Sec>
+        <Sec>Rapport de la journée</Sec>
         {rapport ? (
-          <div style={{ display:'flex', flexDirection:'column', gap:8, fontSize:13.5, color:'var(--text-2)', lineHeight:1.6 }}>
-            {rapport.deroulement && <p style={{ margin:0 }}><strong>Déroulement.</strong> {rapport.deroulement}</p>}
-            {rapport.etat_patient && <p style={{ margin:0 }}><strong>État du patient.</strong> {rapport.etat_patient}</p>}
-            {rapport.observations && <p style={{ margin:0 }}><strong>Observations.</strong> {rapport.observations}</p>}
-            <div style={{ fontSize:11.5, color:'var(--text-faint)' }}>Publié le {rapport.publie_le ? new Date(rapport.publie_le).toLocaleDateString('fr-BE') : ''}</div>
-          </div>
+          <ApercuPartenaire
+            patient={`${d.patient_prenom || ''} ${d.patient_nom || ''}`.trim()}
+            dateTxt={d.souhait_date ? new Date(d.souhait_date + 'T12:00:00').toLocaleDateString('fr-BE') : ''}
+            souhait={d.souhait_description}
+            vecteurs={Array.isArray(rapport.horaires) ? rapport.horaires : []}
+            deroulement={rapport.deroulement}
+            etat={rapport.etat_patient}
+            observations={rapport.observations}
+          />
         ) : (
           <div style={{ fontSize:13, color:'var(--text-muted)' }}>Le rapport sera disponible ici une fois le souhait réalisé et publié par l'équipe.</div>
         )}

@@ -240,6 +240,9 @@ function Resume({ s, souhaitId, onVoirRapport }) {
       {s.statut === 'realise' && (
         <Card>
           <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 6 }}>Rapport de la journée</div>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Le récit de la mission — distinct du dossier médical (pathologies, traitements prévus).
+          </p>
           {s.mission?.rapport_medical || s.mission?.rapport_observations ? (
             <div style={{ fontSize: 13.5, color: 'var(--text-2)', whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
               {s.mission?.rapport_medical || s.mission?.rapport_observations}

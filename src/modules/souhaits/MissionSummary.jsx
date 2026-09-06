@@ -53,6 +53,11 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      {!infoOnly && (
+        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: 0 }}>
+          Dossier de préparation (fiche mission). Le rapport de la journée — photos, horaires, récit — est dans l’onglet Rapport du jour.
+        </p>
+      )}
       {suiviVecteurs.length > 0 && (
         <Card>
           <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Où est le véhicule</div>

@@ -300,6 +300,34 @@ export function heuresEtapeVecteur(mission, vecteurId) {
   return mission.vecteur_etape_heures[vecteurId] || {}
 }
 
+/** Horaires utiles au partenaire : le trajet patient, pas la base. */
+export const IDS_HORAIRES_PARTENAIRE = [
+  'pec_sur_place', 'depart_dest', 'dest_sur_place', 'depart_retour', 'retour_sur_place',
+]
+
+export function defsHorairesPartenaire() {
+  return IDS_HORAIRES_PARTENAIRE.map(id => PARCOURS_TERRAIN.find(e => e.id === id)).filter(Boolean)
+}
+
+export function heureEtapeVecteur(mission, vecteurId, etapeId) {
+  const h = heuresEtapeVecteur(mission, vecteurId)
+  if (h[etapeId]) return h[etapeId]
+  if (etapeId === 'base_rentre') return mission?.vecteur_clotures?.[vecteurId] || mission?.cloture_le || null
+  return null
+}
+
+/** Instantané des horaires patient, sans plaque / km / base — pour le rapport partenaire. */
+export function snapshotHorairesPartenaire(mission) {
+  const vecteurs = Array.isArray(mission?.vecteurs) ? mission.vecteurs : []
+  return vecteurs.map(v => ({
+    id: v.id,
+    nom: [v.nom, v.type_transport].filter(Boolean).join(' · ') || 'Véhicule',
+    heures: Object.fromEntries(
+      IDS_HORAIRES_PARTENAIRE.map(id => [id, heureEtapeVecteur(mission, v.id, id)])
+    ),
+  }))
+}
+
 /** Première heure « Sur place » du volontaire. */
 export function marquerHeurePersonnel(mission, userId, iso) {
   if (!userId) return mission || {}
