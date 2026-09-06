@@ -246,7 +246,7 @@ export function etapePrecedente(etape) {
   return PARCOURS_TERRAIN[i - 1]
 }
 
-/** Du « sur place PEC » jusqu’au départ retour base (exclu). */
+/** Patient à bord : sur place PEC jusqu’au sur place retour (détresse + traitements). */
 export function etapeProtocoleDetresse(etape) {
   const i = idxEtape(etape)
   return i >= idxEtape('pec_sur_place') && i < idxEtape('depart_base')

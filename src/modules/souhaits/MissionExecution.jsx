@@ -459,11 +459,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
     ? ['ticket du plein du matin']
     : []
   const manquantsHint = [...miss, ...extrasManquants].join(', ') || null
-  const showMAR = userMedical && vecteurMedical && complet && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape)
-  const showScanConso = userMedical && vecteurMedical && (
-    (def.patient && ['pec_sur_place', 'dest_sur_place', 'retour_sur_place'].includes(etape))
-    || etape === 'base_rentre'
-  )
+  /* Traitements : tant que le patient est à bord (PEC → retour inclus, y compris en route). */
+  const showMAR = userMedical && vecteurMedical && complet && !!def.patient
+  /* Matériel utilisé : du départ base jusqu’au rentré base. L’emport reste à la base. */
+  const showScanConso = userMedical && vecteurMedical && !aLaBase
   const showCloture = etape === 'base_rentre'
   const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
@@ -587,6 +586,13 @@ export default function MissionExecution({ souhaitId, onBack }) {
             </>
           )}
 
+          {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
+          {showScanConso && (
+            <Section titre="Matériel utilisé">
+              <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
+            </Section>
+          )}
+
           {!aLaBase && !showCloture && (
             <>
               {vecteur.nom && (
@@ -613,12 +619,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
               )}
               {def.checklist === 'retour_pec' && pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Retour patient : à charge du médical de ce véhicule.</p>
-              )}
-              {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
-              {showScanConso && (
-                <Section titre="Matériel utilisé">
-                  <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
-                </Section>
               )}
               {showRapportMedical && <RapportMedical m={m} onSave={saveRapportMedical} />}
             </>
@@ -650,11 +650,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
               {showRapportMedical && <RapportMedical m={m} onSave={saveRapportMedical} />}
-              {showScanConso && (
-                <Section titre="Matériel utilisé">
-                  <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
-                </Section>
-              )}
               <RapportLogistique value={complet ? (m?.rapport_observations || '') : (rpc?.rapport_observations || '')} onSave={saveObs} />
             </>
           )}
