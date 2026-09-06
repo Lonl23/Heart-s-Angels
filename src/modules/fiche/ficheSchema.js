@@ -117,6 +117,18 @@ export function rolesManquantsMultiset(requis, couverts) {
   return out
 }
 
+export function countRole(roles, role) {
+  return (roles || []).filter(r => r === role).length
+}
+
+/** Remplace le nombre d’occurrences d’un rôle (ambulanciers : 0, 1 ou 2). */
+export function withRoleCount(roles, role, n) {
+  const rest = (roles || []).filter(r => r !== role)
+  const max = role === 'ambulancier' ? 2 : 1
+  const k = Math.max(0, Math.min(max, Number(n) || 0))
+  return [...rest, ...Array.from({ length: k }, () => role)]
+}
+
 function qualsDunePersonne(p) {
   if (!p) return []
   if (Array.isArray(p.quals) && p.quals.length) return p.quals
@@ -142,7 +154,7 @@ export function couvertureMission(mission, equipe = [], extras = []) {
     const membres = v.id ? equipe.filter(e => e.vecteur_id === v.id) : equipe
     for (const e of membres) if (e.user_id) used.add(e.user_id)
     const missing = rolesEncoreManquants(need, membres.map(e => ({ quals: qualsDunePersonne(e) })))
-    couvertsAll.push(...need.filter(r => !missing.includes(r)))
+    couvertsAll.push(...rolesManquantsMultiset(need, missing))
   }
 
   let remaining = rolesManquantsMultiset(requisAll, couvertsAll)
@@ -242,35 +254,25 @@ export function phraseIlManque(codes) {
 }
 
 /**
- * Rôles encore manquants après affectés ∪ personnes dispo plein sans conflit.
- * Un infi+ambu ne remplit qu’un côté (le plus rare). Chauffeur : via quals (permis + sélection médicale).
+ * Rôles encore manquants après affectés ∪ personnes dispo.
+ * Un infi+ambu ne remplit qu’un côté (le plus rare). Les doublons (2 ambulanciers) sont conservés.
  */
 export function rolesEncoreManquants(requis, personnes) {
   const need = rolesRequisEffectifs(requis)
-  const couverts = []
-  let nInfi = 0, nAmbu = 0, nDual = 0
+  let remaining = [...need]
+  const deja = []
   for (const p of personnes || []) {
-    const q = p.quals || []
-    const hasInfi = q.includes('infirmier')
-    const hasAmbu = q.includes('ambulancier')
-    if (hasInfi && hasAmbu) nDual++
-    else if (hasInfi) nInfi++
-    else if (hasAmbu) nAmbu++
-    for (const role of q) {
-      if (need.includes(role) && role !== 'infirmier' && role !== 'ambulancier' && !couverts.includes(role)) {
-        couverts.push(role)
-      }
+    if (!remaining.length) break
+    const quals = p.quals || []
+    let role = roleSuggere(quals, remaining, deja)
+    if (!role || !remaining.includes(role) || !quals.includes(role)) {
+      role = remaining.find(r => quals.includes(r)) || ''
     }
+    if (!role) continue
+    remaining = rolesManquantsMultiset(remaining, [role])
+    deja.push(role)
   }
-  for (let i = 0; i < nDual; i++) {
-    if (need.includes('infirmier') && need.includes('ambulancier')) {
-      if (nInfi <= nAmbu) nInfi++; else nAmbu++
-    } else if (need.includes('infirmier')) nInfi++
-    else if (need.includes('ambulancier')) nAmbu++
-  }
-  if (need.includes('infirmier') && nInfi > 0) couverts.push('infirmier')
-  if (need.includes('ambulancier') && nAmbu > 0) couverts.push('ambulancier')
-  return need.filter(r => !couverts.includes(r))
+  return remaining
 }
 
 export function libelleQualsImplicites(role, fiche) {

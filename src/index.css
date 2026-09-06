@@ -509,6 +509,13 @@ img, svg, video, table { max-width: 100%; }
 .ha-cal-ev.dispo-nonmed, .ha-cal-ev.dispo-autre,
 .ha-aff-p.dispo-nonmed, .ha-aff-p.dispo-autre { background: #6B6560; color: #fff; }
 .ha-aff-rapides { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.ha-role-ambu { display:inline-flex; align-items:center; gap:4px; }
+.ha-role-n {
+  min-width: 32px; min-height: 32px; padding: 0 8px; border-radius: 99px;
+  border: 1.5px solid var(--border); background: var(--card); color: var(--text-2);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.ha-role-n.is-on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .ha-aff-p {
   padding:7px 12px; border:none; border-radius:99; font-size:13px; font-weight:600;
   cursor:pointer; color:#fff;
