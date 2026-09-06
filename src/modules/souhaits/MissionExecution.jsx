@@ -245,7 +245,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
   async function toggleCheck(section, item, cur) {
     const nextVal = !cur
     const key = section === 'base' ? 'check_base' : section === 'retour_base' ? 'check_retour_base' : section === 'pec' ? 'check_pec' : 'check_retour_pec'
-    setRpc(x => ({ ...x, [key]: { ...(x[key] || {}), [item]: nextVal } }))
+    setRpc(x => {
+      if (!x) return x
+      return { ...x, [key]: { ...(x[key] || {}), [item]: nextVal } }
+    })
     if (complet && vecteurId) {
       setM(prev => {
         const next = { ...(prev || {}) }
@@ -258,7 +261,20 @@ export default function MissionExecution({ souhaitId, onBack }) {
     }
     const { data, error } = await supabase.rpc('cocher_terrain', { p_souhait: souhaitId, p_section: section, p_item: item, p_val: nextVal })
     if (error || data?.ok === false) {
-      setRpc(x => ({ ...x, [key]: { ...(x[key] || {}), [item]: cur } }))
+      setRpc(x => {
+        if (!x) return x
+        return { ...x, [key]: { ...(x[key] || {}), [item]: cur } }
+      })
+      if (complet && vecteurId) {
+        setM(prev => {
+          const next = { ...(prev || {}) }
+          const vc = { ...(next.vecteur_checklists || {}) }
+          const curV = vc[vecteurId] || {}
+          vc[vecteurId] = { ...curV, [section]: { ...(curV[section] || {}), [item]: cur } }
+          next.vecteur_checklists = vc
+          return next
+        })
+      }
       setErr(error?.message || data?.error || 'Enregistrement impossible.')
     } else flash()
   }
@@ -358,7 +374,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
 
   async function saveObs(txt) {
-    setRpc(x => ({ ...x, rapport_observations: txt }))
+    setRpc(x => x ? { ...x, rapport_observations: txt } : x)
     if (complet) setM(prev => ({ ...(prev || {}), rapport_observations: txt }))
     const { error } = await supabase.rpc('noter_mission', { p_souhait: souhaitId, p_observations: txt })
     if (error) setErr(error.message); else flash()
@@ -738,13 +754,13 @@ function Itineraire({ d, compact, only }) {
 
 function CheckBlock({ items, etat, onToggle }) {
   if (!items?.length) return null
-  const faits = items.filter(it => etat[it]).length
+  const faits = items.filter(it => etat?.[it]).length
   return (
     <div style={{ marginBottom:14 }}>
       <div style={{ textAlign:'right', fontSize:12.5, fontWeight:700, color:'var(--text-muted)', marginBottom:8 }}>{faits}/{items.length}</div>
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         {items.map(it => {
-          const on = !!etat[it]
+          const on = !!etat?.[it]
           return (
             <button key={it} type="button" onClick={()=>onToggle(it, on)} className={'ha-check-btn' + (on ? ' is-on' : '')}>
               <span className="ha-check-mark">{on ? '✓' : ''}</span>
