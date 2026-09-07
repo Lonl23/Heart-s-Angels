@@ -1,7 +1,7 @@
 import { escHtml, htmlDocument } from '@/modules/souhaits/documentA4'
 import {
   ORG_FRAIS, FORFAIT_JUSQUA, TAUX_KM, MAX_KM,
-  fmtEuro, fmtDateCourte, titrePeriode, totalForfait, nomCompletNote,
+  fmtEuro, fmtDateCourte, titrePeriode, totalForfait, totalKm, nomCompletNote,
 } from './constantes'
 
 const ORANGE = '#EC7C30'
@@ -102,7 +102,10 @@ export function nomFichierNote(note, profil) {
 export function htmlNoteFrais({ note, profil, logoDataUrl }) {
   const nom = nomCompletNote(profil)
   const lignes = note.lignes_forfait || []
+  const lignesKm = note.lignes_km || []
   const totF = totalForfait(lignes)
+  const totK = Number.isFinite(Number(note.total_km)) ? Number(note.total_km) : totalKm(lignesKm)
+  const tot = Number.isFinite(Number(note.total)) ? Number(note.total) : Math.round((totF + totK) * 100) / 100
   const periode = titrePeriode(note.periode_mois, note.periode_annee)
   const iban = note.iban || '—'
   const sigV = note.signature_volontaire
@@ -122,9 +125,12 @@ export function htmlNoteFrais({ note, profil, logoDataUrl }) {
     + `<td>${l ? escHtml(fmtEuro(l.montant)) : ''}</td>`
   ))
 
-  const km = padRows([], N_KM, () => (
-    '<td></td><td></td><td></td><td></td>'
-    + `<td>${escHtml(fmtEuro(0))}</td>`
+  const km = padRows(lignesKm, Math.max(N_KM, lignesKm.length), (l) => (
+    `<td>${escHtml(l ? fmtDateCourte(l.date) : '')}</td>`
+    + `<td>${escHtml(l?.activite || '')}</td>`
+    + `<td>${escHtml(l?.lieux || '')}</td>`
+    + `<td>${l && l.km ? escHtml(String(l.km).replace('.', ',')) : ''}</td>`
+    + `<td>${l ? escHtml(fmtEuro(l.montant)) : ''}</td>`
   ))
 
   const imgV = sigV ? `<img src="${escHtml(sigV)}" alt="Signature du volontaire">` : ''
@@ -168,7 +174,7 @@ export function htmlNoteFrais({ note, profil, logoDataUrl }) {
       <tr class="tot">
         <td class="vide" colspan="3"></td>
         <td>Total frais de déplacements</td>
-        <td>${escHtml(fmtEuro(0))}</td>
+        <td>${escHtml(fmtEuro(totK))}</td>
       </tr>
     </table>
 
@@ -177,7 +183,7 @@ export function htmlNoteFrais({ note, profil, logoDataUrl }) {
       <table>
         <tr class="grand">
           <td>TOTAL NOTE DE FRAIS</td>
-          <td style="width:22%">${escHtml(fmtEuro(totF))}</td>
+          <td style="width:22%">${escHtml(fmtEuro(tot))}</td>
         </tr>
       </table>
     </div>

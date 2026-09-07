@@ -77,6 +77,57 @@ export function totalForfait(lignes) {
   return Math.round((lignes || []).reduce((a, l) => a + (Number(l.montant) || 0), 0) * 100) / 100
 }
 
+export const MOTIFS_KM = [
+  { v: 'recolte', l: 'Récolte de souhaits' },
+  { v: 'hors_base', l: 'Souhait hors de la base de la semaine' },
+]
+
+export function activiteKmDefaut(motif) {
+  return motif === 'hors_base' ? 'Souhait' : 'Récolte de souhaits'
+}
+
+export function ligneKmVide(date = '') {
+  return {
+    date,
+    motif: 'recolte',
+    activite: activiteKmDefaut('recolte'),
+    lieux: '',
+    km: '',
+    montant: 0,
+  }
+}
+
+export function montantKm(km) {
+  const n = Number(String(km ?? '').replace(',', '.').replace(/\s/g, ''))
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return Math.round(n * TAUX_KM * 100) / 100
+}
+
+export function normaliserLignesKm(lignes) {
+  return (lignes || [])
+    .map(l => {
+      const motif = l?.motif === 'hors_base' ? 'hors_base' : 'recolte'
+      const km = Number(String(l?.km ?? '').replace(',', '.').replace(/\s/g, ''))
+      return {
+        date: String(l?.date || '').slice(0, 10),
+        motif,
+        activite: (l?.activite || '').trim() || activiteKmDefaut(motif),
+        lieux: (l?.lieux || '').trim(),
+        km: Number.isFinite(km) && km > 0 ? km : 0,
+        montant: montantKm(km),
+      }
+    })
+    .filter(l => l.date && l.km > 0)
+}
+
+export function totalKm(lignes) {
+  return Math.round((normaliserLignesKm(lignes).reduce((a, l) => a + l.montant, 0)) * 100) / 100
+}
+
+export function totalKmParcourus(lignes) {
+  return Math.round(normaliserLignesKm(lignes).reduce((a, l) => a + (Number(l.km) || 0), 0) * 10) / 10
+}
+
 export function joursDuMois(mois, annee) {
   const last = new Date(annee, mois, 0).getDate()
   return Array.from({ length: last }, (_, i) => {

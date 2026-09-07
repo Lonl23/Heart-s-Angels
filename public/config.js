@@ -10,7 +10,7 @@ window.__APP_CONFIG__ = {
     pays:    "BE",
     langue:  "fr",
     devise:  "EUR",
-    tauxKm:  0.4201,              // barème kilométrique (BE 2026 : 0.4201 €/km)
+    tauxKm:  0.4326,              // barème kilométrique (BE 2026 : 0,4326 €/km)
     accent:  "#1BB0CE",
     logoUrl: "/icons/ha-logo-512-v4.png",
   },

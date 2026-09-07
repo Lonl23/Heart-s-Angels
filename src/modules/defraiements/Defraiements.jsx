@@ -4,8 +4,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Empty, Loading, Flash, Pill, inp, lbl } from '@/components/ui'
 import { imprimerHtml, telechargerHtml, imprimerApercuIframe } from '@/modules/souhaits/documentA4'
 import {
-  FORFAIT_JOUR, PLAFOND_AN, stNote, fmtEuro, titrePeriode,
-  normaliserIban, ibanValide, ligneVide, fusionnerJours, totalForfait, joursDuMois,
+  FORFAIT_JOUR, PLAFOND_AN, TAUX_KM, MAX_KM, MOTIFS_KM, stNote, fmtEuro, titrePeriode,
+  normaliserIban, ibanValide, ligneVide, ligneKmVide, fusionnerJours, totalForfait,
+  totalKm, totalKmParcourus, normaliserLignesKm, montantKm, activiteKmDefaut, joursDuMois,
   nomCompletNote,
 } from './constantes'
 import { htmlNoteFrais, nomFichierNote, chargerLogoNote } from './noteFraisHtml'
@@ -86,7 +87,7 @@ export default function Defraiements() {
   return (
     <Page
       title="Défraiements"
-      subtitle="Note de frais forfaitaire (44,02 € par jour d’activité). Les kilomètres ne sont pas pris en compte."
+      subtitle="Forfait 44,02 € par jour d’activité. Kilomètres : 0,4326 €/km pour une récolte de souhaits, ou un souhait hors de la base de la semaine."
       action={<Btn onClick={() => setEdition({ nouveau: true })}>Nouvelle note</Btn>}
     >
       {err && <Flash kind="err">{err}</Flash>}
@@ -109,7 +110,7 @@ export default function Defraiements() {
         : visibles.length === 0 ? (
           <Empty
             title="Aucune note pour le moment"
-            hint="Créez une note pour le mois, les jours de mission se remplissent tout seuls. Un jour d’activité = le forfait, sans km."
+            hint="Créez une note pour le mois : les jours de mission se proposent tout seuls. Les km se déclarent à part (récolte ou souhait hors base)."
             action={<Btn onClick={() => setEdition({ nouveau: true })}>Créer une note</Btn>}
           />
         ) : (
@@ -147,11 +148,13 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
   const [annee, setAnnee] = useState(String(initiale.periode_annee || now.getFullYear()))
   const [iban, setIban] = useState(initiale.iban || '')
   const [lignes, setLignes] = useState(initiale.lignes_forfait || [])
+  const [lignesKm, setLignesKm] = useState(initiale.lignes_km || [])
   const [statut, setStatut] = useState(initiale.statut || 'en_attente')
   const [motif, setMotif] = useState(initiale.motif_refus || '')
   const [volontaires, setVolontaires] = useState([])
   const [profilNote, setProfilNote] = useState(moi)
   const [cumulAn, setCumulAn] = useState(0)
+  const [cumulKmAn, setCumulKmAn] = useState(0)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
   const [apercu, setApercu] = useState(null)
@@ -161,8 +164,12 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
   const [foncAsbl, setFoncAsbl] = useState(initiale.signature_asbl_fonction || '')
   const apercuRef = useRef(null)
   const verrouille = statut !== 'en_attente' && !tresorier
-  const tot = totalForfait(lignes)
-  const plafond = cumulAn + (statut === 'refuse' ? 0 : tot)
+  const totF = totalForfait(lignes)
+  const totK = totalKm(lignesKm)
+  const tot = Math.round((totF + totK) * 100) / 100
+  const kmParcourus = totalKmParcourus(lignesKm)
+  const plafond = cumulAn + (statut === 'refuse' ? 0 : totF)
+  const plafondKm = cumulKmAn + (statut === 'refuse' ? 0 : kmParcourus)
 
   useEffect(() => {
     document.body.classList.toggle('ha-fiche-ouverte', !!apercu)
@@ -184,9 +191,15 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
   }
 
   async function cumulAnnuel(uid, y, saufId) {
-    let q = supabase.from('notes_frais').select('id,total,statut').eq('user_id', uid).eq('periode_annee', Number(y)).neq('statut', 'refuse')
-    const { data } = await q
-    return (data || []).filter(n => n.id !== saufId).reduce((a, n) => a + Number(n.total || 0), 0)
+    const { data } = await supabase.from('notes_frais')
+      .select('id,total_forfait,total,lignes_km,statut')
+      .eq('user_id', uid)
+      .eq('periode_annee', Number(y))
+      .neq('statut', 'refuse')
+    const autres = (data || []).filter(n => n.id !== saufId)
+    const forfait = autres.reduce((a, n) => a + Number(n.total_forfait != null ? n.total_forfait : n.total || 0), 0)
+    const km = autres.reduce((a, n) => a + totalKmParcourus(n.lignes_km), 0)
+    return { forfait, km }
   }
 
   async function preparer() {
@@ -202,15 +215,20 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       setIdNote(exist.id)
       setIban(exist.iban || normaliserIban(p?.fiche?.iban || ''))
       setLignes(exist.lignes_forfait || [])
+      setLignesKm(exist.lignes_km || [])
       setStatut(exist.statut || 'en_attente')
       setMotif(exist.motif_refus || '')
       setSigVol(exist.signature_volontaire || '')
       setSigAsbl(exist.signature_asbl || '')
       setFoncAsbl(exist.signature_asbl_fonction || fonctionDefaut(moi))
-      setCumulAn(await cumulAnnuel(userId, annee, exist.id))
+      const c = await cumulAnnuel(userId, annee, exist.id)
+      setCumulAn(c.forfait)
+      setCumulKmAn(c.km)
       return
     }
-    setCumulAn(await cumulAnnuel(userId, annee, idNote))
+    const c = await cumulAnnuel(userId, annee, idNote)
+    setCumulAn(c.forfait)
+    setCumulKmAn(c.km)
     if (idNote) return
     setIban(cur => cur || normaliserIban(p?.fiche?.iban || moi?.fiche?.iban || ''))
     if (!foncAsbl) setFoncAsbl(fonctionDefaut(moi))
@@ -220,6 +238,7 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       p_annee: Number(annee),
     })
     setLignes(fusionnerJours(Array.isArray(data) ? data : []))
+    setLignesKm([])
   }
 
   async function reprendreMissions() {
@@ -240,17 +259,19 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       souhait_id: l.souhait_id || null,
       montant: FORFAIT_JOUR,
     }))
-    const t = totalForfait(lf)
+    const lk = normaliserLignesKm(lignesKm)
+    const tf = totalForfait(lf)
+    const tk = totalKm(lk)
     return {
       user_id: userId,
       periode_mois: Number(mois),
       periode_annee: Number(annee),
       iban: normaliserIban(iban),
       lignes_forfait: lf,
-      lignes_km: [],
-      total_forfait: t,
-      total_km: 0,
-      total: t,
+      lignes_km: lk,
+      total_forfait: tf,
+      total_km: tk,
+      total: Math.round((tf + tk) * 100) / 100,
       signature_volontaire: sigVol || null,
       signature_volontaire_at: sigVol ? (initiale.signature_volontaire_at || new Date().toISOString()) : null,
       signature_volontaire_nom: sigVol ? nomCompletNote(profilNote) : null,
@@ -265,7 +286,10 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
     if (!ibanValide(iban)) { setMsg({ t: 'Indiquez un IBAN belge valide (BE + 14 chiffres).', ok: false }); return null }
     if (userId === moi.id && !sigVol) { setMsg({ t: 'Signez la note avant d’enregistrer.', ok: false }); return null }
     const body = { ...payload(), ...extra }
-    if (!body.lignes_forfait.length) { setMsg({ t: 'Ajoutez au moins un jour d’activité avec une date.', ok: false }); return null }
+    if (!body.lignes_forfait.length && !body.lignes_km.length) {
+      setMsg({ t: 'Ajoutez au moins un jour d’activité ou une ligne de kilomètres.', ok: false })
+      return null
+    }
     setSaving(true)
     let res
     if (idNote) res = await supabase.from('notes_frais').update(body).eq('id', idNote).select('*').maybeSingle()
@@ -286,6 +310,7 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       setIdNote(row.id)
       setStatut(row.statut)
       setLignes(row.lignes_forfait || [])
+      setLignesKm(row.lignes_km || [])
       setSigVol(row.signature_volontaire || sigVol)
       setSigAsbl(row.signature_asbl || sigAsbl)
     }
@@ -350,13 +375,26 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
     setLignes(ls => ls.map((l, j) => j === i ? { ...l, [k]: k === 'montant' ? FORFAIT_JOUR : v } : l))
   }
 
+  function setKmLigne(i, k, v) {
+    setLignesKm(ls => ls.map((l, j) => {
+      if (j !== i) return l
+      const next = { ...l, [k]: v }
+      if (k === 'motif') {
+        const def = activiteKmDefaut(v)
+        if (!l.activite || l.activite === activiteKmDefaut(l.motif)) next.activite = def
+      }
+      if (k === 'km') next.montant = montantKm(v)
+      return next
+    }))
+  }
+
   const st = stNote(statut)
   const jours = joursDuMois(Number(mois), Number(annee))
 
   return (
     <Page
       title={idNote ? `Note — ${titrePeriode(Number(mois), Number(annee))}` : 'Nouvelle note de frais'}
-      subtitle="Un jour d’activité = 44,02 € forfaitaires. Pas de kilomètres."
+      subtitle="Forfait 44,02 € / jour. Km à 0,4326 € uniquement pour une récolte, ou un souhait hors de la base de la semaine."
       action={<Btn kind="soft" onClick={onClose}>← Retour</Btn>}
     >
       {msg && <Flash kind={msg.ok ? 'ok' : 'err'}>{msg.t}</Flash>}
@@ -424,14 +462,74 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
               </span>
             )}
           </div>
-          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--heading)' }}>{fmtEuro(tot)}</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--heading)' }}>{fmtEuro(totF)}</div>
+        </div>
+      </Card>
+
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div style={{ fontWeight: 700, color: 'var(--heading)' }}>Frais de déplacement</div>
+          {!verrouille && (
+            <Btn kind="soft" onClick={() => setLignesKm(ls => [...ls, ligneKmVide(`${annee}-${String(mois).padStart(2, '0')}-01`)])}>+ Trajet</Btn>
+          )}
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12, lineHeight: 1.45 }}>
+          Indemnité de {String(TAUX_KM).replace('.', ',')} €/km (A/R). Pas pour un souhait qui part de la base de la semaine
+          (aujourd’hui Solumob Jemeppe-sur-Meuse ; plus tard, la base personnelle). Oui pour une récolte de souhaits,
+          ou pour un souhait dont la base n’était pas celle de la semaine. Les km du véhicule de mission ne se reprennent pas.
+        </div>
+        {lignesKm.length === 0 && (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Aucun trajet. Ajoutez une ligne seulement si le motif le permet.
+          </div>
+        )}
+        {lignesKm.map((l, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: '0 10px', alignItems: 'end', marginBottom: 6, borderBottom: '1px solid var(--border)', paddingBottom: 4 }}>
+            <div>
+              <label style={lbl}>Date</label>
+              <select value={l.date || ''} onChange={e => setKmLigne(i, 'date', e.target.value)} disabled={verrouille} style={{ ...inp, opacity: verrouille ? .65 : 1 }}>
+                <option value="">—</option>
+                {jours.map(j => <option key={j} value={j}>{fmtDateLocale(j)}</option>)}
+              </select>
+            </div>
+            <Sel
+              label="Motif"
+              value={l.motif || 'recolte'}
+              set={v => setKmLigne(i, 'motif', v)}
+              options={MOTIFS_KM}
+              disabled={verrouille}
+            />
+            <F label="Activité" value={l.activite || ''} set={v => setKmLigne(i, 'activite', v)} disabled={verrouille} />
+            <F label="Lieux (départ → arrivée)" value={l.lieux || ''} set={v => setKmLigne(i, 'lieux', v)} disabled={verrouille} />
+            <F label="Km A/R" value={l.km === 0 || l.km ? String(l.km) : ''} set={v => setKmLigne(i, 'km', v)} disabled={verrouille} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingBottom: 10 }}>
+              <span style={{ fontWeight: 700, color: 'var(--heading)' }}>{fmtEuro(montantKm(l.km))}</span>
+              {!verrouille && (
+                <Btn kind="danger" onClick={() => setLignesKm(ls => ls.filter((_, j) => j !== i))} style={{ padding: '6px 10px' }}>Retirer</Btn>
+              )}
+            </div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            {kmParcourus || 0} km × {String(TAUX_KM).replace('.', ',')} €
+            {plafondKm > MAX_KM && (
+              <span style={{ color: '#A32D2D', display: 'block', marginTop: 4 }}>
+                Attention : le plafond annuel ({MAX_KM} km) serait dépassé ({plafondKm} km).
+              </span>
+            )}
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--heading)' }}>{fmtEuro(totK)}</div>
         </div>
       </Card>
 
       <Card style={{ marginBottom: 14, background: 'var(--bg-alt)' }}>
-        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 4 }}>Frais de déplacement</div>
-        <div style={{ fontSize: 13.5, color: 'var(--text-2)' }}>
-          Les kilomètres ne sont pas pris en compte dans les défraiements pour le moment. Le total déplacement reste à {fmtEuro(0)}.
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ fontWeight: 700, color: 'var(--heading)' }}>Total de la note</div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: 'var(--heading)' }}>{fmtEuro(tot)}</div>
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+          Forfait {fmtEuro(totF)} + déplacements {fmtEuro(totK)}
         </div>
       </Card>
 

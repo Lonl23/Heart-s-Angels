@@ -22,6 +22,7 @@ const PAGE_TITLE = [
   ['/app/disponibilites', 'Disponibilités'],
   ['/app/stock', 'Stock'],
   ['/app/annuaire', 'Annuaire'],
+  ['/app/volontaires', 'Volontaires'],
   ['/app/admin', 'Administration'],
   ['/app/profil', 'Ma fiche'],
   ['/app', 'Tableau de bord'],
@@ -39,7 +40,7 @@ function toggleTheme() {
 }
 
 export default function Layout() {
-  const { profile, signOut, can, canAccess, peutGererStock } = useAuth()
+  const { profile, signOut, canAccess, peutGererStock, peutGererFiches, peutGererApp } = useAuth()
   const { checkForUpdate, checking } = useSwUpdate()
   const nav = useNavigate()
   const loc = useLocation()
@@ -60,11 +61,15 @@ export default function Layout() {
   function onTheme() { toggleTheme(); setDark(d => !d) }
   async function handleLogout() { await signOut(); nav('/login') }
 
+  const extra = [
+    ...(peutGererFiches() ? [{ to: '/app/volontaires', label: 'Volontaires', icon: '👥' }] : []),
+    ...(peutGererApp() ? [{ to: '/app/admin', label: 'Administration', icon: '⚙️' }] : []),
+  ]
   const items = [...NAV.filter(n => {
     if (n.key === 'missions') return true
     if (n.key === 'stock') return canAccess(n.key) && peutGererStock()
     return canAccess(n.key)
-  }), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', icon:'⚙️' }] : [])]
+  }), ...extra]
   const collapsedEff = isDesktop && collapsed
   const W = collapsedEff ? 66 : 250
 
