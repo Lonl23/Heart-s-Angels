@@ -1,5 +1,7 @@
 export const FORFAIT_JOUR = 44.02
 export const PLAFOND_AN = 1760.83
+export const TAUX_KM = 0.4326
+export const MAX_KM = 2000
 export const ORG_FRAIS = "Heart's Angels asbl"
 export const FORFAIT_JUSQUA = '31/12/2026'
 
@@ -16,20 +18,27 @@ export function stNote(v) {
 }
 
 export function fmtEuro(n) {
-  return new Intl.NumberFormat('fr-BE', { style: 'currency', currency: 'EUR' }).format(Number(n) || 0)
+  const n2 = Number.isFinite(Number(n)) ? Number(n) : 0
+  return n2.toFixed(2).replace('.', ',') + ' €'
 }
+
+const MOIS_COURT = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc']
 
 export function fmtDateCourte(iso) {
   if (!iso) return ''
-  return new Date(String(iso).slice(0, 10) + 'T12:00:00')
-    .toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' })
-    .replace('.', '')
+  const d = new Date(String(iso).slice(0, 10) + 'T12:00:00')
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getDate()}-${MOIS_COURT[d.getMonth()]}`
 }
 
 export function titrePeriode(mois, annee) {
   const d = new Date(annee, (mois || 1) - 1, 1)
   const t = d.toLocaleDateString('fr-BE', { month: 'long', year: 'numeric' })
-  return t.charAt(0).toUpperCase() + t.slice(1)
+  return t
+}
+
+export function nomCompletNote(p) {
+  return [p?.nom, p?.prenom].filter(Boolean).join(' ')
 }
 
 export function normaliserIban(v) {

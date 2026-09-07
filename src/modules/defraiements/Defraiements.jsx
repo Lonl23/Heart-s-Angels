@@ -6,8 +6,11 @@ import { imprimerHtml, telechargerHtml, imprimerApercuIframe } from '@/modules/s
 import {
   FORFAIT_JOUR, PLAFOND_AN, stNote, fmtEuro, titrePeriode,
   normaliserIban, ibanValide, ligneVide, fusionnerJours, totalForfait, joursDuMois,
+  nomCompletNote,
 } from './constantes'
-import { htmlNoteFrais, nomFichierNote } from './noteFraisHtml'
+import { htmlNoteFrais, nomFichierNote, chargerLogoNote } from './noteFraisHtml'
+import SignaturePad from './SignaturePad'
+import { ROLES_ASBL } from '@/modules/fiche/ficheSchema'
 
 const now = new Date()
 const MOIS = Array.from({ length: 12 }, (_, i) => {
@@ -18,6 +21,16 @@ const ANNEES = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]
 
 function nomProfil(p) {
   return [p?.prenom, p?.nom].filter(Boolean).join(' ') || p?.email || 'Volontaire'
+}
+
+function fonctionDefaut(p) {
+  const roles = p?.fiche?.roles_asbl || []
+  const found = ROLES_ASBL.find(r => roles.includes(r.v) && r.v !== 'simple_volontaire')
+  if (found) return found.l
+  if (p?.role === 'tresorier') return 'Trésorier'
+  if (p?.role === 'president') return 'Président'
+  if (p?.role === 'admin') return 'Administrateur'
+  return ''
 }
 
 export default function Defraiements() {
@@ -143,6 +156,9 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
   const [msg, setMsg] = useState(null)
   const [apercu, setApercu] = useState(null)
   const [idNote, setIdNote] = useState(initiale.id || null)
+  const [sigVol, setSigVol] = useState(initiale.signature_volontaire || '')
+  const [sigAsbl, setSigAsbl] = useState(initiale.signature_asbl || '')
+  const [foncAsbl, setFoncAsbl] = useState(initiale.signature_asbl_fonction || '')
   const apercuRef = useRef(null)
   const verrouille = statut !== 'en_attente' && !tresorier
   const tot = totalForfait(lignes)
@@ -188,12 +204,16 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       setLignes(exist.lignes_forfait || [])
       setStatut(exist.statut || 'en_attente')
       setMotif(exist.motif_refus || '')
+      setSigVol(exist.signature_volontaire || '')
+      setSigAsbl(exist.signature_asbl || '')
+      setFoncAsbl(exist.signature_asbl_fonction || fonctionDefaut(moi))
       setCumulAn(await cumulAnnuel(userId, annee, exist.id))
       return
     }
     setCumulAn(await cumulAnnuel(userId, annee, idNote))
     if (idNote) return
     setIban(cur => cur || normaliserIban(p?.fiche?.iban || moi?.fiche?.iban || ''))
+    if (!foncAsbl) setFoncAsbl(fonctionDefaut(moi))
     const { data } = await supabase.rpc('missions_pour_note_frais', {
       p_user: userId,
       p_mois: Number(mois),
@@ -231,11 +251,19 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       total_forfait: t,
       total_km: 0,
       total: t,
+      signature_volontaire: sigVol || null,
+      signature_volontaire_at: sigVol ? (initiale.signature_volontaire_at || new Date().toISOString()) : null,
+      signature_volontaire_nom: sigVol ? nomCompletNote(profilNote) : null,
+      signature_asbl: sigAsbl || null,
+      signature_asbl_at: sigAsbl ? (initiale.signature_asbl_at || new Date().toISOString()) : null,
+      signature_asbl_nom: sigAsbl ? nomCompletNote(moi) : null,
+      signature_asbl_fonction: sigAsbl ? (foncAsbl || fonctionDefaut(moi)) : null,
     }
   }
 
   async function enregistrer(extra = {}) {
     if (!ibanValide(iban)) { setMsg({ t: 'Indiquez un IBAN belge valide (BE + 14 chiffres).', ok: false }); return null }
+    if (userId === moi.id && !sigVol) { setMsg({ t: 'Signez la note avant d’enregistrer.', ok: false }); return null }
     const body = { ...payload(), ...extra }
     if (!body.lignes_forfait.length) { setMsg({ t: 'Ajoutez au moins un jour d’activité avec une date.', ok: false }); return null }
     setSaving(true)
@@ -258,6 +286,8 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       setIdNote(row.id)
       setStatut(row.statut)
       setLignes(row.lignes_forfait || [])
+      setSigVol(row.signature_volontaire || sigVol)
+      setSigAsbl(row.signature_asbl || sigAsbl)
     }
     const fiche = { ...(profilNote?.fiche || {}), iban: normaliserIban(iban) }
     if (userId === moi.id || tresorier) {
@@ -269,6 +299,10 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
   }
 
   async function changerStatut(st, extra = {}) {
+    if (st === 'approuve_n1' && !sigAsbl) {
+      setMsg({ t: 'Signez d’abord pour l’ASBL (encadré plus bas).', ok: false })
+      return
+    }
     const saved = await enregistrer()
     const id = saved?.id || idNote
     if (!id) return
@@ -290,17 +324,26 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       ...payload(),
       id: idNote,
       statut,
+      signature_volontaire: sigVol,
+      signature_volontaire_nom: nomCompletNote(profilNote),
+      signature_asbl: sigAsbl,
+      signature_asbl_nom: sigAsbl ? nomCompletNote(moi) : '',
+      signature_asbl_fonction: foncAsbl || fonctionDefaut(moi),
     }
   }
 
-  function ouvrirA4() {
-    const html = htmlNoteFrais({ note: notePourDoc(), profil: profilNote })
-    imprimerHtml(html, setApercu)
+  async function docHtml() {
+    const logoDataUrl = await chargerLogoNote()
+    return htmlNoteFrais({ note: notePourDoc(), profil: profilNote, logoDataUrl })
   }
 
-  function telecharger() {
+  async function ouvrirA4() {
+    imprimerHtml(await docHtml(), setApercu)
+  }
+
+  async function telecharger() {
     const note = notePourDoc()
-    telechargerHtml(nomFichierNote(note, profilNote), htmlNoteFrais({ note, profil: profilNote }))
+    telechargerHtml(nomFichierNote(note, profilNote), await docHtml())
   }
 
   function setLigne(i, k, v) {
@@ -395,6 +438,35 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       {statut === 'refuse' && motif && (
         <Flash kind="err">Motif du refus : {motif}</Flash>
       )}
+
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Signatures</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+          Comme sur la note papier : le volontaire à droite, l’ASBL à gauche. Signez au doigt ou à la souris.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 16 }}>
+          <SignaturePad
+            label="Le volontaire"
+            value={sigVol}
+            onChange={setSigVol}
+            disabled={verrouille || userId !== moi.id}
+          />
+          {tresorier && (
+            <div>
+              <F label="Fonction (pour l’ASBL)" value={foncAsbl} set={setFoncAsbl} placeholder="Trésorier" />
+              <SignaturePad
+                label="Pour l’ASBL"
+                value={sigAsbl}
+                onChange={setSigAsbl}
+                disabled={false}
+              />
+            </div>
+          )}
+        </div>
+        {userId === moi.id && !sigVol && (
+          <div style={{ fontSize: 12.5, color: '#BA7517', marginTop: 10 }}>Signez avant d’enregistrer la note.</div>
+        )}
+      </Card>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {!verrouille && (
