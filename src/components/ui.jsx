@@ -41,14 +41,14 @@ export function Btn({ children, onClick, kind='primary', type='button', disabled
     </button>
   )
 }
-export function F({ label, value, set, type='text', placeholder, required }) {
-  return <div style={{ marginBottom:10 }}><label style={lbl}>{label}{required&&' *'}</label><input type={type} value={value??''} onChange={e=>set(e.target.value)} placeholder={placeholder} required={required} style={inp} /></div>
+export function F({ label, value, set, type='text', placeholder, required, disabled }) {
+  return <div style={{ marginBottom:10 }}><label style={lbl}>{label}{required&&' *'}</label><input type={type} value={value??''} onChange={e=>set(e.target.value)} placeholder={placeholder} required={required} disabled={disabled} style={{ ...inp, opacity: disabled ? .65 : 1 }} /></div>
 }
 export function TA({ label, value, set, rows=3, placeholder }) {
   return <div style={{ marginBottom:10 }}><label style={lbl}>{label}</label><textarea value={value??''} onChange={e=>set(e.target.value)} rows={rows} placeholder={placeholder} style={{ ...inp, resize:'vertical' }} /></div>
 }
-export function Sel({ label, value, set, options }) {
-  return <div style={{ marginBottom:10 }}><label style={lbl}>{label}</label><select value={value??''} onChange={e=>set(e.target.value)} style={inp}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>
+export function Sel({ label, value, set, options, disabled }) {
+  return <div style={{ marginBottom:10 }}><label style={lbl}>{label}</label><select value={value??''} onChange={e=>set(e.target.value)} disabled={disabled} style={{ ...inp, opacity: disabled ? .65 : 1 }}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>
 }
 
 export function Tabs({ items, value, onChange, extra }) {

@@ -10,7 +10,7 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const DemandeSouhait = lazy(() => import('@/pages/DemandeSouhait'))
 const Inscription = lazy(() => import('@/pages/Inscription'))
 const PartenairePortail = lazy(() => import('@/pages/PartenairePortail'))
-const Stub = lazy(() => import('@/modules/Stub'))
+const Defraiements = lazy(() => import('@/modules/defraiements/Defraiements'))
 const Souhaits = lazy(() => import('@/modules/souhaits/Souhaits'))
 const Disponibilites = lazy(() => import('@/modules/Disponibilites'))
 const Stock = lazy(() => import('@/modules/Stock'))
@@ -41,7 +41,7 @@ export default function App() {
           <Route path="souhaits" element={<Souhaits />} />
           <Route path="missions/:id" element={<MesMissions />} />
           <Route path="missions" element={<MesMissions />} />
-          <Route path="defraiements"   element={<Stub nom="Défraiements" />} />
+          <Route path="defraiements"   element={<Defraiements />} />
           <Route path="disponibilites" element={<Disponibilites />} />
           <Route path="stock"          element={<Stock />} />
           <Route path="annuaire"       element={<Annuaire />} />
