@@ -6,7 +6,6 @@ import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
 import { fmtDatesSouhait } from './datesSouhait'
-import { TicketVue, PhotosCotesVue, aDesPhotosCotes } from './TerrainPhotos'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
 const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
@@ -109,7 +108,7 @@ export default function FicheMission({ souhaitId, onClose }) {
         <Btn kind="soft" onClick={onClose}>← Retour</Btn>
         <Btn onClick={imprimer}>🖨 Imprimer la fiche</Btn>
         <Btn kind="soft" onClick={telechargerFiche}>Télécharger</Btn>
-        <span style={{ alignSelf:'center', fontSize:12.5, color:'var(--text-muted)' }}>{fiches.length} fiche{fiches.length>1?'s':''} · une par vecteur · document A4, pas une capture d’écran</span>
+        <span style={{ alignSelf:'center', fontSize:12.5, color:'var(--text-muted)' }}>{fiches.length} fiche{fiches.length>1?'s':''} · préparation du souhait · une par vecteur</span>
       </div>
 
       <div className="fiche" ref={ficheRef}>
@@ -138,7 +137,6 @@ export default function FicheMission({ souhaitId, onClose }) {
 
 function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
   const v = f.v
-  const photosV = v ? ((m.terrain_photos || {})[v.id] || {}) : {}
   const pecAdr = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
   const vecteurLabel = v ? `Vecteur ${f.i + 1} — ${v.nom || '—'}${v.type_transport ? ` · ${v.type_transport}` : ''}${v.plaque ? ` · ${v.plaque}` : ''}` : 'Toutes affectations'
   const Wm = () => <div className={'wm ' + (med ? 'med' : 'conf')}><span>{med ? 'CONFIDENTIEL\nSECRET MÉDICAL' : 'CONFIDENTIEL'}</span></div>
@@ -194,23 +192,6 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             </div>}
             {!v && (m.vecteurs || []).map((vv, i) => <div key={vv.id} className="vec"><div className="vh">Vecteur {i+1} — {vv.nom||'—'}</div></div>)}
           </Sec>
-          {(photosV.ticket_carburant_matin?.path || photosV.ticket_carburant?.path || aDesPhotosCotes(photosV.coins) || aDesPhotosCotes(photosV.coins_retour)) && (
-            <>
-              {(aDesPhotosCotes(photosV.coins) || aDesPhotosCotes(photosV.coins_retour)) && (
-                <Sec t="📸 Photos véhicule — dégâts" plain>
-                  {aDesPhotosCotes(photosV.coins) && <PhotosCotesVue coins={photosV.coins || {}} titre="Départ" />}
-                  {aDesPhotosCotes(photosV.coins_retour) && <PhotosCotesVue coins={photosV.coins_retour || {}} titre="Rentrée" />}
-                </Sec>
-              )}
-              {(photosV.ticket_carburant_matin?.path || photosV.ticket_carburant?.path) && (
-            <Sec t="🎫 Tickets carburant (remboursement prêteur)" plain>
-              {v?.essence_pct != null && v.essence_pct !== '' && <div className="muted" style={{ marginBottom:6 }}>Essence au départ : {v.essence_pct} %</div>}
-              {photosV.ticket_carburant_matin?.path && <TicketVue meta={photosV.ticket_carburant_matin} titre="Plein du matin" />}
-              {photosV.ticket_carburant?.path && <TicketVue meta={photosV.ticket_carburant} titre="Plein du retour" />}
-            </Sec>
-              )}
-            </>
-          )}
         </div>
       </div>
 
@@ -497,12 +478,4 @@ const printStyles = `
   .rline { border-bottom:1px solid #C7D3D5; height:19px; }
   .muted { color:#8CA0A3; }
   .ha-gps, .ha-gps-btn { display:none !important; }
-  .ha-coins { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .ha-coin-label { font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#178FA6; margin-bottom:4px; }
-  .ha-photo-thumb { position:relative; display:block; width:100%; padding:0; border:1px solid #E3EBEC; border-radius:6px; overflow:hidden; background:#111; }
-  .ha-photo-thumb img { width:100%; height:auto; max-height:42mm; object-fit:cover; display:block; }
-  .ha-photo-svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-  .ha-photo-badge { position:absolute; left:6px; bottom:6px; background:#C8435A; color:#fff; font-size:9px; font-weight:700; border-radius:99px; padding:2px 8px; }
-  .ha-photo-ph { min-height:22mm; border:1.4px dashed #C7D3D5; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#8CA0A3; font-size:10px; }
-  .ha-annot-scrim { display:none !important; }
 `
