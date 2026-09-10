@@ -371,12 +371,13 @@ input:focus, select:focus, textarea:focus {
   border-style: solid; padding: 0; width: 100%; min-height: 110px; background: #111;
 }
 .ha-photo-thumb img { width: 100%; height: 110px; object-fit: cover; display: block; }
+.ha-photo-thumb .ha-photo-svg { z-index: 1; }
 .ha-photo-ph { width: 100%; height: 110px; background: var(--bg-alt); }
 .ha-photo-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .ha-annot-img .ha-photo-svg { pointer-events: all; cursor: crosshair; }
 .ha-photo-badge {
   position: absolute; left: 6px; bottom: 6px; background: #C8435A; color: #fff;
-  font-size: 11px; font-weight: 700; border-radius: 99px; padding: 2px 8px;
+  font-size: 11px; font-weight: 700; border-radius: 99px; padding: 2px 8px; z-index: 2;
 }
 .ha-rapport-heures {
   width: 100%;

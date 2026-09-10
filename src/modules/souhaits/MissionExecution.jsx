@@ -12,7 +12,7 @@ import {
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
 import MedicamentsMAR from './MedicamentsMAR'
-import { COTES, CoinPhotos, PhotoAnnotator, TicketPhoto, uploadMissionPhoto } from './TerrainPhotos'
+import { COTES, CoinPhotos, PhotoAnnotator, PhotosCotesVue, TicketPhoto, uploadMissionPhoto, aDesPhotosCotes } from './TerrainPhotos'
 import ScanConso from '@/modules/stock/ScanConso'
 import ScanEmport from '@/modules/stock/ScanEmport'
 import { PopupDetresse } from './ProtocoleDetresse'
@@ -466,6 +466,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
   const showDetresse = userMedical && complet && vecteur && etapeProtocoleDetresse(etape) && !locked
+  const photosDepartOk = aDesPhotosCotes(photos?.coins)
   const med = medecinPluri(complet ? m : null)
   const medTel = (med?.tel || '').trim() || rpc?.medecin_tel || appel?.medecin_tel || ''
   const medNom = nomPluri(med) || rpc?.medecin_nom || appel?.medecin_nom || ''
@@ -594,6 +595,15 @@ export default function MissionExecution({ souhaitId, onBack }) {
             </Section>
           )}
 
+          {!aLaBase && !showCloture && photosDepartOk && (
+            <Section titre="Photos véhicule — dégâts (départ)">
+              <PhotosCotesVue coins={photos.coins || {}} />
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 6 }}>
+                Les marques de dégâts restent sur la photo, à chaque étape et après la mission.
+              </div>
+            </Section>
+          )}
+
           {!aLaBase && !showCloture && (
             <>
               {vecteur.nom && (
@@ -624,6 +634,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
           {showCloture && (
             <>
+              {photosDepartOk && (
+                <Section titre="Photos départ — dégâts à conserver">
+                  <PhotosCotesVue coins={photos.coins || {}} />
+                </Section>
+              )}
               <Section titre="Photos des 4 côtés — remise">
                 <CoinPhotos
                   coins={photos.coins_retour || {}}

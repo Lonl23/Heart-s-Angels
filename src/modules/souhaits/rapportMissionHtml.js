@@ -48,6 +48,13 @@ function imgSrc(url) {
   return escHtml(url)
 }
 
+function svgMarks(marks) {
+  return (marks || []).map((mk) => mk.type === 'rect'
+    ? `<rect x="${Number(mk.x) * 100}" y="${Number(mk.y) * 100}" width="${Number(mk.w) * 100}" height="${Number(mk.h) * 100}" fill="rgba(200,67,90,.22)" stroke="#C8435A" stroke-width="1.2" vector-effect="non-scaling-stroke" />`
+    : `<circle cx="${Number(mk.x) * 100}" cy="${Number(mk.y) * 100}" r="2.2" fill="#C8435A" stroke="#fff" stroke-width="0.6" vector-effect="non-scaling-stroke" />`
+  ).join('')
+}
+
 function grilleCotes(coins, images) {
   return '<div class="coins">' + COTES.map(c => {
     const meta = coins?.[c.id]
@@ -55,7 +62,7 @@ function grilleCotes(coins, images) {
     const n = (meta?.marks || []).length
     return `<div class="coin"><div class="cl">${escHtml(c.l)}</div>`
       + (url
-        ? `<img src="${imgSrc(url)}" alt="${escHtml(c.l)}">${n ? `<div class="badge">${n} dégât${n > 1 ? 's' : ''}</div>` : ''}`
+        ? `<div class="wrap"><img src="${imgSrc(url)}" alt="${escHtml(c.l)}"><svg viewBox="0 0 100 100" preserveAspectRatio="none">${svgMarks(meta.marks)}</svg>${n ? `<div class="badge">${n} dégât${n > 1 ? 's' : ''}</div>` : ''}</div>`
         : '<div class="ph">Non photographié</div>')
       + (meta?.note ? `<div class="muted">${escHtml(meta.note)}</div>` : '')
       + '</div>'
@@ -110,6 +117,9 @@ export const CSS_RAPPORT_A4 = `
   .coin { page-break-inside:avoid; }
   .coin .cl { font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#178FA6; margin-bottom:4px; }
   .coin img { width:100%; height:auto; max-height:48mm; object-fit:cover; border-radius:6px; border:1px solid #E3EBEC; display:block; }
+  .coin .wrap { position:relative; }
+  .coin .wrap svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .coin .wrap .badge { position:absolute; left:6px; bottom:6px; background:#C8435A; color:#fff; padding:2px 8px; border-radius:99px; margin:0; }
   .coin .ph { min-height:28mm; border:1.4px dashed #C7D3D5; border-radius:6px; display:flex; align-items:center; justify-content:center; color:#8CA0A3; font-size:10px; }
   .badge { font-size:9px; font-weight:700; color:#B23B3B; margin-top:3px; }
   .muted { color:#8CA0A3; font-size:10.5px; }
