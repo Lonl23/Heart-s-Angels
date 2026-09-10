@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth'
 import ChangePassword from '@/pages/ChangePassword'
 
 function Splash({ text }) {
-  return <div style={{ display:'grid', placeItems:'center', height:'100vh', color:'var(--text-muted)', fontFamily:'DM Sans,sans-serif' }}>{text}</div>
+  return <div className="ha-shell" style={{ display:'grid', placeItems:'center', color:'var(--text-muted)', fontFamily:'DM Sans,sans-serif' }}>{text}</div>
 }
 
 // Réservé au personnel interne

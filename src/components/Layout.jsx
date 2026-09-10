@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useSwUpdate } from '@/hooks/useSwUpdate'
 import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
+import { estNatif, syncNativeTheme } from '@/lib/native'
 
 const NAV = [
   { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
@@ -58,7 +59,7 @@ export default function Layout() {
   useEffect(() => { setMobileOpen(false) }, [loc.pathname])
 
   function toggleCollapse() { const v = !collapsed; setCollapsed(v); localStorage.setItem('nav_collapsed', v ? '1' : '0') }
-  function onTheme() { toggleTheme(); setDark(d => !d) }
+  function onTheme() { toggleTheme(); setDark(d => !d); syncNativeTheme() }
   async function handleLogout() { await signOut(); nav('/login') }
 
   const extra = [
@@ -74,7 +75,7 @@ export default function Layout() {
   const W = collapsedEff ? 66 : 250
 
   return (
-    <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
+    <div className="ha-shell" style={{ display:'flex', overflow:'hidden', background:'var(--bg)' }}>
       <aside className="ha-sidebar" style={{
         width: W, flexShrink:0, zIndex:60, background:'var(--surface)',
         borderRight:'1px solid var(--border)', display:'flex', flexDirection:'column',
@@ -105,7 +106,9 @@ export default function Layout() {
             )}
           </NavLink>
           <button type="button" onClick={onTheme} title={dark ? 'Passer au thème clair' : 'Passer au thème sombre'} style={rowBtn(collapsedEff)}>{dark ? '☀︎' : '☾'}{!collapsedEff && (dark ? ' Thème clair' : ' Thème sombre')}</button>
-          <button type="button" onClick={checkForUpdate} disabled={checking} title="Rechercher des mises à jour" style={rowBtn(collapsedEff)}>↻{!collapsedEff && (checking ? ' Recherche…' : ' Rechercher des mises à jour')}</button>
+          {!estNatif() && (
+            <button type="button" onClick={checkForUpdate} disabled={checking} title="Rechercher des mises à jour" style={rowBtn(collapsedEff)}>↻{!collapsedEff && (checking ? ' Recherche…' : ' Rechercher des mises à jour')}</button>
+          )}
           <button type="button" onClick={handleLogout} title="Déconnexion" style={{ ...rowBtn(collapsedEff), color:'#C8435A' }}>↩︎{!collapsedEff && ' Déconnexion'}</button>
           {!collapsedEff && <div style={{ fontSize:10, color:'var(--text-faint)', padding:'10px 8px 0', lineHeight:1.4 }}>{COPYRIGHT}</div>}
         </div>
@@ -113,7 +116,7 @@ export default function Layout() {
 
       {mobileOpen && <div onClick={()=>setMobileOpen(false)} className="ha-scrim" style={{ position:'fixed', inset:0, background:'var(--overlay)', zIndex:55 }} />}
 
-      <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', height:'100vh', minHeight:0 }}>
+      <div className="ha-shell-main" style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', minHeight:0 }}>
         <header style={{ position:'sticky', top:0, zIndex:30, display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--surface)', borderBottom:'1px solid var(--border)' }}>
           <button onClick={()=>setMobileOpen(o=>!o)} className="ha-burger" aria-label="Menu" style={iconBtn}>☰</button>
           <Logo size={40} className="ha-header-logo" />
@@ -125,14 +128,14 @@ export default function Layout() {
       <style>{`
         @media (max-width: 899px) {
           .ha-sidebar {
-            position: fixed; top:0; left:0; height:100vh; width: min(250px, 82vw) !important;
+            position: fixed; top:0; left:0; height:100%; width: min(250px, 82vw) !important;
             transform: translateX(-100%);
           }
           .ha-collapse-btn { display:none !important; }
           .ha-header-logo { display:block; }
         }
         @media (min-width: 900px) {
-          .ha-sidebar { position: relative; height:100vh; transform:none !important; }
+          .ha-sidebar { position: relative; height:100%; transform:none !important; }
           .ha-burger, .ha-scrim, .ha-header-logo { display:none !important; }
         }
       `}</style>

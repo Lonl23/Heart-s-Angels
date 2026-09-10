@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { estNatif } from '@/lib/native'
 
 const SwUpdateContext = createContext(null)
 
@@ -32,6 +33,7 @@ export function SwUpdateProvider({ children }) {
   }
 
   useEffect(() => {
+    if (estNatif()) return
     if (!('serviceWorker' in navigator)) return
     let cancelled = false
     let interval
@@ -91,6 +93,7 @@ export function SwUpdateProvider({ children }) {
   }
 
   async function checkForUpdate() {
+    if (estNatif()) { flashUpToDate(); return }
     const reg = regRef.current
     if (!reg) { flashUpToDate(); return }
     setChecking(true)
