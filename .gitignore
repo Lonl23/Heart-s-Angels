@@ -23,6 +23,7 @@ android/app/src/main/assets/capacitor.plugins.json
 *.jks
 *.keystore
 !debug.keystore
+!downloads/Heart-s-Angels.apk
 
 # Capacitor / iOS
 ios/App/Pods
