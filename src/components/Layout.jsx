@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useSwUpdate } from '@/hooks/useSwUpdate'
 import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
-import { estNatif, syncNativeTheme } from '@/lib/native'
+import { syncNativeTheme } from '@/lib/native'
 
 const NAV = [
   { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
@@ -106,9 +106,7 @@ export default function Layout() {
             )}
           </NavLink>
           <button type="button" onClick={onTheme} title={dark ? 'Passer au thème clair' : 'Passer au thème sombre'} style={rowBtn(collapsedEff)}>{dark ? '☀︎' : '☾'}{!collapsedEff && (dark ? ' Thème clair' : ' Thème sombre')}</button>
-          {!estNatif() && (
-            <button type="button" onClick={checkForUpdate} disabled={checking} title="Rechercher des mises à jour" style={rowBtn(collapsedEff)}>↻{!collapsedEff && (checking ? ' Recherche…' : ' Rechercher des mises à jour')}</button>
-          )}
+          <button type="button" onClick={checkForUpdate} disabled={checking} title="Rechercher des mises à jour" style={rowBtn(collapsedEff)}>↻{!collapsedEff && (checking ? ' Recherche…' : ' Rechercher des mises à jour')}</button>
           <button type="button" onClick={handleLogout} title="Déconnexion" style={{ ...rowBtn(collapsedEff), color:'#C8435A' }}>↩︎{!collapsedEff && ' Déconnexion'}</button>
           {!collapsedEff && <div style={{ fontSize:10, color:'var(--text-faint)', padding:'10px 8px 0', lineHeight:1.4 }}>{COPYRIGHT}</div>}
         </div>

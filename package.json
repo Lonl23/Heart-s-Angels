@@ -10,7 +10,8 @@
     "cap:sync": "vite build && cap sync",
     "cap:android": "vite build && cap sync android",
     "cap:ios": "vite build && cap sync ios",
-    "cap:apk": "vite build && cap sync android && cd android && ./gradlew assembleDebug"
+    "cap:version": "node scripts/native-version.mjs bump",
+    "cap:apk": "node scripts/native-version.mjs bump && vite build && cap sync android && cd android && ./gradlew assembleDebug && node scripts/native-version.mjs copy-apk"
   },
   "dependencies": {
     "@capacitor/android": "^7.6.9",

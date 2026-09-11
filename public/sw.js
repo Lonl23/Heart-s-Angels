@@ -14,7 +14,10 @@ function isVolatile(pathname) {
     pathname.startsWith('/icons/') ||
     pathname.startsWith('/apple-touch-icon') ||
     pathname.startsWith('/ha-logo-') ||
-    pathname.startsWith('/favicon')
+    pathname.startsWith('/favicon') ||
+    pathname === '/native-version.json' ||
+    pathname === '/android.html' ||
+    pathname.endsWith('.apk')
   )
 }
 
