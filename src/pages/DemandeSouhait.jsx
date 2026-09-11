@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Logo } from '@/components/ui'
+import { Logo, PhoneF, AddressFields } from '@/components/ui'
+import { GenrePicker } from '@/modules/annuaire/genre'
 
 export default function DemandeSouhait() {
   const [f, setF] = useState({
     patient_prenom:'', patient_nom:'', patient_ddn:'', etablissement:'', medecin_referent:'',
+    patient_genre:'', patient_tel_gsm:'', patient_tel_fixe:'', patient_adresse:null,
     contact_prenom:'', contact_nom:'', contact_relation:'', contact_email:'', contact_telephone:'',
+    contact_tel_fixe:'', contact_ddn:'', contact_adresse:null,
     souhait_description:'', souhait_date:'', souhait_lieu:'',
     mobilite:'', equipement_medical:'', allergies:'', urgence:false,
     consent_patient:false, consent_rgpd:false,
@@ -19,8 +22,17 @@ export default function DemandeSouhait() {
     e.preventDefault()
     if (!f.consent_patient || !f.consent_rgpd) { setErr('Merci de cocher les deux consentements.'); return }
     setBusy(true); setErr(null)
-    const payload = { ...f, source:'externe',
-      patient_ddn: f.patient_ddn || null, souhait_date: f.souhait_date || null }
+    const payload = {
+      ...f, source:'externe',
+      patient_ddn: f.patient_ddn || null, souhait_date: f.souhait_date || null,
+      patient_genre: f.patient_genre || null,
+      patient_tel_gsm: f.patient_tel_gsm || null,
+      patient_tel_fixe: f.patient_tel_fixe || null,
+      patient_adresse: f.patient_adresse || null,
+      contact_tel_fixe: f.contact_tel_fixe || null,
+      contact_ddn: f.contact_ddn || null,
+      contact_adresse: f.contact_adresse || null,
+    }
     const { error } = await supabase.from('demandes_souhaits').insert(payload)
     setBusy(false)
     if (error) setErr("Une erreur est survenue. Réessayez plus tard.")
@@ -45,13 +57,24 @@ export default function DemandeSouhait() {
       <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <Section t="Le patient">
           <Row><I l="Prénom *" v={f.patient_prenom} s={v=>set('patient_prenom',v)} req /><I l="Nom *" v={f.patient_nom} s={v=>set('patient_nom',v)} req /></Row>
+          <GenrePicker value={f.patient_genre} set={v=>set('patient_genre',v)} />
           <Row><I l="Date de naissance" type="date" v={f.patient_ddn} s={v=>set('patient_ddn',v)} /><I l="Établissement / lieu" v={f.etablissement} s={v=>set('etablissement',v)} /></Row>
+          <Row><PhoneF label="GSM" value={f.patient_tel_gsm} set={v=>set('patient_tel_gsm',v)} /><PhoneF label="Fixe" value={f.patient_tel_fixe} set={v=>set('patient_tel_fixe',v)} /></Row>
+          <div>
+            <label style={lbl}>Adresse légale</label>
+            <AddressFields value={f.patient_adresse} set={v=>set('patient_adresse',v)} />
+          </div>
           <I l="Médecin référent" v={f.medecin_referent} s={v=>set('medecin_referent',v)} />
         </Section>
         <Section t="Vous (personne de contact)">
           <Row><I l="Prénom *" v={f.contact_prenom} s={v=>set('contact_prenom',v)} req /><I l="Nom *" v={f.contact_nom} s={v=>set('contact_nom',v)} req /></Row>
-          <Row><I l="Lien avec le patient" v={f.contact_relation} s={v=>set('contact_relation',v)} /><I l="Téléphone" v={f.contact_telephone} s={v=>set('contact_telephone',v)} /></Row>
+          <Row><I l="Lien d'affiliation" v={f.contact_relation} s={v=>set('contact_relation',v)} /><I l="Date de naissance" type="date" v={f.contact_ddn} s={v=>set('contact_ddn',v)} /></Row>
+          <Row><PhoneF label="GSM" value={f.contact_telephone} set={v=>set('contact_telephone',v)} /><PhoneF label="Fixe" value={f.contact_tel_fixe} set={v=>set('contact_tel_fixe',v)} /></Row>
           <I l="E-mail *" type="email" v={f.contact_email} s={v=>set('contact_email',v)} req />
+          <div>
+            <label style={lbl}>Adresse légale</label>
+            <AddressFields value={f.contact_adresse} set={v=>set('contact_adresse',v)} />
+          </div>
         </Section>
         <Section t="Le souhait">
           <T l="Décrivez le souhait *" v={f.souhait_description} s={v=>set('souhait_description',v)} req />

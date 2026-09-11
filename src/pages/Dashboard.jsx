@@ -3,20 +3,26 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Card, Empty, Loading } from '@/components/ui'
+import { lblEtapeTerrain } from '@/modules/souhaits/missionSchema'
+import { fmtDatesSouhait } from '@/modules/souhaits/datesSouhait'
 
 const CARDS = [
   { to:'/app/missions',      key:'missions',      icon:'🚑', label:'Mes missions',   desc:'Terrain : checklists, démarrer, terminer' },
   { to:'/app/souhaits',      key:'souhaits',      icon:'⭐', label:'Souhaits',       desc:'Encoder et préparer les dossiers' },
-  { to:'/app/defraiements',  key:'defraiements',  icon:'🧾', label:'Défraiements',   desc:'Frais, validation, paiement' },
+  { to:'/app/defraiements',  key:'defraiements',  icon:'🧾', label:'Défraiements',   desc:'Note de frais : forfait et km (récolte / hors base)' },
   { to:'/app/disponibilites',key:'disponibilites',icon:'📅', label:'Disponibilités', desc:'Agenda : vos jours et les missions (sans nom de patient)' },
   { to:'/app/stock',         key:'stock',         icon:'📦', label:'Stock',          desc:'Matériel et mouvements' },
-  { to:'/app/annuaire',      key:'annuaire',      icon:'📇', label:'Annuaire',       desc:'Contacts et institutions' },
+  { to:'/app/annuaire',      key:'annuaire',      icon:'📇', label:'Annuaire',       desc:'Bénéficiaires, contacts rattachés, institutions' },
 ]
 
 export default function Dashboard() {
-  const { profile, canAccess, peutGererStock } = useAuth()
+  const { profile, canAccess, peutGererStock, peutGererFiches, peutGererApp } = useAuth()
   const [missions, setMissions] = useState(null)
-  const cartes = CARDS.filter(c => c.key === 'stock' ? canAccess(c.key) && peutGererStock() : canAccess(c.key))
+  const cartes = [
+    ...CARDS.filter(c => c.key === 'stock' ? canAccess(c.key) && peutGererStock() : canAccess(c.key)),
+    ...(peutGererFiches() ? [{ to:'/app/volontaires', icon:'👥', label:'Volontaires', desc:'Invitations, membres et fiches' }] : []),
+    ...(peutGererApp() ? [{ to:'/app/admin', icon:'⚙️', label:'Administration', desc:'Partenaires et accès de l’application' }] : []),
+  ]
   const date = new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' })
 
   useEffect(() => {
@@ -41,8 +47,9 @@ export default function Dashboard() {
                     <div>
                       <div style={{ fontWeight:600, color:'var(--text)' }}>Mission — {m.beneficiaire_prenom}</div>
                       <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>
-                        {m.date_souhaitee ? new Date(m.date_souhaitee).toLocaleDateString('fr-BE') : 'Date à définir'}
+                        {fmtDatesSouhait(m)}
                         {m.vehicule ? ` · ${m.vehicule}` : ''}
+                        {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>
                     </div>
                     <span style={{ color:'var(--accent)', fontWeight:600, fontSize:13 }}>Ouvrir ›</span>

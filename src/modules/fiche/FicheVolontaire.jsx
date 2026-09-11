@@ -5,7 +5,7 @@ import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
 import { QUALIFS, ROLES_ASBL, SPECIALISATIONS_INF, qualifsPourType, qualificationsCompatibles } from './ficheSchema'
 
 const vide = {
-  date_naissance:'', telephone:'', type_benevole:'',
+  date_naissance:'', telephone:'', iban:'', type_benevole:'',
   qualifications:[], roles_asbl:[],
   permis:{ B:false, C:false, E:false, selection_medicale:false, selection_validite:'' },
   ambulancier:{ visa_atnup:'', badge_112:'' },
@@ -116,8 +116,9 @@ export default function FicheVolontaire({ userId, onBack }) {
           <F label="Nom" value={prof.nom||''} set={v=>setProf(p=>({...p,nom:v}))} required />
           <F label="Date de naissance" type="date" value={f.date_naissance} set={v=>set('date_naissance',v)} />
           <PhoneF label="Téléphone" value={f.telephone} set={v=>set('telephone',v)} />
+          <F label="IBAN (défraiements)" value={f.iban||''} set={v=>set('iban', v.toUpperCase())} placeholder="BE00 0000 0000 0000" />
         </div>
-        <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>E-mail (connexion) : {prof.email}</div>
+        <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>E-mail (connexion) : {prof.email} — l’IBAN sert aux notes de frais forfaitaires.</div>
       </Card>
 
       {/* Type + qualifications */}

@@ -70,9 +70,20 @@ export function AuthProvider({ children }) {
   }
 
   const role = profile?.role || null
+  function accesTotal() {
+    if (ADMINS.includes(role)) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint','administrateur_asbl'].includes(r))
+  }
+  function peutGererApp() {
+    if (!role || role === 'partenaire') return false
+    if (ADMINS.includes(role)) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint'].includes(r))
+  }
   function can(perm) {
     if (!role) return false
-    if (perm === 'admin')       return ADMINS.includes(role) || accesTotal()
+    if (perm === 'admin')       return peutGererApp()
     if (perm === 'medical')     return MEDICAL.includes(role)
     if (perm === 'staff')       return STAFF.includes(role)
     if (perm === 'partenaire')  return role === 'partenaire'
@@ -94,11 +105,6 @@ export function AuthProvider({ children }) {
     return sujets.some(([d, sj]) => matrix[`${d}:${sj}:${feature}`] === true)
   }
 
-  function accesTotal() {
-    if (ADMINS.includes(role)) return true
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint','administrateur_asbl'].includes(r))
-  }
   function estMedical() {
     if (['medecin','infirmier','ambulancier_bleu','ambulancier_gris'].includes(role)) return true
     return (profile?.fiche?.type_benevole) === 'medical'
@@ -145,6 +151,12 @@ export function AuthProvider({ children }) {
       'resp_logistique','resp_logistique_adjoint',
     ].includes(r))
   }
+  function peutGererDefraiements() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'tresorier') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['tresorier', 'tresorier_adjoint'].includes(r))
+  }
   function estVolontaireNonMedical() {
     if (peutVoirToutesDispos()) return false
     const t = profile?.fiche?.type_benevole
@@ -156,8 +168,8 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
-    can, canAccess, accesTotal, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, estVolontaireNonMedical,
+    can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, estVolontaireNonMedical,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

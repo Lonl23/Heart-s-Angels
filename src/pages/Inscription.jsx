@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { COPYRIGHT } from '@/copyright'
 import { lbl, inp, Logo } from '@/components/ui'
+import { motDePasseErreur, MDP_AIDE } from '@/lib/motDePasse'
 
 export default function Inscription() {
   const [email, setEmail] = useState('')
@@ -14,8 +15,9 @@ export default function Inscription() {
 
   async function submit(e) {
     e.preventDefault(); setErr(null)
-    if (p1.length < 6) return setErr('Mot de passe trop court (≥ 6 caractères).')
     if (p1 !== p2) return setErr('Les deux mots de passe ne correspondent pas.')
+    const faible = motDePasseErreur(p1)
+    if (faible) return setErr(faible)
     setBusy(true)
     try {
       const { data: v } = await supabase.rpc('verifier_invitation', { p_code: code.trim(), p_email: email.trim() })
@@ -46,7 +48,7 @@ export default function Inscription() {
             <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="HA-XXXX-XXXX" required style={{ ...inp, fontFamily:'monospace', letterSpacing:1 }} />
           </div>
           <div>
-            <label style={lbl}>Mot de passe (au moins 6 caractères)</label>
+            <label style={lbl}>Mot de passe ({MDP_AIDE})</label>
             <input type="password" value={p1} onChange={e=>setP1(e.target.value)} autoComplete="new-password" required style={inp} />
           </div>
           <div>

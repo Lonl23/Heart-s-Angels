@@ -5,37 +5,18 @@ import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
+import { fmtDatesSouhait } from './datesSouhait'
+import { upsertBeneficiaire, upsertContactRattache } from '@/modules/annuaire/annuaireApi'
+import {
+  STATUTS, PIPELINE, PIPELINE_ENCODE, ATTENTE_RAISONS, DEMANDE_STATUTS,
+  stInfo, peutPasserNonRealise, peutChangerStatut, statutFige,
+} from './statuts'
 
-export const STATUTS = {
-  nouveau:     { l:'Nouveau',        c:'#7A5AF8', bg:'#EEE9FE' },
-  en_attente:  { l:'En attente',     c:'#BA7517', bg:'#FAEEDA' },
-  pret:        { l:'Prêt à réaliser',c:'#185FA5', bg:'#E6F1FB' },
-  en_cours:    { l:'En cours',       c:'#1BB0CE', bg:'#E6F7FA' },
-  realise:     { l:'Réalisé',        c:'#3B6D11', bg:'#EAF3DE' },
-  non_realise: { l:'Non réalisé',    c:'#A32D2D', bg:'#FCEBEB' },
+export {
+  STATUTS, PIPELINE, PIPELINE_ENCODE, ATTENTE_RAISONS, DEMANDE_STATUTS,
+  stInfo, peutPasserNonRealise, statutFige, peutChangerStatut,
 }
-export const PIPELINE = ['nouveau','en_attente','pret','en_cours','realise']
-export const PIPELINE_ENCODE = ['nouveau','en_attente','pret']
-export const ATTENTE_RAISONS = [
-  { v:'rencontre',    l:'Rencontre bénéficiaire' },
-  { v:'informations', l:'Informations' },
-  { v:'logistique',   l:'Logistique / véhicule' },
-  { v:'equipage',     l:'Équipage à prévoir' },
-]
-export const DEMANDE_STATUTS = {
-  nouvelle: { l:'Reçue' },
-  en_cours: { l:'En cours' },
-  acceptee: { l:'Acceptée' },
-  refusee:  { l:'Non retenue' },
-  realisee: { l:'Réalisée' },
-}
-export const stInfo = v => STATUTS[v] || STATUTS.en_attente
-export function peutPasserNonRealise(statut) {
-  return !['en_cours', 'realise'].includes(statut)
-}
-export function statutsDisponibles(actuel) {
-  return Object.keys(STATUTS).filter(k => k !== 'non_realise' || k === actuel || peutPasserNonRealise(actuel))
-}
+export { statutsDisponibles } from './statuts'
 
 export default function Souhaits() {
   const nav = useNavigate()
@@ -45,6 +26,14 @@ export default function Souhaits() {
   const [nbDemandes, setNbDemandes] = useState(0)
   const nouveau = loc.pathname.endsWith('/nouveau')
   const preparer = loc.pathname.endsWith('/preparer')
+
+  function ouvrirSouhait(s) {
+    const id = typeof s === 'string' ? s : s?.id
+    const statut = typeof s === 'string' ? null : s?.statut
+    if (!id) return
+    if (statut === 'realise') nav(`/app/souhaits/${id}`)
+    else nav(`/app/souhaits/${id}/preparer`)
+  }
 
   useEffect(() => {
     supabase.from('demandes_souhaits').select('id', { count:'exact', head:true }).in('statut', ['nouvelle','en_cours'])
@@ -72,9 +61,19 @@ export default function Souhaits() {
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
       ]} />
-      {tab === 'souhaits' ? <Kanban onOpen={sid => nav(`/app/souhaits/${sid}`)} /> : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
+      {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} /> : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
     </Page>
   )
+}
+
+function hitCol(x, y) {
+  const els = document.elementsFromPoint?.(x, y) || [document.elementFromPoint(x, y)].filter(Boolean)
+  for (const el of els) {
+    if (el?.closest?.('.ha-kanban-ghost')) continue
+    const col = el?.closest?.('[data-col]')?.getAttribute('data-col')
+    if (col) return col
+  }
+  return null
 }
 
 function Kanban({ onOpen }) {
@@ -87,6 +86,10 @@ function Kanban({ onOpen }) {
   const [motif, setMotif] = useState(null)     // { id, from }
   const [motifTxt, setMotifTxt] = useState('')
   const origin = useRef(null)
+  const itemsRef = useRef([])
+  const onOpenRef = useRef(onOpen)
+  itemsRef.current = items
+  onOpenRef.current = onOpen
 
   useEffect(() => { (async () => {
     const { data } = await supabase.from('souhaits').select('*').order('date_souhaitee', { ascending:true, nullsFirst:false })
@@ -94,10 +97,17 @@ function Kanban({ onOpen }) {
   })() }, [])
 
   function flash(t, kind='ok') { setMsg({ t, kind }); setTimeout(()=>setMsg(null), 3200) }
+  const flashRef = useRef(flash)
+  flashRef.current = flash
 
   async function appliquer(id, col, extra={}) {
-    const item = items.find(s => s.id === id)
+    const item = itemsRef.current.find(s => s.id === id)
     if (!item || item.statut === col) return
+    if (!peutChangerStatut(item.statut, col)) {
+      if (statutFige(item.statut)) flash('Un souhait réalisé ne peut plus changer de statut.', 'warn')
+      else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
+      return
+    }
     const patch = { statut: col, ...extra }
     if (col === 'realise' && !item.date_realisee) patch.date_realisee = new Date().toISOString().slice(0,10)
     setItems(list => list.map(s => s.id === id ? { ...s, ...patch } : s))
@@ -109,53 +119,89 @@ function Kanban({ onOpen }) {
       flash(`Statut : ${stInfo(col).l}`)
     }
   }
+  const appliquerRef = useRef(appliquer)
+  appliquerRef.current = appliquer
 
-  function deposer(id, col) {
-    const item = items.find(s => s.id === id)
+  function deposer(s, col) {
+    const item = typeof s === 'string' ? itemsRef.current.find(x => x.id === s) : s
     if (!item || !col || item.statut === col) return
+    if (!peutChangerStatut(item.statut, col)) {
+      if (statutFige(item.statut)) flash('Un souhait réalisé ne peut plus changer de statut.', 'warn')
+      else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
+      return
+    }
     if (col === 'non_realise') {
-      if (!peutPasserNonRealise(item.statut)) {
-        flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
-        return
-      }
-      setMotif({ id, from: item.statut })
+      setMotif({ id: item.id, from: item.statut })
       setMotifTxt(item.mission?.motif_non_realise || '')
       return
     }
-    appliquer(id, col)
+    appliquer(item.id, col)
   }
-
-  function hitCol(x, y) {
-    const el = document.elementFromPoint(x, y)
-    return el?.closest('[data-col]')?.getAttribute('data-col') || null
-  }
+  const deposerRef = useRef(deposer)
+  deposerRef.current = deposer
 
   function onPointerDown(e, s) {
     if (e.pointerType === 'mouse' && e.button !== 0) return
+    if (e.target?.closest?.('a,button')) return
     const r = e.currentTarget.getBoundingClientRect()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    origin.current = { id: s.id, x: e.clientX, y: e.clientY, r, started: false, target: e.currentTarget }
+    origin.current = {
+      s, x: e.clientX, y: e.clientY, r,
+      started: false,
+      touch: e.pointerType === 'touch',
+      el: e.currentTarget, pid: e.pointerId,
+    }
+    if (e.pointerType !== 'touch') {
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* */ }
+    }
   }
-  function onPointerMove(e) {
-    const o = origin.current
-    if (!o) return
-    const dist = Math.hypot(e.clientX - o.x, e.clientY - o.y)
-    if (!o.started && dist < 10) return
-    o.started = true
-    if (e.cancelable) e.preventDefault()
-    setDrag({ id: o.id, x: e.clientX, y: e.clientY, w: o.r.width, ox: o.x - o.r.left, oy: o.y - o.r.top })
-    setOver(hitCol(e.clientX, e.clientY))
-  }
-  function onPointerUp(e, s) {
-    const o = origin.current
-    origin.current = null
-    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* déjà relâché */ }
-    const started = o?.started
-    const col = started ? hitCol(e.clientX, e.clientY) : null
-    setDrag(null); setOver(null)
-    if (started) deposer(s.id, col)
-    else onOpen(s.id)
-  }
+
+  useEffect(() => {
+    function onMove(e) {
+      const o = origin.current
+      if (!o || o.touch) return
+      const dist = Math.hypot(e.clientX - o.x, e.clientY - o.y)
+      if (!o.started && dist < 8) return
+      if (statutFige(o.s.statut)) {
+        if (!o.started) {
+          o.started = true
+          flashRef.current('Un souhait réalisé ne peut plus changer de statut.', 'warn')
+        }
+        return
+      }
+      if (!o.started) {
+        o.started = true
+        try { o.el.setPointerCapture(o.pid) } catch { /* */ }
+      }
+      if (e.cancelable) e.preventDefault()
+      setDrag({ id: o.s.id, x: e.clientX, y: e.clientY, w: o.r.width, ox: o.x - o.r.left, oy: o.y - o.r.top })
+      setOver(hitCol(e.clientX, e.clientY))
+    }
+    function onUp(e) {
+      const o = origin.current
+      if (!o) return
+      origin.current = null
+      try { o.el.releasePointerCapture?.(o.pid) } catch { /* */ }
+      const started = o.started
+      const col = started ? hitCol(e.clientX, e.clientY) : null
+      setDrag(null)
+      setOver(null)
+      if (started) {
+        if (col && col !== o.s.statut) deposerRef.current(o.s, col)
+        return
+      }
+      if (e.type === 'pointercancel') return
+      if (e.target?.closest?.('a,button')) return
+      if (!o.touch) onOpenRef.current(o.s)
+    }
+    window.addEventListener('pointermove', onMove, true)
+    window.addEventListener('pointerup', onUp, true)
+    window.addEventListener('pointercancel', onUp, true)
+    return () => {
+      window.removeEventListener('pointermove', onMove, true)
+      window.removeEventListener('pointerup', onUp, true)
+      window.removeEventListener('pointercancel', onUp, true)
+    }
+  }, [])
 
   async function confirmerMotif() {
     const t = motifTxt.trim()
@@ -178,7 +224,7 @@ function Kanban({ onOpen }) {
     <div>
       <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:14 }}>
         <input className="ha-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un bénéficiaire, un lieu…" />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Nouveau → En attente → Prêt : préparation. En cours / Réalisé : le terrain (Mes missions).</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Un souhait réalisé ne se déplace plus.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -198,7 +244,7 @@ function Kanban({ onOpen }) {
         <Empty title="Aucun résultat" hint="Essayez un autre mot, ou effacez la recherche." />
       )}
       {filtered.length > 0 && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,230px),1fr))', gap:12 }}>
+        <div className="ha-kanban-board">
           {PIPELINE.map(col => {
             const st = stInfo(col)
             const list = filtered.filter(s => s.statut === col)
@@ -212,7 +258,8 @@ function Kanban({ onOpen }) {
                 <div className={'ha-kanban-drop' + (over===col ? ' is-over' : '')}>
                   {list.map(s => (
                     <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
-                      onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove} onPointerUp={e=>onPointerUp(e,s)} />
+                      onPointerDown={e=>onPointerDown(e,s)}
+                      onOuvrir={() => onOpen(s)} />
                   ))}
                   {list.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici</div>}
                 </div>
@@ -227,7 +274,8 @@ function Kanban({ onOpen }) {
           <div className={'ha-kanban-drop' + (over==='non_realise' ? ' is-over' : '')} style={{ minHeight: autres.length ? 48 : 72 }}>
             {autres.map(s => (
               <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
-                onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove} onPointerUp={e=>onPointerUp(e,s)} />
+                onPointerDown={e=>onPointerDown(e,s)}
+                onOuvrir={() => onOpen(s)} />
             ))}
             {autres.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici pour marquer non réalisé</div>}
           </div>
@@ -242,21 +290,30 @@ function Kanban({ onOpen }) {
   )
 }
 
-function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp }) {
+function CarteSouhait({ s, dragging, onPointerDown, onOuvrir }) {
   return (
-    <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '')} style={{ padding:'12px 14px' }}
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-      title="Glisser pour changer le statut, cliquer pour ouvrir">
+    <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '') + (statutFige(s.statut) ? ' is-locked' : '')} style={{ padding:'12px 14px' }}
+      onPointerDown={onPointerDown}
+      title={s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.' : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:6, marginBottom:5 }}>
         <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5 }}>{s.beneficiaire_prenom} {s.beneficiaire_nom}</span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
       </div>
       <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
-      <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{s.date_souhaitee ? new Date(s.date_souhaitee).toLocaleDateString('fr-BE') : 'Date à définir'}</div>
+      <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{fmtDatesSouhait(s)}</div>
       {s.statut==='en_attente' && s.mission?.attente && (
         <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
           {ATTENTE_RAISONS.filter(r=>s.mission.attente[r.v]).map(r=><span key={r.v} style={{ fontSize:10.5, background:'#FAEEDA', color:'#BA7517', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>{r.l}</span>)}
         </div>
+      )}
+      {onOuvrir && (
+        <button type="button" className="ha-kanban-open"
+          onClick={e => { e.preventDefault(); e.stopPropagation(); onOuvrir() }}
+          onPointerDown={e => e.stopPropagation()}
+          onPointerUp={e => e.stopPropagation()}
+          onPointerCancel={e => e.stopPropagation()}>
+          {s.statut === 'realise' ? 'Rapport ›' : 'Préparer ›'}
+        </button>
       )}
     </Card>
   )
@@ -274,15 +331,51 @@ function Demandes({ onOpen }) {
   }
   async function refuser(d) { if (!confirm('Refuser cette demande ? Elle disparaîtra de la liste active.')) return; await supabase.from('demandes_souhaits').update({ statut:'refusee' }).eq('id', d.id); load() }
   async function accepter(d) {
+    let annuaireId = null
+    try {
+      annuaireId = await upsertBeneficiaire({
+        nom: d.patient_nom,
+        prenom: d.patient_prenom,
+        date_naissance: d.patient_ddn,
+        genre: d.patient_genre,
+        tel_gsm: d.patient_tel_gsm,
+        tel_fixe: d.patient_tel_fixe,
+        adresse: d.patient_adresse,
+        telephone: d.patient_tel_gsm || d.patient_tel_fixe,
+      }, { created_by: profile?.id })
+      if (annuaireId && (d.contact_prenom || d.contact_nom)) {
+        await upsertContactRattache(annuaireId, {
+          prenom: d.contact_prenom,
+          nom: d.contact_nom,
+          lien: d.contact_relation,
+          date_naissance: d.contact_ddn,
+          tel_gsm: d.contact_telephone,
+          tel_fixe: d.contact_tel_fixe,
+          adresse: d.contact_adresse,
+          email: d.contact_email,
+        }, { created_by: profile?.id })
+      }
+    } catch (e) {
+      alert('Annuaire : ' + (e.message || e))
+      return
+    }
     const { data: s, error } = await supabase.from('souhaits').insert({
-      beneficiaire_nom:d.patient_nom, beneficiaire_prenom:d.patient_prenom, beneficiaire_ddn:d.patient_ddn||null,
-      beneficiaire_contact:`${d.contact_prenom||''} ${d.contact_nom||''} ${d.contact_telephone||d.contact_email||''}`.trim(),
-      description:d.souhait_description, localisation:d.souhait_lieu, besoins_specifiques:d.equipement_medical,
-      notes_medicales:[d.mobilite&&`Mobilité: ${d.mobilite}`, d.allergies&&`Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
-      date_souhaitee:d.souhait_date||null, statut: 'nouveau', created_by:profile?.id,
+      beneficiaire_nom: d.patient_nom, beneficiaire_prenom: d.patient_prenom, beneficiaire_ddn: d.patient_ddn || null,
+      beneficiaire_contact: `${d.contact_prenom || ''} ${d.contact_nom || ''} ${d.contact_telephone || d.contact_email || ''}`.trim(),
+      beneficiaire_annuaire_id: annuaireId,
+      beneficiaire_genre: d.patient_genre || null,
+      beneficiaire_tel_gsm: d.patient_tel_gsm || null,
+      beneficiaire_tel_fixe: d.patient_tel_fixe || null,
+      beneficiaire_adresse: d.patient_adresse || null,
+      description: d.souhait_description, localisation: d.souhait_lieu, besoins_specifiques: d.equipement_medical,
+      notes_medicales: [d.mobilite && `Mobilité: ${d.mobilite}`, d.allergies && `Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
+      date_souhaitee: d.souhait_date || null, statut: 'nouveau', created_by: profile?.id,
+      dates_possibles: d.souhait_date ? [{ debut: d.souhait_date, fin: d.souhait_date }] : [],
+      origine: (d.partenaire_id || d.source === 'partenaire') ? 'institution' : 'prive',
+      partenaire_id: d.partenaire_id || null,
     }).select().single()
     if (error) { alert('Erreur : ' + error.message); return }
-    await supabase.from('demandes_souhaits').update({ statut:'acceptee', souhait_id:s.id }).eq('id', d.id)
+    await supabase.from('demandes_souhaits').update({ statut: 'acceptee', souhait_id: s.id }).eq('id', d.id)
     onOpen(s.id)
   }
 

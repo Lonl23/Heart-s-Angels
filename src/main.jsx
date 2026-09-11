@@ -8,11 +8,13 @@ import { SwUpdateProvider } from '@/hooks/useSwUpdate'
 import App from '@/App'
 import './index.css'
 import config from '@/app.config'
+import { initNative } from '@/lib/native'
 
 // Applique le thème enregistré (clair/sombre)
 const theme = localStorage.getItem('theme') || 'light'
 document.documentElement.setAttribute('data-theme', theme)
 if (config.organisation?.accent) document.documentElement.style.setProperty('--accent', config.organisation.accent)
+initNative()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

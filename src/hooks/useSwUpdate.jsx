@@ -1,4 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { CapacitorHttp } from '@capacitor/core'
+import { estNatif } from '@/lib/native'
+import config from '@/app.config'
 
 const SwUpdateContext = createContext(null)
 
@@ -10,13 +13,27 @@ function whenLoaded(fn) {
   else window.addEventListener('load', fn, { once: true })
 }
 
+function versionUrl() {
+  const base = String(config.domaine || '').replace(/\/$/, '')
+  return `${base}/native-version.json?t=${Date.now()}`
+}
+
+function apkDownloadUrl(remote) {
+  if (remote?.apkUrl) return remote.apkUrl
+  const base = String(config.domaine || '').replace(/\/$/, '')
+  const file = remote?.apk || 'Heart-s-Angels.apk'
+  return `${base}/${file}`
+}
+
 export function SwUpdateProvider({ children }) {
   const [updateReady, setUpdateReady] = useState(false)
   const [upToDateFlash, setUpToDateFlash] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [nativeUpdate, setNativeUpdate] = useState(false)
   const regRef = useRef(null)
   const applyingRef = useRef(false)
   const flashTimer = useRef(null)
+  const apkUrlRef = useRef('')
 
   function markWaiting(worker) {
     if (!worker || !navigator.serviceWorker.controller) return
@@ -31,7 +48,51 @@ export function SwUpdateProvider({ children }) {
     })
   }
 
+  async function checkNative(manual) {
+    const base = String(config.domaine || '').replace(/\/$/, '')
+    if (!base) {
+      if (manual) flashUpToDate()
+      return
+    }
+    try {
+      const { App } = await import('@capacitor/app')
+      const info = await App.getInfo()
+      const local = Number(info.build) || 0
+      const res = await CapacitorHttp.get({
+        url: versionUrl(),
+        headers: { Accept: 'application/json' },
+      })
+      if (res.status < 200 || res.status >= 300) throw new Error('version')
+      const remote = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
+      if (Number(remote?.versionCode) > local) {
+        apkUrlRef.current = apkDownloadUrl(remote)
+        setNativeUpdate(true)
+        setUpdateReady(true)
+      } else if (manual) {
+        flashUpToDate()
+      }
+    } catch {
+      if (manual) flashUpToDate()
+    }
+  }
+
   useEffect(() => {
+    if (estNatif()) {
+      let cancelled = false
+      let interval
+      function onVisible() {
+        if (document.visibilityState === 'visible') checkNative(false)
+      }
+      checkNative(false)
+      interval = setInterval(() => { if (!cancelled) checkNative(false) }, HOUR_MS)
+      document.addEventListener('visibilitychange', onVisible)
+      return () => {
+        cancelled = true
+        clearInterval(interval)
+        document.removeEventListener('visibilitychange', onVisible)
+      }
+    }
+
     if (!('serviceWorker' in navigator)) return
     let cancelled = false
     let interval
@@ -80,6 +141,17 @@ export function SwUpdateProvider({ children }) {
   }
 
   async function applyUpdate() {
+    if (estNatif()) {
+      const url = apkUrlRef.current
+      if (!url) return
+      try {
+        const { App } = await import('@capacitor/app')
+        await App.openUrl({ url })
+      } catch {
+        window.open(url, '_blank')
+      }
+      return
+    }
     const waiting = regRef.current?.waiting
     if (!waiting) {
       window.location.reload()
@@ -91,6 +163,12 @@ export function SwUpdateProvider({ children }) {
   }
 
   async function checkForUpdate() {
+    if (estNatif()) {
+      setChecking(true)
+      await checkNative(true)
+      setChecking(false)
+      return
+    }
     const reg = regRef.current
     if (!reg) { flashUpToDate(); return }
     setChecking(true)
@@ -124,8 +202,8 @@ export function SwUpdateProvider({ children }) {
       {children}
       {updateReady && (
         <div className="ha-update-banner" role="status" aria-live="polite">
-          <span>Une mise à jour est disponible</span>
-          <button type="button" onClick={applyUpdate}>Mettre à jour</button>
+          <span>{nativeUpdate ? "Une nouvelle version de l'application est disponible" : 'Une mise à jour est disponible'}</span>
+          <button type="button" onClick={applyUpdate}>{nativeUpdate ? 'Installer' : 'Mettre à jour'}</button>
         </div>
       )}
       {!updateReady && upToDateFlash && (
