@@ -1,7 +1,8 @@
 import { escHtml, htmlDocument } from '@/modules/souhaits/documentA4'
 import {
   ORG_FRAIS, FORFAIT_JUSQUA, TAUX_KM, MAX_KM,
-  fmtEuro, fmtDateCourte, titrePeriode, totalForfait, totalKm, nomCompletNote,
+  fmtEuro, fmtDateCourte, fmtDateHeure, titrePeriode, totalForfait, totalKm, nomCompletNote,
+  etapesCircuit,
 } from './constantes'
 
 const ORANGE = '#EC7C30'
@@ -69,16 +70,20 @@ const CSS = `
     color: ${ORANGE}; font-weight: 700; font-size: 11pt; height: 8mm;
     font-style: normal;
   }
-  .sigs {
-    display: flex; margin-top: 10mm; padding: 0 8mm;
+  .ogm-box {
+    margin-top: 6mm; border: 1.6px solid #000; padding: 3mm 4mm; text-align: center;
   }
-  .sig { flex: 1; font-size: 11pt; }
-  .sig .who { margin-bottom: 2mm; }
-  .sig .img {
-    height: 18mm; display: flex; align-items: center; justify-content: flex-start;
+  .ogm-box .lbl { font-size: 9pt; color: ${ORANGE}; font-weight: 700; letter-spacing: .3px; }
+  .ogm-box .num {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 16pt; font-weight: 700; letter-spacing: 1px; margin-top: 1mm;
   }
-  .sig .img img { max-height: 18mm; max-width: 55mm; }
-  .sig .line { margin-top: 1mm; }
+  .legal-sig {
+    font-size: 8.5pt; font-style: italic; text-align: center; margin: 3mm 0 2mm;
+  }
+  table.trace { margin-top: 2mm; }
+  table.trace th, table.trace td { font-size: 9pt; text-align: left; padding: 2px 5px; }
+  table.trace th { background: #f4f4f4; font-weight: 700; }
   @media print {
     .page { width: auto; }
   }
@@ -108,11 +113,8 @@ export function htmlNoteFrais({ note, profil, logoDataUrl }) {
   const tot = Number.isFinite(Number(note.total)) ? Number(note.total) : Math.round((totF + totK) * 100) / 100
   const periode = titrePeriode(note.periode_mois, note.periode_annee)
   const iban = note.iban || '—'
-  const sigV = note.signature_volontaire
-  const sigA = note.signature_asbl
-  const nomV = note.signature_volontaire_nom || nom
-  const nomA = note.signature_asbl_nom || ''
-  const foncA = note.signature_asbl_fonction || ''
+  const ogm = note.communication || '— (attribuée à la soumission)'
+  const etapes = etapesCircuit(note)
 
   const logo = logoDataUrl
     ? `<img class="logo" alt="" src="${escHtml(logoDataUrl)}">`
@@ -133,8 +135,14 @@ export function htmlNoteFrais({ note, profil, logoDataUrl }) {
     + `<td>${l ? escHtml(fmtEuro(l.montant)) : ''}</td>`
   ))
 
-  const imgV = sigV ? `<img src="${escHtml(sigV)}" alt="Signature du volontaire">` : ''
-  const imgA = sigA ? `<img src="${escHtml(sigA)}" alt="Signature ASBL">` : ''
+  const trace = etapes.map(e => (
+    `<tr>`
+    + `<td>${escHtml(e.l)}</td>`
+    + `<td>${escHtml(e.nom || '—')}</td>`
+    + `<td>${escHtml(e.fonc || '')}</td>`
+    + `<td>${escHtml(e.at ? fmtDateHeure(e.at) : '—')}</td>`
+    + `</tr>`
+  )).join('')
 
   const body = `<div class="page">
     <div class="head">
@@ -188,19 +196,15 @@ export function htmlNoteFrais({ note, profil, logoDataUrl }) {
       </table>
     </div>
 
-    <div class="sigs">
-      <div class="sig">
-        <div class="who">Pour l’ASBL,</div>
-        <div class="img">${imgA}</div>
-        <div class="line">${escHtml(nomA || 'Nom, Prénom')}</div>
-        <div class="line">${escHtml(foncA || 'Fonction')}</div>
-      </div>
-      <div class="sig">
-        <div class="who">Le volontaire</div>
-        <div class="img">${imgV}</div>
-        <div class="line">${escHtml(nomV || 'Nom, Prénom')}</div>
-      </div>
+    <div class="ogm-box">
+      <div class="lbl">COMMUNICATION STRUCTURÉE (virement / comptabilité)</div>
+      <div class="num">${escHtml(ogm)}</div>
     </div>
+    <p class="legal-sig">Valider dans l’application vaut signature. Chaque étape est nominative et horodatée. Aucune signature manuscrite n’est requise.</p>
+    <table class="trace">
+      <tr><th>Étape</th><th>Personne</th><th>Fonction</th><th>Date et heure</th></tr>
+      ${trace}
+    </table>
   </div>`
 
   return htmlDocument(`Note de frais — ${nom} — ${periode}`, body, CSS)

@@ -88,6 +88,7 @@ async function main() {
     await client.query(lireSQL('45_notes_frais.sql'))
     await client.query(lireSQL('46_notes_frais_signatures.sql'))
     await client.query(lireSQL('47_notes_frais_km.sql'))
+    await client.query(lireSQL('48_notes_frais_circuit.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

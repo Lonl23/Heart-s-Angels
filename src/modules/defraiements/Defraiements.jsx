@@ -7,11 +7,9 @@ import {
   FORFAIT_JOUR, PLAFOND_AN, TAUX_KM, MAX_KM, MOTIFS_KM, stNote, fmtEuro, titrePeriode,
   normaliserIban, ibanValide, ligneVide, ligneKmVide, fusionnerJours, totalForfait,
   totalKm, totalKmParcourus, normaliserLignesKm, montantKm, activiteKmDefaut, joursDuMois,
-  nomCompletNote,
+  etapesCircuit, fmtDateHeure, ogmChiffres,
 } from './constantes'
 import { htmlNoteFrais, nomFichierNote, chargerLogoNote } from './noteFraisHtml'
-import SignaturePad from './SignaturePad'
-import { ROLES_ASBL } from '@/modules/fiche/ficheSchema'
 
 const now = new Date()
 const MOIS = Array.from({ length: 12 }, (_, i) => {
@@ -24,14 +22,8 @@ function nomProfil(p) {
   return [p?.prenom, p?.nom].filter(Boolean).join(' ') || p?.email || 'Volontaire'
 }
 
-function fonctionDefaut(p) {
-  const roles = p?.fiche?.roles_asbl || []
-  const found = ROLES_ASBL.find(r => roles.includes(r.v) && r.v !== 'simple_volontaire')
-  if (found) return found.l
-  if (p?.role === 'tresorier') return 'Trésorier'
-  if (p?.role === 'president') return 'Président'
-  if (p?.role === 'admin') return 'Administrateur'
-  return ''
+function msgRpc(error, fallback) {
+  return error?.message || fallback || 'Erreur'
 }
 
 export default function Defraiements() {
@@ -42,6 +34,7 @@ export default function Defraiements() {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
   const [filtre, setFiltre] = useState('miennes')
+  const [recherche, setRecherche] = useState('')
   const [edition, setEdition] = useState(null)
 
   useEffect(() => { charger() }, [profile?.id, tresorier])
@@ -67,10 +60,18 @@ export default function Defraiements() {
   }
 
   const visibles = notes.filter(n => {
-    if (filtre === 'a_valider') return n.statut === 'en_attente'
+    if (filtre === 'a_verifier') return n.statut === 'soumise'
+    if (filtre === 'a_autoriser') return n.statut === 'verifiee'
+    if (filtre === 'a_virer') return n.statut === 'approuve_n1' || n.statut === 'approuve_n2'
     if (filtre === 'payees') return n.statut === 'paye'
     if (filtre === 'miennes') return n.user_id === profile?.id
     return true
+  }).filter(n => {
+    const q = recherche.trim().toLowerCase()
+    if (!q) return true
+    const p = profils[n.user_id]
+    const hay = [n.communication, ogmChiffres(n.communication), nomProfil(p), titrePeriode(n.periode_mois, n.periode_annee)].join(' ').toLowerCase()
+    return hay.includes(q) || ogmChiffres(n.communication).includes(ogmChiffres(q))
   })
 
   if (edition) {
@@ -87,15 +88,17 @@ export default function Defraiements() {
   return (
     <Page
       title="Défraiements"
-      subtitle="Forfait 44,02 € par jour d’activité. Kilomètres : 0,4326 €/km pour une récolte de souhaits, ou un souhait hors de la base de la semaine."
+      subtitle="Valider dans l’app vaut signature. Chaque note a une communication structurée pour le virement et la comptabilité."
       action={<Btn onClick={() => setEdition({ nouveau: true })}>Nouvelle note</Btn>}
     >
       {err && <Flash kind="err">{err}</Flash>}
       {tresorier && (
-        <div className="ha-tabs" style={{ marginBottom: 16 }}>
+        <div className="ha-tabs" style={{ marginBottom: 12 }}>
           {[
             { v: 'miennes', l: 'Mes notes' },
-            { v: 'a_valider', l: 'À valider' },
+            { v: 'a_verifier', l: 'À vérifier' },
+            { v: 'a_autoriser', l: 'À autoriser' },
+            { v: 'a_virer', l: 'À virer' },
             { v: 'toutes', l: 'Toutes' },
             { v: 'payees', l: 'Payées' },
           ].map(f => (
@@ -105,12 +108,22 @@ export default function Defraiements() {
           ))}
         </div>
       )}
+      {tresorier && (
+        <div style={{ marginBottom: 14 }}>
+          <input
+            value={recherche}
+            onChange={e => setRecherche(e.target.value)}
+            placeholder="N° de communication ou nom…"
+            style={inp}
+          />
+        </div>
+      )}
 
       {loading ? <Loading />
         : visibles.length === 0 ? (
           <Empty
             title="Aucune note pour le moment"
-            hint="Créez une note pour le mois : les jours de mission se proposent tout seuls. Les km se déclarent à part (récolte ou souhait hors base)."
+            hint="Créez une note, puis validez-la : cela signe la demande et attribue le numéro de communication."
             action={<Btn onClick={() => setEdition({ nouveau: true })}>Créer une note</Btn>}
           />
         ) : (
@@ -127,6 +140,11 @@ export default function Defraiements() {
                         {nomProfil(p)}
                         {n.iban ? ` · ${n.iban}` : ''}
                       </div>
+                      {n.communication && (
+                        <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 700, color: 'var(--heading)', marginTop: 4 }}>
+                          {n.communication}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontWeight: 700, color: 'var(--heading)' }}>{fmtEuro(n.total)}</span>
@@ -159,17 +177,17 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
   const [msg, setMsg] = useState(null)
   const [apercu, setApercu] = useState(null)
   const [idNote, setIdNote] = useState(initiale.id || null)
-  const [sigVol, setSigVol] = useState(initiale.signature_volontaire || '')
-  const [sigAsbl, setSigAsbl] = useState(initiale.signature_asbl || '')
-  const [foncAsbl, setFoncAsbl] = useState(initiale.signature_asbl_fonction || '')
+  const [note, setNote] = useState(initiale.nouveau ? null : initiale)
   const apercuRef = useRef(null)
-  const verrouille = statut !== 'en_attente' && !tresorier
+  const brouillon = statut === 'en_attente' || statut === 'refuse'
+  const verrouille = !brouillon
   const totF = totalForfait(lignes)
   const totK = totalKm(lignesKm)
   const tot = Math.round((totF + totK) * 100) / 100
   const kmParcourus = totalKmParcourus(lignesKm)
   const plafond = cumulAn + (statut === 'refuse' ? 0 : totF)
   const plafondKm = cumulKmAn + (statut === 'refuse' ? 0 : kmParcourus)
+  const estVolontaire = userId === moi.id
 
   useEffect(() => {
     document.body.classList.toggle('ha-fiche-ouverte', !!apercu)
@@ -202,6 +220,17 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
     return { forfait, km }
   }
 
+  function poserNote(row) {
+    if (!row) return
+    setNote(row)
+    setIdNote(row.id)
+    setStatut(row.statut)
+    setMotif(row.motif_refus || '')
+    setIban(row.iban || '')
+    setLignes(row.lignes_forfait || [])
+    setLignesKm(row.lignes_km || [])
+  }
+
   async function preparer() {
     const p = await chargerProfil(userId)
     setProfilNote(p)
@@ -212,15 +241,7 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       .eq('periode_annee', Number(annee))
       .maybeSingle()
     if (exist && exist.id !== idNote) {
-      setIdNote(exist.id)
-      setIban(exist.iban || normaliserIban(p?.fiche?.iban || ''))
-      setLignes(exist.lignes_forfait || [])
-      setLignesKm(exist.lignes_km || [])
-      setStatut(exist.statut || 'en_attente')
-      setMotif(exist.motif_refus || '')
-      setSigVol(exist.signature_volontaire || '')
-      setSigAsbl(exist.signature_asbl || '')
-      setFoncAsbl(exist.signature_asbl_fonction || fonctionDefaut(moi))
+      poserNote(exist)
       const c = await cumulAnnuel(userId, annee, exist.id)
       setCumulAn(c.forfait)
       setCumulKmAn(c.km)
@@ -231,7 +252,6 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
     setCumulKmAn(c.km)
     if (idNote) return
     setIban(cur => cur || normaliserIban(p?.fiche?.iban || moi?.fiche?.iban || ''))
-    if (!foncAsbl) setFoncAsbl(fonctionDefaut(moi))
     const { data } = await supabase.rpc('missions_pour_note_frais', {
       p_user: userId,
       p_mois: Number(mois),
@@ -272,48 +292,43 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
       total_forfait: tf,
       total_km: tk,
       total: Math.round((tf + tk) * 100) / 100,
-      signature_volontaire: sigVol || null,
-      signature_volontaire_at: sigVol ? (initiale.signature_volontaire_at || new Date().toISOString()) : null,
-      signature_volontaire_nom: sigVol ? nomCompletNote(profilNote) : null,
-      signature_asbl: sigAsbl || null,
-      signature_asbl_at: sigAsbl ? (initiale.signature_asbl_at || new Date().toISOString()) : null,
-      signature_asbl_nom: sigAsbl ? nomCompletNote(moi) : null,
-      signature_asbl_fonction: sigAsbl ? (foncAsbl || fonctionDefaut(moi)) : null,
     }
   }
 
-  async function enregistrer(extra = {}) {
+  async function enregistrer() {
     if (!ibanValide(iban)) { setMsg({ t: 'Indiquez un IBAN belge valide (BE + 14 chiffres).', ok: false }); return null }
-    if (userId === moi.id && !sigVol) { setMsg({ t: 'Signez la note avant d’enregistrer.', ok: false }); return null }
-    const body = { ...payload(), ...extra }
+    const body = payload()
     if (!body.lignes_forfait.length && !body.lignes_km.length) {
       setMsg({ t: 'Ajoutez au moins un jour d’activité ou une ligne de kilomètres.', ok: false })
       return null
     }
+    const contenu = {
+      iban: body.iban,
+      lignes_forfait: body.lignes_forfait,
+      lignes_km: body.lignes_km,
+      total_forfait: body.total_forfait,
+      total_km: body.total_km,
+      total: body.total,
+    }
     setSaving(true)
     let res
-    if (idNote) res = await supabase.from('notes_frais').update(body).eq('id', idNote).select('*').maybeSingle()
-    else res = await supabase.from('notes_frais').insert(body).select('*').maybeSingle()
+    if (idNote) {
+      res = await supabase.from('notes_frais').update(contenu).eq('id', idNote).select('*').maybeSingle()
+    } else {
+      res = await supabase.from('notes_frais').insert({ ...body, statut: 'en_attente' }).select('*').maybeSingle()
+    }
     if (res.error && /duplicate|unique/i.test(res.error.message)) {
       const { data: exist } = await supabase.from('notes_frais')
         .select('*').eq('user_id', userId).eq('periode_mois', Number(mois)).eq('periode_annee', Number(annee)).maybeSingle()
       if (exist) {
         setIdNote(exist.id)
-        setStatut(exist.statut)
-        res = await supabase.from('notes_frais').update(body).eq('id', exist.id).select('*').maybeSingle()
+        res = await supabase.from('notes_frais').update(contenu).eq('id', exist.id).select('*').maybeSingle()
       }
     }
     setSaving(false)
     if (res.error) { setMsg({ t: res.error.message, ok: false }); return null }
     const row = res.data
-    if (row) {
-      setIdNote(row.id)
-      setStatut(row.statut)
-      setLignes(row.lignes_forfait || [])
-      setLignesKm(row.lignes_km || [])
-      setSigVol(row.signature_volontaire || sigVol)
-      setSigAsbl(row.signature_asbl || sigAsbl)
-    }
+    poserNote(row)
     const fiche = { ...(profilNote?.fiche || {}), iban: normaliserIban(iban) }
     if (userId === moi.id || tresorier) {
       await supabase.from('profiles').update({ fiche }).eq('id', userId)
@@ -323,38 +338,26 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
     return row
   }
 
-  async function changerStatut(st, extra = {}) {
-    if (st === 'approuve_n1' && !sigAsbl) {
-      setMsg({ t: 'Signez d’abord pour l’ASBL (encadré plus bas).', ok: false })
-      return
-    }
+  async function actionRpc(nom, args = {}) {
+    setSaving(true)
+    const { data, error } = await supabase.rpc(nom, args)
+    setSaving(false)
+    if (error) { setMsg({ t: msgRpc(error), ok: false }); return }
+    const row = Array.isArray(data) ? data[0] : data
+    poserNote(row)
+    setMsg({ t: 'Enregistré.', ok: true })
+    setTimeout(() => setMsg(null), 2500)
+  }
+
+  async function soumettre() {
     const saved = await enregistrer()
     const id = saved?.id || idNote
     if (!id) return
-    const patch = { statut: st, ...extra }
-    if (st === 'approuve_n1' || st === 'approuve_n2') {
-      patch.valide_par = moi.id
-      patch.valide_at = new Date().toISOString()
-    }
-    if (st === 'paye') patch.paye_at = new Date().toISOString()
-    const { error } = await supabase.from('notes_frais').update(patch).eq('id', id)
-    if (error) { setMsg({ t: error.message, ok: false }); return }
-    setStatut(st)
-    if (extra.motif_refus != null) setMotif(extra.motif_refus)
-    setMsg({ t: 'Statut mis à jour.', ok: true })
+    await actionRpc('soumettre_note_frais', { p_id: id })
   }
 
   function notePourDoc() {
-    return {
-      ...payload(),
-      id: idNote,
-      statut,
-      signature_volontaire: sigVol,
-      signature_volontaire_nom: nomCompletNote(profilNote),
-      signature_asbl: sigAsbl,
-      signature_asbl_nom: sigAsbl ? nomCompletNote(moi) : '',
-      signature_asbl_fonction: foncAsbl || fonctionDefaut(moi),
-    }
+    return { ...payload(), ...(note || {}), id: idNote, statut, iban: normaliserIban(iban), lignes_forfait: fusionnerJours(lignes), lignes_km: normaliserLignesKm(lignesKm) }
   }
 
   async function docHtml() {
@@ -367,8 +370,20 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
   }
 
   async function telecharger() {
-    const note = notePourDoc()
-    telechargerHtml(nomFichierNote(note, profilNote), await docHtml())
+    const n = notePourDoc()
+    telechargerHtml(nomFichierNote(n, profilNote), await docHtml())
+  }
+
+  async function copierOgm() {
+    const t = note?.communication
+    if (!t) return
+    try {
+      await navigator.clipboard.writeText(t)
+      setMsg({ t: 'Communication copiée.', ok: true })
+      setTimeout(() => setMsg(null), 2000)
+    } catch {
+      setMsg({ t: t, ok: true })
+    }
   }
 
   function setLigne(i, k, v) {
@@ -394,11 +409,54 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
   return (
     <Page
       title={idNote ? `Note — ${titrePeriode(Number(mois), Number(annee))}` : 'Nouvelle note de frais'}
-      subtitle="Forfait 44,02 € / jour. Km à 0,4326 € uniquement pour une récolte, ou un souhait hors de la base de la semaine."
+      subtitle="Valider la demande vaut signature. Le numéro de communication sert au virement et à la comptabilité."
       action={<Btn kind="soft" onClick={onClose}>← Retour</Btn>}
     >
       {msg && <Flash kind={msg.ok ? 'ok' : 'err'}>{msg.t}</Flash>}
       <div style={{ marginBottom: 12 }}><Pill color={st.c} bg={st.bg}>{st.l}</Pill></div>
+
+      <Card style={{ marginBottom: 14, background: 'var(--bg-alt)' }}>
+        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 6 }}>Communication structurée</div>
+        {note?.communication ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: 20, fontWeight: 700, letterSpacing: 0.6, color: 'var(--heading)' }}>
+              {note.communication}
+            </div>
+            <Btn kind="soft" onClick={copierOgm}>Copier</Btn>
+          </div>
+        ) : (
+          <div style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+            Attribuée automatiquement quand le volontaire valide sa demande.
+          </div>
+        )}
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 6 }}>
+          À coller comme communication du virement (format belge +++XXX/XXXX/XXXXX+++).
+        </div>
+      </Card>
+
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Circuit de validation</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+          Pas de signature dessinée : chaque validation est horodatée au nom de la personne connectée.
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {etapesCircuit(note).map(e => (
+            <div key={e.k} style={{ display: 'grid', gridTemplateColumns: 'minmax(140px,1fr) minmax(140px,1.4fr) minmax(120px,1fr)', gap: 8, alignItems: 'baseline', borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{e.l}</div>
+              <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                {e.nom || '—' }
+                {e.fonc ? <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}> · {e.fonc}</span> : null}
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', textAlign: 'right' }}>{e.at ? fmtDateHeure(e.at) : '—'}</div>
+            </div>
+          ))}
+        </div>
+        {note?.refuse_nom && (
+          <div style={{ fontSize: 13, color: '#A32D2D', marginTop: 10 }}>
+            Refusée par {note.refuse_nom}{note.refuse_at ? ` le ${fmtDateHeure(note.refuse_at)}` : ''}.
+          </div>
+        )}
+      </Card>
 
       <Card style={{ marginBottom: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '0 16px' }}>
@@ -537,53 +595,45 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
         <Flash kind="err">Motif du refus : {motif}</Flash>
       )}
 
-      <Card style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Signatures</div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-          Comme sur la note papier : le volontaire à droite, l’ASBL à gauche. Signez au doigt ou à la souris.
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 16 }}>
-          <SignaturePad
-            label="Le volontaire"
-            value={sigVol}
-            onChange={setSigVol}
-            disabled={verrouille || userId !== moi.id}
-          />
-          {tresorier && (
-            <div>
-              <F label="Fonction (pour l’ASBL)" value={foncAsbl} set={setFoncAsbl} placeholder="Trésorier" />
-              <SignaturePad
-                label="Pour l’ASBL"
-                value={sigAsbl}
-                onChange={setSigAsbl}
-                disabled={false}
-              />
-            </div>
-          )}
-        </div>
-        {userId === moi.id && !sigVol && (
-          <div style={{ fontSize: 12.5, color: '#BA7517', marginTop: 10 }}>Signez avant d’enregistrer la note.</div>
-        )}
-      </Card>
-
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {!verrouille && (
-          <Btn onClick={() => enregistrer()} disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer'}</Btn>
+          <Btn onClick={() => enregistrer()} disabled={saving}>{saving ? 'Enregistrement…' : 'Enregistrer le brouillon'}</Btn>
+        )}
+        {!verrouille && estVolontaire && (
+          <Btn kind="ok" onClick={soumettre} disabled={saving}>Valider ma demande</Btn>
+        )}
+        {!verrouille && !estVolontaire && (
+          <div style={{ fontSize: 13, color: '#BA7517', alignSelf: 'center' }}>
+            Le volontaire doit ouvrir sa note et toucher « Valider ma demande » (cela signe).
+          </div>
+        )}
+        {estVolontaire && statut === 'soumise' && (
+          <Btn kind="soft" onClick={() => actionRpc('retirer_note_frais', { p_id: idNote })} disabled={saving}>Retirer la demande</Btn>
         )}
         <Btn kind="soft" onClick={ouvrirA4}>Ouvrir la note A4</Btn>
         <Btn kind="soft" onClick={telecharger}>Télécharger</Btn>
-        {tresorier && statut === 'en_attente' && idNote && (
+        {tresorier && statut === 'soumise' && idNote && (
           <>
-            <Btn kind="ok" onClick={() => changerStatut('approuve_n1')}>Approuver</Btn>
+            <Btn kind="ok" onClick={() => actionRpc('verifier_note_frais', { p_id: idNote })} disabled={saving}>Vérifier la demande</Btn>
             <Btn kind="danger" onClick={() => {
               const t = window.prompt('Motif du refus ?') || ''
               if (!t.trim()) return
-              changerStatut('refuse', { motif_refus: t.trim() })
+              actionRpc('refuser_note_frais', { p_id: idNote, p_motif: t.trim() })
             }}>Refuser</Btn>
           </>
         )}
-        {tresorier && (statut === 'approuve_n1' || statut === 'approuve_n2') && (
-          <Btn kind="ok" onClick={() => changerStatut('paye')}>Marquer payée</Btn>
+        {tresorier && statut === 'verifiee' && idNote && (
+          <>
+            <Btn kind="ok" onClick={() => actionRpc('autoriser_note_frais', { p_id: idNote })} disabled={saving}>Autoriser le paiement</Btn>
+            <Btn kind="danger" onClick={() => {
+              const t = window.prompt('Motif du refus ?') || ''
+              if (!t.trim()) return
+              actionRpc('refuser_note_frais', { p_id: idNote, p_motif: t.trim() })
+            }}>Refuser</Btn>
+          </>
+        )}
+        {tresorier && (statut === 'approuve_n1' || statut === 'approuve_n2') && idNote && (
+          <Btn kind="ok" onClick={() => actionRpc('virer_note_frais', { p_id: idNote })} disabled={saving}>Virement effectué</Btn>
         )}
       </div>
 

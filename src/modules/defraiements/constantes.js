@@ -6,11 +6,13 @@ export const ORG_FRAIS = "Heart's Angels asbl"
 export const FORFAIT_JUSQUA = '31/12/2026'
 
 export const STATUTS_NOTE = {
-  en_attente:  { l: 'À valider',  c: '#BA7517', bg: '#FAEEDA' },
-  approuve_n1: { l: 'Approuvée',  c: '#185FA5', bg: '#E6F1FB' },
-  approuve_n2: { l: 'Approuvée',  c: '#185FA5', bg: '#E6F1FB' },
-  refuse:      { l: 'Refusée',    c: '#A32D2D', bg: '#FCEBEB' },
-  paye:        { l: 'Payée',      c: '#3B6D11', bg: '#EAF3DE' },
+  en_attente:  { l: 'Brouillon',     c: '#7A7470', bg: '#F0EFED' },
+  soumise:     { l: 'Demandée',      c: '#BA7517', bg: '#FAEEDA' },
+  verifiee:    { l: 'Vérifiée',      c: '#185FA5', bg: '#E6F1FB' },
+  approuve_n1: { l: 'Autorisée',     c: '#0E4A5A', bg: '#E6F1FB' },
+  approuve_n2: { l: 'Autorisée',     c: '#0E4A5A', bg: '#E6F1FB' },
+  refuse:      { l: 'Refusée',       c: '#A32D2D', bg: '#FCEBEB' },
+  paye:        { l: 'Payée',         c: '#3B6D11', bg: '#EAF3DE' },
 }
 
 export function stNote(v) {
@@ -135,4 +137,24 @@ export function joursDuMois(mois, annee) {
     const m = String(mois).padStart(2, '0')
     return `${annee}-${m}-${d}`
   })
+}
+
+export function fmtDateHeure(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('fr-BE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+export function etapesCircuit(note) {
+  return [
+    { k: 'demande',  l: 'Demandé par',              nom: note?.demande_nom,  fonc: note?.demande_fonction,  at: note?.demande_at },
+    { k: 'verifie',  l: 'Vérifié par',              nom: note?.verifie_nom,  fonc: note?.verifie_fonction,  at: note?.verifie_at },
+    { k: 'autorise', l: 'Autorisé par',             nom: note?.autorise_nom, fonc: note?.autorise_fonction, at: note?.autorise_at },
+    { k: 'virement', l: 'Virement effectué par',    nom: note?.virement_nom, fonc: note?.virement_fonction, at: note?.virement_at },
+  ]
+}
+
+export function ogmChiffres(ogm) {
+  return String(ogm || '').replace(/[^0-9]/g, '')
 }

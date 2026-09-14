@@ -153,9 +153,9 @@ export function AuthProvider({ children }) {
   }
   function peutGererDefraiements() {
     if (!role || role === 'partenaire') return false
-    if (accesTotal() || role === 'tresorier') return true
+    if (accesTotal() || role === 'tresorier' || role === 'president') return true
     const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['tresorier', 'tresorier_adjoint'].includes(r))
+    return roles.some(r => ['president', 'vice_president', 'tresorier', 'tresorier_adjoint'].includes(r))
   }
   function estVolontaireNonMedical() {
     if (peutVoirToutesDispos()) return false
