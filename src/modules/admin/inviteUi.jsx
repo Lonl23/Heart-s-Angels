@@ -42,12 +42,38 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs }) {
       </div>
       <F label={roles ? 'E-mail' : 'E-mail (identifiant de connexion — e-mail général de l’institution)'} type="email" value={form.email} set={v => set('email', v)} required />
       {roles && (
-        <>
-          <Sel label={roleLabel || 'Type de volontaire'} value={form.role} set={v => set('role', v)} options={roleOpts} />
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '-4px 0 10px' }}>
-            Les fonctions dans l’ASBL (président, trésorier, coordinateur…) se choisissent ensuite dans la fiche.
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>{roleLabel || 'Type de volontaire'}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {roleOpts.map(o => {
+              const on = form.role === o.v
+              return (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => set('role', o.v)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    border: on ? '2px solid var(--accent)' : '1px solid var(--border)',
+                    background: on ? '#E6F7FA' : 'var(--card)',
+                    color: 'var(--heading)',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    fontFamily: 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {o.l}
+                </button>
+              )
+            })}
           </div>
-        </>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+            Uniquement médical ou non médical. Les fonctions (président, trésorier…) se choisissent ensuite dans la fiche.
+          </div>
+        </div>
       )}
       {orgs && <Sel label="Organisation" value={form.partenaire_id || ''} set={v => set('partenaire_id', v)} options={[{ v: '', l: '— Choisir —' }, ...orgs.map(o => ({ v: o.id, l: o.nom }))]} />}
       {err && <div style={{ color: '#C8435A', fontSize: 13, marginBottom: 8 }}>{err}</div>}
