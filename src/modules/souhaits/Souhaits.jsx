@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams, useLocation, Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
+import { Page, Card, Btn, Pill, PillFictif, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
 import { fmtDatesSouhait } from './datesSouhait'
@@ -310,7 +310,10 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
       onPointerDown={onPointerDown}
       title={s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.' : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:6, marginBottom:5 }}>
-        <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5 }}>{s.beneficiaire_prenom} {s.beneficiaire_nom}</span>
+        <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+          {s.beneficiaire_prenom} {s.beneficiaire_nom}
+          {s.fictif && <PillFictif />}
+        </span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
       </div>
       <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
@@ -391,6 +394,7 @@ function Demandes({ onOpen }) {
       dates_possibles: d.souhait_date ? [{ debut: d.souhait_date, fin: d.souhait_date }] : [],
       origine: (d.partenaire_id || d.source === 'partenaire') ? 'institution' : 'prive',
       partenaire_id: d.partenaire_id || null,
+      fictif: !!d.fictif,
     }).select().single()
     if (error) { alert('Erreur : ' + error.message); return }
     await supabase.from('demandes_souhaits').update({ statut: 'acceptee', souhait_id: s.id }).eq('id', d.id)
@@ -407,9 +411,14 @@ function Demandes({ onOpen }) {
         <Card key={d.id}>
           <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:8 }}>
             <div>
-              <div style={{ fontWeight:600, color:'var(--text)' }}>{d.patient_prenom} {d.patient_nom} {d.urgence && <Pill color="#A32D2D" bg="#FCEBEB">Urgent</Pill>}</div>
+              <div style={{ fontWeight:600, color:'var(--text)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                {d.patient_prenom} {d.patient_nom}
+                {d.urgence && <Pill color="#A32D2D" bg="#FCEBEB">Urgent</Pill>}
+                {d.fictif && <PillFictif />}
+              </div>
               <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Par {d.contact_prenom} {d.contact_nom} · {d.contact_email}
                 {d.source === 'partenaire' && ' · Partenaire'}{d.source === 'externe' && ' · Formulaire public'}
+                {d.fictif && ' · Mission fictive'}
               </div>
             </div>
             <Pill>{DEMANDE_STATUTS[d.statut]?.l || d.statut}</Pill>

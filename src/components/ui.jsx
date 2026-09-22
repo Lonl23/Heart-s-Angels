@@ -261,6 +261,10 @@ export function Pill({ children, color='var(--accent)', bg='var(--bg-alt)' }) {
   return <span style={{ background:bg, color, padding:'2px 9px', borderRadius:99, fontSize:11.5, fontWeight:600, whiteSpace:'nowrap' }}>{children}</span>
 }
 
+export function PillFictif() {
+  return <Pill color="#6B4C9A" bg="#F3EAFB">Fictif</Pill>
+}
+
 export function Logo({ size = 72, style, className }) {
   const src = config.organisation?.logoUrl || '/icons/ha-logo-512-v4.png'
   return (

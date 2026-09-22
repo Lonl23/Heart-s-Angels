@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, Btn, TA, Pill, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
+import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
 import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut } from './statuts'
@@ -108,6 +108,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
           </h1>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+            {s.fictif && <PillFictif />}
             {fmtDatesSouhait(s) !== 'Date à définir' && <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{fmtDatesSouhait(s)}</span>}
           </div>
         </div>
@@ -146,6 +147,9 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
         </Card>
       )}
 
+      {s.fictif && (
+        <Flash kind="warn">Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.</Flash>
+      )}
       {s.statut === 'en_attente' && (
         <Card style={{ marginBottom:12, padding:'12px 16px' }}>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:8 }}>En attente de (plusieurs possibles) :</div>
@@ -213,6 +217,7 @@ function Resume({ s, souhaitId, onVoirRapport }) {
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <Card>
         <L k="Origine" v={s.origine === 'institution' ? `Institution${extNom ? ` · ${extNom}` : ''}` : 'Demande privée'} />
+        {s.fictif && <L k="Nature" v="Mission fictive (démonstration)" />}
         {appel?.tel && <L k="N° à appeler" v={`${appel.tel}${appel.libelle ? ` (${appel.libelle})` : ''}`} />}
         <L k="Bénéficiaire" v={`${s.beneficiaire_prenom||''} ${s.beneficiaire_nom||''}`.trim()} />
         {s.beneficiaire_genre && (

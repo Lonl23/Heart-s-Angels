@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, Pill } from '@/components/ui'
+import { Page, Card, Btn, Pill, PillFictif } from '@/components/ui'
 import { ACCES, EQUIPES_ACCES } from '@/modules/acces/accesSchema'
 import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td } from '@/modules/admin/inviteUi'
+import { urlAccesPartenaire, copierTexte } from '@/lib/urls'
 
 export default function Admin() {
   const { peutGererApp } = useAuth()
@@ -37,6 +38,8 @@ function Partenaires() {
   const [cptForm, setCptForm] = useState(null)
   const [lastCode, setLastCode] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [copieUrl, setCopieUrl] = useState(false)
+  const urlPartenaire = urlAccesPartenaire()
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -61,6 +64,8 @@ function Partenaires() {
       contact_tel: f.tel_general || f.contact_tel || null,
       email_general: f.email_general || f.contact_email || null,
       tel_general: f.tel_general || f.contact_tel || null,
+      notes: f.notes || null,
+      fictif: !!f.fictif,
     }
     if (f.id) await supabase.from('partenaires').update(p).eq('id', f.id)
     else await supabase.from('partenaires').insert(p)
@@ -93,6 +98,16 @@ function Partenaires() {
       {msg && <Msg msg={msg} />}
       {lastCode && <CodeBox code={lastCode} />}
 
+      <Card style={{ marginBottom: 16, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 6 }}>Adresse HTML de l’accès partenaire</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>À coller sur le site web ou à envoyer aux institutions.</div>
+        <input readOnly value={urlPartenaire} onFocus={e => e.target.select()} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', boxSizing: 'border-box', marginBottom: 8 }} />
+        <Btn kind="soft" onClick={async () => {
+          const ok = await copierTexte(urlPartenaire)
+          if (ok) { setCopieUrl(true); setTimeout(() => setCopieUrl(false), 1800) }
+        }}>{copieUrl ? '✓ Adresse copiée' : 'Copier l’adresse'}</Btn>
+      </Card>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)' }}>Organisations partenaires</div>
         <Btn onClick={() => setOrgForm({})}>+ Organisation</Btn>
@@ -102,7 +117,13 @@ function Partenaires() {
         {orgs.length === 0 && <Card>Aucune organisation.</Card>}
         {orgs.map(o => (
           <Card key={o.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div><div style={{ fontWeight: 600, color: 'var(--text)' }}>{o.nom}</div><div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{[o.type, o.ville].filter(Boolean).join(' · ') || '—'}</div></div>
+            <div>
+              <div style={{ fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {o.nom}
+                {o.fictif && <PillFictif />}
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{[o.type, o.ville].filter(Boolean).join(' · ') || '—'}</div>
+            </div>
             <Btn kind="soft" onClick={() => setOrgForm(o)}>Modifier</Btn>
           </Card>
         ))}

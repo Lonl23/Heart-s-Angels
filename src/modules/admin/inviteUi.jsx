@@ -102,6 +102,10 @@ export function FormOrg({ form, setForm, onSave }) {
         <PhoneF label="Numéro général" value={form.tel_general || form.contact_tel} set={v => set('tel_general', v)} />
       </div>
       <F label="E-mail général (identifiant de connexion)" type="email" value={form.email_general || form.contact_email} set={v => set('email_general', v)} />
+      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: 'var(--text-2)', cursor: 'pointer', margin: '4px 0 12px' }}>
+        <input type="checkbox" checked={!!form.fictif} onChange={e => set('fictif', e.target.checked)} />
+        <span>Partenaire fictif — toutes ses demandes et missions sont des démonstrations.</span>
+      </label>
       <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>{busy ? '…' : '✓ Enregistrer'}</Btn>
     </Card>
   )

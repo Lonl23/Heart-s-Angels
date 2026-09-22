@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { COPYRIGHT } from '@/copyright'
-import { Card, Btn, F, TA, Pill, Empty, Loading, Logo, PhoneF, AddressFields } from '@/components/ui'
+import { Card, Btn, F, TA, Pill, PillFictif, Empty, Loading, Logo, PhoneF, AddressFields, Flash } from '@/components/ui'
 import { ApercuPartenaire } from '@/modules/souhaits/RapportPartenaire'
 
 const STATUT = {
@@ -20,6 +20,15 @@ export default function PartenairePortail() {
   const nav = useNavigate()
   const [view, setView] = useState('liste')   // liste | nouvelle | detail
   const [selId, setSelId] = useState(null)
+  const [org, setOrg] = useState(null)
+
+  useEffect(() => {
+    if (!profile?.partenaire_id) return
+    supabase.from('partenaires').select('id,nom,fictif').eq('id', profile.partenaire_id).maybeSingle()
+      .then(({ data }) => setOrg(data || null))
+  }, [profile?.partenaire_id])
+
+  const fictif = !!org?.fictif
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
@@ -27,11 +36,19 @@ export default function PartenairePortail() {
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <Logo size={40} />
           <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>Espace institution</span>
+          {fictif && <PillFictif />}
         </div>
-        <Btn kind="soft" onClick={async()=>{ await signOut(); nav('/login') }}>Déconnexion</Btn>
+        <Btn kind="soft" onClick={async()=>{ await signOut(); nav('/login/partenaire') }}>Déconnexion</Btn>
       </header>
 
       <div style={{ maxWidth:860, margin:'0 auto', padding:'clamp(16px,3vw,28px)' }}>
+        {fictif && (
+          <div style={{ marginBottom:16 }}>
+            <Flash kind="warn">
+              Compte de démonstration ({org?.nom || 'partenaire fictif'}). Les demandes encodées ici sont fictives et ne correspondent à aucun vrai patient.
+            </Flash>
+          </div>
+        )}
         {view === 'liste' && (
           <ListeDemandes profile={profile} onNew={() => setView('nouvelle')} onOpen={(id) => { setSelId(id); setView('detail') }} />
         )}
@@ -76,7 +93,10 @@ function ListeDemandes({ profile, onNew, onOpen }) {
                 <Card key={d.id} clickable onClick={()=>onOpen(d.id)}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
                     <div>
-                      <div style={{ fontWeight:600, color:'var(--text)' }}>{d.patient_prenom} {d.patient_nom}</div>
+                      <div style={{ fontWeight:600, color:'var(--text)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                        {d.patient_prenom} {d.patient_nom}
+                        {d.fictif && <PillFictif />}
+                      </div>
                       <div style={{ fontSize:13, color:'var(--text-2)', marginTop:2, display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{d.souhait_description}</div>
                       <div style={{ fontSize:11.5, color:'var(--text-faint)', marginTop:2 }}>Encodée le {new Date(d.created_at).toLocaleDateString('fr-BE')}</div>
                     </div>
@@ -268,7 +288,10 @@ function DetailDemande({ id, onBack }) {
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
         <Btn kind="soft" onClick={onBack}>← Mes demandes</Btn>
-        <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          {d.fictif && <PillFictif />}
+          <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+        </div>
       </div>
 
       <Card style={{ marginBottom:14 }}>

@@ -31,6 +31,7 @@ export default function App() {
     <Suspense fallback={<EcranChargement />}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/login/partenaire" element={<Login />} />
         <Route path="/demande" element={<DemandeSouhait />} />
         <Route path="/inscription" element={<Inscription />} />
 

@@ -26,7 +26,7 @@ export function RequirePartenaire({ children }) {
   const { session, loading, can, profile } = useAuth()
   if (profile && session && can('partenaire')) return children
   if (loading || (session && !profile)) return <Splash text="Chargement…" />
-  if (!session) return <Navigate to="/login" replace />
+  if (!session) return <Navigate to="/login/partenaire" replace />
   if (!can('partenaire')) return <Navigate to="/app" replace />
   return children
 }

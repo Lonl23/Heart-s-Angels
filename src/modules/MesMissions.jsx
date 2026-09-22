@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { Page, Card, Empty, Loading, Pill, LiensGps } from '@/components/ui'
+import { Page, Card, Empty, Loading, Pill, PillFictif, LiensGps } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { stInfo } from './souhaits/Souhaits'
 import { lblStatutBase, lblEtapeTerrain } from './souhaits/missionSchema'
@@ -94,7 +94,10 @@ export default function MesMissions() {
                         </div>
                       )}
                     </div>
-                    <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
+                      {m.fictif && <PillFictif />}
+                      <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+                    </div>
                   </div>
                   <div style={{ marginTop:10, fontSize:13.5, fontWeight:600, color:'var(--accent)' }}>
                     {m.statut === 'en_cours' ? 'Continuer ›' : m.statut === 'realise' ? 'Consulter ›' : 'Ouvrir ›'}
