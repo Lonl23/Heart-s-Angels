@@ -9,6 +9,7 @@ import Suivi from './Suivi'
 import MaterielRequis from './MaterielRequis'
 import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 import EquipePluriForm from './EquipePluri'
+import { RecolteursPicker } from './Recolteurs'
 
 const grp = id => GROUPES.find(g => g.id === id)
 
@@ -87,6 +88,7 @@ export default function MissionForm({ souhaitId }) {
           {cur.groupes.map(gid => {
             if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} />
             if (gid === 'base') return <BlocBase key={gid} m={m} set={set} />
+            if (gid === 'administratif') return <BlocAdministratif key={gid} m={m} set={set} setM={setM} />
             const g = grp(gid); if (!g) return null
             return (
               <Card key={gid}>
@@ -128,6 +130,19 @@ function localiteIncomplete(a) {
   if (!a || typeof a !== 'object') return true
   const loc = String(a.localite || '').toLowerCase()
   return loc.includes('jemeppe') && !loc.includes('seraing')
+}
+
+function BlocAdministratif({ m, set, setM }) {
+  const g = grp('administratif')
+  return (
+    <Card>
+      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
+      <RecolteursPicker m={m} setM={setM} />
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
+        {g.fields.map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} />)}
+      </div>
+    </Card>
+  )
 }
 
 function BlocBase({ m, set }) {

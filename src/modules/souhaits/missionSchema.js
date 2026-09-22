@@ -12,7 +12,6 @@ export const GROUPES = [
     { k:'date_demande', l:'Date demande', t:'date' },
     { k:'origine', l:'Origine', t:'text' },
     { k:'date_rencontre', l:'Date rencontre', t:'datetime' },
-    { k:'recolteur', l:'Récolteur de souhait', t:'text' },
     { k:'consignes_equipage', l:'Consignes pour l\'équipage (lues sur le terrain)', t:'textarea' },
   ]},
   { id:'base', label:'Base', fields:[
@@ -380,6 +379,27 @@ export function equipePluri(mission) {
 export function nomPluri(r) {
   if (!r) return ''
   return [r.prenom, r.nom].filter(Boolean).join(' ').trim()
+}
+
+export function estProfilRecolteur(p) {
+  const roles = p?.fiche?.roles_asbl
+  return Array.isArray(roles) && roles.includes('recolteur_souhait')
+}
+
+export function recolteursDuSouhait(mission) {
+  const arr = Array.isArray(mission?.recolteurs) ? mission.recolteurs : []
+  const clean = arr.filter(r => r && (r.id || r.nom || r.prenom))
+  if (clean.length) return clean
+  const t = String(mission?.recolteur || '').trim()
+  if (!t) return []
+  return t.split(/\s*,\s*/).filter(Boolean).map(nom => ({ id: null, prenom: '', nom }))
+}
+
+export function nomsRecolteurs(mission) {
+  return recolteursDuSouhait(mission)
+    .map(r => [r.prenom, r.nom].filter(Boolean).join(' ').trim())
+    .filter(Boolean)
+    .join(', ')
 }
 
 export function personnePluriRemplie(r) {

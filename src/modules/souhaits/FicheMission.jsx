@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
-import { CHECKLISTS, itemsChecklistVisibles, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse, equipePluri, personnePluriRemplie, lblRolePluri, medecinPluri, nomPluri } from './missionSchema'
+import { CHECKLISTS, itemsChecklistVisibles, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse, equipePluri, personnePluriRemplie, lblRolePluri, medecinPluri, nomPluri, nomsRecolteurs } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
@@ -151,7 +151,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
           <Sec t="Administratif">
             <Fld l="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : ''} wide />
             {med && <Fld l="Registre national" v={m.registre_national} />}
-            <Fld l="Récolteur de souhait" v={m.recolteur} />
+            <Fld l="Récolteur de souhait" v={nomsRecolteurs(m)} />
             <Fld l="Priorité élevée" v={m.priorite_elevee ? 'Oui' : ''} />
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
             {med && <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />}

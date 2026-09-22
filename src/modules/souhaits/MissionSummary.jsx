@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, fmtAdresse, AdresseAffichee } from '@/components/ui'
-import { GROUPES, CHECKLISTS, itemsChecklistTous, lblEtapeTerrain, etapeDuVecteur, lblAutorisationPhotos } from './missionSchema'
+import { GROUPES, CHECKLISTS, itemsChecklistTous, lblEtapeTerrain, etapeDuVecteur, lblAutorisationPhotos, nomsRecolteurs } from './missionSchema'
 
 export default function MissionSummary({ souhaitId, infoOnly=false }) {
   const [m, setM] = useState(null)
@@ -67,6 +67,13 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
               <span style={{ fontWeight:700, color:'var(--heading)' }}>{v.etape}</span>
             </div>
           ))}
+        </Card>
+      )}
+      {nomsRecolteurs(m) && (
+        <Card>
+          <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Récolteurs de souhait</div>
+          <div style={{ fontSize:13.5, color:'var(--text)' }}>{nomsRecolteurs(m)}</div>
+          <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>Ils s’inscrivent eux-mêmes — ce n’est pas l’équipage du vecteur.</div>
         </Card>
       )}
       {groupesRemplis.map(g => (

@@ -7,6 +7,8 @@ import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
 import { fmtDatesSouhait } from './datesSouhait'
 import { upsertBeneficiaire, upsertContactRattache } from '@/modules/annuaire/annuaireApi'
+import { BoutonJeRecolte } from './Recolteurs'
+import { nomsRecolteurs } from './missionSchema'
 import {
   STATUTS, PIPELINE, PIPELINE_ENCODE, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, peutChangerStatut, statutFige,
@@ -99,6 +101,10 @@ function Kanban({ onOpen }) {
   function flash(t, kind='ok') { setMsg({ t, kind }); setTimeout(()=>setMsg(null), 3200) }
   const flashRef = useRef(flash)
   flashRef.current = flash
+
+  function majMissionCarte(id, mission) {
+    setItems(list => list.map(s => s.id === id ? { ...s, mission } : s))
+  }
 
   async function appliquer(id, col, extra={}) {
     const item = itemsRef.current.find(s => s.id === id)
@@ -259,7 +265,8 @@ function Kanban({ onOpen }) {
                   {list.map(s => (
                     <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
                       onPointerDown={e=>onPointerDown(e,s)}
-                      onOuvrir={() => onOpen(s)} />
+                      onOuvrir={() => onOpen(s)}
+                      onMission={majMissionCarte} />
                   ))}
                   {list.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici</div>}
                 </div>
@@ -275,7 +282,8 @@ function Kanban({ onOpen }) {
             {autres.map(s => (
               <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
                 onPointerDown={e=>onPointerDown(e,s)}
-                onOuvrir={() => onOpen(s)} />
+                onOuvrir={() => onOpen(s)}
+                onMission={majMissionCarte} />
             ))}
             {autres.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici pour marquer non réalisé</div>}
           </div>
@@ -290,7 +298,8 @@ function Kanban({ onOpen }) {
   )
 }
 
-function CarteSouhait({ s, dragging, onPointerDown, onOuvrir }) {
+function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
+  const recolteurs = nomsRecolteurs(s.mission)
   return (
     <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '') + (statutFige(s.statut) ? ' is-locked' : '')} style={{ padding:'12px 14px' }}
       onPointerDown={onPointerDown}
@@ -301,11 +310,15 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir }) {
       </div>
       <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
       <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{fmtDatesSouhait(s)}</div>
+      {recolteurs && (
+        <div style={{ fontSize:11.5, color:'var(--accent-blue, #1BB0CE)', marginTop:4 }}>Récolte : {recolteurs}</div>
+      )}
       {s.statut==='en_attente' && s.mission?.attente && (
         <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
           {ATTENTE_RAISONS.filter(r=>s.mission.attente[r.v]).map(r=><span key={r.v} style={{ fontSize:10.5, background:'#FAEEDA', color:'#BA7517', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>{r.l}</span>)}
         </div>
       )}
+      <BoutonJeRecolte s={s} onMaj={mission => onMission?.(s.id, mission)} />
       {onOuvrir && (
         <button type="button" className="ha-kanban-open"
           onClick={e => { e.preventDefault(); e.stopPropagation(); onOuvrir() }}

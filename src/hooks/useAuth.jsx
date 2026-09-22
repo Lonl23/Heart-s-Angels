@@ -163,13 +163,17 @@ export function AuthProvider({ children }) {
     if (t === 'medical') return false
     return t === 'non_medical' || role === 'volontaire_non_medical'
   }
+  function estRecolteurSouhait() {
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.includes('recolteur_souhait')
+  }
 
   async function signOut() { await supabase.auth.signOut() }
 
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, estVolontaireNonMedical,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 
