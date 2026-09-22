@@ -27,8 +27,9 @@ function msgRpc(error, fallback) {
 }
 
 export default function Defraiements() {
-  const { profile, peutGererDefraiements } = useAuth()
+  const { profile, peutGererDefraiements, peutSupprimerNoteFrais } = useAuth()
   const tresorier = peutGererDefraiements()
+  const peutSupprimer = peutSupprimerNoteFrais()
   const [notes, setNotes] = useState([])
   const [profils, setProfils] = useState({})
   const [loading, setLoading] = useState(true)
@@ -79,6 +80,7 @@ export default function Defraiements() {
       <EditeurNote
         initiale={edition}
         tresorier={tresorier}
+        peutSupprimer={peutSupprimer}
         moi={profile}
         onClose={() => { setEdition(null); charger() }}
       />
@@ -160,7 +162,7 @@ export default function Defraiements() {
   )
 }
 
-function EditeurNote({ initiale, tresorier, moi, onClose }) {
+function EditeurNote({ initiale, tresorier, peutSupprimer, moi, onClose }) {
   const [userId, setUserId] = useState(initiale.user_id || moi.id)
   const [mois, setMois] = useState(String(initiale.periode_mois || (now.getMonth() + 1)))
   const [annee, setAnnee] = useState(String(initiale.periode_annee || now.getFullYear()))
@@ -636,6 +638,37 @@ function EditeurNote({ initiale, tresorier, moi, onClose }) {
           <Btn kind="ok" onClick={() => actionRpc('virer_note_frais', { p_id: idNote })} disabled={saving}>Virement effectué</Btn>
         )}
       </div>
+
+      {peutSupprimer && idNote && (
+        <Card style={{ marginTop: 18, borderColor: '#E8B4B4', background: '#FDF6F6' }}>
+          <div style={{ fontWeight: 700, color: '#A32D2D', marginBottom: 6 }}>Suppression complète</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.45 }}>
+            Réservé au responsable informatique. La demande disparaît définitivement, quel que soit son statut
+            (brouillon, soumise, payée…). Le mois redevient libre pour une nouvelle note.
+          </div>
+          <Btn
+            kind="danger"
+            disabled={saving}
+            onClick={async () => {
+              const ok = window.confirm(
+                'Supprimer définitivement cette demande de défraiement ?\n\n'
+                + 'La note disparaîtra complètement, y compris si elle a déjà été validée ou payée. '
+                + 'Le volontaire pourra recréer une note pour le même mois.\n\n'
+                + 'Cette action est irréversible.'
+              )
+              if (!ok) return
+              setSaving(true)
+              const { error } = await supabase.rpc('supprimer_note_frais', { p_id: idNote })
+              setSaving(false)
+              if (error) { setMsg({ t: msgRpc(error, 'Impossible de supprimer la demande.'), ok: false }); return }
+              onClose()
+            }}
+            style={{ background: '#A32D2D', color: '#fff' }}
+          >
+            {saving ? 'Suppression…' : 'Supprimer complètement'}
+          </Btn>
+        </Card>
+      )}
 
       {apercu && (
         <div className="ha-fiche-apercu">
