@@ -166,7 +166,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
           <Flash kind="warn">
             {programmer
               ? 'Encodage du dossier — tout s\'enregistre tout seul. Les checklists et le MAR se feront dans Mes missions.'
-              : 'Partie patient — identité, souhait, infos médicales. Les équipages, horaires et ambulances sont encodés par la coordination transport.'}
+              : 'Vous voyez tout le dossier pour informer le patient. Vous encodez la partie patient ; les équipages, horaires et ambulances sont saisis par la coordination transport, la présidence ou l’informatique.'}
           </Flash>
           {encoderPatient && (
             <Card>
@@ -180,14 +180,14 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
       {mode === 'view' && (
         <>
-          <Tabs value={tabActif === 'suivi' && !programmer ? 'resume' : tabActif} onChange={v => { setTabFixe(true); setTab(v) }} items={[
+          <Tabs value={tabActif} onChange={v => { setTabFixe(true); setTab(v) }} items={[
             { v:'resume', l:'Résumé' },
             { v:'jour', l: s.statut === 'realise' ? 'Rapport du jour' : 'Rapport' },
-            ...(programmer ? [{ v:'suivi', l:'Suivi interne' }] : []),
+            { v:'suivi', l:'Suivi interne' },
           ]} />
-          {(tabActif==='resume' || (tabActif==='suivi' && !programmer)) && <Resume s={s} souhaitId={id} onVoirRapport={() => { setTabFixe(true); setTab('jour') }} />}
+          {tabActif==='resume' && <Resume s={s} souhaitId={id} onVoirRapport={() => { setTabFixe(true); setTab('jour') }} />}
           {tabActif==='jour' && <RapportJournee s={s} souhaitId={id} flash={flash} onMission={mission => setS(x => ({ ...x, mission }))} />}
-          {programmer && tabActif==='suivi' && <Suivi souhaitId={id} />}
+          {tabActif==='suivi' && <Suivi souhaitId={id} />}
         </>
       )}
     </div>

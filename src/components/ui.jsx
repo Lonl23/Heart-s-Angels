@@ -41,8 +41,9 @@ export function Btn({ children, onClick, kind='primary', type='button', disabled
     </button>
   )
 }
-export function F({ label, value, set, type='text', placeholder, required, disabled }) {
-  return <div style={{ marginBottom:10 }}><label style={lbl}>{label}{required&&' *'}</label><input type={type} value={value??''} onChange={e=>set(e.target.value)} placeholder={placeholder} required={required} disabled={disabled} style={{ ...inp, opacity: disabled ? .65 : 1 }} /></div>
+export function F({ label, value, set, type='text', placeholder, required, disabled, readOnly }) {
+  const lock = disabled || readOnly
+  return <div style={{ marginBottom:10 }}><label style={lbl}>{label}{required&&' *'}</label><input type={type} value={value??''} onChange={e=>{ if (!lock && set) set(e.target.value) }} placeholder={placeholder} required={required} disabled={disabled} readOnly={!!readOnly} style={{ ...inp, opacity: disabled ? .65 : 1 }} /></div>
 }
 export function TA({ label, value, set, rows=3, placeholder }) {
   return <div style={{ marginBottom:10 }}><label style={lbl}>{label}</label><textarea value={value??''} onChange={e=>set(e.target.value)} rows={rows} placeholder={placeholder} style={{ ...inp, resize:'vertical' }} /></div>

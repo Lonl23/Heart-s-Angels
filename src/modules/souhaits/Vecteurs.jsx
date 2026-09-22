@@ -11,7 +11,7 @@ import { fmtDatesSouhait, joursDesPeriodes, periodesDepuisSouhait, plageGlobale 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'v' + Date.now() + Math.random().toString(16).slice(2))
 const TYPES = ['', 'Ambulance', 'VSL', 'Voiture', 'Autre']
 
-export default function Vecteurs({ souhaitId, m, setM }) {
+export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
   const vecteurs = m.vecteurs || []
   const [equipe, setEquipe] = useState([])
   const [pool, setPool] = useState([])
@@ -137,7 +137,7 @@ export default function Vecteurs({ souhaitId, m, setM }) {
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:10, flexWrap:'wrap' }}>
         <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Un vecteur = un véhicule et son équipage. Cochez les qualifications sur chaque véhicule — vous pouvez demander 1 ou 2 ambulanciers. Les personnes affectées voient la mission dans Mes missions. Le rôle (infi / ambulancier) se pose tout seul selon le besoin de ce vecteur.</div>
-        <Btn onClick={ajouterVecteur}>+ Vecteur</Btn>
+        {!lecture && <Btn onClick={ajouterVecteur}>+ Vecteur</Btn>}
       </div>
 
       {vecteurs.length === 0 && <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Aucun vecteur. Ajoutez-en un pour constituer l'équipage.</div>}
@@ -158,20 +158,20 @@ export default function Vecteurs({ souhaitId, m, setM }) {
             <div key={v.id} style={{ border:'1.5px solid var(--border)', borderRadius:14, padding:'14px 16px', background:'var(--card)' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
                 <div style={{ fontWeight:700, color:'var(--heading)' }}>🚐 Vecteur {i+1}{v.nom?` — ${v.nom}`:''}</div>
-                <Btn kind="danger" onClick={()=>retirerVecteur(v.id)} style={{ padding:'4px 10px' }}>Retirer</Btn>
+                {!lecture && <Btn kind="danger" onClick={()=>retirerVecteur(v.id)} style={{ padding:'4px 10px' }}>Retirer</Btn>}
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'0 14px' }}>
-                <F label="Nom / identifiant" value={v.nom} set={val=>majVecteur(v.id,{nom:val})} placeholder="Ambulance 1" />
-                <Sel label="Type de transport" value={v.type_transport} set={val=>majVecteur(v.id,{type_transport:val})} options={TYPES.map(t=>({v:t,l:t||'—'}))} />
-                <F label="Plaque" value={v.plaque} set={val=>majVecteur(v.id,{plaque:val})} />
+                <F label="Nom / identifiant" value={v.nom} set={val=>majVecteur(v.id,{nom:val})} placeholder="Ambulance 1" readOnly={lecture} />
+                <Sel label="Type de transport" value={v.type_transport} set={val=>majVecteur(v.id,{type_transport:val})} options={TYPES.map(t=>({v:t,l:t||'—'}))} disabled={lecture} />
+                <F label="Plaque" value={v.plaque} set={val=>majVecteur(v.id,{plaque:val})} readOnly={lecture} />
               </div>
 
-              <CardRoles roles={rolesAffiches} onToggle={role => toggleRoleVecteur(v.id, role)} onCount={(role, n) => setRoleCountVecteur(v.id, role, n)} compact />
+              <CardRoles roles={rolesAffiches} onToggle={role => toggleRoleVecteur(v.id, role)} onCount={(role, n) => setRoleCountVecteur(v.id, role, n)} compact lecture={lecture} />
 
               <div style={{ marginTop:8 }}>
                 <div style={{ fontSize:12, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>Équipage</div>
-                <AjoutMembre pool={pool} dejaIds={dejaIds} requis={requisEffectifsV} remaining={remaining} rolesDeja={rolesDejaV}
-                  phraseManque={phraseManque} onAdd={u => affecter(v.id, u)} />
+                {!lecture && <AjoutMembre pool={pool} dejaIds={dejaIds} requis={requisEffectifsV} remaining={remaining} rolesDeja={rolesDejaV}
+                  phraseManque={phraseManque} onAdd={u => affecter(v.id, u)} />}
                 <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:8 }}>
                   {membres.filter(e => e.user_id && (e.profiles?.prenom || e.profiles?.nom)).map(e => {
                     const info = pool.find(p => p.user_id === e.user_id)
@@ -187,7 +187,7 @@ export default function Vecteurs({ souhaitId, m, setM }) {
                         </span>
                         <span style={{ display:'flex', alignItems:'center', gap:8 }}>
                           <i className={'ha-cal-dot ' + (teinte === 'dual' ? 'dual' : teinte === 'infi' ? 'infi' : teinte === 'ambu' ? 'ambu' : 'nonmed')} />
-                          <button type="button" onClick={()=>retirerMembre(e.id)} style={{ background:'none', border:'none', color:'#C8435A', cursor:'pointer' }}>✕</button>
+                          {!lecture && <button type="button" onClick={()=>retirerMembre(e.id)} style={{ background:'none', border:'none', color:'#C8435A', cursor:'pointer' }}>✕</button>}
                         </span>
                       </div>
                     )
@@ -344,7 +344,7 @@ function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque
   )
 }
 
-function CardRoles({ roles, onToggle, onCount, compact }) {
+function CardRoles({ roles, onToggle, onCount, compact, lecture }) {
   const nAmbu = countRole(roles, 'ambulancier')
   return (
     <div style={{
@@ -367,11 +367,11 @@ function CardRoles({ roles, onToggle, onCount, compact }) {
             const on = nAmbu > 0
             return (
               <span key={o.v} className="ha-role-ambu">
-                <button type="button" onClick={() => onToggle(o.v)}
-                  style={{ padding:'7px 12px', borderRadius:99, border:`1.5px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--card)', color:on?'#fff':'var(--text-2)', fontSize:13, fontWeight:600 }}>
+                <button type="button" onClick={() => { if (!lecture) onToggle(o.v) }}
+                  style={{ padding:'7px 12px', borderRadius:99, border:`1.5px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--card)', color:on?'#fff':'var(--text-2)', fontSize:13, fontWeight:600, cursor: lecture ? 'default' : 'pointer' }}>
                   {on ? '✓ ' : ''}{o.l}{nAmbu > 1 ? ' ×2' : ''}
                 </button>
-                {on && onCount && [1, 2].map(n => (
+                {on && onCount && !lecture && [1, 2].map(n => (
                   <button key={n} type="button" className={'ha-role-n' + (nAmbu === n ? ' is-on' : '')}
                     onClick={e => { e.stopPropagation(); onCount('ambulancier', n) }}
                     aria-label={`${n} ambulancier${n > 1 ? 's' : ''}`}>
@@ -383,8 +383,8 @@ function CardRoles({ roles, onToggle, onCount, compact }) {
           }
           const on = roles.includes(o.v)
           return (
-            <button key={o.v} type="button" onClick={() => onToggle(o.v)}
-              style={{ padding:'7px 12px', borderRadius:99, border:`1.5px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--card)', color:on?'#fff':'var(--text-2)', fontSize:13, fontWeight:600 }}>
+            <button key={o.v} type="button" onClick={() => { if (!lecture) onToggle(o.v) }}
+              style={{ padding:'7px 12px', borderRadius:99, border:`1.5px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--card)', color:on?'#fff':'var(--text-2)', fontSize:13, fontWeight:600, cursor: lecture ? 'default' : 'pointer' }}>
               {on ? '✓ ' : ''}{o.l}
             </button>
           )

@@ -12,7 +12,7 @@ const SECTIONS_CL = [
   { v:'retour_base', l:'Retour base' },
 ]
 
-export default function MaterielRequis({ m, setM }) {
+export default function MaterielRequis({ m, setM, lecture=false }) {
   const list = Array.isArray(m?.materiel_requis) ? m.materiel_requis : []
   const setList = rows => setM(o => ({ ...o, materiel_requis: rows }))
   const [cats, setCats] = useState([])
@@ -60,6 +60,8 @@ export default function MaterielRequis({ m, setM }) {
         <p style={{ margin:'0 0 12px', fontSize:13.5, color:'var(--text-muted)' }}>
           L’équipage scannera au départ chaque bouteille d’O₂ et chaque sac. Ajoutez ici ce qui est nécessaire pour ce souhait.
         </p>
+      {!lecture && (
+        <>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
           {VOLUMES_O2.map(v => (
             <Btn key={v.v} kind="soft" onClick={() => setList([...list, { id: nid(), kind:'o2', volume_l: Number(v.v), qte:1, libelle: nomTypeO2(v.v) }])}>
@@ -81,6 +83,8 @@ export default function MaterielRequis({ m, setM }) {
           )}
           <Btn onClick={ajouter}>+ Ajouter</Btn>
         </div>
+        </>
+      )}
       </Card>
 
       {list.length === 0 ? (
@@ -96,19 +100,19 @@ export default function MaterielRequis({ m, setM }) {
                     {r.kind === 'o2' ? 'Scanner la bouteille au départ' : r.kind === 'sac' ? 'Scanner le QR du sac' : r.kind === 'catalogue' ? 'Scanner l’article' : 'À cocher (pas de QR)'}
                   </div>
                 </div>
-                <Btn kind="danger" onClick={() => setList(list.filter(x => x.id !== r.id))} style={{ padding:'5px 10px' }}>Retirer</Btn>
+                {!lecture && <Btn kind="danger" onClick={() => setList(list.filter(x => x.id !== r.id))} style={{ padding:'5px 10px' }}>Retirer</Btn>}
               </div>
             ))}
           </div>
         </Card>
       )}
 
-      <ChecklistExtras m={m} setM={setM} />
+      <ChecklistExtras m={m} setM={setM} lecture={lecture} />
     </div>
   )
 }
 
-function ChecklistExtras({ m, setM }) {
+function ChecklistExtras({ m, setM, lecture }) {
   const [add, setAdd] = useState({ section:'base', libelle:'', medical:false })
   const extras = m?.checklist_extras || {}
   function setExtras(next) { setM(o => ({ ...o, checklist_extras: next })) }
@@ -132,6 +136,7 @@ function ChecklistExtras({ m, setM }) {
       <p style={{ margin:'0 0 12px', fontSize:13.5, color:'var(--text-muted)' }}>
         Ajoutez du matériel (ou un autre point) à une checklist. L’équipage le verra dans Mes missions, en plus des cases standard (GPS, VISA…).
       </p>
+      {!lecture && (
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, alignItems:'end' }}>
         <Sel label="Checklist" value={add.section} set={v=>setAdd(a=>({ ...a, section:v, medical: v==='pec' }))} options={SECTIONS_CL} />
         <F label="Matériel / élément" value={add.libelle} set={v=>setAdd(a=>({ ...a, libelle:v }))} placeholder="Coussin, brancard, couverture…" />
@@ -141,6 +146,7 @@ function ChecklistExtras({ m, setM }) {
         )}
         <Btn onClick={ajouter}>+ Ajouter à la checklist</Btn>
       </div>
+      )}
       {SECTIONS_CL.map(s => {
         const extra = extrasChecklist(m, s.v)
         if (!extra.length) return null
@@ -153,7 +159,7 @@ function ChecklistExtras({ m, setM }) {
                   <div style={{ fontWeight:600 }}>{x.libelle}</div>
                   <div style={{ fontSize:12, color:'var(--text-muted)' }}>{x.medical || s.v === 'pec' ? 'Coché par le médical' : 'Coché par l’équipage'}</div>
                 </div>
-                <Btn kind="danger" onClick={() => retirer(s.v, x.id)} style={{ padding:'5px 10px' }}>Retirer</Btn>
+                {!lecture && <Btn kind="danger" onClick={() => retirer(s.v, x.id)} style={{ padding:'5px 10px' }}>Retirer</Btn>}
               </div>
             ))}
           </div>
