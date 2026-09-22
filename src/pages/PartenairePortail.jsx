@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { COPYRIGHT } from '@/copyright'
 import { Card, Btn, F, TA, Pill, PillFictif, Empty, Loading, Logo, PhoneF, AddressFields, Flash } from '@/components/ui'
 import { ApercuPartenaire } from '@/modules/souhaits/RapportPartenaire'
+import { GenrePicker } from '@/modules/annuaire/genre'
 
 const STATUT = {
   nouvelle:  { l:'Reçue',       c:'#BA7517', bg:'#FAEEDA' },

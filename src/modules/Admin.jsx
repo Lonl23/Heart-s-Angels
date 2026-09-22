@@ -101,7 +101,12 @@ function Partenaires() {
       <Card style={{ marginBottom: 16, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 6 }}>Adresse HTML de l’accès partenaire</div>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>À coller sur le site web ou à envoyer aux institutions.</div>
-        <input readOnly value={urlPartenaire} onFocus={e => e.target.select()} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', boxSizing: 'border-box', marginBottom: 8 }} />
+        <div style={{
+          width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9,
+          fontSize: 12.5, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          boxSizing: 'border-box', marginBottom: 8, wordBreak: 'break-all', lineHeight: 1.45,
+          background: 'var(--surface)', color: 'var(--text)', userSelect: 'all',
+        }}>{urlPartenaire}</div>
         <Btn kind="soft" onClick={async () => {
           const ok = await copierTexte(urlPartenaire)
           if (ok) { setCopieUrl(true); setTimeout(() => setCopieUrl(false), 1800) }

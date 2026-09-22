@@ -34,14 +34,14 @@ export default function Login() {
 
   async function copierAdresse() {
     const ok = await copierTexte(urlPartenaire)
-    if (!ok) { setErr("Impossible de copier automatiquement : sélectionnez l’adresse et copiez-la."); return }
-    setCopie(true)
-    setTimeout(() => setCopie(false), 1800)
+    setCopie(ok)
+    if (!ok) setErr("Sélectionnez l’adresse ci-dessus puis copiez-la (Ctrl+C).")
+    else setTimeout(() => setCopie(false), 1800)
   }
 
   return (
     <div style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
-      <div style={{ width:'100%', maxWidth:380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
+      <div style={{ width:'100%', maxWidth:420, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
         <Logo size={140} style={{ margin:'0 auto 8px' }} />
         <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, marginBottom:6 }}>
           {partenaire ? 'Espace partenaires' : 'Espace de gestion'}
@@ -75,13 +75,28 @@ export default function Login() {
 
         <div style={{ marginTop:16, padding:'12px 12px 10px', background:'var(--bg-alt)', border:'1px solid var(--border)', borderRadius:12 }}>
           <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:6 }}>Adresse HTML de l’accès partenaire (à coller sur le site ou à envoyer)</div>
-          <input
-            readOnly
-            value={urlPartenaire}
-            onFocus={e => e.target.select()}
+          <div
+            tabIndex={0}
+            onFocus={e => {
+              const r = document.createRange()
+              r.selectNodeContents(e.currentTarget)
+              const s = window.getSelection()
+              s.removeAllRanges()
+              s.addRange(r)
+            }}
             aria-label="Adresse HTML de l’accès partenaire"
-            style={{ ...inp, fontSize:12, fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace', marginBottom:8 }}
-          />
+            style={{
+              ...inp,
+              fontSize:12,
+              fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace',
+              overflowWrap:'break-word',
+              wordBreak:'normal',
+              lineHeight:1.45,
+              minHeight:0,
+              marginBottom:8,
+              userSelect:'all',
+            }}
+          >{urlPartenaire}</div>
           <button type="button" onClick={copierAdresse} style={{
             width:'100%', padding:'9px 12px', borderRadius:9, border:'1px solid var(--border)',
             background:'var(--card)', color:'var(--text)', fontSize:13.5, fontWeight:600, cursor:'pointer',
