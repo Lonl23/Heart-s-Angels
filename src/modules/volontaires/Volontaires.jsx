@@ -7,12 +7,22 @@ import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
 import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
 import { CodeBox, FormInvit, Msg, genCode, tbl, th, td } from '@/modules/admin/inviteUi'
 
-const ROLES_INTERNES = ['admin', 'president', 'coordinateur', 'ambulancier_bleu', 'ambulancier_gris', 'infirmier', 'medecin', 'volontaire_non_medical', 'tresorier', 'secretaire']
+const TYPES_INVIT = [
+  { v: 'volontaire_medical', l: 'Volontaire médical' },
+  { v: 'volontaire_non_medical', l: 'Volontaire non médical' },
+]
 
 const _lblRole = v => (ROLES_ASBL.find(r => r.v === v)?.l) || v
 const _lblQual = v => (QUALIFS.find(q => q.v === v)?.l) || v
+const _lblInvit = v => (TYPES_INVIT.find(r => r.v === v)?.l) || v
 function rolesAsblTxt(u) { const rs = u.fiche?.roles_asbl || []; return rs.length ? rs.map(_lblRole).join(', ') : '—' }
 function qualifsTxt(u) { const qs = u.fiche?.qualifications || []; return qs.length ? qs.map(_lblQual).join(', ') : '—' }
+function typeBenevoleTxt(u) {
+  const t = u.fiche?.type_benevole
+  if (t === 'medical') return 'Volontaire médical'
+  if (t === 'non_medical') return 'Volontaire non médical'
+  return _lblInvit(u.role)
+}
 
 export default function Volontaires() {
   const { peutGererFiches } = useAuth()
@@ -50,7 +60,14 @@ function Membres({ onOpenFiche }) {
 
   async function inviter(f) {
     const code = genCode()
-    const { error } = await supabase.from('invitations').insert({ code, email: f.email.trim(), prenom: f.prenom, nom: f.nom, role: f.role })
+    const { error } = await supabase.from('invitations').insert({
+      code,
+      email: f.email.trim(),
+      prenom: f.prenom,
+      nom: f.nom,
+      role: f.role,
+      type_benevole: f.role === 'volontaire_medical' ? 'medical' : 'non_medical',
+    })
     if (error) { flash(error.message, false); return }
     setForm(null); setLastCode(code); load()
   }
@@ -67,8 +84,8 @@ function Membres({ onOpenFiche }) {
     <div>
       {msg && <Msg msg={msg} />}
       {lastCode && <CodeBox code={lastCode} />}
-      <div style={{ marginBottom: 14 }}><Btn onClick={() => { setLastCode(null); setForm({ role: 'volontaire_non_medical' }) }}>+ Inviter un membre</Btn></div>
-      {form && <FormInvit form={form} setForm={setForm} onSave={inviter} roles={ROLES_INTERNES} />}
+      <div style={{ marginBottom: 14 }}><Btn onClick={() => { setLastCode(null); setForm({ role: 'volontaire_non_medical' }) }}>+ Inviter un volontaire</Btn></div>
+      {form && <FormInvit form={form} setForm={setForm} onSave={inviter} roles={TYPES_INVIT} roleLabel="Type de volontaire" />}
 
       {invits.length > 0 && (
         <Card style={{ marginBottom: 16 }}>
@@ -76,7 +93,7 @@ function Membres({ onOpenFiche }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {invits.map(i => (
               <div key={i.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 13 }}><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-blue)' }}>{i.code}</span> — {i.prenom} {i.nom} ({i.email}) · <span style={{ color: 'var(--text-muted)' }}>{i.role}</span></div>
+                <div style={{ fontSize: 13 }}><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-blue)' }}>{i.code}</span> — {i.prenom} {i.nom} ({i.email}) · <span style={{ color: 'var(--text-muted)' }}>{_lblInvit(i.role)}</span></div>
                 <Btn kind="danger" onClick={() => revoquer(i.code)} style={{ padding: '4px 10px' }}>Révoquer</Btn>
               </div>
             ))}
@@ -86,11 +103,11 @@ function Membres({ onOpenFiche }) {
 
       {loading ? <p style={{ color: 'var(--text-muted)' }}>Chargement…</p> : (
         <Card style={{ padding: 0, overflow: 'auto' }}>
-          <table style={tbl}><thead><tr style={{ background: 'var(--bg-alt)' }}>{['Nom', 'E-mail', 'Rôle (ASBL)', 'Qualification', 'Statut', 'Action'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+          <table style={tbl}><thead><tr style={{ background: 'var(--bg-alt)' }}>{['Nom', 'E-mail', 'Type', 'Rôle (ASBL)', 'Qualification', 'Statut', 'Action'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>
               {membres.map(u => (
                 <tr key={u.id} style={{ borderTop: '1px solid var(--border)', opacity: u.actif ? 1 : .5 }}>
-                  <td style={td}>{u.prenom} {u.nom}</td><td style={td}>{u.email}</td><td style={td}>{rolesAsblTxt(u)}</td><td style={td}>{qualifsTxt(u)}</td>
+                  <td style={td}>{u.prenom} {u.nom}</td><td style={td}>{u.email}</td><td style={td}>{typeBenevoleTxt(u)}</td><td style={td}>{rolesAsblTxt(u)}</td><td style={td}>{qualifsTxt(u)}</td>
                   <td style={td}>{u.actif ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill> : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}</td>
                   <td style={{ ...td, display: 'flex', gap: 6, flexWrap: 'wrap' }}><Btn kind="soft" onClick={() => onOpenFiche(u.id)} style={{ padding: '5px 10px' }}>Fiche</Btn><Btn kind={u.actif ? 'danger' : 'ok'} onClick={() => toggle(u)} style={{ padding: '5px 10px' }}>{u.actif ? 'Désactiver' : 'Activer'}</Btn></td>
                 </tr>

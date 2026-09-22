@@ -34,7 +34,7 @@ export const ROLES_MISSION = [
 
 export const lblRoleMission = v => ROLES_MISSION.find(r => r.v === v)?.l || v
 
-const ROLES_PROFIL_MEDICAUX = ['medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris']
+const ROLES_PROFIL_MEDICAUX = ['medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris', 'volontaire_medical']
 const QUALS_MEDICALES = ['ambulancier', 'infirmier', 'medecin']
 const ROLES_MISSION_NON_MED = [
   'volontaire_non_medical', 'chauffeur', 'secouriste', 'kine', 'psychologue', 'autre',

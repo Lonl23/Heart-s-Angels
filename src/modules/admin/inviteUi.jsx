@@ -21,10 +21,11 @@ export function CodeBox({ code }) {
   )
 }
 
-export function FormInvit({ form, setForm, onSave, roles, orgs }) {
+export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs }) {
   const set = (k, v) => setForm(s => ({ ...s, [k]: v }))
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
+  const roleOpts = (roles || []).map(r => (typeof r === 'object' ? r : { v: r, l: r }))
   async function go() {
     if (!form.prenom || !form.nom || !form.email) { setErr('Prénom, nom et e-mail requis.'); return }
     setBusy(true); setErr(null); await onSave(form); setBusy(false)
@@ -32,15 +33,22 @@ export function FormInvit({ form, setForm, onSave, roles, orgs }) {
   return (
     <Card style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{roles ? 'Inviter un membre' : 'Inviter un partenaire'}</div>
+        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{roles ? 'Inviter un volontaire' : 'Inviter un partenaire'}</div>
         <Btn kind="soft" onClick={() => setForm(null)}>Annuler</Btn>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <F label="Prénom" value={form.prenom} set={v => set('prenom', v)} required />
         <F label="Nom" value={form.nom} set={v => set('nom', v)} required />
       </div>
-      <F label="E-mail (identifiant de connexion — e-mail général de l’institution)" type="email" value={form.email} set={v => set('email', v)} required />
-      {roles && <Sel label="Rôle" value={form.role} set={v => set('role', v)} options={roles.map(r => ({ v: r, l: r }))} />}
+      <F label={roles ? 'E-mail' : 'E-mail (identifiant de connexion — e-mail général de l’institution)'} type="email" value={form.email} set={v => set('email', v)} required />
+      {roles && (
+        <>
+          <Sel label={roleLabel || 'Type de volontaire'} value={form.role} set={v => set('role', v)} options={roleOpts} />
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '-4px 0 10px' }}>
+            Les fonctions dans l’ASBL (président, trésorier, coordinateur…) se choisissent ensuite dans la fiche.
+          </div>
+        </>
+      )}
       {orgs && <Sel label="Organisation" value={form.partenaire_id || ''} set={v => set('partenaire_id', v)} options={[{ v: '', l: '— Choisir —' }, ...orgs.map(o => ({ v: o.id, l: o.nom }))]} />}
       {err && <div style={{ color: '#C8435A', fontSize: 13, marginBottom: 8 }}>{err}</div>}
       <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>{busy ? '…' : '✓ Générer le code d\'invitation'}</Btn>

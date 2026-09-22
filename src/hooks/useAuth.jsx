@@ -5,7 +5,7 @@ const AuthContext = createContext(null)
 
 // Groupes de rôles (alignés sur l'énuméré role_utilisateur en base)
 const STAFF = ['admin','president','coordinateur','ambulancier_bleu','ambulancier_gris',
-               'infirmier','medecin','volontaire_non_medical','tresorier','secretaire']
+               'infirmier','medecin','volontaire_medical','volontaire_non_medical','tresorier','secretaire']
 const ADMINS  = ['admin','president']
 const MEDICAL = ['admin','president','medecin','infirmier']
 
@@ -106,7 +106,7 @@ export function AuthProvider({ children }) {
   }
 
   function estMedical() {
-    if (['medecin','infirmier','ambulancier_bleu','ambulancier_gris'].includes(role)) return true
+    if (['medecin','infirmier','ambulancier_bleu','ambulancier_gris','volontaire_medical'].includes(role)) return true
     return (profile?.fiche?.type_benevole) === 'medical'
   }
   function peutGererSouhaits() {
