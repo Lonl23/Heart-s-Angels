@@ -3,8 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill } from '@/components/ui'
-import { ROLES_ASBL } from '@/modules/fiche/ficheSchema'
-import { ACCES } from '@/modules/acces/accesSchema'
+import { ACCES, EQUIPES_ACCES } from '@/modules/acces/accesSchema'
 import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td } from '@/modules/admin/inviteUi'
 
 export default function Admin() {
@@ -157,10 +156,18 @@ function AccesMatrice() {
     const m = {}; (data || []).forEach(r => { m[`${r.dimension}:${r.sujet}:${r.acces}`] = r.autorise }); setMap(m)
   }
   function flash(t, ok = true) { setMsg({ t, ok }); setTimeout(() => setMsg(null), 3000) }
-  async function toggle(sujet, acces, cur) {
+  function coche(equipe, acces) {
+    return equipe.roles.some(r => !!map[`role:${r}:${acces}`])
+  }
+  async function toggle(equipe, acces, cur) {
     const nv = !cur
-    setMap(m => ({ ...m, [`role:${sujet}:${acces}`]: nv }))
-    const { error } = await supabase.from('acces_config').upsert({ dimension: 'role', sujet, acces, autorise: nv }, { onConflict: 'dimension,sujet,acces' })
+    const patch = {}
+    equipe.roles.forEach(r => { patch[`role:${r}:${acces}`] = nv })
+    setMap(m => ({ ...m, ...patch }))
+    const { error } = await supabase.from('acces_config').upsert(
+      equipe.roles.map(r => ({ dimension: 'role', sujet: r, acces, autorise: nv })),
+      { onConflict: 'dimension,sujet,acces' }
+    )
     if (error) flash(error.message, false)
   }
 
@@ -168,26 +175,35 @@ function AccesMatrice() {
     <div>
       {msg && <Msg msg={msg} />}
       <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Les menus et modules dépendent uniquement des <b>rôles ASBL</b> (fiche volontaire). Infirmier, ambulancier ou le type de bénévole n’ouvrent aucun menu : ils restent sur la fiche pour l’identité en mission. Un membre a un accès dès qu’<b>au moins un</b> de ses rôles ASBL l’autorise. Les administrateurs du logiciel gardent toujours l’accès total. Tant que rien n’est coché, aucune restriction n’est appliquée (hors souhaits, déjà liés aux rôles de récolte et de programmation).
+        <b>Mes missions</b>, <b>défraiements</b> et <b>disponibilités</b> sont ouverts à tout le personnel enregistré (pas les partenaires) : ils ne se règlent pas ici.
+        {' '}Les souhaits restent liés aux rôles de récolte et de programmation (transport, présidence, informatique).
+        {' '}Cochez seulement le <b>stock</b> et l’<b>annuaire</b> (et éventuellement Souhaits en plus) par <b>équipe</b> : responsable et adjoint d’une même catégorie comptent ensemble. Un membre a l’accès dès qu’une de ses équipes est cochée. Les administrateurs du logiciel gardent l’accès total.
       </div>
 
       <Card style={{ padding: 0, overflow: 'auto' }}>
-        <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 13 }}>
+        <table style={{ width: '100%', minWidth: 420, borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'var(--bg-alt)' }}>
-              <th style={{ ...th, position: 'sticky', left: 0, background: 'var(--bg-alt)' }}>Rôle ASBL</th>
+              <th style={{ ...th, position: 'sticky', left: 0, background: 'var(--bg-alt)' }}>Équipe ASBL</th>
               {ACCES.map(a => <th key={a.v} style={{ ...th, textAlign: 'center' }}>{a.l}</th>)}
             </tr>
           </thead>
           <tbody>
-            {ROLES_ASBL.map(sj => (
-              <tr key={sj.v} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ ...td, position: 'sticky', left: 0, background: 'var(--card)', fontWeight: 600 }}>{sj.l}</td>
+            {EQUIPES_ACCES.map(eq => (
+              <tr key={eq.v} style={{ borderTop: '1px solid var(--border)' }}>
+                <td style={{ ...td, position: 'sticky', left: 0, background: 'var(--card)', fontWeight: 600 }}>
+                  {eq.l}
+                  {eq.roles.length > 1 && (
+                    <div style={{ fontWeight: 400, fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {eq.v === 'presidence' ? 'président et vice-président' : 'responsable et adjoint'}
+                    </div>
+                  )}
+                </td>
                 {ACCES.map(a => {
-                  const cur = !!map[`role:${sj.v}:${a.v}`]
+                  const cur = coche(eq, a.v)
                   return (
                     <td key={a.v} style={{ ...td, textAlign: 'center' }}>
-                      <input type="checkbox" checked={cur} onChange={() => toggle(sj.v, a.v, cur)} style={{ width: 18, height: 18, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                      <input type="checkbox" checked={cur} onChange={() => toggle(eq, a.v, cur)} style={{ width: 18, height: 18, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                     </td>
                   )
                 })}

@@ -16,10 +16,10 @@ const CARDS = [
 ]
 
 export default function Dashboard() {
-  const { profile, canAccess, peutGererStock, peutGererFiches, peutGererApp } = useAuth()
+  const { profile, canAccess, peutGererFiches, peutGererApp } = useAuth()
   const [missions, setMissions] = useState(null)
   const cartes = [
-    ...CARDS.filter(c => c.key === 'stock' ? canAccess(c.key) && peutGererStock() : canAccess(c.key)),
+    ...CARDS.filter(c => canAccess(c.key)),
     ...(peutGererFiches() ? [{ to:'/app/volontaires', icon:'👥', label:'Volontaires', desc:'Invitations, membres et fiches' }] : []),
     ...(peutGererApp() ? [{ to:'/app/admin', icon:'⚙️', label:'Administration', desc:'Partenaires et accès de l’application' }] : []),
   ]

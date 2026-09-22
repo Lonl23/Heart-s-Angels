@@ -107,9 +107,9 @@ export function AuthProvider({ children }) {
     if (ADMINS.includes(role) || accesTotal()) return true
     const BASE = ['dashboard','missions','defraiements','disponibilites']
     if (BASE.includes(feature)) return true
-    if (feature === 'souhaits') return peutGererSouhaits()
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => matrix[`role:${r}:${feature}`] === true)
+    if (feature === 'souhaits') return peutGererSouhaits() || matriceAutorise(feature)
+    if (feature === 'stock' && peutGererStock()) return true
+    return matriceAutorise(feature)
   }
 
   function estMedical() {
@@ -117,6 +117,9 @@ export function AuthProvider({ children }) {
     return (profile?.fiche?.type_benevole) === 'medical'
   }
   function rolesAsbl() { return profile?.fiche?.roles_asbl || [] }
+  function matriceAutorise(feature) {
+    return rolesAsbl().some(r => matrix[`role:${r}:${feature}`] === true)
+  }
   function peutProgrammerSouhait() {
     if (!role || role === 'partenaire') return false
     if (accesTotal() || role === 'coordinateur') return true
