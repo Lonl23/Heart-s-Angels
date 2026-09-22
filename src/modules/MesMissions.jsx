@@ -11,8 +11,11 @@ import MissionExecution from './souhaits/MissionExecution'
 const FILTRES = [
   { v:'a_faire', l:'À faire' },
   { v:'en_cours', l:'En cours' },
-  { v:'terminees', l:'Terminées' },
 ]
+
+function missionTerminee(m) {
+  return m.statut === 'realise' || m.statut === 'non_realise' || m.statut === 'annule'
+}
 
 export default function MesMissions() {
   const { session, estMedical } = useAuth()
@@ -34,15 +37,15 @@ export default function MesMissions() {
 
   if (id) return <MissionExecution souhaitId={id} onBack={() => nav('/app/missions')} />
 
-  const visible = items.filter(m => {
+  const aRealiser = items.filter(m => !missionTerminee(m))
+  const visible = aRealiser.filter(m => {
     if (filtre === 'en_cours') return m.statut === 'en_cours'
-    if (filtre === 'terminees') return m.statut === 'realise' || m.statut === 'non_realise'
-    return m.statut !== 'realise' && m.statut !== 'non_realise'
+    return m.statut !== 'en_cours'
   })
-  const nbCours = items.filter(m => m.statut === 'en_cours').length
+  const nbCours = aRealiser.filter(m => m.statut === 'en_cours').length
 
   return (
-    <Page title="Mes missions" subtitle="Un écran après l’autre : Sur place, puis le trajet, jusqu’à la rentrée.">
+    <Page title="Mes missions" subtitle="Uniquement les missions où vous êtes affecté, tant qu’elles restent à réaliser.">
       {err && <div style={{ color:'#A32D2D', fontSize:13, marginBottom:10 }}>{err}</div>}
       <div className="ha-tabs" style={{ marginBottom:16 }}>
         {FILTRES.map(f => (
@@ -52,8 +55,8 @@ export default function MesMissions() {
         ))}
       </div>
       {loading ? <Loading />
-        : items.length === 0 ? <Empty title="Aucune mission pour le moment" hint="La coordination vous affectera ici lorsqu'un équipage sera constitué." />
-        : visible.length === 0 ? <Empty title="Rien dans cet onglet" hint="Changez de filtre, ou revenez quand une mission sera prête." />
+        : aRealiser.length === 0 ? <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici. Une fois la mission faite, elle disparaît." />
+        : visible.length === 0 ? <Empty title="Rien dans cet onglet" hint={filtre === 'en_cours' ? 'Aucune mission en cours. Celles à faire sont dans l’autre onglet.' : 'Les missions en cours sont dans l’onglet En cours.'} />
         : (
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
             {visible.map(m => {
@@ -100,7 +103,7 @@ export default function MesMissions() {
                     </div>
                   </div>
                   <div style={{ marginTop:10, fontSize:13.5, fontWeight:600, color:'var(--accent)' }}>
-                    {m.statut === 'en_cours' ? 'Continuer ›' : m.statut === 'realise' ? 'Consulter ›' : 'Ouvrir ›'}
+                    {m.statut === 'en_cours' ? 'Continuer ›' : 'Ouvrir ›'}
                   </div>
                 </Card>
               )

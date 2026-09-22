@@ -29,7 +29,7 @@ export default function Dashboard() {
     supabase.rpc('mes_affectations').then(({ data }) => setMissions(data || []))
   }, [])
 
-  const aVenir = (missions || []).filter(m => m.statut !== 'realise' && m.statut !== 'non_realise').slice(0, 3)
+  const aVenir = (missions || []).filter(m => m.statut !== 'realise' && m.statut !== 'non_realise' && m.statut !== 'annule').slice(0, 3)
 
   return (
     <div style={{ padding:'clamp(16px,3vw,28px)', width:'100%', boxSizing:'border-box' }}>
@@ -63,7 +63,7 @@ export default function Dashboard() {
 
       {missions && missions.length === 0 && canAccess('missions') && (
         <div style={{ marginBottom:24 }}>
-          <Empty title="Aucune mission affectée" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici et dans Mes missions." />
+          <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici et dans Mes missions. Une fois faite, la mission disparaît." />
         </div>
       )}
 

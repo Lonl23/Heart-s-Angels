@@ -93,6 +93,7 @@ async function main() {
     await client.query(lireSQL('50_invitation_type_benevole.sql'))
     await client.query(lireSQL('51_partenaire_fictif.sql'))
     await client.query(lireSQL('52_notes_frais_suppression.sql'))
+    await client.query(lireSQL('53_mes_missions_a_realiser.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()
