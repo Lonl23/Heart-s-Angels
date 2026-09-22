@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 import { Card, Btn, TA, Pill, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
@@ -14,6 +15,9 @@ import RapportJournee from './RapportJournee'
 import Suivi from './Suivi'
 
 export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer=false }) {
+  const { peutEncoderPatientSouhait, peutProgrammerSouhait } = useAuth()
+  const encoderPatient = peutEncoderPatientSouhait()
+  const programmer = peutProgrammerSouhait()
   const [s, setS] = useState(null)
   const mode = preparer ? 'edit' : 'view'
   const [tab, setTab] = useState('resume')
@@ -126,7 +130,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
             : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes missions' : ''}`}
         </div>
         <StatutFlow value={s.statut} info={stInfo} pipeline={PIPELINE_ENCODE} extras={extras} onPick={majStatut} locked={statutFige(s.statut)} />
-        {s.statut === 'pret' && pretHints.length > 0 && (
+        {programmer && s.statut === 'pret' && pretHints.length > 0 && (
           <div style={{ fontSize:12.5, color:'#BA7517', marginTop:8 }}>Avant le terrain, il manque encore : {pretHints.join(', ')}.</div>
         )}
       </Card>
@@ -159,25 +163,31 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
       {mode === 'edit' && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <Flash kind="warn">Encodage du dossier — tout s'enregistre tout seul. Les checklists et le MAR se feront dans Mes missions.</Flash>
-          <Card>
-            <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Souhait & bénéficiaire</div>
-            <FormSouhait initial={s} inline onDone={()=>{ load(); flash('Souhait enregistré.') }} />
-          </Card>
-          <MissionForm souhaitId={id} />
+          <Flash kind="warn">
+            {programmer
+              ? 'Encodage du dossier — tout s\'enregistre tout seul. Les checklists et le MAR se feront dans Mes missions.'
+              : 'Partie patient — identité, souhait, infos médicales. Les équipages, horaires et ambulances sont encodés par la coordination transport.'}
+          </Flash>
+          {encoderPatient && (
+            <Card>
+              <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Souhait & bénéficiaire</div>
+              <FormSouhait initial={s} inline onDone={()=>{ load(); flash('Souhait enregistré.') }} />
+            </Card>
+          )}
+          {(encoderPatient || programmer) && <MissionForm souhaitId={id} />}
         </div>
       )}
 
       {mode === 'view' && (
         <>
-          <Tabs value={tabActif} onChange={v => { setTabFixe(true); setTab(v) }} items={[
+          <Tabs value={tabActif === 'suivi' && !programmer ? 'resume' : tabActif} onChange={v => { setTabFixe(true); setTab(v) }} items={[
             { v:'resume', l:'Résumé' },
             { v:'jour', l: s.statut === 'realise' ? 'Rapport du jour' : 'Rapport' },
-            { v:'suivi', l:'Suivi interne' },
+            ...(programmer ? [{ v:'suivi', l:'Suivi interne' }] : []),
           ]} />
-          {tabActif==='resume' && <Resume s={s} souhaitId={id} onVoirRapport={() => { setTabFixe(true); setTab('jour') }} />}
+          {(tabActif==='resume' || (tabActif==='suivi' && !programmer)) && <Resume s={s} souhaitId={id} onVoirRapport={() => { setTabFixe(true); setTab('jour') }} />}
           {tabActif==='jour' && <RapportJournee s={s} souhaitId={id} flash={flash} onMission={mission => setS(x => ({ ...x, mission }))} />}
-          {tabActif==='suivi' && <Suivi souhaitId={id} />}
+          {programmer && tabActif==='suivi' && <Suivi souhaitId={id} />}
         </>
       )}
     </div>

@@ -3,8 +3,8 @@ import { Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill } from '@/components/ui'
-import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
-import { ACCES, TYPES_BENEVOLE } from '@/modules/acces/accesSchema'
+import { ROLES_ASBL } from '@/modules/fiche/ficheSchema'
+import { ACCES } from '@/modules/acces/accesSchema'
 import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td } from '@/modules/admin/inviteUi'
 
 export default function Admin() {
@@ -148,10 +148,8 @@ function Partenaires() {
 }
 
 function AccesMatrice() {
-  const [dim, setDim] = useState('role')
   const [map, setMap] = useState({})
   const [msg, setMsg] = useState(null)
-  const sujets = dim === 'role' ? ROLES_ASBL : dim === 'qualif' ? QUALIFS : TYPES_BENEVOLE
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -161,8 +159,8 @@ function AccesMatrice() {
   function flash(t, ok = true) { setMsg({ t, ok }); setTimeout(() => setMsg(null), 3000) }
   async function toggle(sujet, acces, cur) {
     const nv = !cur
-    setMap(m => ({ ...m, [`${dim}:${sujet}:${acces}`]: nv }))
-    const { error } = await supabase.from('acces_config').upsert({ dimension: dim, sujet, acces, autorise: nv }, { onConflict: 'dimension,sujet,acces' })
+    setMap(m => ({ ...m, [`role:${sujet}:${acces}`]: nv }))
+    const { error } = await supabase.from('acces_config').upsert({ dimension: 'role', sujet, acces, autorise: nv }, { onConflict: 'dimension,sujet,acces' })
     if (error) flash(error.message, false)
   }
 
@@ -170,28 +168,23 @@ function AccesMatrice() {
     <div>
       {msg && <Msg msg={msg} />}
       <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Cochez les accès autorisés pour chaque rôle, qualification ou type. Un membre a un accès dès qu'<b>au moins un</b> de ses rôles/qualifications/son type l'autorise. Les administrateurs du logiciel gardent toujours l'accès total. Tant que rien n'est coché, aucune restriction n'est appliquée.
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-        {[['role', 'Rôles ASBL'], ['qualif', 'Qualifications'], ['type', 'Type de bénévole']].map(([v, l]) => (
-          <button key={v} onClick={() => setDim(v)} style={{ padding: '7px 13px', borderRadius: 9, border: '1px solid var(--border)', background: dim === v ? 'var(--accent)' : 'var(--card)', color: dim === v ? '#fff' : 'var(--text-2)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>{l}</button>
-        ))}
+        Les menus et modules dépendent uniquement des <b>rôles ASBL</b> (fiche volontaire). Infirmier, ambulancier ou le type de bénévole n’ouvrent aucun menu : ils restent sur la fiche pour l’identité en mission. Un membre a un accès dès qu’<b>au moins un</b> de ses rôles ASBL l’autorise. Les administrateurs du logiciel gardent toujours l’accès total. Tant que rien n’est coché, aucune restriction n’est appliquée (hors souhaits, déjà liés aux rôles de récolte et de programmation).
       </div>
 
       <Card style={{ padding: 0, overflow: 'auto' }}>
         <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'var(--bg-alt)' }}>
-              <th style={{ ...th, position: 'sticky', left: 0, background: 'var(--bg-alt)' }}>Sujet</th>
+              <th style={{ ...th, position: 'sticky', left: 0, background: 'var(--bg-alt)' }}>Rôle ASBL</th>
               {ACCES.map(a => <th key={a.v} style={{ ...th, textAlign: 'center' }}>{a.l}</th>)}
             </tr>
           </thead>
           <tbody>
-            {sujets.map(sj => (
+            {ROLES_ASBL.map(sj => (
               <tr key={sj.v} style={{ borderTop: '1px solid var(--border)' }}>
                 <td style={{ ...td, position: 'sticky', left: 0, background: 'var(--card)', fontWeight: 600 }}>{sj.l}</td>
                 {ACCES.map(a => {
-                  const cur = !!map[`${dim}:${sj.v}:${a.v}`]
+                  const cur = !!map[`role:${sj.v}:${a.v}`]
                   return (
                     <td key={a.v} style={{ ...td, textAlign: 'center' }}>
                       <input type="checkbox" checked={cur} onChange={() => toggle(sj.v, a.v, cur)} style={{ width: 18, height: 18, accentColor: 'var(--accent)', cursor: 'pointer' }} />

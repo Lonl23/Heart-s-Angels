@@ -9,6 +9,18 @@ const STAFF = ['admin','president','coordinateur','ambulancier_bleu','ambulancie
 const ADMINS  = ['admin','president']
 const MEDICAL = ['admin','president','medecin','infirmier']
 
+/** Coordination transport, présidence, informatique : équipages, horaires, ambulances. */
+const ROLES_PROGRAMME_SOUHAIT = [
+  'president', 'vice_president',
+  'resp_informatique', 'resp_informatique_adjoint',
+  'coord_transport', 'coord_transport_adjoint',
+]
+/** Partie patient (récolte) : récolteur et coordination médicale. */
+const ROLES_PATIENT_SOUHAIT = [
+  'recolteur_souhait',
+  'coord_medical', 'coord_medical_adjoint', 'coordinateur_medical',
+]
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -96,26 +108,28 @@ export function AuthProvider({ children }) {
     const BASE = ['dashboard','missions','defraiements','disponibilites']
     if (BASE.includes(feature)) return true
     if (feature === 'souhaits') return peutGererSouhaits()
-    const fi = profile?.fiche || {}
-    const sujets = [
-      fi.type_benevole && ['type', fi.type_benevole],
-      ...(Array.isArray(fi.qualifications) ? fi.qualifications.map(q => ['qualif', q]) : []),
-      ...(Array.isArray(fi.roles_asbl) ? fi.roles_asbl.map(r => ['role', r]) : []),
-    ].filter(Boolean)
-    return sujets.some(([d, sj]) => matrix[`${d}:${sj}:${feature}`] === true)
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => matrix[`role:${r}:${feature}`] === true)
   }
 
   function estMedical() {
     if (['medecin','infirmier','ambulancier_bleu','ambulancier_gris','volontaire_medical'].includes(role)) return true
     return (profile?.fiche?.type_benevole) === 'medical'
   }
-  function peutGererSouhaits() {
+  function rolesAsbl() { return profile?.fiche?.roles_asbl || [] }
+  function peutProgrammerSouhait() {
     if (!role || role === 'partenaire') return false
     if (accesTotal() || role === 'coordinateur') return true
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['coord_transport','coord_transport_adjoint','coord_medical','coord_medical_adjoint','recolteur_souhait'].includes(r))
+    return rolesAsbl().some(r => ROLES_PROGRAMME_SOUHAIT.includes(r))
   }
-  function peutVoirSouhaitComplet() { return peutGererSouhaits() || estMedical() }
+  function peutEncoderPatientSouhait() {
+    if (!role || role === 'partenaire') return false
+    if (peutProgrammerSouhait()) return true
+    return rolesAsbl().some(r => ROLES_PATIENT_SOUHAIT.includes(r))
+  }
+  function peutGererSouhaits() {
+    return peutProgrammerSouhait() || peutEncoderPatientSouhait()
+  }
   function peutGererFiches() {
     if (accesTotal()) return true
     const roles = profile?.fiche?.roles_asbl || []
@@ -172,7 +186,8 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
-    can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
+    can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
+    peutProgrammerSouhait, peutEncoderPatientSouhait,
     peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])

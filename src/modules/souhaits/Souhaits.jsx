@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { useNavigate, useParams, useLocation, Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
@@ -24,6 +24,8 @@ export default function Souhaits() {
   const nav = useNavigate()
   const { id } = useParams()
   const loc = useLocation()
+  const { peutEncoderPatientSouhait } = useAuth()
+  const encoderPatient = peutEncoderPatientSouhait()
   const [tab, setTab] = useState('souhaits')
   const [nbDemandes, setNbDemandes] = useState(0)
   const nouveau = loc.pathname.endsWith('/nouveau')
@@ -42,12 +44,15 @@ export default function Souhaits() {
       .then(({ count }) => setNbDemandes(count || 0))
   }, [id, nouveau, tab, loc.pathname])
 
-  if (nouveau) return (
-    <FormSouhait onDone={(nid) => {
-      if (typeof nid === 'string') nav(`/app/souhaits/${nid}/preparer`)
-      else nav('/app/souhaits')
-    }} />
-  )
+  if (nouveau) {
+    if (!encoderPatient) return <Navigate to="/app/souhaits" replace />
+    return (
+      <FormSouhait onDone={(nid) => {
+        if (typeof nid === 'string') nav(`/app/souhaits/${nid}/preparer`)
+        else nav('/app/souhaits')
+      }} />
+    )
+  }
   if (id) return (
     <DetailSouhait id={id} preparer={preparer}
       onBack={() => nav('/app/souhaits')}
@@ -58,7 +63,7 @@ export default function Souhaits() {
 
   return (
     <Page title="Souhaits" subtitle="Encodez les dossiers ici. Le terrain (checklists, MAR, démarrer / terminer) se fait dans Mes missions."
-      action={tab==='souhaits' ? <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn> : null}>
+      action={tab==='souhaits' && encoderPatient ? <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn> : null}>
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },

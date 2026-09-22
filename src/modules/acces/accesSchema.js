@@ -8,8 +8,3 @@ export const ACCES = [
   { v:'stock',          l:'Stock' },
   { v:'annuaire',       l:'Annuaire' },
 ]
-
-export const TYPES_BENEVOLE = [
-  { v:'medical',     l:'Médical' },
-  { v:'non_medical', l:'Non médical' },
-]

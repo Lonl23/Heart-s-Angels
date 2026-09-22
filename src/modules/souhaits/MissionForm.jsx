@@ -10,35 +10,44 @@ import MaterielRequis from './MaterielRequis'
 import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 import EquipePluriForm from './EquipePluri'
 import { RecolteursPicker } from './Recolteurs'
+import { useAuth } from '@/hooks/useAuth'
 
 const grp = id => GROUPES.find(g => g.id === id)
 
 const TABS = [
-  { id:'administratif', label:'Administratif', groupes:['administratif'] },
-  { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'] },
-  { id:'vecteurs',      label:'Vecteurs & équipages' },
-  { id:'materiel',      label:'Matériel & checklists' },
-  { id:'medical',       label:'Médical', groupes:['medical'] },
-  { id:'traitements',   label:'Traitements' },
-  { id:'suivi',         label:'Suivi interne' },
+  { id:'administratif', label:'Administratif', groupes:['administratif'], zone:'patient' },
+  { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'], zone:'programme' },
+  { id:'vecteurs',      label:'Vecteurs & équipages', zone:'programme' },
+  { id:'materiel',      label:'Matériel & checklists', zone:'programme' },
+  { id:'medical',       label:'Médical', groupes:['medical'], zone:'patient' },
+  { id:'traitements',   label:'Traitements', zone:'patient' },
+  { id:'suivi',         label:'Suivi interne', zone:'programme' },
 ]
 
 export default function MissionForm({ souhaitId }) {
+  const { peutProgrammerSouhait, peutEncoderPatientSouhait } = useAuth()
+  const programme = peutProgrammerSouhait()
+  const patient = peutEncoderPatientSouhait()
+  const tabs = TABS.filter(t => t.zone === 'programme' ? programme : patient)
   const [m, setM] = useState(null)
-  const [tab, setTab] = useState(() => sessionStorage.getItem(`encodage-tab-${souhaitId}`) || 'administratif')
+  const [tab, setTab] = useState(() => sessionStorage.getItem(`encodage-tab-${souhaitId}`) || tabs[0]?.id || 'administratif')
   const [status, setStatus] = useState('')      // '', 'saving', 'saved'
   const chargee = useRef(false)
   const timer = useRef()
+
+  useEffect(() => {
+    if (tabs.length && !tabs.some(t => t.id === tab)) setTab(tabs[0].id)
+  }, [tab, programme, patient])
 
   useEffect(() => { sessionStorage.setItem(`encodage-tab-${souhaitId}`, tab) }, [souhaitId, tab])
 
   useEffect(() => { (async () => {
     const { data } = await supabase.from('souhaits').select('mission').eq('id', souhaitId).single()
     chargee.current = false
-    const next = prefillBase(data?.mission || {})
-    setM(next)
     const orig = data?.mission || {}
-    if (next.base_nom !== orig.base_nom || fmtAdresse(next.base_adresse) !== fmtAdresse(orig.base_adresse)) {
+    const next = programme ? prefillBase(orig) : orig
+    setM(next)
+    if (programme && (next.base_nom !== orig.base_nom || fmtAdresse(next.base_adresse) !== fmtAdresse(orig.base_adresse))) {
       await supabase.from('souhaits').update({ mission: next }).eq('id', souhaitId)
     }
   })() }, [souhaitId])
@@ -58,30 +67,37 @@ export default function MissionForm({ souhaitId }) {
 
   const set = (k, v) => setM(o => ({ ...o, [k]: v }))
   if (!m) return <Loading />
-  const cur = TABS.find(t => t.id === tab)
+  if (!tabs.length) return <Flash>Vous n’avez pas les droits pour encoder cette partie du dossier.</Flash>
+  const cur = tabs.find(t => t.id === tab) || tabs[0]
 
   return (
     <div>
-      <Flash>Ici on encode et on prépare. Dans Matériel, vous pouvez ajouter des points aux checklists ; l’équipage les coche dans Mes missions.</Flash>
+      <Flash>
+        {programme && patient
+          ? 'Ici on encode et on prépare. Dans Matériel, vous pouvez ajouter des points aux checklists ; l’équipage les coche dans Mes missions.'
+          : patient
+            ? 'Partie patient : identité, souhait, infos médicales. Les équipages, horaires et ambulances sont encodés par la coordination transport.'
+            : 'Équipages, horaires et ambulances. La partie patient est encodée par les récolteurs.'}
+      </Flash>
       <Tabs
-        value={tab}
+        value={cur.id}
         onChange={setTab}
-        items={TABS.map(t => ({ v:t.id, l:t.label }))}
+        items={tabs.map(t => ({ v:t.id, l:t.label }))}
         extra={<span style={{ fontSize:12, color: status==='saved'?'#3B6D11':'var(--text-faint)' }}>{status==='saving' ? 'Enregistrement…' : status==='saved' ? 'Enregistré' : 'Enregistrement automatique'}</span>}
       />
 
-      {tab === 'vecteurs' && <Vecteurs souhaitId={souhaitId} m={m} setM={setM} />}
-      {tab === 'materiel' && <MaterielRequis m={m} setM={setM} />}
-      {tab === 'traitements' && (
+      {cur.id === 'vecteurs' && <Vecteurs souhaitId={souhaitId} m={m} setM={setM} />}
+      {cur.id === 'materiel' && <MaterielRequis m={m} setM={setM} />}
+      {cur.id === 'traitements' && (
         <div>
           <Flash>Encodez les traitements prévus. Les administrations se cochent dans Mes missions, le jour J.</Flash>
           <Traitements souhaitId={souhaitId} />
         </div>
       )}
-      {tab === 'medical' && (
+      {cur.id === 'medical' && (
         <Flash>Ces infos sont lues par l'équipage médical sur le terrain. Le rapport de mission se rédige dans Mes missions.</Flash>
       )}
-      {tab === 'suivi' && <Suivi souhaitId={souhaitId} />}
+      {cur.id === 'suivi' && <Suivi souhaitId={souhaitId} />}
 
       {cur?.groupes && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -102,8 +118,8 @@ export default function MissionForm({ souhaitId }) {
         </div>
       )}
 
-      {tab === 'medical' && <EquipePluriForm m={m} setM={setM} />}
-      {tab === 'medical' && <ProtocoleDetresseForm m={m} setM={setM} />}
+      {cur.id === 'medical' && programme && <EquipePluriForm m={m} setM={setM} />}
+      {cur.id === 'medical' && <ProtocoleDetresseForm m={m} setM={setM} />}
 
     </div>
   )

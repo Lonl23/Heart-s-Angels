@@ -26,7 +26,7 @@ function etapeDefaut(saved, vecteurStatut) {
 }
 
 export default function MissionExecution({ souhaitId, onBack }) {
-  const { user, profile, peutVoirSouhaitComplet } = useAuth()
+  const { user, profile } = useAuth()
   const [sh, setSh] = useState(null)
   const [m, setM] = useState(null)
   const [rpc, setRpc] = useState(null)
@@ -59,7 +59,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
     let { data: me } = await supabase.from('souhait_personnel')
       .select('*').eq('souhait_id', souhaitId).eq('user_id', user.id).maybeSingle()
 
-    const voirComplet = peutVoirSouhaitComplet() && medicalDeCetteMission(me)
+    const voirComplet = medicalDeCetteMission(me)
     setComplet(voirComplet)
 
     if (voirComplet) {
