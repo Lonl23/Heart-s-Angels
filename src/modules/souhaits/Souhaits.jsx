@@ -24,7 +24,7 @@ export default function Souhaits() {
   const nav = useNavigate()
   const { id } = useParams()
   const loc = useLocation()
-  const { peutEncoderPatientSouhait } = useAuth()
+  const { peutEncoderPatientSouhait, peutOuvrirArchives } = useAuth()
   const encoderPatient = peutEncoderPatientSouhait()
   const [tab, setTab] = useState('souhaits')
   const [nbDemandes, setNbDemandes] = useState(0)
@@ -67,8 +67,11 @@ export default function Souhaits() {
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
+        ...(peutOuvrirArchives() ? [{ v:'archives', l:'Archives' }] : []),
       ]} />
-      {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} /> : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
+      {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} />
+        : tab === 'archives' ? <Archives onOpen={id => nav(`/app/souhaits/${id}`)} />
+        : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
     </Page>
   )
 }
@@ -427,6 +430,49 @@ function Demandes({ onOpen }) {
           {d.statut === 'acceptee'
             ? <Pill color="#3B6D11" bg="#EAF3DE">Souhait créé — ouvrez-le dans le tableau</Pill>
             : <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><Btn kind="ok" onClick={()=>accepter(d)}>Accepter et créer le souhait</Btn><Btn kind="danger" onClick={()=>refuser(d)}>Refuser</Btn></div>}
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+function Archives({ onOpen }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState(null)
+  useEffect(() => {
+    supabase.rpc('lister_souhaits_archives').then(({ data, error }) => {
+      setErr(error?.message || null)
+      setItems(data || [])
+      setLoading(false)
+    })
+  }, [])
+  if (loading) return <Loading />
+  if (err) return <Flash kind="err">{err}</Flash>
+  if (!items.length) {
+    return (
+      <Empty
+        title="Aucune archive"
+        hint="Un souhait réalisé est verrouillé un mois calendrier après la date de réalisation. L’ouverture se fait avec votre code PIN."
+      />
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 4 }}>
+        Dossiers réalisés depuis plus d’un mois. Ouverture avec votre code PIN personnel.
+      </div>
+      {items.map(s => (
+        <Card key={s.id} clickable onClick={() => onOpen(s.id)} style={{ padding: '14px 16px' }}>
+          <div style={{ fontWeight: 700, color: 'var(--text)' }}>
+            {[s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ') || 'Souhait'}
+            {s.fictif ? ' · fictif' : ''}
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+            Réalisé le {s.date_realisee ? new Date(s.date_realisee + 'T12:00:00').toLocaleDateString('fr-BE') : '—'}
+            {s.verrouille_au ? ` · verrouillé depuis le ${new Date(s.verrouille_au + 'T12:00:00').toLocaleDateString('fr-BE')}` : ''}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 13.5, fontWeight: 600, color: 'var(--accent)' }}>Ouvrir avec le code PIN ›</div>
         </Card>
       ))}
     </div>

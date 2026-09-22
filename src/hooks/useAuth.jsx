@@ -191,6 +191,13 @@ export function AuthProvider({ children }) {
     const roles = profile?.fiche?.roles_asbl || []
     return roles.includes('recolteur_souhait')
   }
+  /** Président, vice-président, responsable informatique (pas l’adjoint) : archives PIN. */
+  function peutOuvrirArchives() {
+    if (!role || role === 'partenaire') return false
+    if (!profile || profile.actif === false) return false
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president', 'vice_president', 'resp_informatique'].includes(r))
+  }
 
   async function signOut() { await supabase.auth.signOut() }
 
@@ -198,7 +205,7 @@ export function AuthProvider({ children }) {
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, estVolontaireNonMedical, estRecolteurSouhait,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

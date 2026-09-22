@@ -13,6 +13,8 @@ import MissionForm from './MissionForm'
 import MissionSummary from './MissionSummary'
 import RapportJournee from './RapportJournee'
 import Suivi from './Suivi'
+import { FormPinOuverture } from '@/components/PinArchive'
+import { Link } from 'react-router-dom'
 
 export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer=false }) {
   const { peutEncoderPatientSouhait, peutProgrammerSouhait } = useAuth()
@@ -26,16 +28,39 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
   const [msg, setMsg] = useState(null)
   const [motifOpen, setMotifOpen] = useState(false)
   const [motif, setMotif] = useState('')
+  const [archive, setArchive] = useState(null)
+  const [manque, setManque] = useState(false)
+  const [pinMsg, setPinMsg] = useState(null)
+  const [pinSaving, setPinSaving] = useState(false)
 
   useEffect(() => { load() }, [id])
   useEffect(() => {
     setTabFixe(false)
     setTab('resume')
+    setArchive(null)
+    setManque(false)
+    setPinMsg(null)
   }, [id])
   useEffect(() => {
     if (preparer && s && statutFige(s.statut)) onVoir?.()
   }, [preparer, s?.id, s?.statut])
-  async function load() { const { data } = await supabase.from('souhaits').select('*').eq('id', id).single(); setS(data) }
+  async function load() {
+    const { data } = await supabase.from('souhaits').select('*').eq('id', id).maybeSingle()
+    if (data) { setS(data); setArchive(null); setManque(false); return }
+    const { data: etat } = await supabase.rpc('etat_souhait_archive', { p_id: id })
+    if (etat?.archive) { setS(null); setArchive(etat); setManque(false); return }
+    setS(null)
+    setManque(true)
+  }
+  async function ouvrirArchive(pin) {
+    setPinSaving(true)
+    setPinMsg(null)
+    const { data, error } = await supabase.rpc('ouvrir_souhait_archive', { p_id: id, p_pin: pin })
+    setPinSaving(false)
+    if (error) { setPinMsg({ t: error.message, ok: false }); return }
+    if (!data?.ok) { setPinMsg({ t: data?.error || 'Code incorrect.', ok: false }); return }
+    await load()
+  }
   function flash(t){ setMsg(t); setTimeout(()=>setMsg(null), 3000) }
 
   async function appliquerStatut(v, missionPatch={}) {
@@ -82,6 +107,40 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     setS(x => ({ ...x, mission }))
   }
 
+  if (manque) {
+    return (
+      <div style={{ padding: 24 }}>
+        <Flash kind="err">Ce dossier n’existe pas ou vous n’y avez plus accès.</Flash>
+        <Btn kind="soft" onClick={onBack}>← Retour</Btn>
+      </div>
+    )
+  }
+  if (archive) {
+    return (
+      <div style={{ padding: 24, maxWidth: 480 }}>
+        <Btn kind="soft" onClick={onBack}>← Retour</Btn>
+        <h1 style={{ fontSize: '1.4rem', color: 'var(--heading)', margin: '16px 0 8px' }}>Dossier archivé</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13.5, lineHeight: 1.45, marginBottom: 16 }}>
+          Ce souhait est verrouillé depuis un mois calendrier après sa réalisation.
+          {archive.peut_ouvrir
+            ? ' Saisissez votre code PIN personnel pour l’ouvrir (session de 30 minutes).'
+            : ' Seuls le président, la vice-présidente et le responsable informatique peuvent l’ouvrir.'}
+        </p>
+        {archive.peut_ouvrir ? (
+          <>
+            {!archive.a_pin && (
+              <p style={{ fontSize: 13.5, marginBottom: 12 }}>
+                <Link to="/app/profil" style={{ color: 'var(--accent)', fontWeight: 600 }}>Ouvrir ma fiche</Link> pour créer le code.
+              </p>
+            )}
+            <FormPinOuverture onOuvrir={ouvrirArchive} saving={pinSaving} msg={pinMsg} aPin={!!archive.a_pin} />
+          </>
+        ) : (
+          <Btn kind="soft" onClick={onBack}>Retour aux souhaits</Btn>
+        )}
+      </div>
+    )
+  }
   if (!s) return <div style={{ padding:24 }}><Loading /></div>
   if (preparer && statutFige(s.statut)) return <div style={{ padding:24 }}><Loading /></div>
   if (fiche) return <FicheMission souhaitId={id} onClose={()=>setFiche(false)} />
