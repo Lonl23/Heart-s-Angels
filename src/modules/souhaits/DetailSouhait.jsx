@@ -178,7 +178,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
               <FormSouhait initial={s} inline onDone={()=>{ load(); flash('Souhait enregistré.') }} />
             </Card>
           )}
-          {(encoderPatient || programmer) && <MissionForm souhaitId={id} />}
+          {(encoderPatient || programmer) && <MissionForm souhaitId={id} souhait={s} />}
         </div>
       )}
 

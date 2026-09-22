@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, LiensGps } from '@/components/ui'
+import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, LiensGps, Btn, AdresseAffichee } from '@/components/ui'
 import config from '@/app.config'
 import { GROUPES, AUTORISATION_PHOTOS, normaliserAutorisationPhotos, lblAutorisationPhotos, equipePluri, nomsRecolteurs } from './missionSchema'
 import Traitements from './Traitements'
@@ -11,8 +11,12 @@ import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 import EquipePluriForm, { LignesPluri } from './EquipePluri'
 import { RecolteursPicker } from './Recolteurs'
 import { useAuth } from '@/hooks/useAuth'
+import { GenreIcon } from '@/modules/annuaire/genre'
+import { formaterNiss, fmtTelephones, libelleGenre } from '@/modules/annuaire/annuaireSchema'
+import { ficheVersBeneficiaire } from '@/modules/annuaire/annuaireApi'
 
 const grp = id => GROUPES.find(g => g.id === id)
+const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'priorite_elevee', 'date_demande', 'date_rencontre', 'consignes_equipage']
 
 const TABS = [
   { id:'administratif', label:'Administratif', groupes:['administratif'], zone:'patient' },
@@ -24,12 +28,14 @@ const TABS = [
   { id:'suivi',         label:'Suivi interne', zone:'commun' },
 ]
 
-export default function MissionForm({ souhaitId }) {
+export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
   const { peutProgrammerSouhait, peutEncoderPatientSouhait } = useAuth()
   const programme = peutProgrammerSouhait()
   const patient = peutEncoderPatientSouhait()
   const tabs = TABS
   const [m, setM] = useState(null)
+  const [souhait, setSouhait] = useState(souhaitProp || null)
+  const [instDemandeuse, setInstDemandeuse] = useState(null)
   const [tab, setTab] = useState(() => sessionStorage.getItem(`encodage-tab-${souhaitId}`) || 'administratif')
   const [status, setStatus] = useState('')
   const chargee = useRef(false)
@@ -42,15 +48,37 @@ export default function MissionForm({ souhaitId }) {
   useEffect(() => { sessionStorage.setItem(`encodage-tab-${souhaitId}`, tab) }, [souhaitId, tab])
 
   useEffect(() => { (async () => {
-    const { data } = await supabase.from('souhaits').select('mission').eq('id', souhaitId).single()
+    const { data } = await supabase.from('souhaits').select('*').eq('id', souhaitId).single()
     chargee.current = false
     const orig = data?.mission || {}
-    const next = programme ? prefillBase(orig) : orig
+    let next = programme ? prefillBase(orig) : orig
+    next = prefillDepuisBeneficiaire(next, data)
+    setSouhait(data || null)
     setM(next)
-    if (programme && (next.base_nom !== orig.base_nom || fmtAdresse(next.base_adresse) !== fmtAdresse(orig.base_adresse))) {
+    setInstDemandeuse(await chargerInstitutionDemandeuse(data))
+    if (JSON.stringify(next) !== JSON.stringify(orig)) {
       await supabase.from('souhaits').update({ mission: next }).eq('id', souhaitId)
     }
   })() }, [souhaitId])
+
+  useEffect(() => {
+    if (!souhaitProp) return
+    setSouhait(souhaitProp)
+    chargerInstitutionDemandeuse(souhaitProp).then(setInstDemandeuse)
+    setM(o => o ? prefillDepuisBeneficiaire(o, souhaitProp) : o)
+  }, [
+    souhaitProp?.beneficiaire_adresse,
+    souhaitProp?.beneficiaire_niss,
+    souhaitProp?.beneficiaire_prenom,
+    souhaitProp?.beneficiaire_nom,
+    souhaitProp?.beneficiaire_tel_gsm,
+    souhaitProp?.beneficiaire_tel_fixe,
+    souhaitProp?.beneficiaire_genre,
+    souhaitProp?.beneficiaire_ddn,
+    souhaitProp?.origine,
+    souhaitProp?.partenaire_id,
+    souhaitProp?.annuaire_externe_id,
+  ])
 
   useEffect(() => {
     if (m === null) return
@@ -109,9 +137,9 @@ export default function MissionForm({ souhaitId }) {
       {cur?.groupes && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           {cur.groupes.map(gid => {
-            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} lecture={lectureOnglet} />
+            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} lecture={lectureOnglet} instDemandeuse={instDemandeuse} />
             if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} />
-            if (gid === 'administratif') return <BlocAdministratif key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} />
+            if (gid === 'administratif') return <BlocAdministratif key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhait={souhait} />
             const g = grp(gid); if (!g) return null
             return (
               <Card key={gid}>
@@ -141,6 +169,25 @@ export default function MissionForm({ souhaitId }) {
   )
 }
 
+function adresseVide(a) {
+  return !fmtAdresse(a)
+}
+
+function prefillDepuisBeneficiaire(mission, s) {
+  if (!s || !mission) return mission
+  const patch = {}
+  if (adresseVide(mission.patient_adresse) && s.beneficiaire_adresse && fmtAdresse(s.beneficiaire_adresse)) {
+    patch.patient_adresse = s.beneficiaire_adresse
+  }
+  if (!mission.registre_national && s.beneficiaire_niss) patch.registre_national = s.beneficiaire_niss
+  if (!mission.date_demande && s.created_at) patch.date_demande = String(s.created_at).slice(0, 10)
+  if (!mission.origine) {
+    patch.origine = s.origine === 'institution' ? 'Institution' : (s.origine ? 'Demande privée' : '')
+  }
+  if (!Object.keys(patch).length) return mission
+  return { ...mission, ...patch }
+}
+
 function prefillBase(m) {
   const b = (config.bases || [])[0]
   if (!b) return m
@@ -164,8 +211,64 @@ function localiteIncomplete(a) {
   return loc.includes('jemeppe') && !loc.includes('seraing')
 }
 
-function BlocAdministratif({ m, set, setM, lecture }) {
+async function chargerInstitutionDemandeuse(s) {
+  if (!s) return null
+  if (s.annuaire_externe_id) {
+    const { data } = await supabase.from('annuaire').select('id,nom,telephone,data').eq('id', s.annuaire_externe_id).maybeSingle()
+    if (data) {
+      return {
+        nom: data.nom,
+        adresse: data.data?.adresse || null,
+        tel: data.telephone || data.data?.telephone || '',
+        id: data.id,
+      }
+    }
+  }
+  if (s.partenaire_id) {
+    const { data: p } = await supabase.from('partenaires').select('id,nom,adresse,ville,tel_general,annuaire_id').eq('id', s.partenaire_id).maybeSingle()
+    if (!p) return null
+    let adresse = null
+    if (p.annuaire_id) {
+      const { data: a } = await supabase.from('annuaire').select('nom,data,telephone').eq('id', p.annuaire_id).maybeSingle()
+      adresse = a?.data?.adresse || null
+      return {
+        nom: a?.nom || p.nom,
+        adresse,
+        tel: p.tel_general || a?.telephone || '',
+        id: p.id,
+      }
+    }
+    if (p.adresse) adresse = { rue: p.adresse, localite: p.ville || '', pays: 'Belgique' }
+    else if (p.ville) adresse = { localite: p.ville, pays: 'Belgique' }
+    return { nom: p.nom, adresse, tel: p.tel_general || '', id: p.id }
+  }
+  return null
+}
+
+function BlocAdministratif({ m, set, setM, lecture, souhait }) {
   const g = grp('administratif')
+  const [fiche, setFiche] = useState(null)
+  useEffect(() => {
+    if (!souhait?.beneficiaire_annuaire_id) { setFiche(null); return }
+    supabase.from('annuaire').select('*').eq('id', souhait.beneficiaire_annuaire_id).maybeSingle()
+      .then(({ data }) => setFiche(data || null))
+  }, [souhait?.beneficiaire_annuaire_id])
+
+  const b = fiche ? ficheVersBeneficiaire(fiche) : {}
+  const prenom = souhait?.beneficiaire_prenom || b.prenom || ''
+  const nom = souhait?.beneficiaire_nom || b.nom || ''
+  const ddn = souhait?.beneficiaire_ddn || b.date_naissance || ''
+  const genre = souhait?.beneficiaire_genre || b.genre || ''
+  const niss = souhait?.beneficiaire_niss || b.niss || m.registre_national || ''
+  const gsm = souhait?.beneficiaire_tel_gsm || b.tel_gsm || ''
+  const fixe = souhait?.beneficiaire_tel_fixe || b.tel_fixe || ''
+  const adresse = (fmtAdresse(souhait?.beneficiaire_adresse) && souhait.beneficiaire_adresse)
+    || (fmtAdresse(b.adresse) && b.adresse)
+    || m.patient_adresse
+  const tels = fmtTelephones({ tel_gsm: gsm, tel_fixe: fixe })
+  const manqueAdresse = adresseVide(adresse)
+  const originLib = souhait?.origine === 'institution' ? 'Institution' : (souhait?.origine ? 'Demande privée' : (m.origine || ''))
+
   return (
     <Card>
       <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
@@ -177,8 +280,36 @@ function BlocAdministratif({ m, set, setM, lecture }) {
       ) : (
         <RecolteursPicker m={m} setM={setM} />
       )}
+
+      <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'12px 14px', margin:'4px 0 14px' }}>
+        <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>Repris de la fiche bénéficiaire</div>
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6 }}>
+          {genre && <GenreIcon genre={genre} size={22} title={libelleGenre(genre)} />}
+          <div style={{ fontWeight:700, fontSize:15, color:'var(--heading)' }}>{prenom} {nom}{!prenom && !nom ? '—' : ''}</div>
+        </div>
+        <div style={{ fontSize:13.5, color:'var(--text-2)', lineHeight:1.55 }}>
+          {ddn && <div>Né(e) le {new Date(ddn).toLocaleDateString('fr-BE')}</div>}
+          {niss && <div>Registre national {formaterNiss(niss)}</div>}
+          {tels && <div>{tels}</div>}
+          {originLib && <div>Origine : {originLib}</div>}
+        </div>
+        {fmtAdresse(adresse)
+          ? <div style={{ marginTop:8 }}><AdresseAffichee label="Adresse légale" value={adresse} /></div>
+          : <div style={{ marginTop:8, fontSize:13, color:'var(--text-muted)' }}>Aucune adresse sur la fiche — complétez-la ci-dessous.</div>}
+      </div>
+
+      {manqueAdresse && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse du domicile du patient</div>
+          <AddressFields value={m.patient_adresse} set={v => { if (!lecture) set('patient_adresse', v) }} />
+        </div>
+      )}
+      {!niss && (
+        <Champ f={grp('administratif').fields.find(f => f.k === 'registre_national')} val={m.registre_national} set={v => set('registre_national', v)} lecture={lecture} />
+      )}
+
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        {g.fields.map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lecture} />)}
+        {g.fields.filter(f => ADMIN_MISSION.includes(f.k)).map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lecture} />)}
       </div>
     </Card>
   )
@@ -224,27 +355,103 @@ function BlocBase({ m, set, lecture }) {
   )
 }
 
-function PriseEnCharge({ m, set, lecture }) {
+function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
   const dom = m.pec_type === 'Domicile du patient'
+  const inst = m.pec_type === 'Institution'
   const champ = k => grp('prise_en_charge').fields.find(f => f.k === k)
+  const source = m.pec_inst_source || (inst && !instDemandeuse ? 'autre' : '')
+  const aDemandeuse = instDemandeuse && source === 'demandeuse'
+
+  function choisirType(v) {
+    set('pec_type', v)
+    if (v !== 'Institution') set('pec_inst_source', '')
+  }
+  function choisirDemandeuse() {
+    if (lecture || !instDemandeuse) return
+    set('pec_inst_source', 'demandeuse')
+    set('pec_institution', instDemandeuse.nom || '')
+    if (fmtAdresse(instDemandeuse.adresse)) set('pec_adresse', instDemandeuse.adresse)
+  }
+  function choisirAutre() {
+    if (lecture) return
+    set('pec_inst_source', 'autre')
+    if (source === 'demandeuse') {
+      set('pec_institution', '')
+      set('pec_adresse', null)
+    }
+  }
+  function appliquerRecherche(hit) {
+    if (lecture) return
+    set('pec_inst_source', 'autre')
+    set('pec_institution', hit.nom || '')
+    if (hit.adresse) set('pec_adresse', hit.adresse)
+  }
+
   return (
     <Card>
       <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Prise en charge</div>
-      <div style={{ maxWidth:320 }}><Champ f={champ('pec_type')} val={m.pec_type} set={v=>set('pec_type', v)} lecture={lecture} /></div>
-      {dom ? (
+      <div style={{ maxWidth:320 }}><Champ f={champ('pec_type')} val={m.pec_type} set={choisirType} lecture={lecture} /></div>
+      {dom && (
         <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'10px 12px', margin:'6px 0' }}>
-          <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse (domicile du patient — reprise de l'Administratif)</div>
-          <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— à renseigner dans l\'onglet Administratif —'}</div>
+          <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse (domicile du patient — reprise de la fiche bénéficiaire)</div>
+          <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— à renseigner sur la fiche bénéficiaire —'}</div>
           {fmtAdresse(m.patient_adresse) && <div style={{ marginTop: 6 }}><LiensGps adresse={m.patient_adresse} /></div>}
         </div>
-      ) : (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-          <Champ f={champ('pec_institution')} val={m.pec_institution} set={v=>set('pec_institution', v)} lecture={lecture} />
-          <Champ f={champ('pec_adresse')} val={m.pec_adresse} set={v=>set('pec_adresse', v)} lecture={lecture} />
-          <Champ f={champ('pec_service')} val={m.pec_service} set={v=>set('pec_service', v)} lecture={lecture} />
-          <Champ f={champ('pec_etage')} val={m.pec_etage} set={v=>set('pec_etage', v)} lecture={lecture} />
-          <Champ f={champ('pec_aile')} val={m.pec_aile} set={v=>set('pec_aile', v)} lecture={lecture} />
-          <Champ f={champ('pec_chambre')} val={m.pec_chambre} set={v=>set('pec_chambre', v)} lecture={lecture} />
+      )}
+      {inst && (
+        <div style={{ margin:'8px 0 12px' }}>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:8 }}>Quelle institution ?</div>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
+            {instDemandeuse && (
+              <button
+                type="button"
+                className={'ha-tab-like' + (source === 'demandeuse' ? ' is-on' : '')}
+                disabled={lecture}
+                onClick={choisirDemandeuse}
+              >Institution demandeuse{instDemandeuse.nom ? ` · ${instDemandeuse.nom}` : ''}</button>
+            )}
+            <button
+              type="button"
+              className={'ha-tab-like' + (source === 'autre' ? ' is-on' : '')}
+              disabled={lecture}
+              onClick={choisirAutre}
+            >Autre institution</button>
+          </div>
+          {!source && (
+            <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:8 }}>
+              {instDemandeuse
+                ? 'Indiquez s’il s’agit de l’institution qui a demandé le souhait, ou d’un autre établissement.'
+                : 'Recherchez l’établissement de prise en charge (annuaire ou internet).'}
+            </div>
+          )}
+          {aDemandeuse && (
+            <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
+              <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse de l’institution demandeuse</div>
+              <div style={{ fontWeight:600, fontSize:14, color:'var(--text)', margin:'2px 0 4px' }}>{instDemandeuse.nom}</div>
+              <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(instDemandeuse.adresse) || fmtAdresse(m.pec_adresse) || '—'}</div>
+              {instDemandeuse.tel && <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:4 }}>{instDemandeuse.tel}</div>}
+              {fmtAdresse(instDemandeuse.adresse || m.pec_adresse) && (
+                <div style={{ marginTop:6 }}><LiensGps adresse={instDemandeuse.adresse || m.pec_adresse} /></div>
+              )}
+            </div>
+          )}
+          {source === 'autre' && (
+            <RechercheInstitution lecture={lecture} onPick={appliquerRecherche} />
+          )}
+          {source === 'autre' && (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
+              <Champ f={champ('pec_institution')} val={m.pec_institution} set={v=>set('pec_institution', v)} lecture={lecture} />
+              <Champ f={champ('pec_adresse')} val={m.pec_adresse} set={v=>set('pec_adresse', v)} lecture={lecture} />
+            </div>
+          )}
+          {(source === 'demandeuse' || source === 'autre') && (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
+              <Champ f={champ('pec_service')} val={m.pec_service} set={v=>set('pec_service', v)} lecture={lecture} />
+              <Champ f={champ('pec_etage')} val={m.pec_etage} set={v=>set('pec_etage', v)} lecture={lecture} />
+              <Champ f={champ('pec_aile')} val={m.pec_aile} set={v=>set('pec_aile', v)} lecture={lecture} />
+              <Champ f={champ('pec_chambre')} val={m.pec_chambre} set={v=>set('pec_chambre', v)} lecture={lecture} />
+            </div>
+          )}
         </div>
       )}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
@@ -254,6 +461,105 @@ function PriseEnCharge({ m, set, lecture }) {
       <Champ f={champ('pec_precisions')} val={m.pec_precisions} set={v=>set('pec_precisions', v)} lecture={lecture} />
     </Card>
   )
+}
+
+function RechercheInstitution({ lecture, onPick }) {
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  async function chercher(e) {
+    e?.preventDefault?.()
+    const needle = q.trim()
+    if (needle.length < 2) { setErr('Indiquez au moins 2 lettres.'); return }
+    setBusy(true); setErr(null); setHits([])
+    const locaux = []
+    let web = []
+    let msg = null
+    try {
+      const { data } = await supabase.from('annuaire')
+        .select('id,nom,telephone,data,categorie')
+        .in('categorie', ['institution', 'externe_souhait'])
+        .ilike('nom', `%${needle}%`)
+        .limit(8)
+      for (const r of data || []) {
+        locaux.push({
+          id: r.id,
+          nom: r.nom,
+          adresse: r.data?.adresse || null,
+          tel: r.telephone || r.data?.telephone || '',
+          via: 'Annuaire',
+        })
+      }
+    } catch { /* annuaire optionnel */ }
+    try {
+      web = await chercherPhoton(needle)
+    } catch {
+      msg = 'La recherche internet n’a pas abouti. Essayez Google Maps ci-dessous, ou encodez l’adresse à la main.'
+    }
+    const vus = new Set(locaux.map(x => (x.nom || '').toLowerCase()))
+    const fusion = [...locaux, ...web.filter(x => !vus.has((x.nom || '').toLowerCase()))]
+    setHits(fusion)
+    setBusy(false)
+    if (!fusion.length) setErr(msg || 'Aucun résultat. Affinez le nom, ou ouvrez Google Maps.')
+    else setErr(msg)
+  }
+
+  const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q.trim() || 'institution Belgique')}`
+
+  return (
+    <div style={{ marginBottom:12 }}>
+      <form onSubmit={chercher} style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'flex-end' }}>
+        <div style={{ flex:'1 1 220px' }}>
+          <F label="Rechercher l’institution (annuaire + internet)" value={q} set={setQ} />
+        </div>
+        <Btn onClick={chercher} disabled={lecture || busy} style={{ marginBottom:10 }}>{busy ? 'Recherche…' : 'Rechercher'}</Btn>
+        <a href={maps} target="_blank" rel="noopener noreferrer" className="ha-gps-btn" style={{ marginBottom:12, alignSelf:'center' }}>Google Maps</a>
+      </form>
+      {err && <div style={{ fontSize:13, color:'#8A6D1B', marginBottom:8 }}>{err}</div>}
+      {hits.length > 0 && (
+        <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:10 }}>
+          {hits.map((h, i) => (
+            <button
+              key={h.id || `${h.nom}-${i}`}
+              type="button"
+              disabled={lecture}
+              onClick={() => onPick(h)}
+              style={{
+                textAlign:'left', padding:'10px 12px', borderRadius:10, cursor:'pointer',
+                border:'1px solid var(--border)', background:'var(--card)', fontFamily:'inherit',
+              }}
+            >
+              <div style={{ fontWeight:600, color:'var(--text)' }}>{h.nom || 'Sans nom'}{h.via ? <span style={{ fontWeight:500, color:'var(--text-muted)', fontSize:12 }}> · {h.via}</span> : null}</div>
+              <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>{fmtAdresse(h.adresse) || 'Adresse non renseignée'}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+async function chercherPhoton(q) {
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&lang=fr&limit=8&lat=50.5&lon=4.47`
+  const r = await fetch(url, { headers: { Accept: 'application/json' } })
+  if (!r.ok) throw new Error('photon')
+  const j = await r.json()
+  return (j.features || []).map(f => {
+    const p = f.properties || {}
+    return {
+      nom: p.name || [p.street, p.housenumber].filter(Boolean).join(' ') || 'Résultat carte',
+      adresse: {
+        rue: p.street || '',
+        numero: p.housenumber || '',
+        cp: p.postcode || '',
+        localite: p.city || p.town || p.village || p.district || p.locality || '',
+        pays: p.country || 'Belgique',
+      },
+      via: 'Internet',
+    }
+  }).filter(x => fmtAdresse(x.adresse) || x.nom)
 }
 
 function Champ({ f, val, set, lecture }) {
