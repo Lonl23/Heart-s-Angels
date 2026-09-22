@@ -96,7 +96,11 @@ export default function Login() {
               marginBottom:8,
               userSelect:'all',
             }}
-          >{urlPartenaire}</div>
+          >{(() => {
+            const i = urlPartenaire.lastIndexOf('/')
+            if (i <= 0) return urlPartenaire
+            return <>{urlPartenaire.slice(0, i + 1)}<wbr />{urlPartenaire.slice(i + 1)}</>
+          })()}</div>
           <button type="button" onClick={copierAdresse} style={{
             width:'100%', padding:'9px 12px', borderRadius:9, border:'1px solid var(--border)',
             background:'var(--card)', color:'var(--text)', fontSize:13.5, fontWeight:600, cursor:'pointer',
