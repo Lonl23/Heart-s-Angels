@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Card, Btn, F, Sel, PhoneF } from '@/components/ui'
+import { copierTexte, messageInvitation, urlInvitation } from '@/lib/urls'
 
 export function genCode() {
   const s = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -7,16 +8,51 @@ export function genCode() {
   return `HA-${p()}-${p()}`
 }
 
-export function CodeBox({ code }) {
-  const [copie, setCopie] = useState(false)
+async function marquerCopie(setCopie, cle, texte) {
+  const ok = await copierTexte(texte)
+  if (!ok) return false
+  setCopie(cle)
+  setTimeout(() => setCopie(null), 1800)
+  return true
+}
+
+export function BtnCopierLien({ code, email, style }) {
+  const [copie, setCopie] = useState(null)
+  const lien = urlInvitation(code, email)
+  return (
+    <Btn
+      kind="soft"
+      onClick={() => marquerCopie(setCopie, 'lien', lien)}
+      style={{ padding: '4px 10px', ...style }}
+      title={lien}
+    >
+      {copie === 'lien' ? '✓ Lien copié' : 'Copier le lien'}
+    </Btn>
+  )
+}
+
+export function CodeBox({ code, email, prenom }) {
+  const [copie, setCopie] = useState(null)
+  const lien = urlInvitation(code, email)
+  const message = messageInvitation({ prenom, lien })
   return (
     <Card style={{ marginBottom: 14, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>
-      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>Code d'invitation à transmettre (valable 7 jours) :</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: 'monospace', fontSize: '1.3rem', fontWeight: 700, color: 'var(--accent-blue)', letterSpacing: 1 }}>{code}</span>
-        <Btn kind="soft" onClick={() => { navigator.clipboard?.writeText(code); setCopie(true); setTimeout(() => setCopie(false), 1500) }}>{copie ? '✓ Copié' : 'Copier'}</Btn>
+      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>Lien d’invitation à envoyer par e-mail (valable 7 jours) :</div>
+      <div style={{
+        width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9,
+        fontSize: 12.5, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        boxSizing: 'border-box', marginBottom: 8, wordBreak: 'break-all', lineHeight: 1.45,
+        background: 'var(--surface)', color: 'var(--text)', userSelect: 'all',
+      }}>{lien}</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <Btn kind="soft" onClick={() => marquerCopie(setCopie, 'lien', lien)}>{copie === 'lien' ? '✓ Lien copié' : 'Copier le lien'}</Btn>
+        <Btn kind="soft" onClick={() => marquerCopie(setCopie, 'message', message)}>{copie === 'message' ? '✓ Message copié' : 'Copier le message'}</Btn>
       </div>
-      <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8 }}>La personne s'inscrit via « J'ai un code d'invitation » sur l'écran de connexion.</div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Code de secours (si le lien ne s’ouvre pas) :</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: 'monospace', fontSize: '1.15rem', fontWeight: 700, color: 'var(--accent-blue)', letterSpacing: 1 }}>{code}</span>
+        <Btn kind="soft" onClick={() => marquerCopie(setCopie, 'code', code)}>{copie === 'code' ? '✓ Code copié' : 'Copier le code'}</Btn>
+      </div>
     </Card>
   )
 }
@@ -77,7 +113,7 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs }) {
       )}
       {orgs && <Sel label="Organisation" value={form.partenaire_id || ''} set={v => set('partenaire_id', v)} options={[{ v: '', l: '— Choisir —' }, ...orgs.map(o => ({ v: o.id, l: o.nom }))]} />}
       {err && <div style={{ color: '#C8435A', fontSize: 13, marginBottom: 8 }}>{err}</div>}
-      <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>{busy ? '…' : '✓ Générer le code d\'invitation'}</Btn>
+      <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>{busy ? '…' : '✓ Générer le lien d\'invitation'}</Btn>
     </Card>
   )
 }

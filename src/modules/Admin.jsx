@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, PillFictif } from '@/components/ui'
 import { ACCES, EQUIPES_ACCES } from '@/modules/acces/accesSchema'
-import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td } from '@/modules/admin/inviteUi'
+import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td, BtnCopierLien } from '@/modules/admin/inviteUi'
 import { urlAccesPartenaire, copierTexte } from '@/lib/urls'
 
 export default function Admin() {
@@ -36,7 +36,7 @@ function Partenaires() {
   const [loading, setLoading] = useState(true)
   const [orgForm, setOrgForm] = useState(null)
   const [cptForm, setCptForm] = useState(null)
-  const [lastCode, setLastCode] = useState(null)
+  const [lastInvite, setLastInvite] = useState(null)
   const [msg, setMsg] = useState(null)
   const [copieUrl, setCopieUrl] = useState(false)
   const urlPartenaire = urlAccesPartenaire()
@@ -86,7 +86,7 @@ function Partenaires() {
       partenaire_id: f.partenaire_id,
     })
     if (error) { flash(error.message, false); return }
-    setCptForm(null); setLastCode(code); load()
+    setCptForm(null); setLastInvite({ code, email, prenom: f.prenom || org?.nom || 'Institution' }); load()
   }
   async function toggle(u) { const { error } = await supabase.from('profiles').update({ actif: !u.actif }).eq('id', u.id); if (error) flash(error.message, false); else load() }
   async function revoquer(code) { if (!confirm('Révoquer cette invitation ?')) return; await supabase.from('invitations').delete().eq('code', code); load() }
@@ -96,7 +96,7 @@ function Partenaires() {
   return (
     <div>
       {msg && <Msg msg={msg} />}
-      {lastCode && <CodeBox code={lastCode} />}
+      {lastInvite && <CodeBox code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} />}
 
       <Card style={{ marginBottom: 16, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 6 }}>Adresse HTML de l’accès partenaire</div>
@@ -136,7 +136,7 @@ function Partenaires() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)' }}>Comptes partenaires</div>
-        <Btn onClick={() => { setLastCode(null); setCptForm({}) }}>+ Inviter un partenaire</Btn>
+        <Btn onClick={() => { setLastInvite(null); setCptForm({}) }}>+ Inviter un partenaire</Btn>
       </div>
       {cptForm && <FormInvit form={cptForm} setForm={setCptForm} onSave={inviter} orgs={orgs} />}
 
@@ -147,7 +147,10 @@ function Partenaires() {
             {invits.map(i => (
               <div key={i.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 13 }}><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-blue)' }}>{i.code}</span> — {i.prenom} {i.nom} ({i.email}) · <span style={{ color: 'var(--text-muted)' }}>{orgNom(i.partenaire_id)}</span></div>
-                <Btn kind="danger" onClick={() => revoquer(i.code)} style={{ padding: '4px 10px' }}>Révoquer</Btn>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <BtnCopierLien code={i.code} email={i.email} />
+                  <Btn kind="danger" onClick={() => revoquer(i.code)} style={{ padding: '4px 10px' }}>Révoquer</Btn>
+                </div>
               </div>
             ))}
           </div>

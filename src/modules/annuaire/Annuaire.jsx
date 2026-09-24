@@ -6,6 +6,7 @@ import { CATEGORIES, ACCOMPAGNANT_FIELDS, POINT_CONTACT_FIELDS, catInfo, emptyTo
 import { GenrePicker, GenreIcon, NissF } from './genre'
 import { assurerPartenaireDepuisAnnuaire, upsertPointContact } from './annuaireApi'
 import { genCodeInvitation } from '@/lib/motDePasse'
+import { CodeBox } from '@/modules/admin/inviteUi'
 
 const COLS = ['nom', 'prenom', 'beneficiaire_id', 'institution_id', 'niss', 'tel_gsm', 'tel_fixe', 'genre', 'date_naissance', 'lien', 'telephone']
 
@@ -433,17 +434,15 @@ function AccesInstitution({ form }) {
     <div>
       <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 6 }}>Espace institution</div>
       <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>
-        Connexion avec l’e-mail général et un mot de passe (10 caractères, majuscule, minuscule, chiffre, caractère spécial), ou avec un code généré ici.
+        Connexion avec l’e-mail général et un mot de passe (10 caractères, majuscule, minuscule, chiffre, caractère spécial), ou avec le lien généré ici.
       </p>
       {email ? <div style={{ fontSize: 13, marginBottom: 10 }}>E-mail de connexion : <strong>{email}</strong></div>
         : <div style={{ fontSize: 13, color: '#BA7517', marginBottom: 10 }}>Ajoutez un e-mail général pour ouvrir l’espace.</div>}
-      <Btn onClick={generer} disabled={busy || !email}>{busy ? '…' : 'Générer un code d’accès'}</Btn>
+      <Btn onClick={generer} disabled={busy || !email}>{busy ? '…' : 'Générer un lien d’accès'}</Btn>
       {err && <div style={{ color: '#C8435A', fontSize: 13, marginTop: 8 }}>{err}</div>}
       {code && (
-        <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-alt)', borderRadius: 10 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Code à transmettre (valable 7 jours) :</div>
-          <div style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 18, letterSpacing: 1, color: 'var(--accent-blue)' }}>{code}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>L’institution s’inscrit via « J’ai un code d’invitation » avec l’e-mail général.</div>
+        <div style={{ marginTop: 12 }}>
+          <CodeBox code={code} email={email} prenom={form.contact_personne || form.nom} />
         </div>
       )}
     </div>

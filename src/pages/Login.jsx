@@ -64,11 +64,11 @@ export default function Login() {
         )}
 
         <div style={{ textAlign:'center', marginTop:16 }}>
-          <Link to="/inscription" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>J'ai un code d'invitation</Link>
+          <Link to="/inscription" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>J'ai une invitation</Link>
         </div>
         {partenaire
           ? <div style={{ textAlign:'center', marginTop:10 }}><Link to="/login" style={{ fontSize:13, color:'var(--text-muted)' }}>← Accès personnel ASBL</Link></div>
-          : <p style={{ textAlign:'center', fontSize:12, color:'var(--text-muted)', margin:'8px 0 0' }}>Institutions : e-mail général + mot de passe, ou code généré dans l’annuaire.</p>
+            : <p style={{ textAlign:'center', fontSize:12, color:'var(--text-muted)', margin:'8px 0 0' }}>Institutions : e-mail général + mot de passe, ou invitation générée dans l’annuaire.</p>
         }
         <div style={{ textAlign:'center', fontSize:10.5, color:'var(--text-faint)', marginTop:18 }}>{COPYRIGHT}</div>
       </div>

@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
 import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
-import { CodeBox, FormInvit, Msg, genCode, tbl, th, td } from '@/modules/admin/inviteUi'
+import { CodeBox, FormInvit, Msg, genCode, tbl, th, td, BtnCopierLien } from '@/modules/admin/inviteUi'
 
 const TYPES_INVIT = [
   { v: 'volontaire_medical', l: 'Volontaire médical' },
@@ -44,7 +44,7 @@ function Membres({ onOpenFiche }) {
   const [invits, setInvits] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(null)
-  const [lastCode, setLastCode] = useState(null)
+  const [lastInvite, setLastInvite] = useState(null)
   const [msg, setMsg] = useState(null)
 
   useEffect(() => { load() }, [])
@@ -69,7 +69,7 @@ function Membres({ onOpenFiche }) {
       type_benevole: f.role === 'volontaire_medical' ? 'medical' : 'non_medical',
     })
     if (error) { flash(error.message, false); return }
-    setForm(null); setLastCode(code); load()
+    setForm(null); setLastInvite({ code, email: f.email.trim(), prenom: f.prenom }); load()
   }
   async function toggle(u) {
     const { error } = await supabase.from('profiles').update({ actif: !u.actif }).eq('id', u.id)
@@ -83,8 +83,8 @@ function Membres({ onOpenFiche }) {
   return (
     <div>
       {msg && <Msg msg={msg} />}
-      {lastCode && <CodeBox code={lastCode} />}
-      <div style={{ marginBottom: 14 }}><Btn onClick={() => { setLastCode(null); setForm({ role: 'volontaire_non_medical' }) }}>+ Inviter un volontaire</Btn></div>
+      {lastInvite && <CodeBox code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} />}
+      <div style={{ marginBottom: 14 }}><Btn onClick={() => { setLastInvite(null); setForm({ role: 'volontaire_non_medical' }) }}>+ Inviter un volontaire</Btn></div>
       {form && <FormInvit form={form} setForm={setForm} onSave={inviter} roles={TYPES_INVIT} roleLabel="Type de volontaire" />}
 
       {invits.length > 0 && (
@@ -94,7 +94,10 @@ function Membres({ onOpenFiche }) {
             {invits.map(i => (
               <div key={i.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 13 }}><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-blue)' }}>{i.code}</span> — {i.prenom} {i.nom} ({i.email}) · <span style={{ color: 'var(--text-muted)' }}>{_lblInvit(i.role)}</span></div>
-                <Btn kind="danger" onClick={() => revoquer(i.code)} style={{ padding: '4px 10px' }}>Révoquer</Btn>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <BtnCopierLien code={i.code} email={i.email} />
+                  <Btn kind="danger" onClick={() => revoquer(i.code)} style={{ padding: '4px 10px' }}>Révoquer</Btn>
+                </div>
               </div>
             ))}
           </div>
