@@ -98,7 +98,7 @@ export function AuthProvider({ children }) {
     if (perm === 'admin')       return peutGererApp()
     if (perm === 'medical')     return MEDICAL.includes(role)
     if (perm === 'staff')       return STAFF.includes(role)
-    if (perm === 'partenaire')  return role === 'partenaire'
+    if (perm === 'partenaire')  return role === 'partenaire' && profile?.actif !== false
     return STAFF.includes(role)
   }
 

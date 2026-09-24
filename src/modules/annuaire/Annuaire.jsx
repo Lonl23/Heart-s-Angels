@@ -442,7 +442,7 @@ function AccesInstitution({ form }) {
       {err && <div style={{ color: '#C8435A', fontSize: 13, marginTop: 8 }}>{err}</div>}
       {code && (
         <div style={{ marginTop: 12 }}>
-          <CodeBox code={code} email={email} prenom={form.contact_personne || form.nom} />
+          <CodeBox code={code} email={email} prenom={form.contact_personne || form.nom} partenaire nomInstitution={form.nom} />
         </div>
       )}
     </div>

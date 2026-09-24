@@ -36,7 +36,9 @@ export default function PartenairePortail() {
       <header style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'var(--surface)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:20 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <Logo size={40} />
-          <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>Espace institution</span>
+          <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>
+            {org?.nom ? org.nom : 'Espace institution'}
+          </span>
           {fictif && <PillFictif />}
         </div>
         <Btn kind="soft" onClick={async()=>{ await signOut(); nav('/login/partenaire') }}>Déconnexion</Btn>

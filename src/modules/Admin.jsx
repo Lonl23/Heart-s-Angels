@@ -6,6 +6,7 @@ import { Page, Card, Btn, Pill, PillFictif } from '@/components/ui'
 import { ACCES, EQUIPES_ACCES } from '@/modules/acces/accesSchema'
 import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td, BtnCopierLien } from '@/modules/admin/inviteUi'
 import { urlAccesPartenaire, copierTexte } from '@/lib/urls'
+import { emailPartenaireAutorise, EMAIL_PRO_AIDE } from '@/lib/emailPro'
 
 export default function Admin() {
   const { peutGererApp } = useAuth()
@@ -33,6 +34,7 @@ function Partenaires() {
   const [orgs, setOrgs] = useState([])
   const [comptes, setComptes] = useState([])
   const [invits, setInvits] = useState([])
+  const [demandes, setDemandes] = useState([])
   const [loading, setLoading] = useState(true)
   const [orgForm, setOrgForm] = useState(null)
   const [cptForm, setCptForm] = useState(null)
@@ -44,12 +46,13 @@ function Partenaires() {
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    const [{ data: o }, { data: c }, { data: i }] = await Promise.all([
+    const [{ data: o }, { data: c }, { data: i }, { data: d }] = await Promise.all([
       supabase.from('partenaires').select('*').order('nom'),
       supabase.from('profiles').select('id,prenom,nom,email,actif,partenaire_id').eq('role', 'partenaire').order('nom'),
       supabase.from('invitations').select('*').not('partenaire_id', 'is', null).eq('utilise', false).order('created_at', { ascending: false }),
+      supabase.from('demandes_acces_partenaire').select('*').eq('statut', 'en_attente').order('created_at', { ascending: false }),
     ])
-    setOrgs(o || []); setComptes(c || []); setInvits(i || []); setLoading(false)
+    setOrgs(o || []); setComptes(c || []); setInvits(i || []); setDemandes(d || []); setLoading(false)
   }
   function flash(t, ok = true) { setMsg({ t, ok }); setTimeout(() => setMsg(null), 4000) }
   const orgNom = id => orgs.find(o => o.id === id)?.nom || '—'
@@ -66,6 +69,11 @@ function Partenaires() {
       tel_general: f.tel_general || f.contact_tel || null,
       notes: f.notes || null,
       fictif: !!f.fictif,
+      email_pro_derogation: !!f.fictif ? false : !!f.email_pro_derogation,
+    }
+    const mail = p.email_general
+    if (mail && !emailPartenaireAutorise(mail, { fictif: p.fictif, derogation: p.email_pro_derogation })) {
+      flash(EMAIL_PRO_AIDE, false); return
     }
     if (f.id) await supabase.from('partenaires').update(p).eq('id', f.id)
     else await supabase.from('partenaires').insert(p)
@@ -75,7 +83,10 @@ function Partenaires() {
     if (!f.partenaire_id) { flash('Choisissez une organisation.', false); return }
     const org = orgs.find(o => o.id === f.partenaire_id)
     const email = (f.email || org?.email_general || org?.contact_email || '').trim()
-    if (!email) { flash('Indiquez l’e-mail général de l’institution.', false); return }
+    if (!email) { flash('Indiquez l’e-mail professionnel de l’institution.', false); return }
+    if (!emailPartenaireAutorise(email, { fictif: org?.fictif, derogation: org?.email_pro_derogation })) {
+      flash(EMAIL_PRO_AIDE, false); return
+    }
     const code = genCode()
     const { error } = await supabase.from('invitations').insert({
       code,
@@ -86,9 +97,29 @@ function Partenaires() {
       partenaire_id: f.partenaire_id,
     })
     if (error) { flash(error.message, false); return }
-    setCptForm(null); setLastInvite({ code, email, prenom: f.prenom || org?.nom || 'Institution' }); load()
+    setCptForm(null); setLastInvite({ code, email, prenom: f.prenom || org?.nom || 'Institution', partenaire: true, nomInstitution: org?.nom }); load()
   }
   async function toggle(u) { const { error } = await supabase.from('profiles').update({ actif: !u.actif }).eq('id', u.id); if (error) flash(error.message, false); else load() }
+  async function accepterDemande(id) {
+    const { data, error } = await supabase.rpc('accepter_demande_partenaire', { p_id: id })
+    if (error || !data?.ok) { flash(error?.message || data?.error || 'Impossible d’accepter.', false); return }
+    setLastInvite({
+      code: data.code,
+      email: data.email,
+      prenom: data.prenom,
+      partenaire: true,
+      nomInstitution: data.nom,
+    })
+    flash('Demande acceptée. Envoyez le lien d’activation à l’institution.')
+    load()
+  }
+  async function refuserDemande(id) {
+    const motif = window.prompt('Motif du refus (optionnel, interne) :') ?? ''
+    if (motif === '' && !confirm('Refuser cette demande ?')) return
+    const { data, error } = await supabase.rpc('refuser_demande_partenaire', { p_id: id, p_motif: motif })
+    if (error || !data?.ok) { flash(error?.message || data?.error || 'Impossible de refuser.', false); return }
+    load()
+  }
   async function revoquer(code) { if (!confirm('Révoquer cette invitation ?')) return; await supabase.from('invitations').delete().eq('code', code); load() }
 
   if (loading) return <p style={{ color: 'var(--text-muted)' }}>Chargement…</p>
@@ -96,7 +127,7 @@ function Partenaires() {
   return (
     <div>
       {msg && <Msg msg={msg} />}
-      {lastInvite && <CodeBox code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} />}
+      {lastInvite && <CodeBox code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} partenaire={!!lastInvite.partenaire} nomInstitution={lastInvite.nomInstitution} />}
 
       <Card style={{ marginBottom: 16, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 6 }}>Adresse HTML de l’accès partenaire</div>
@@ -113,6 +144,35 @@ function Partenaires() {
         }}>{copieUrl ? '✓ Adresse copiée' : 'Copier l’adresse'}</Btn>
       </Card>
 
+      {demandes.length > 0 && (
+        <Card style={{ marginBottom: 16, border: '1px solid rgba(186,117,23,.35)', background: '#FAEEDA' }}>
+          <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>
+            Demandes d’accès en attente ({demandes.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {demandes.map(d => (
+              <div key={d.id} style={{ background: 'var(--card)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text)' }}>{d.nom_institution}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 4 }}>
+                  {d.contact_nom} · {d.email}
+                  {d.ville ? ` · ${d.ville}` : ''}
+                  {d.tel ? ` · ${d.tel}` : ''}
+                </div>
+                {d.partenaire_id && (
+                  <div style={{ fontSize: 12, color: '#BA7517', marginTop: 4 }}>
+                    Correspond déjà à « {orgNom(d.partenaire_id)} » dans l’annuaire.
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                  <Btn onClick={() => accepterDemande(d.id)} style={{ padding: '5px 10px' }}>Accepter</Btn>
+                  <Btn kind="danger" onClick={() => refuserDemande(d.id)} style={{ padding: '5px 10px' }}>Refuser</Btn>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)' }}>Organisations partenaires</div>
         <Btn onClick={() => setOrgForm({})}>+ Organisation</Btn>
@@ -126,6 +186,7 @@ function Partenaires() {
               <div style={{ fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {o.nom}
                 {o.fictif && <PillFictif />}
+                {o.email_pro_derogation && !o.fictif && <Pill color="#BA7517" bg="#FAEEDA">E-mail perso autorisé</Pill>}
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{[o.type, o.ville].filter(Boolean).join(' · ') || '—'}</div>
             </div>
@@ -148,7 +209,7 @@ function Partenaires() {
               <div key={i.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 13 }}><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-blue)' }}>{i.code}</span> — {i.prenom} {i.nom} ({i.email}) · <span style={{ color: 'var(--text-muted)' }}>{orgNom(i.partenaire_id)}</span></div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <BtnCopierLien code={i.code} email={i.email} />
+                  <BtnCopierLien code={i.code} email={i.email} partenaire />
                   <Btn kind="danger" onClick={() => revoquer(i.code)} style={{ padding: '4px 10px' }}>Révoquer</Btn>
                 </div>
               </div>

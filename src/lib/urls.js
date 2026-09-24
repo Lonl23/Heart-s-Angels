@@ -12,19 +12,37 @@ export function urlAccesPartenaire() {
   return `${urlBasePublique()}/login/partenaire`
 }
 
-/** Lien d’inscription personnel : le destinataire n’a plus qu’à choisir son mot de passe. */
-export function urlInvitation(code, email) {
+/** Lien d’inscription : le destinataire n’a plus qu’à choisir son mot de passe. */
+export function urlInvitation(code, email, { partenaire = false } = {}) {
   const params = new URLSearchParams()
   const c = String(code || '').trim()
   const e = String(email || '').trim()
   if (c) params.set('code', c)
   if (e) params.set('email', e)
+  const path = partenaire ? '/inscription/partenaire' : '/inscription'
   const q = params.toString()
-  return q ? `${urlBasePublique()}/inscription?${q}` : `${urlBasePublique()}/inscription`
+  return q ? `${urlBasePublique()}${path}?${q}` : `${urlBasePublique()}${path}`
 }
 
 /** Texte prêt à coller dans un e-mail (envoi manuel tant qu’il n’y a pas de SMTP). */
-export function messageInvitation({ prenom, lien } = {}) {
+export function messageInvitation({ prenom, lien, partenaire, nomInstitution } = {}) {
+  if (partenaire) {
+    const inst = nomInstitution ? ` « ${nomInstitution} »` : ''
+    return `Bonjour${prenom ? ` ${prenom}` : ''},
+
+Votre institution${inst} est reconnue comme partenaire de Heart's Angels.
+
+Activez l’accès en choisissant un mot de passe (lien valable 7 jours) :
+
+${lien || ''}
+
+Ensuite, connectez-vous sur l’espace partenaires avec :
+- le nom exact de l’institution
+- votre e-mail professionnel
+- le mot de passe que vous venez de choisir
+
+Heart's Angels ASBL`
+  }
   const salut = prenom ? `Bonjour ${prenom},` : 'Bonjour,'
   return `${salut}
 

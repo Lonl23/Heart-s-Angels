@@ -16,9 +16,9 @@ async function marquerCopie(setCopie, cle, texte) {
   return true
 }
 
-export function BtnCopierLien({ code, email, style }) {
+export function BtnCopierLien({ code, email, partenaire, style }) {
   const [copie, setCopie] = useState(null)
-  const lien = urlInvitation(code, email)
+  const lien = urlInvitation(code, email, { partenaire })
   return (
     <Btn
       kind="soft"
@@ -31,13 +31,15 @@ export function BtnCopierLien({ code, email, style }) {
   )
 }
 
-export function CodeBox({ code, email, prenom }) {
+export function CodeBox({ code, email, prenom, partenaire, nomInstitution }) {
   const [copie, setCopie] = useState(null)
-  const lien = urlInvitation(code, email)
-  const message = messageInvitation({ prenom, lien })
+  const lien = urlInvitation(code, email, { partenaire })
+  const message = messageInvitation({ prenom, lien, partenaire, nomInstitution })
   return (
     <Card style={{ marginBottom: 14, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>
-      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>Lien d’invitation à envoyer par e-mail (valable 7 jours) :</div>
+      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
+        {partenaire ? 'Lien d’activation à envoyer à l’institution (valable 7 jours) :' : 'Lien d’invitation à envoyer par e-mail (valable 7 jours) :'}
+      </div>
       <div style={{
         width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9,
         fontSize: 12.5, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -63,7 +65,9 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs }) {
   const [busy, setBusy] = useState(false)
   const roleOpts = (roles || []).map(r => (typeof r === 'object' ? r : { v: r, l: r }))
   async function go() {
-    if (!form.prenom || !form.nom || !form.email) { setErr('Prénom, nom et e-mail requis.'); return }
+    if (roles && (!form.prenom || !form.nom || !form.email)) { setErr('Prénom, nom et e-mail requis.'); return }
+    if (orgs && !form.partenaire_id) { setErr('Choisissez une organisation.'); return }
+    if (orgs && !form.email) { setErr('E-mail professionnel de l’institution requis.'); return }
     setBusy(true); setErr(null); await onSave(form); setBusy(false)
   }
   return (
@@ -72,11 +76,13 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs }) {
         <div style={{ fontWeight: 600, color: 'var(--text)' }}>{roles ? 'Inviter un volontaire' : 'Inviter un partenaire'}</div>
         <Btn kind="soft" onClick={() => setForm(null)}>Annuler</Btn>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <F label="Prénom" value={form.prenom} set={v => set('prenom', v)} required />
-        <F label="Nom" value={form.nom} set={v => set('nom', v)} required />
-      </div>
-      <F label={roles ? 'E-mail' : 'E-mail (identifiant de connexion — e-mail général de l’institution)'} type="email" value={form.email} set={v => set('email', v)} required />
+      {roles && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <F label="Prénom" value={form.prenom} set={v => set('prenom', v)} required />
+          <F label="Nom" value={form.nom} set={v => set('nom', v)} required />
+        </div>
+      )}
+      <F label={roles ? 'E-mail' : 'E-mail professionnel (identifiant de connexion)'} type="email" value={form.email} set={v => set('email', v)} required />
       {roles && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>{roleLabel || 'Type de volontaire'}</div>
@@ -111,7 +117,17 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs }) {
           </div>
         </div>
       )}
-      {orgs && <Sel label="Organisation" value={form.partenaire_id || ''} set={v => set('partenaire_id', v)} options={[{ v: '', l: '— Choisir —' }, ...orgs.map(o => ({ v: o.id, l: o.nom }))]} />}
+      {orgs && (
+        <Sel
+          label="Organisation"
+          value={form.partenaire_id || ''}
+          set={v => {
+            const o = orgs.find(x => x.id === v)
+            setForm(s => ({ ...s, partenaire_id: v, email: (o?.email_general || o?.contact_email || s.email || '') }))
+          }}
+          options={[{ v: '', l: '— Choisir —' }, ...orgs.map(o => ({ v: o.id, l: o.nom }))]}
+        />
+      )}
       {err && <div style={{ color: '#C8435A', fontSize: 13, marginBottom: 8 }}>{err}</div>}
       <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>{busy ? '…' : '✓ Générer le lien d\'invitation'}</Btn>
     </Card>
@@ -137,10 +153,14 @@ export function FormOrg({ form, setForm, onSave }) {
         <F label="Contact (nom)" value={form.contact_nom} set={v => set('contact_nom', v)} />
         <PhoneF label="Numéro général" value={form.tel_general || form.contact_tel} set={v => set('tel_general', v)} />
       </div>
-      <F label="E-mail général (identifiant de connexion)" type="email" value={form.email_general || form.contact_email} set={v => set('email_general', v)} />
+      <F label="E-mail professionnel (identifiant de connexion)" type="email" value={form.email_general || form.contact_email} set={v => set('email_general', v)} />
       <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: 'var(--text-2)', cursor: 'pointer', margin: '4px 0 12px' }}>
         <input type="checkbox" checked={!!form.fictif} onChange={e => set('fictif', e.target.checked)} />
         <span>Partenaire fictif — toutes ses demandes et missions sont des démonstrations.</span>
+      </label>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: 'var(--text-2)', cursor: 'pointer', margin: '0 0 12px' }}>
+        <input type="checkbox" checked={!!form.email_pro_derogation} onChange={e => set('email_pro_derogation', e.target.checked)} disabled={!!form.fictif} />
+        <span>Autoriser un e-mail personnel (dérogation IT) — uniquement si l’institution n’a pas de boîte professionnelle.</span>
       </label>
       <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>{busy ? '…' : '✓ Enregistrer'}</Btn>
     </Card>

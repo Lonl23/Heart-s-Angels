@@ -9,6 +9,7 @@ import Login from '@/pages/Login'
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const DemandeSouhait = lazy(() => import('@/pages/DemandeSouhait'))
 const Inscription = lazy(() => import('@/pages/Inscription'))
+const DemandePartenaire = lazy(() => import('@/pages/DemandePartenaire'))
 const PartenairePortail = lazy(() => import('@/pages/PartenairePortail'))
 const Defraiements = lazy(() => import('@/modules/defraiements/Defraiements'))
 const Souhaits = lazy(() => import('@/modules/souhaits/Souhaits'))
@@ -32,8 +33,10 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/login/partenaire" element={<Login />} />
+        <Route path="/login/partenaire/demande" element={<DemandePartenaire />} />
         <Route path="/demande" element={<DemandeSouhait />} />
         <Route path="/inscription" element={<Inscription />} />
+        <Route path="/inscription/partenaire" element={<Inscription />} />
 
         <Route path="/app" element={<RequireStaff><Layout /></RequireStaff>}>
           <Route index element={<Dashboard />} />
