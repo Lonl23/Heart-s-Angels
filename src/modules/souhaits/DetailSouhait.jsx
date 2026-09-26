@@ -211,6 +211,9 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       {s.fictif && (
         <Flash kind="warn">Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.</Flash>
       )}
+      {s.statut === 'demande_info_externe' && (
+        <Flash kind="warn">Demande d’informations externe — ce n’est pas une attente interne du pipeline.</Flash>
+      )}
       {s.statut === 'en_attente' && (
         <Card style={{ marginBottom:12, padding:'12px 16px' }}>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:8 }}>En attente de (plusieurs possibles) :</div>

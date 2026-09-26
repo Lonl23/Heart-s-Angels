@@ -1,6 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  Mes missions : uniquement les affectations encore à réaliser.
---  Idempotent. Après 52_notes_frais_suppression.sql.
+--  Mes missions : une demande d’informations externe n’est pas une mission
+--  à réaliser. Reprise après 58 (la valeur d’enum doit déjà être commitée).
+--  Idempotent. Après 58_demande_info_externe.sql.
 -- ════════════════════════════════════════════════════════════════════════════
 
 drop function if exists public.mes_affectations();
@@ -78,5 +79,3 @@ comment on function public.mes_affectations() is
   'Missions du volontaire connecté, uniquement celles où il est affecté et qui restent à réaliser.';
 
 grant execute on function public.mes_affectations() to authenticated;
-
-notify pgrst, 'reload schema';

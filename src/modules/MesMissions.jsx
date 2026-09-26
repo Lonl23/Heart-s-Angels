@@ -14,7 +14,7 @@ const FILTRES = [
 ]
 
 function missionTerminee(m) {
-  return m.statut === 'realise' || m.statut === 'non_realise' || m.statut === 'annule'
+  return m.statut === 'realise' || m.statut === 'non_realise' || m.statut === 'annule' || m.statut === 'demande_info_externe'
 }
 
 export default function MesMissions() {

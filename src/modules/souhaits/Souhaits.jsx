@@ -235,7 +235,8 @@ function Kanban({ onOpen }) {
   const filtered = needle
     ? items.filter(s => `${s.beneficiaire_prenom} ${s.beneficiaire_nom} ${s.description||''} ${s.localisation||''}`.toLowerCase().includes(needle))
     : items
-  const autres = filtered.filter(s => !PIPELINE.includes(s.statut))
+  const demandesExt = filtered.filter(s => s.statut === 'demande_info_externe')
+  const nonRealises = filtered.filter(s => s.statut === 'non_realise')
   const ghost = drag && items.find(s => s.id === drag.id)
 
   return (
@@ -291,16 +292,34 @@ function Kanban({ onOpen }) {
         </div>
       )}
       {filtered.length > 0 && (
-        <div data-col="non_realise" style={{ marginTop:16 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-muted)', marginBottom:8 }}>Non réalisés</div>
-          <div className={'ha-kanban-drop' + (over==='non_realise' ? ' is-over' : '')} style={{ minHeight: autres.length ? 48 : 72 }}>
-            {autres.map(s => (
+        <div data-col="demande_info_externe" style={{ marginTop:16 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+            <span style={{ width:10, height:10, borderRadius:99, background:STATUTS.demande_info_externe.c }} />
+            <span style={{ fontSize:13, fontWeight:600, color:'var(--text-muted)' }}>{STATUTS.demande_info_externe.l}</span>
+            <span style={{ fontSize:12, color:'var(--text-muted)' }}>{demandesExt.length}</span>
+          </div>
+          <div className={'ha-kanban-drop' + (over==='demande_info_externe' ? ' is-over' : '')} style={{ minHeight: demandesExt.length ? 48 : 72 }}>
+            {demandesExt.map(s => (
               <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
                 onPointerDown={e=>onPointerDown(e,s)}
                 onOuvrir={() => onOpen(s)}
                 onMission={majMissionCarte} />
             ))}
-            {autres.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici pour marquer non réalisé</div>}
+            {demandesExt.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici — ce n’est pas une attente interne</div>}
+          </div>
+        </div>
+      )}
+      {filtered.length > 0 && (
+        <div data-col="non_realise" style={{ marginTop:16 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-muted)', marginBottom:8 }}>Non réalisés</div>
+          <div className={'ha-kanban-drop' + (over==='non_realise' ? ' is-over' : '')} style={{ minHeight: nonRealises.length ? 48 : 72 }}>
+            {nonRealises.map(s => (
+              <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
+                onPointerDown={e=>onPointerDown(e,s)}
+                onOuvrir={() => onOpen(s)}
+                onMission={majMissionCarte} />
+            ))}
+            {nonRealises.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici pour marquer non réalisé</div>}
           </div>
         </div>
       )}
@@ -326,6 +345,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
         <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
           {s.beneficiaire_prenom} {s.beneficiaire_nom}
           {s.fictif && <PillFictif />}
+          {s.statut === 'demande_info_externe' && <Pill color="#3D5A80" bg="#E8EEF5">Info externe</Pill>}
           {verrouille && <Pill color="#BA7517" bg="#FAEEDA">Verrouillé</Pill>}
         </span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}

@@ -29,7 +29,7 @@ export default function Dashboard() {
     supabase.rpc('mes_affectations').then(({ data }) => setMissions(data || []))
   }, [])
 
-  const aVenir = (missions || []).filter(m => m.statut !== 'realise' && m.statut !== 'non_realise' && m.statut !== 'annule').slice(0, 3)
+  const aVenir = (missions || []).filter(m => m.statut !== 'realise' && m.statut !== 'non_realise' && m.statut !== 'annule' && m.statut !== 'demande_info_externe').slice(0, 3)
 
   return (
     <div style={{ padding:'clamp(16px,3vw,28px)', width:'100%', boxSizing:'border-box' }}>
