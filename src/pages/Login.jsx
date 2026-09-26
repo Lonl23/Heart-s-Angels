@@ -6,9 +6,11 @@ import { COPYRIGHT } from '@/copyright'
 import { lbl, inp, Logo } from '@/components/ui'
 
 export default function Login() {
-  const { session, can, loading } = useAuth()
+  const { session, can, loading, profile } = useAuth()
   const nav = useNavigate()
   const loc = useLocation()
+  const partenaire = loc.pathname.startsWith('/login/partenaire')
+  const [institution, setInstitution] = useState('')
   const [email, setEmail] = useState('')
   const [pwd, setPwd] = useState('')
   const [err, setErr] = useState(null)
@@ -16,26 +18,67 @@ export default function Login() {
 
   useEffect(() => {
     if (loading || !session) return
-    if (can('partenaire')) { nav('/partenaire', { replace:true }); return }
+    if (partenaire) {
+      if (can('partenaire')) { nav('/partenaire', { replace:true }); return }
+      return
+    }
+    if (can('partenaire')) { nav('/login/partenaire', { replace:true }); return }
     const from = loc.state?.from
     nav(typeof from === 'string' && from.startsWith('/app') ? from : '/app', { replace:true })
-  }, [session, loading])
+  }, [session, loading, partenaire, profile])
 
   async function submit(e) {
     e.preventDefault(); setErr(null); setBusy(true)
+    if (partenaire) {
+      const nom = institution.trim()
+      if (!nom) { setErr('Indiquez le nom de l’institution.'); setBusy(false); return }
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pwd })
+      if (error) { setBusy(false); setErr('Identifiants incorrects.'); return }
+      const { data: v } = await supabase.rpc('confirmer_session_partenaire', { p_nom_institution: nom })
+      if (!v?.ok) {
+        await supabase.auth.signOut()
+        setBusy(false)
+        setErr('Identifiants incorrects.')
+        return
+      }
+      setBusy(false)
+      nav('/partenaire', { replace:true })
+      return
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password: pwd })
+    if (error) { setBusy(false); setErr('Identifiants incorrects.'); return }
+    const { data: p } = await supabase.from('profiles').select('role').eq('id', (await supabase.auth.getUser()).data.user?.id).maybeSingle()
+    if (p?.role === 'partenaire') {
+      await supabase.auth.signOut()
+      setBusy(false)
+      setErr('Utilisez l’accès partenaire (nom de l’institution + e-mail + mot de passe).')
+      return
+    }
     setBusy(false)
-    if (error) setErr("Identifiants incorrects.")
   }
 
   return (
     <div style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
       <div style={{ width:'100%', maxWidth:380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
         <Logo size={140} style={{ margin:'0 auto 8px' }} />
-        <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, marginBottom:22 }}>Espace de gestion</p>
+        <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, marginBottom:6 }}>
+          {partenaire ? 'Espace partenaires' : 'Espace de gestion'}
+        </p>
+        {partenaire && (
+          <p style={{ textAlign:'center', color:'var(--text-2)', fontSize:12.5, margin:'0 0 18px', lineHeight:1.45 }}>
+            Encodez une demande de souhait et suivez son avancement.
+          </p>
+        )}
+        {!partenaire && <div style={{ height:16 }} />}
         <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          {partenaire && (
+            <div>
+              <label style={lbl}>Nom de l’institution</label>
+              <input value={institution} onChange={e=>setInstitution(e.target.value)} autoComplete="organization" required style={inp} />
+            </div>
+          )}
           <div>
-            <label style={lbl}>Adresse e-mail</label>
+            <label style={lbl}>{partenaire ? 'Adresse e-mail professionnelle' : 'Adresse e-mail'}</label>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="username" required style={inp} />
           </div>
           <div>
@@ -45,7 +88,29 @@ export default function Login() {
           {err && <div className="ha-flash ha-flash-err" style={{ marginBottom:0 }}>{err}</div>}
           <button type="submit" disabled={busy} style={{ padding:12, background:'var(--accent)', color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:600 }}>{busy?'Connexion…':'Se connecter'}</button>
         </form>
-        <div style={{ textAlign:'center', marginTop:16 }}><Link to="/inscription" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>J'ai un code d'invitation</Link></div>
+
+        {partenaire ? (
+          <div style={{ textAlign:'center', marginTop:16 }}>
+            <Link to="/login/partenaire/demande" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>Demander à devenir partenaire</Link>
+            <div style={{ marginTop:10 }}>
+              <Link to="/inscription/partenaire" style={{ fontSize:13, color:'var(--text-muted)' }}>J’ai un lien d’activation</Link>
+            </div>
+            <div style={{ marginTop:10 }}>
+              <Link to="/login" style={{ fontSize:13, color:'var(--text-muted)' }}>← Accès personnel ASBL</Link>
+            </div>
+          </div>
+        ) : (
+          <>
+            <Link to="/login/partenaire" style={{
+              display:'block', textAlign:'center', marginTop:12, padding:'11px 12px',
+              border:'1.5px solid var(--accent)', borderRadius:10, color:'var(--accent)',
+              fontSize:14, fontWeight:600, textDecoration:'none',
+            }}>Accès partenaire</Link>
+            <div style={{ textAlign:'center', marginTop:16 }}>
+              <Link to="/inscription" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>J'ai une invitation</Link>
+            </div>
+          </>
+        )}
         <div style={{ textAlign:'center', fontSize:10.5, color:'var(--text-faint)', marginTop:18 }}>{COPYRIGHT}</div>
       </div>
     </div>

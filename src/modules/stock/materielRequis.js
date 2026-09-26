@@ -1,3 +1,5 @@
+import { nomTypeO2 } from './stockSchema'
+
 export function nid() {
   return (crypto.randomUUID && crypto.randomUUID()) || ('m-' + Math.random().toString(36).slice(2, 10))
 }
@@ -6,8 +8,8 @@ export function libelleRequis(r) {
   if (!r) return ''
   if (r.kind === 'o2') {
     const n = Number(r.qte) || 1
-    const vol = r.volume_l ? `${Number(r.volume_l)} L` : 'O₂'
-    return n > 1 ? `Oxygène ${vol} × ${n}` : `Oxygène ${vol}`
+    const nom = nomTypeO2(r.volume_l)
+    return n > 1 ? `${nom} × ${n}` : nom
   }
   if (r.kind === 'sac') return r.libelle || 'Sac'
   if (r.kind === 'catalogue') {

@@ -13,7 +13,7 @@ const CATS = [
 const catL = v => CATS.find(c => c.v === v)?.l || v
 
 export default function Checklist({ souhaitId }) {
-  const { profile, can } = useAuth()
+  const { profile, peutGererApp } = useAuth()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [modele, setModele] = useState(false)   // panneau de gestion du modèle
@@ -61,7 +61,7 @@ export default function Checklist({ souhaitId }) {
           <div style={{ fontWeight:600, color:'var(--heading)' }}>Préparation de la mission</div>
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             <Btn kind="soft" onClick={appliquerModele}>↧ Appliquer le modèle</Btn>
-            {can('admin') && <Btn kind="soft" onClick={()=>setModele(m=>!m)}>{modele?'Fermer le modèle':'⚙️ Modèle'}</Btn>}
+            {peutGererApp() && <Btn kind="soft" onClick={()=>setModele(m=>!m)}>{modele?'Fermer le modèle':'⚙️ Modèle'}</Btn>}
           </div>
         </div>
         {total > 0 && (
@@ -77,7 +77,7 @@ export default function Checklist({ souhaitId }) {
         )}
       </Card>
 
-      {modele && can('admin') && <ModeleEditor onClose={()=>setModele(false)} />}
+      {modele && peutGererApp() && <ModeleEditor onClose={()=>setModele(false)} />}
 
       {/* Ajout libre */}
       <Card style={{ marginBottom:14 }}>

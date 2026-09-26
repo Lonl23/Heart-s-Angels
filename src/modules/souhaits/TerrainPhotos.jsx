@@ -27,14 +27,44 @@ export async function compressImage(file) {
 }
 
 const urlCache = new Map()
+const SIGNED_TTL_S = 7 * 24 * 3600
+const CACHE_TTL_MS = 6 * 24 * 3600 * 1000
+
 export async function signedPhoto(path) {
   if (!path) return null
   const hit = urlCache.get(path)
   if (hit && hit.exp > Date.now()) return hit.url
-  const { data } = await supabase.storage.from('mission-photos').createSignedUrl(path, 8 * 3600)
+  const { data } = await supabase.storage.from('mission-photos').createSignedUrl(path, SIGNED_TTL_S)
   const url = data?.signedUrl || null
-  if (url) urlCache.set(path, { url, exp: Date.now() + 7 * 3600 * 1000 })
+  if (url) urlCache.set(path, { url, exp: Date.now() + CACHE_TTL_MS })
   return url
+}
+
+export function nbDegats(meta) {
+  return (meta?.marks || []).length
+}
+
+export function aDesPhotosCotes(coins) {
+  return COTES.some(c => !!coins?.[c.id]?.path)
+}
+
+/** Image autonome pour un document A4 (data URL). Repli : URL signée. */
+export async function photoDataUrl(path) {
+  const url = await signedPhoto(path)
+  if (!url) return null
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return url
+    const blob = await res.blob()
+    return await new Promise((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(r.result)
+      r.onerror = reject
+      r.readAsDataURL(blob)
+    })
+  } catch {
+    return url
+  }
 }
 
 export async function uploadMissionPhoto(souhaitId, vecteurId, slot, file) {
@@ -67,12 +97,40 @@ export function PhotoThumb({ meta, onOpen, onAnnotate }) {
   const [url, setUrl] = useState(null)
   useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])
   if (!meta?.path) return null
-  const n = (meta.marks || []).length
+  const n = nbDegats(meta)
   return (
     <button type="button" className="ha-photo-thumb" onClick={() => (onAnnotate || onOpen)?.(meta)}>
       {url ? <img src={url} alt="" /> : <div className="ha-photo-ph" />}
+      <PhotoMarks marks={meta.marks} />
       {n > 0 && <span className="ha-photo-badge">{n} dégât{n > 1 ? 's' : ''}</span>}
     </button>
+  )
+}
+
+export function PhotoViewer({ meta, titre, onClose }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])
+  if (!meta?.path) return null
+  const n = nbDegats(meta)
+  return (
+    <div className="ha-annot-scrim" onClick={onClose}>
+      <div className="ha-annot" onClick={e => e.stopPropagation()}>
+        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>
+          {titre || 'Photo véhicule'}
+          {n > 0 ? ` · ${n} dégât${n > 1 ? 's' : ''}` : ''}
+        </div>
+        <div className="ha-annot-img">
+          {url && <img src={url} alt="" draggable={false} />}
+          <PhotoMarks marks={meta.marks} />
+        </div>
+        {meta.note && (
+          <div style={{ fontSize: 13.5, color: 'var(--text-2)', marginTop: 10 }}>{meta.note}</div>
+        )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <Btn kind="soft" onClick={onClose}>Fermer</Btn>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -143,10 +201,11 @@ export function PhotoAnnotator({ meta, onSave, onClose }) {
 }
 
 export function CoinPhotos({ coins, onCapture, onAnnotate, onDelete, disabled, hint }) {
+  const [vue, setVue] = useState(null)
   return (
     <div>
       <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>
-        {hint || 'Photographiez les 4 côtés du véhicule. S\'il y a un dégât, marquez-le sur la photo.'}
+        {hint || 'Photographiez les 4 côtés du véhicule. S\'il y a un dégât, marquez-le sur la photo — les marques restent visibles ensuite.'}
       </div>
       <div className="ha-coins">
         {COTES.map(c => {
@@ -155,7 +214,11 @@ export function CoinPhotos({ coins, onCapture, onAnnotate, onDelete, disabled, h
             <div key={c.id} className="ha-coin">
               <div className="ha-coin-label">{c.l}</div>
               {meta?.path
-                ? <PhotoThumb meta={meta} onAnnotate={()=>onAnnotate(c.id, meta)} />
+                ? <PhotoThumb
+                    meta={meta}
+                    onAnnotate={disabled ? undefined : () => onAnnotate?.(c.id, meta)}
+                    onOpen={() => setVue({ meta, titre: c.l })}
+                  />
                 : (
                   <label className="ha-coin-empty">
                     <input type="file" accept="image/*" capture="environment" disabled={disabled}
@@ -182,20 +245,28 @@ export function CoinPhotos({ coins, onCapture, onAnnotate, onDelete, disabled, h
           )
         })}
       </div>
+      {vue && <PhotoViewer meta={vue.meta} titre={vue.titre} onClose={() => setVue(null)} />}
     </div>
   )
 }
 
-export function TicketPhoto({ meta, onCapture, disabled }) {
+export function TicketPhoto({ meta, onCapture, disabled, hint, label }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])
   return (
     <div>
       <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>
-        Photographiez le ticket de caisse du carburant (plein ou appoint).
+        {hint || 'Photographiez le ticket de caisse du carburant (plein ou appoint).'}
       </div>
       {meta?.path
         ? (
           <div style={{ maxWidth: 280 }}>
-            <PhotoThumb meta={meta} />
+            <PhotoThumb meta={meta} onOpen={() => url && window.open(url, '_blank', 'noopener')} />
+            {url && (
+              <a href={url} target="_blank" rel="noreferrer" style={{ display:'block', fontSize:13, fontWeight:600, color:'var(--accent)', margin:'8px 0 4px', textDecoration:'none' }}>
+                Ouvrir / partager le ticket
+              </a>
+            )}
             <label className="ha-coin-replace">
               <input type="file" accept="image/*" capture="environment" disabled={disabled}
                 onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(f) }} />
@@ -207,9 +278,90 @@ export function TicketPhoto({ meta, onCapture, disabled }) {
           <label className="ha-coin-empty" style={{ maxWidth: 280 }}>
             <input type="file" accept="image/*" capture="environment" disabled={disabled}
               onChange={e => { const f = e.target.files?.[0]; e.target.value=''; if (f) onCapture(f) }} />
-            <span>📷 Ticket carburant</span>
+            <span>📷 {label || 'Ticket carburant'}</span>
           </label>
         )}
+    </div>
+  )
+}
+
+export function ticketsCarburantMission(m) {
+  const photos = m?.terrain_photos || {}
+  const vecteurs = Array.isArray(m?.vecteurs) && m.vecteurs.length
+    ? m.vecteurs
+    : Object.keys(photos).map(id => ({ id }))
+  return vecteurs.map(v => {
+    const p = photos[v.id] || {}
+    return {
+      id: v.id,
+      nom: [v.nom, v.plaque].filter(Boolean).join(' · ') || 'Véhicule',
+      essence: v.essence_pct,
+      matin: p.ticket_carburant_matin,
+      soir: p.ticket_carburant,
+    }
+  }).filter(x => x.matin?.path || x.soir?.path)
+}
+
+/** Galerie lecture seule des 4 côtés : les marques de dégâts restent sur la photo. */
+export function PhotosCotesVue({ coins, titre }) {
+  const [vue, setVue] = useState(null)
+  return (
+    <div className="ha-rapport-photos">
+      {titre && (
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--heading)', margin: '8px 0 8px' }}>{titre}</div>
+      )}
+      <div className="ha-coins">
+        {COTES.map(c => (
+          <PhotoCoteVue key={c.id} label={c.l} meta={coins?.[c.id]} onOpen={setVue} />
+        ))}
+      </div>
+      {vue && <PhotoViewer meta={vue} titre={titre} onClose={() => setVue(null)} />}
+    </div>
+  )
+}
+
+function PhotoCoteVue({ label, meta, onOpen }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])
+  const n = nbDegats(meta)
+  return (
+    <div className="ha-coin">
+      <div className="ha-coin-label">{label}</div>
+      {meta?.path
+        ? (
+          <button type="button" className="ha-photo-thumb" onClick={() => onOpen?.(meta)}>
+            {url ? <img src={url} alt={label} /> : <div className="ha-photo-ph" />}
+            <PhotoMarks marks={meta.marks} />
+            {n > 0 && <span className="ha-photo-badge">{n} dégât{n > 1 ? 's' : ''}</span>}
+          </button>
+        )
+        : (
+          <div className="ha-photo-ph" style={{ minHeight: 88, display: 'grid', placeItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+            Non photographié
+          </div>
+        )}
+      {meta?.note && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{meta.note}</div>
+      )}
+    </div>
+  )
+}
+
+export function TicketVue({ meta, titre }) {
+  const [url, setUrl] = useState(null)
+  useEffect(() => { signedPhoto(meta?.path).then(setUrl) }, [meta?.path])
+  if (!meta?.path) return null
+  return (
+    <div style={{ marginBottom: 12 }}>
+      {titre && <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>{titre}</div>}
+      {url
+        ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={titre || 'Ticket'} style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 10, border: '1px solid var(--border)', display: 'block' }} /></a>
+        : <div className="ha-photo-ph" style={{ height: 120, borderRadius: 10 }} />}
+      {url && (
+        <a href={url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 6, fontSize: 13.5, fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
+          Ouvrir / envoyer le ticket
+        </a>
+      )}
     </div>
   )
 }

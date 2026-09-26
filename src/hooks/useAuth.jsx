@@ -5,9 +5,21 @@ const AuthContext = createContext(null)
 
 // Groupes de rôles (alignés sur l'énuméré role_utilisateur en base)
 const STAFF = ['admin','president','coordinateur','ambulancier_bleu','ambulancier_gris',
-               'infirmier','medecin','volontaire_non_medical','tresorier','secretaire']
+               'infirmier','medecin','volontaire_medical','volontaire_non_medical','tresorier','secretaire']
 const ADMINS  = ['admin','president']
 const MEDICAL = ['admin','president','medecin','infirmier']
+
+/** Coordination transport, présidence, informatique : équipages, horaires, ambulances. */
+const ROLES_PROGRAMME_SOUHAIT = [
+  'president', 'vice_president',
+  'resp_informatique', 'resp_informatique_adjoint',
+  'coord_transport', 'coord_transport_adjoint',
+]
+/** Partie patient (récolte) : récolteur et coordination médicale. */
+const ROLES_PATIENT_SOUHAIT = [
+  'recolteur_souhait',
+  'coord_medical', 'coord_medical_adjoint', 'coordinateur_medical',
+]
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
@@ -70,12 +82,23 @@ export function AuthProvider({ children }) {
   }
 
   const role = profile?.role || null
+  function accesTotal() {
+    if (ADMINS.includes(role)) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint','administrateur_asbl'].includes(r))
+  }
+  function peutGererApp() {
+    if (!role || role === 'partenaire') return false
+    if (ADMINS.includes(role)) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint'].includes(r))
+  }
   function can(perm) {
     if (!role) return false
-    if (perm === 'admin')       return ADMINS.includes(role) || accesTotal()
+    if (perm === 'admin')       return peutGererApp()
     if (perm === 'medical')     return MEDICAL.includes(role)
     if (perm === 'staff')       return STAFF.includes(role)
-    if (perm === 'partenaire')  return role === 'partenaire'
+    if (perm === 'partenaire')  return role === 'partenaire' && profile?.actif !== false
     return STAFF.includes(role)
   }
 
@@ -84,32 +107,32 @@ export function AuthProvider({ children }) {
     if (ADMINS.includes(role) || accesTotal()) return true
     const BASE = ['dashboard','missions','defraiements','disponibilites']
     if (BASE.includes(feature)) return true
-    if (feature === 'souhaits') return peutGererSouhaits()
-    const fi = profile?.fiche || {}
-    const sujets = [
-      fi.type_benevole && ['type', fi.type_benevole],
-      ...(Array.isArray(fi.qualifications) ? fi.qualifications.map(q => ['qualif', q]) : []),
-      ...(Array.isArray(fi.roles_asbl) ? fi.roles_asbl.map(r => ['role', r]) : []),
-    ].filter(Boolean)
-    return sujets.some(([d, sj]) => matrix[`${d}:${sj}:${feature}`] === true)
+    if (feature === 'souhaits') return peutGererSouhaits() || matriceAutorise(feature)
+    if (feature === 'stock' && peutGererStock()) return true
+    return matriceAutorise(feature)
   }
 
-  function accesTotal() {
-    if (ADMINS.includes(role)) return true
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint','administrateur_asbl'].includes(r))
-  }
   function estMedical() {
-    if (['medecin','infirmier','ambulancier_bleu','ambulancier_gris'].includes(role)) return true
+    if (['medecin','infirmier','ambulancier_bleu','ambulancier_gris','volontaire_medical'].includes(role)) return true
     return (profile?.fiche?.type_benevole) === 'medical'
   }
-  function peutGererSouhaits() {
+  function rolesAsbl() { return profile?.fiche?.roles_asbl || [] }
+  function matriceAutorise(feature) {
+    return rolesAsbl().some(r => matrix[`role:${r}:${feature}`] === true)
+  }
+  function peutProgrammerSouhait() {
     if (!role || role === 'partenaire') return false
     if (accesTotal() || role === 'coordinateur') return true
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['coord_transport','coord_transport_adjoint','coord_medical','coord_medical_adjoint','recolteur_souhait'].includes(r))
+    return rolesAsbl().some(r => ROLES_PROGRAMME_SOUHAIT.includes(r))
   }
-  function peutVoirSouhaitComplet() { return peutGererSouhaits() || estMedical() }
+  function peutEncoderPatientSouhait() {
+    if (!role || role === 'partenaire') return false
+    if (peutProgrammerSouhait()) return true
+    return rolesAsbl().some(r => ROLES_PATIENT_SOUHAIT.includes(r))
+  }
+  function peutGererSouhaits() {
+    return peutProgrammerSouhait() || peutEncoderPatientSouhait()
+  }
   function peutGererFiches() {
     if (accesTotal()) return true
     const roles = profile?.fiche?.roles_asbl || []
@@ -145,19 +168,44 @@ export function AuthProvider({ children }) {
       'resp_logistique','resp_logistique_adjoint',
     ].includes(r))
   }
+  function peutGererDefraiements() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'tresorier' || role === 'president') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president', 'vice_president', 'tresorier', 'tresorier_adjoint'].includes(r))
+  }
+  /** Suppression définitive d’une note : équipe informatique (et accès total). */
+  function peutSupprimerNoteFrais() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal()) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['resp_informatique', 'resp_informatique_adjoint'].includes(r))
+  }
   function estVolontaireNonMedical() {
     if (peutVoirToutesDispos()) return false
     const t = profile?.fiche?.type_benevole
     if (t === 'medical') return false
     return t === 'non_medical' || role === 'volontaire_non_medical'
   }
+  function estRecolteurSouhait() {
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.includes('recolteur_souhait')
+  }
+  /** Président, vice-président, responsable informatique (pas l’adjoint) : archives PIN. */
+  function peutOuvrirArchives() {
+    if (!role || role === 'partenaire') return false
+    if (!profile || profile.actif === false) return false
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president', 'vice_president', 'resp_informatique'].includes(r))
+  }
 
   async function signOut() { await supabase.auth.signOut() }
 
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
-    can, canAccess, accesTotal, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, estVolontaireNonMedical,
+    can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
+    peutProgrammerSouhait, peutEncoderPatientSouhait,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 
