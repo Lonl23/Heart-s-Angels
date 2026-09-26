@@ -25,7 +25,14 @@ export const DEMANDE_STATUTS = {
 export const stInfo = v => STATUTS[v] || STATUTS.en_attente
 
 export function statutFige(statut) {
-  return statut === 'realise'
+  return statut === 'realise' || statut === 'non_realise'
+}
+
+export function libelleStatutFige(statut) {
+  if (statut === 'non_realise') {
+    return 'Un souhait non réalisé est verrouillé : il ne peut plus être préparé ni changer de statut.'
+  }
+  return 'Un souhait réalisé ne peut plus changer de statut.'
 }
 
 export function peutPasserNonRealise(statut) {

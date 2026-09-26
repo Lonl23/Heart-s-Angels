@@ -11,12 +11,12 @@ import { BoutonJeRecolte } from './Recolteurs'
 import { nomsRecolteurs } from './missionSchema'
 import {
   STATUTS, PIPELINE, PIPELINE_ENCODE, ATTENTE_RAISONS, DEMANDE_STATUTS,
-  stInfo, peutPasserNonRealise, peutChangerStatut, statutFige,
+  stInfo, peutPasserNonRealise, peutChangerStatut, statutFige, libelleStatutFige,
 } from './statuts'
 
 export {
   STATUTS, PIPELINE, PIPELINE_ENCODE, ATTENTE_RAISONS, DEMANDE_STATUTS,
-  stInfo, peutPasserNonRealise, statutFige, peutChangerStatut,
+  stInfo, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige,
 }
 export { statutsDisponibles } from './statuts'
 
@@ -35,7 +35,7 @@ export default function Souhaits() {
     const id = typeof s === 'string' ? s : s?.id
     const statut = typeof s === 'string' ? null : s?.statut
     if (!id) return
-    if (statut === 'realise') nav(`/app/souhaits/${id}`)
+    if (statut === 'realise' || statut === 'non_realise' || s?.verrouille) nav(`/app/souhaits/${id}`)
     else nav(`/app/souhaits/${id}/preparer`)
   }
 
@@ -99,7 +99,7 @@ function Kanban({ onOpen }) {
   itemsRef.current = items
   onOpenRef.current = onOpen
 
-  useEffect(() => { (async () => {
+  async function charger() {
     const [{ data }, { data: verrouilles }] = await Promise.all([
       supabase.from('souhaits').select('*').order('date_souhaitee', { ascending:true, nullsFirst:false }),
       supabase.rpc('lister_souhaits_verrouilles'),
@@ -108,7 +108,8 @@ function Kanban({ onOpen }) {
     const ids = new Set(ouverts.map(s => s.id))
     const fermes = (verrouilles || []).filter(s => !ids.has(s.id)).map(s => ({ ...s, verrouille: true }))
     setItems([...ouverts, ...fermes]); setLoading(false)
-  })() }, [])
+  }
+  useEffect(() => { charger() }, [])
 
   function flash(t, kind='ok') { setMsg({ t, kind }); setTimeout(()=>setMsg(null), 3200) }
   const flashRef = useRef(flash)
@@ -122,7 +123,7 @@ function Kanban({ onOpen }) {
     const item = itemsRef.current.find(s => s.id === id)
     if (!item || item.statut === col) return
     if (!peutChangerStatut(item.statut, col)) {
-      if (statutFige(item.statut)) flash('Un souhait réalisé ne peut plus changer de statut.', 'warn')
+      if (statutFige(item.statut)) flash(libelleStatutFige(item.statut), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }
@@ -135,6 +136,7 @@ function Kanban({ onOpen }) {
       flash(error.message, 'err')
     } else {
       flash(`Statut : ${stInfo(col).l}`)
+      if (col === 'non_realise') await charger()
     }
   }
   const appliquerRef = useRef(appliquer)
@@ -144,7 +146,7 @@ function Kanban({ onOpen }) {
     const item = typeof s === 'string' ? itemsRef.current.find(x => x.id === s) : s
     if (!item || !col || item.statut === col) return
     if (!peutChangerStatut(item.statut, col)) {
-      if (statutFige(item.statut)) flash('Un souhait réalisé ne peut plus changer de statut.', 'warn')
+      if (statutFige(item.statut)) flash(libelleStatutFige(item.statut), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }
@@ -182,7 +184,7 @@ function Kanban({ onOpen }) {
       if (statutFige(o.s.statut)) {
         if (!o.started) {
           o.started = true
-          flashRef.current('Un souhait réalisé ne peut plus changer de statut.', 'warn')
+          flashRef.current(libelleStatutFige(o.s.statut), 'warn')
         }
         return
       }
@@ -233,7 +235,7 @@ function Kanban({ onOpen }) {
   if (loading) return <Loading />
   const needle = q.trim().toLowerCase()
   const filtered = needle
-    ? items.filter(s => `${s.beneficiaire_prenom} ${s.beneficiaire_nom} ${s.description||''} ${s.localisation||''}`.toLowerCase().includes(needle))
+    ? items.filter(s => `${s.beneficiaire_prenom || ''} ${s.beneficiaire_nom || ''} ${s.description||''} ${s.localisation||''} ${s.date_souhaitee||''}`.toLowerCase().includes(needle))
     : items
   const demandesExt = filtered.filter(s => s.statut === 'demande_info_externe')
   const nonRealises = filtered.filter(s => s.statut === 'non_realise')
@@ -243,7 +245,7 @@ function Kanban({ onOpen }) {
     <div>
       <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:14 }}>
         <input className="ha-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un bénéficiaire, un lieu…" />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Un souhait réalisé ne se déplace plus.</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Un souhait réalisé ou non réalisé ne se déplace plus.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -335,23 +337,59 @@ function Kanban({ onOpen }) {
 function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
   const recolteurs = nomsRecolteurs(s.mission)
   const verrouille = !!s.verrouille
+  const dateAffichee = fmtDatesSouhait(s)
+  const titre = verrouille
+    ? (s.statut === 'non_realise'
+      ? 'Non réalisé — verrouillé. Ouvrir avec le PIN.'
+      : 'Réalisé — verrouillé un mois calendrier après la réalisation. Ouvrir avec le PIN.')
+    : s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.'
+    : s.statut === 'non_realise' ? 'Non réalisé — verrouillé.'
+    : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'
+
+  if (verrouille) {
+    return (
+      <Card clickable className={'ha-kanban-card is-locked' + (dragging ? ' is-origin' : '')} style={{ padding:'12px 14px' }}
+        onPointerDown={onPointerDown}
+        title={titre}>
+        <div style={{ fontWeight:600, color:'var(--text)', fontSize:13.5, marginBottom:5 }}>
+          {s.beneficiaire_prenom || '—'}
+        </div>
+        {s.description && (
+          <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
+        )}
+        {dateAffichee !== 'Date à définir' && (
+          <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{dateAffichee}</div>
+        )}
+        {s.localisation && (
+          <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:4 }}>{s.localisation}</div>
+        )}
+        {onOuvrir && (
+          <button type="button" className="ha-kanban-open"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); onOuvrir() }}
+            onPointerDown={e => e.stopPropagation()}
+            onPointerUp={e => e.stopPropagation()}
+            onPointerCancel={e => e.stopPropagation()}>
+            Ouvrir ›
+          </button>
+        )}
+      </Card>
+    )
+  }
+
   return (
     <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '') + (statutFige(s.statut) ? ' is-locked' : '')} style={{ padding:'12px 14px' }}
       onPointerDown={onPointerDown}
-      title={verrouille
-        ? 'Réalisé — verrouillé un mois calendrier après la réalisation. Cliquez pour ouvrir avec le PIN.'
-        : s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.' : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'}>
+      title={titre}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:6, marginBottom:5 }}>
         <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
           {s.beneficiaire_prenom} {s.beneficiaire_nom}
           {s.fictif && <PillFictif />}
           {s.statut === 'demande_info_externe' && <Pill color="#3D5A80" bg="#E8EEF5">Info externe</Pill>}
-          {verrouille && <Pill color="#BA7517" bg="#FAEEDA">Verrouillé</Pill>}
         </span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
       </div>
       <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
-      <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{fmtDatesSouhait(s)}</div>
+      <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{dateAffichee}</div>
       {recolteurs && (
         <div style={{ fontSize:11.5, color:'var(--accent-blue, #1BB0CE)', marginTop:4 }}>Récolte : {recolteurs}</div>
       )}
@@ -360,14 +398,14 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
           {ATTENTE_RAISONS.filter(r=>s.mission.attente[r.v]).map(r=><span key={r.v} style={{ fontSize:10.5, background:'#FAEEDA', color:'#BA7517', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>{r.l}</span>)}
         </div>
       )}
-      {!verrouille && <BoutonJeRecolte s={s} onMaj={mission => onMission?.(s.id, mission)} />}
+      <BoutonJeRecolte s={s} onMaj={mission => onMission?.(s.id, mission)} />
       {onOuvrir && (
         <button type="button" className="ha-kanban-open"
           onClick={e => { e.preventDefault(); e.stopPropagation(); onOuvrir() }}
           onPointerDown={e => e.stopPropagation()}
           onPointerUp={e => e.stopPropagation()}
           onPointerCancel={e => e.stopPropagation()}>
-          {s.statut === 'realise' ? (verrouille ? 'Ouvrir ›' : 'Rapport ›') : 'Préparer ›'}
+          {s.statut === 'realise' ? 'Rapport ›' : 'Préparer ›'}
         </button>
       )}
     </Card>

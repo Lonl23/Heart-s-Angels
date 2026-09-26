@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
-import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut } from './statuts'
+import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige } from './statuts'
 import { fmtDatesSouhait } from './datesSouhait'
 import { medecinPluri, nomPluri, nomsRecolteurs } from './missionSchema'
 import FormSouhait from './FormSouhait'
@@ -65,7 +65,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
   async function appliquerStatut(v, missionPatch={}) {
     if (statutFige(s.statut) && v !== s.statut) {
-      flash('Un souhait réalisé ne peut plus changer de statut.')
+      flash(libelleStatutFige(s.statut))
       return
     }
     const patch = { statut: v }
@@ -74,13 +74,15 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       const { data: fresh } = await supabase.from('souhaits').select('mission').eq('id', id).single()
       patch.mission = { ...(fresh?.mission || s.mission || {}), ...missionPatch }
     }
-    await supabase.from('souhaits').update(patch).eq('id', id)
+    const { error } = await supabase.from('souhaits').update(patch).eq('id', id)
+    if (error) { flash(error.message); return }
+    if (v === 'non_realise') return
     setS(x => ({ ...x, ...patch })); flash('Statut mis à jour.')
   }
   function majStatut(v) {
     if (v === s.statut) return
     if (!peutChangerStatut(s.statut, v) && v !== 'non_realise') {
-      if (statutFige(s.statut)) flash('Un souhait réalisé ne peut plus changer de statut.')
+      if (statutFige(s.statut)) flash(libelleStatutFige(s.statut))
       return
     }
     if (v === 'non_realise') {
@@ -97,6 +99,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     if (!t) { alert('Indiquez le motif de non-réalisation.'); return }
     setMotifOpen(false)
     await appliquerStatut('non_realise', { motif_non_realise: t })
+    await load()
   }
   async function toggleAttente(key) {
     const { data: fresh } = await supabase.from('souhaits').select('mission').eq('id', id).single()
@@ -120,10 +123,20 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       <div style={{ padding: 24, maxWidth: 480 }}>
         <Btn kind="soft" onClick={onBack}>← Retour</Btn>
         <h1 style={{ fontSize: '1.4rem', color: 'var(--heading)', margin: '16px 0 8px' }}>
-          Dossier verrouillé{archive.beneficiaire ? ` — ${archive.beneficiaire}` : ''}
+          Dossier verrouillé{archive.beneficiaire_prenom || archive.beneficiaire ? ` — ${archive.beneficiaire_prenom || archive.beneficiaire}` : ''}
         </h1>
+        {archive.description && (
+          <p style={{ color: 'var(--text)', fontSize: 14, margin: '0 0 6px' }}>{archive.description}</p>
+        )}
+        {(archive.date_souhaitee || archive.localisation) && (
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: '0 0 12px' }}>
+            {[fmtDatesSouhait({ date_souhaitee: archive.date_souhaitee }), archive.localisation].filter(x => x && x !== 'Date à définir').join(' · ')}
+          </p>
+        )}
         <p style={{ color: 'var(--text-muted)', fontSize: 13.5, lineHeight: 1.45, marginBottom: 16 }}>
-          Ce souhait réalisé est verrouillé depuis un mois calendrier après sa réalisation.
+          {archive.statut === 'non_realise'
+            ? 'Ce souhait non réalisé est verrouillé. Il n’y a plus rien à préparer.'
+            : 'Ce souhait réalisé est verrouillé depuis un mois calendrier après sa réalisation.'}
           {archive.peut_ouvrir
             ? ' Saisissez votre code PIN personnel pour l’ouvrir (session de 30 minutes).'
             : ' Seuls le président, la vice-présidente et le responsable informatique peuvent l’ouvrir.'}
@@ -188,7 +201,9 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       <Card style={{ marginBottom:12, padding:'12px 16px' }}>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
           {statutFige(s.statut)
-            ? 'Souhait réalisé — le statut ne peut plus être modifié, les heures de mission sont conservées.'
+            ? (s.statut === 'non_realise'
+              ? 'Souhait non réalisé — verrouillé, plus rien à préparer.'
+              : 'Souhait réalisé — le statut ne peut plus être modifié, les heures de mission sont conservées.')
             : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes missions' : ''}`}
         </div>
         <StatutFlow value={s.statut} info={stInfo} pipeline={PIPELINE_ENCODE} extras={extras} onPick={majStatut} locked={statutFige(s.statut)} />
