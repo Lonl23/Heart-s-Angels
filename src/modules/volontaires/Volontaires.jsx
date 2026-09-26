@@ -23,6 +23,12 @@ function typeBenevoleTxt(u) {
   if (t === 'non_medical') return 'Volontaire non médical'
   return _lblInvit(u.role)
 }
+function compteAConfigurer(u) {
+  return !!(u?.fiche?.compte_a_configurer) || !(u?.email || '').trim()
+}
+function roleInvitDepuisFiche(u) {
+  return u?.fiche?.type_benevole === 'medical' ? 'volontaire_medical' : 'volontaire_non_medical'
+}
 
 export default function Volontaires() {
   const { peutGererFiches } = useAuth()
@@ -67,9 +73,20 @@ function Membres({ onOpenFiche }) {
       nom: f.nom,
       role: f.role,
       type_benevole: f.role === 'volontaire_medical' ? 'medical' : 'non_medical',
+      profile_cible_id: f.profile_cible_id || null,
     })
     if (error) { flash(error.message, false); return }
     setForm(null); setLastInvite({ code, email: f.email.trim(), prenom: f.prenom }); load()
+  }
+  function configurerCompte(u) {
+    setLastInvite(null)
+    setForm({
+      prenom: u.prenom || '',
+      nom: u.nom || '',
+      email: (u.email || '').trim(),
+      role: roleInvitDepuisFiche(u),
+      profile_cible_id: u.id,
+    })
   }
   async function toggle(u) {
     const { error } = await supabase.from('profiles').update({ actif: !u.actif }).eq('id', u.id)
@@ -85,7 +102,16 @@ function Membres({ onOpenFiche }) {
       {msg && <Msg msg={msg} />}
       {lastInvite && <CodeBox code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} />}
       <div style={{ marginBottom: 14 }}><Btn onClick={() => { setLastInvite(null); setForm({ role: 'volontaire_non_medical' }) }}>+ Inviter un volontaire</Btn></div>
-      {form && <FormInvit form={form} setForm={setForm} onSave={inviter} roles={TYPES_INVIT} roleLabel="Type de volontaire" />}
+      {form && (
+        <FormInvit
+          form={form}
+          setForm={setForm}
+          onSave={inviter}
+          roles={TYPES_INVIT}
+          roleLabel="Type de volontaire"
+          titre={form.profile_cible_id ? 'Configurer le compte' : 'Inviter un volontaire'}
+        />
+      )}
 
       {invits.length > 0 && (
         <Card style={{ marginBottom: 16 }}>
@@ -110,9 +136,15 @@ function Membres({ onOpenFiche }) {
             <tbody>
               {membres.map(u => (
                 <tr key={u.id} style={{ borderTop: '1px solid var(--border)', opacity: u.actif ? 1 : .5 }}>
-                  <td style={td}>{u.prenom} {u.nom}</td><td style={td}>{u.email}</td><td style={td}>{typeBenevoleTxt(u)}</td><td style={td}>{rolesAsblTxt(u)}</td><td style={td}>{qualifsTxt(u)}</td>
-                  <td style={td}>{u.actif ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill> : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}</td>
-                  <td style={{ ...td, display: 'flex', gap: 6, flexWrap: 'wrap' }}><Btn kind="soft" onClick={() => onOpenFiche(u.id)} style={{ padding: '5px 10px' }}>Fiche</Btn><Btn kind={u.actif ? 'danger' : 'ok'} onClick={() => toggle(u)} style={{ padding: '5px 10px' }}>{u.actif ? 'Désactiver' : 'Activer'}</Btn></td>
+                  <td style={td}>{u.prenom} {u.nom}</td>
+                  <td style={td}>{compteAConfigurer(u) ? <span style={{ color: 'var(--text-muted)' }}>Compte à configurer</span> : u.email}</td>
+                  <td style={td}>{typeBenevoleTxt(u)}</td><td style={td}>{rolesAsblTxt(u)}</td><td style={td}>{qualifsTxt(u)}</td>
+                  <td style={td}>{compteAConfigurer(u) ? <Pill color="#BA7517" bg="#FAEEDA">Sans accès</Pill> : u.actif ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill> : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}</td>
+                  <td style={{ ...td, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <Btn kind="soft" onClick={() => onOpenFiche(u.id)} style={{ padding: '5px 10px' }}>Fiche</Btn>
+                    {compteAConfigurer(u) && <Btn onClick={() => configurerCompte(u)} style={{ padding: '5px 10px' }}>Configurer le compte</Btn>}
+                    <Btn kind={u.actif ? 'danger' : 'ok'} onClick={() => toggle(u)} style={{ padding: '5px 10px' }}>{u.actif ? 'Désactiver' : 'Activer'}</Btn>
+                  </td>
                 </tr>
               ))}
             </tbody>

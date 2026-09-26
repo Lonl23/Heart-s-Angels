@@ -59,11 +59,12 @@ export function CodeBox({ code, email, prenom, partenaire, nomInstitution }) {
   )
 }
 
-export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs }) {
+export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre }) {
   const set = (k, v) => setForm(s => ({ ...s, [k]: v }))
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const roleOpts = (roles || []).map(r => (typeof r === 'object' ? r : { v: r, l: r }))
+  const titreForm = titre || (roles ? 'Inviter un volontaire' : 'Inviter un partenaire')
   async function go() {
     if (roles && (!form.prenom || !form.nom || !form.email)) { setErr('Prénom, nom et e-mail requis.'); return }
     if (orgs && !form.partenaire_id) { setErr('Choisissez une organisation.'); return }
@@ -73,7 +74,7 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs }) {
   return (
     <Card style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{roles ? 'Inviter un volontaire' : 'Inviter un partenaire'}</div>
+        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{titreForm}</div>
         <Btn kind="soft" onClick={() => setForm(null)}>Annuler</Btn>
       </div>
       {roles && (

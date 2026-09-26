@@ -78,7 +78,7 @@ export default function FicheVolontaire({ userId, onBack }) {
 
   async function save() {
     if (!prof?.prenom || !prof?.nom) { setMsg({ t:'Prénom et nom requis.', ok:false }); return }
-    if (estAmbu && !f.ambulancier.visa_atnup.trim()) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier.', ok:false }); return }
+    if (estAmbu && !f.ambulancier.visa_atnup.trim() && !f.compte_a_configurer) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier.', ok:false }); return }
     setSaving(true)
     const fiche = { ...f, qualifications: qualificationsCompatibles(f.type_benevole, f.qualifications) }
     const { data, error } = await supabase.from('profiles')
@@ -118,6 +118,11 @@ export default function FicheVolontaire({ userId, onBack }) {
   return (
     <Page title={userId ? `Fiche — ${prof.prenom} ${prof.nom}` : 'Ma fiche volontaire'} action={onBack && <Btn kind="soft" onClick={onBack}>← Retour</Btn>}>
       {msg && <Card style={{ marginBottom:12, padding:'10px 14px', background: msg.ok?'#F0FAF0':'#FEF2F2', border:`1px solid ${msg.ok?'#C3E6C3':'#FCD5D5'}`, color: msg.ok?'#1E5C1E':'#991B1B' }}>{msg.t}</Card>}
+      {(f.compte_a_configurer || !(prof.email || '').trim()) && (
+        <Card style={{ marginBottom:12, padding:'10px 14px', background:'#FAEEDA', border:'1px solid #E8C98A', color:'#7A4E0B' }}>
+          Cette personne est dans les volontaires mais n’a pas encore de compte. Dans Volontaires, utilisez « Configurer le compte » pour encoder son e-mail et lui envoyer le lien d’invitation.
+        </Card>
+      )}
 
       <div style={{ columns:'300px', columnGap:14 }}>
       {/* Identité */}
@@ -140,7 +145,9 @@ export default function FicheVolontaire({ userId, onBack }) {
           <PhoneF label="Téléphone" value={f.telephone} set={v=>set('telephone',v)} />
           <F label="IBAN (défraiements)" value={f.iban||''} set={v=>set('iban', v.toUpperCase())} placeholder="BE00 0000 0000 0000" />
         </div>
-        <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>E-mail (connexion) : {prof.email} — l’IBAN sert aux notes de frais forfaitaires.</div>
+        <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>
+          E-mail (connexion) : {(prof.email || '').trim() || 'pas encore de compte'} — l’IBAN sert aux notes de frais forfaitaires.
+        </div>
       </Card>
 
       {/* Type + qualifications */}
