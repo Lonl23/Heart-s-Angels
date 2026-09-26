@@ -208,7 +208,7 @@ export default function FicheVolontaire({ userId, onBack }) {
 
       {pinEligible && (
         <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
-          <Sec>Code d’ouverture des archives</Sec>
+          <Sec>Code d’ouverture des dossiers verrouillés</Sec>
           <FormPinFiche aPin={aPin} onSauver={sauverPin} saving={savingPin} msg={pinMsg} />
         </Card>
       )}

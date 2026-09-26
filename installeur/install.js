@@ -97,6 +97,7 @@ async function main() {
     await client.query(lireSQL('54_archive_souhaits.sql'))
     await client.query(lireSQL('55_acces_partenaire_demande.sql'))
     await client.query(lireSQL('56_volontaires_sans_acces.sql'))
+    await client.query(lireSQL('57_souhaits_verrouilles_tableau.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

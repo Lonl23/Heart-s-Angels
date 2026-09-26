@@ -24,7 +24,7 @@ export default function Souhaits() {
   const nav = useNavigate()
   const { id } = useParams()
   const loc = useLocation()
-  const { peutEncoderPatientSouhait, peutOuvrirArchives } = useAuth()
+  const { peutEncoderPatientSouhait } = useAuth()
   const encoderPatient = peutEncoderPatientSouhait()
   const [tab, setTab] = useState('souhaits')
   const [nbDemandes, setNbDemandes] = useState(0)
@@ -67,10 +67,8 @@ export default function Souhaits() {
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
-        ...(peutOuvrirArchives() ? [{ v:'archives', l:'Archives' }] : []),
       ]} />
       {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} />
-        : tab === 'archives' ? <Archives onOpen={id => nav(`/app/souhaits/${id}`)} />
         : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
     </Page>
   )
@@ -102,8 +100,14 @@ function Kanban({ onOpen }) {
   onOpenRef.current = onOpen
 
   useEffect(() => { (async () => {
-    const { data } = await supabase.from('souhaits').select('*').order('date_souhaitee', { ascending:true, nullsFirst:false })
-    setItems(data || []); setLoading(false)
+    const [{ data }, { data: verrouilles }] = await Promise.all([
+      supabase.from('souhaits').select('*').order('date_souhaitee', { ascending:true, nullsFirst:false }),
+      supabase.rpc('lister_souhaits_verrouilles'),
+    ])
+    const ouverts = data || []
+    const ids = new Set(ouverts.map(s => s.id))
+    const fermes = (verrouilles || []).filter(s => !ids.has(s.id)).map(s => ({ ...s, verrouille: true }))
+    setItems([...ouverts, ...fermes]); setLoading(false)
   })() }, [])
 
   function flash(t, kind='ok') { setMsg({ t, kind }); setTimeout(()=>setMsg(null), 3200) }
@@ -262,6 +266,9 @@ function Kanban({ onOpen }) {
           {PIPELINE.map(col => {
             const st = stInfo(col)
             const list = filtered.filter(s => s.statut === col)
+            if (col === 'realise') {
+              list.sort((a, b) => String(b.date_realisee || b.date_souhaitee || '').localeCompare(String(a.date_realisee || a.date_souhaitee || '')))
+            }
             return (
               <div key={col} data-col={col} style={{ minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
@@ -308,14 +315,18 @@ function Kanban({ onOpen }) {
 
 function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
   const recolteurs = nomsRecolteurs(s.mission)
+  const verrouille = !!s.verrouille
   return (
     <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '') + (statutFige(s.statut) ? ' is-locked' : '')} style={{ padding:'12px 14px' }}
       onPointerDown={onPointerDown}
-      title={s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.' : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'}>
+      title={verrouille
+        ? 'Réalisé — verrouillé un mois calendrier après la réalisation. Cliquez pour ouvrir avec le PIN.'
+        : s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.' : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:6, marginBottom:5 }}>
         <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
           {s.beneficiaire_prenom} {s.beneficiaire_nom}
           {s.fictif && <PillFictif />}
+          {verrouille && <Pill color="#BA7517" bg="#FAEEDA">Verrouillé</Pill>}
         </span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
       </div>
@@ -329,14 +340,14 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
           {ATTENTE_RAISONS.filter(r=>s.mission.attente[r.v]).map(r=><span key={r.v} style={{ fontSize:10.5, background:'#FAEEDA', color:'#BA7517', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>{r.l}</span>)}
         </div>
       )}
-      <BoutonJeRecolte s={s} onMaj={mission => onMission?.(s.id, mission)} />
+      {!verrouille && <BoutonJeRecolte s={s} onMaj={mission => onMission?.(s.id, mission)} />}
       {onOuvrir && (
         <button type="button" className="ha-kanban-open"
           onClick={e => { e.preventDefault(); e.stopPropagation(); onOuvrir() }}
           onPointerDown={e => e.stopPropagation()}
           onPointerUp={e => e.stopPropagation()}
           onPointerCancel={e => e.stopPropagation()}>
-          {s.statut === 'realise' ? 'Rapport ›' : 'Préparer ›'}
+          {s.statut === 'realise' ? (verrouille ? 'Ouvrir ›' : 'Rapport ›') : 'Préparer ›'}
         </button>
       )}
     </Card>
@@ -430,49 +441,6 @@ function Demandes({ onOpen }) {
           {d.statut === 'acceptee'
             ? <Pill color="#3B6D11" bg="#EAF3DE">Souhait créé — ouvrez-le dans le tableau</Pill>
             : <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><Btn kind="ok" onClick={()=>accepter(d)}>Accepter et créer le souhait</Btn><Btn kind="danger" onClick={()=>refuser(d)}>Refuser</Btn></div>}
-        </Card>
-      ))}
-    </div>
-  )
-}
-
-function Archives({ onOpen }) {
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState(null)
-  useEffect(() => {
-    supabase.rpc('lister_souhaits_archives').then(({ data, error }) => {
-      setErr(error?.message || null)
-      setItems(data || [])
-      setLoading(false)
-    })
-  }, [])
-  if (loading) return <Loading />
-  if (err) return <Flash kind="err">{err}</Flash>
-  if (!items.length) {
-    return (
-      <Empty
-        title="Aucune archive"
-        hint="Un souhait réalisé est verrouillé un mois calendrier après la date de réalisation. L’ouverture se fait avec votre code PIN."
-      />
-    )
-  }
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 4 }}>
-        Dossiers réalisés depuis plus d’un mois. Ouverture avec votre code PIN personnel.
-      </div>
-      {items.map(s => (
-        <Card key={s.id} clickable onClick={() => onOpen(s.id)} style={{ padding: '14px 16px' }}>
-          <div style={{ fontWeight: 700, color: 'var(--text)' }}>
-            {[s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ') || 'Souhait'}
-            {s.fictif ? ' · fictif' : ''}
-          </div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-            Réalisé le {s.date_realisee ? new Date(s.date_realisee + 'T12:00:00').toLocaleDateString('fr-BE') : '—'}
-            {s.verrouille_au ? ` · verrouillé depuis le ${new Date(s.verrouille_au + 'T12:00:00').toLocaleDateString('fr-BE')}` : ''}
-          </div>
-          <div style={{ marginTop: 8, fontSize: 13.5, fontWeight: 600, color: 'var(--accent)' }}>Ouvrir avec le code PIN ›</div>
         </Card>
       ))}
     </div>

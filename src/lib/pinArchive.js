@@ -1,4 +1,4 @@
-/** PIN d’ouverture des dossiers archivés : 5 chiffres, sans suite, miroir ni doublon collé. */
+/** PIN d’ouverture des souhaits réalisés verrouillés : 5 chiffres, sans suite, miroir ni doublon collé. */
 
 export const PIN_LONGUEUR = 5
 

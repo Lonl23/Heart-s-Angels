@@ -119,9 +119,11 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     return (
       <div style={{ padding: 24, maxWidth: 480 }}>
         <Btn kind="soft" onClick={onBack}>← Retour</Btn>
-        <h1 style={{ fontSize: '1.4rem', color: 'var(--heading)', margin: '16px 0 8px' }}>Dossier archivé</h1>
+        <h1 style={{ fontSize: '1.4rem', color: 'var(--heading)', margin: '16px 0 8px' }}>
+          Dossier verrouillé{archive.beneficiaire ? ` — ${archive.beneficiaire}` : ''}
+        </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 13.5, lineHeight: 1.45, marginBottom: 16 }}>
-          Ce souhait est verrouillé depuis un mois calendrier après sa réalisation.
+          Ce souhait réalisé est verrouillé depuis un mois calendrier après sa réalisation.
           {archive.peut_ouvrir
             ? ' Saisissez votre code PIN personnel pour l’ouvrir (session de 30 minutes).'
             : ' Seuls le président, la vice-présidente et le responsable informatique peuvent l’ouvrir.'}

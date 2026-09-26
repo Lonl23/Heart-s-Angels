@@ -33,7 +33,7 @@ export function FormPinFiche({ aPin, onSauver, saving, msg }) {
       <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.45 }}>
         {aPin
           ? 'Vous avez déjà un code. Pour le changer, indiquez l’ancien puis le nouveau.'
-          : 'Créez un code personnel à 5 chiffres. Il servira à ouvrir un souhait archivé (un mois calendrier après sa réalisation).'}
+          : 'Créez un code personnel à 5 chiffres. Il servira à ouvrir un souhait réalisé verrouillé (un mois calendrier après sa réalisation).'}
         {' '}{PIN_REGLES}
       </div>
       {aPin && <ChampPin label="Ancien code" value={ancien} set={setAncien} />}
