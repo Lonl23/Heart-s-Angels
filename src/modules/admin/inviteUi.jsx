@@ -31,12 +31,12 @@ export function BtnCopierLien({ code, email, partenaire, style }) {
   )
 }
 
-export function CodeBox({ code, email, prenom, partenaire, nomInstitution }) {
+export function CodeBox({ code, email, prenom, partenaire, nomInstitution, embedded }) {
   const [copie, setCopie] = useState(null)
   const lien = urlInvitation(code, email, { partenaire })
   const message = messageInvitation({ prenom, lien, partenaire, nomInstitution })
-  return (
-    <Card style={{ marginBottom: 14, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>
+  const inner = (
+    <>
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
         {partenaire ? 'Lien d’activation à envoyer à l’institution (valable 7 jours) :' : 'Lien d’invitation à envoyer par e-mail (valable 7 jours) :'}
       </div>
@@ -55,11 +55,13 @@ export function CodeBox({ code, email, prenom, partenaire, nomInstitution }) {
         <span style={{ fontFamily: 'monospace', fontSize: '1.15rem', fontWeight: 700, color: 'var(--accent-blue)', letterSpacing: 1 }}>{code}</span>
         <Btn kind="soft" onClick={() => marquerCopie(setCopie, 'code', code)}>{copie === 'code' ? '✓ Code copié' : 'Copier le code'}</Btn>
       </div>
-    </Card>
+    </>
   )
+  if (embedded) return inner
+  return <Card style={{ marginBottom: 14, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>{inner}</Card>
 }
 
-export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre }) {
+export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre, embedded }) {
   const set = (k, v) => setForm(s => ({ ...s, [k]: v }))
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -71,12 +73,14 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre
     if (orgs && !form.email) { setErr('E-mail professionnel de l’institution requis.'); return }
     setBusy(true); setErr(null); await onSave(form); setBusy(false)
   }
-  return (
-    <Card style={{ marginBottom: 14 }}>
+  const inner = (
+    <>
+      {!embedded && (
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ fontWeight: 600, color: 'var(--text)' }}>{titreForm}</div>
         <Btn kind="soft" onClick={() => setForm(null)}>Annuler</Btn>
       </div>
+      )}
       {roles && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <F label="Prénom" value={form.prenom} set={v => set('prenom', v)} required />
@@ -131,8 +135,10 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre
       )}
       {err && <div style={{ color: '#C8435A', fontSize: 13, marginBottom: 8 }}>{err}</div>}
       <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>{busy ? '…' : '✓ Générer le lien d\'invitation'}</Btn>
-    </Card>
+    </>
   )
+  if (embedded) return inner
+  return <Card style={{ marginBottom: 14 }}>{inner}</Card>
 }
 
 export function FormOrg({ form, setForm, onSave }) {

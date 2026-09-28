@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, Pill } from '@/components/ui'
+import { Page, Card, Btn, Pill, Modal } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
 import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
 import { CodeBox, FormInvit, Msg, genCode, tbl, th, td, BtnCopierLien } from '@/modules/admin/inviteUi'
@@ -100,17 +100,37 @@ function Membres({ onOpenFiche }) {
   return (
     <div>
       {msg && <Msg msg={msg} />}
-      {lastInvite && <CodeBox code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} />}
-      <div style={{ marginBottom: 14 }}><Btn onClick={() => { setLastInvite(null); setForm({ role: 'volontaire_non_medical' }) }}>+ Inviter un volontaire</Btn></div>
-      {form && (
-        <FormInvit
-          form={form}
-          setForm={setForm}
-          onSave={inviter}
-          roles={TYPES_INVIT}
-          roleLabel="Type de volontaire"
-          titre={form.profile_cible_id ? 'Configurer le compte' : 'Inviter un volontaire'}
-        />
+      <div style={{ marginBottom: 14 }}>
+        <Btn onClick={() => { setLastInvite(null); setForm({ role: 'volontaire_non_medical' }) }}>+ Inviter un volontaire</Btn>
+      </div>
+      {(form || lastInvite) && (
+        <Modal
+          title={lastInvite
+            ? 'Lien d’invitation'
+            : (form.profile_cible_id ? 'Configurer le compte' : 'Inviter un volontaire')}
+          onClose={() => { setForm(null); setLastInvite(null) }}
+        >
+          {lastInvite ? (
+            <CodeBox embedded code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} />
+          ) : (
+            <>
+              {form.profile_cible_id && (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+                  Encodez l’e-mail ici pour envoyer le lien. Inutile d’ouvrir la fiche.
+                </p>
+              )}
+              <FormInvit
+                embedded
+                form={form}
+                setForm={setForm}
+                onSave={inviter}
+                roles={TYPES_INVIT}
+                roleLabel="Type de volontaire"
+                titre={form.profile_cible_id ? 'Configurer le compte' : 'Inviter un volontaire'}
+              />
+            </>
+          )}
+        </Modal>
       )}
 
       {invits.length > 0 && (

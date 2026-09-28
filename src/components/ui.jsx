@@ -172,6 +172,11 @@ export function PhoneF({ label, value, set, required, placeholder = '+32 xxx.xx.
 }
 
 export function Modal({ title, onClose, children, footer, wide }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
   return (
     <div className="ha-modal-scrim" onClick={onClose} role="presentation">
       <div className={'ha-modal' + (wide ? ' is-wide' : '')} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
