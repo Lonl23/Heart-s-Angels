@@ -176,15 +176,31 @@ input:focus, select:focus, textarea:focus {
 }
 .ha-check input { margin-top: 3px; accent-color: var(--accent); }
 
-.ha-kanban-board {
-  display: flex; flex-direction: column; gap: 18px;
+.ha-page-fill {
+  display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden;
 }
-@media (min-width: 700px) {
-  .ha-kanban-board {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
-  }
+.ha-page-fill > .ha-tabs { flex-shrink: 0; }
+.ha-page-fill > .ha-page-scroll { flex: 1; min-height: 0; overflow: auto; }
+.ha-kanban-page {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+}
+.ha-kanban-toolbar { flex-shrink: 0; }
+.ha-kanban-board {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: row; gap: 12px;
+  overflow-x: auto; overflow-y: hidden;
+  align-items: stretch;
+  padding-bottom: 4px;
+}
+.ha-kanban-col {
+  display: flex; flex-direction: column;
+  flex: 1 0 186px; min-width: 186px; min-height: 0;
+}
+.ha-kanban-col-h {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; flex-shrink: 0;
+}
+.ha-kanban-col-h > span:nth-child(2) {
+  font-weight: 600; color: var(--text); font-size: 13.5px; line-height: 1.25;
 }
 .ha-kanban-card {
   cursor: grab; user-select: none; touch-action: manipulation; width: 100%;
@@ -199,9 +215,22 @@ input:focus, select:focus, textarea:focus {
 }
 .ha-kanban-drop {
   display: flex; flex-direction: column; gap: 8px;
-  min-height: 80px; background: var(--bg-alt); border-radius: 12px;
+  flex: 1; min-height: 80px;
+  overflow-y: auto; overscroll-behavior: contain;
+  background: var(--bg-alt); border-radius: 12px;
   padding: 8px; border: 2px dashed transparent;
   transition: border-color var(--ease), background var(--ease);
+}
+@media (max-width: 699px) {
+  .ha-page-fill { height: auto; overflow: visible; }
+  .ha-kanban-page { flex: none; }
+  .ha-kanban-board {
+    flex-direction: column; overflow: visible; height: auto;
+  }
+  .ha-kanban-col {
+    flex: none; min-width: 0; max-width: none; width: 100%;
+  }
+  .ha-kanban-drop { max-height: min(62vh, 520px); }
 }
 .ha-kanban-drop.is-over {
   border-color: var(--accent);

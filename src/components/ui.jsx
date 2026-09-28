@@ -4,9 +4,9 @@ import config from '@/app.config'
 export const inp = { width:'100%', padding:'9px 12px', border:'1px solid var(--border)', borderRadius:9, fontSize:13.5, background:'var(--surface)', color:'var(--text)', boxSizing:'border-box', fontFamily:'inherit' }
 export const lbl = { fontSize:12.5, color:'var(--text-muted)', display:'block', marginBottom:5 }
 
-export function Page({ title, subtitle, action, children }) {
+export function Page({ title, subtitle, action, children, fill }) {
   return (
-    <div style={{ padding:'clamp(16px,3vw,28px)', width:'100%', boxSizing:'border-box' }}>
+    <div className={fill ? 'ha-page-fill' : undefined} style={{ padding:'clamp(16px,3vw,28px)', width:'100%', boxSizing:'border-box' }}>
       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom: subtitle ? 12 : 20 }}>
         <div>
           <h1 style={{ fontSize:'1.7rem', color:'var(--heading)', margin:0 }}>{title}</h1>

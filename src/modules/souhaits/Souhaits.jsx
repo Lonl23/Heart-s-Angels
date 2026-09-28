@@ -10,12 +10,12 @@ import { upsertBeneficiaire, upsertContactRattache } from '@/modules/annuaire/an
 import { BoutonJeRecolte } from './Recolteurs'
 import { nomsRecolteurs } from './missionSchema'
 import {
-  STATUTS, PIPELINE, PIPELINE_ENCODE, ATTENTE_RAISONS, DEMANDE_STATUTS,
+  STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, peutChangerStatut, statutFige, libelleStatutFige,
 } from './statuts'
 
 export {
-  STATUTS, PIPELINE, PIPELINE_ENCODE, ATTENTE_RAISONS, DEMANDE_STATUTS,
+  STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige,
 }
 export { statutsDisponibles } from './statuts'
@@ -62,14 +62,14 @@ export default function Souhaits() {
   )
 
   return (
-    <Page title="Souhaits" subtitle="Encodez les dossiers ici. Le terrain (checklists, MAR, démarrer / terminer) se fait dans Mes missions."
+    <Page fill title="Souhaits" subtitle="Encodez les dossiers ici. Le terrain (checklists, MAR, démarrer / terminer) se fait dans Mes missions."
       action={tab==='souhaits' && encoderPatient ? <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn> : null}>
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
       ]} />
       {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} />
-        : <Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} />}
+        : <div className="ha-page-scroll"><Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} /></div>}
     </Page>
   )
 }
@@ -237,19 +237,17 @@ function Kanban({ onOpen }) {
   const filtered = needle
     ? items.filter(s => `${s.beneficiaire_prenom || ''} ${s.beneficiaire_nom || ''} ${s.description||''} ${s.localisation||''} ${s.date_souhaitee||''}`.toLowerCase().includes(needle))
     : items
-  const demandesExt = filtered.filter(s => s.statut === 'demande_info_externe')
-  const nonRealises = filtered.filter(s => s.statut === 'non_realise')
   const ghost = drag && items.find(s => s.id === drag.id)
 
   return (
-    <div>
-      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:14 }}>
+    <div className="ha-kanban-page">
+      <div className="ha-kanban-toolbar" style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:14 }}>
         <input className="ha-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un bénéficiaire, un lieu…" />
         <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Un souhait réalisé ou non réalisé ne se déplace plus.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
-        <Card style={{ marginBottom:14 }}>
+        <Card className="ha-kanban-toolbar" style={{ marginBottom:14 }}>
           <div style={{ fontWeight:600, color:'var(--heading)', marginBottom:8 }}>Motif de non-réalisation</div>
           <TA label="Pourquoi ce souhait ne sera pas réalisé ?" value={motifTxt} set={setMotifTxt} rows={3} placeholder="Ex. : état de santé, date impossible, souhait retiré…" />
           <div style={{ display:'flex', gap:8 }}>
@@ -266,18 +264,23 @@ function Kanban({ onOpen }) {
       )}
       {filtered.length > 0 && (
         <div className="ha-kanban-board">
-          {PIPELINE.map(col => {
+          {KANBAN_COLONNES.map(col => {
             const st = stInfo(col)
             const list = filtered.filter(s => s.statut === col)
-            if (col === 'realise') {
-              list.sort((a, b) => String(b.date_realisee || b.date_souhaitee || '').localeCompare(String(a.date_realisee || a.date_souhaitee || '')))
+            if (col === 'realise' || col === 'non_realise') {
+              list.sort((a, b) => String(b.date_realisee || b.date_souhaitee || b.updated_at || '').localeCompare(String(a.date_realisee || a.date_souhaitee || a.updated_at || '')))
             }
+            const vide = col === 'demande_info_externe'
+              ? 'Déposez ici — ce n’est pas une attente interne'
+              : col === 'non_realise'
+                ? 'Déposez ici pour marquer non réalisé'
+                : 'Déposez ici'
             return (
-              <div key={col} data-col={col} style={{ minWidth:0 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                  <span style={{ width:10, height:10, borderRadius:99, background:st.c }} />
-                  <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5 }}>{st.l}</span>
-                  <span style={{ fontSize:12, color:'var(--text-muted)' }}>{list.length}</span>
+              <div key={col} className="ha-kanban-col" data-col={col}>
+                <div className="ha-kanban-col-h">
+                  <span style={{ width:10, height:10, borderRadius:99, background:st.c, flexShrink:0, marginTop:3 }} />
+                  <span>{st.l}</span>
+                  <span style={{ fontSize:12, color:'var(--text-muted)', flexShrink:0 }}>{list.length}</span>
                 </div>
                 <div className={'ha-kanban-drop' + (over===col ? ' is-over' : '')}>
                   {list.map(s => (
@@ -286,43 +289,11 @@ function Kanban({ onOpen }) {
                       onOuvrir={() => onOpen(s)}
                       onMission={majMissionCarte} />
                   ))}
-                  {list.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici</div>}
+                  {list.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>{vide}</div>}
                 </div>
               </div>
             )
           })}
-        </div>
-      )}
-      {filtered.length > 0 && (
-        <div data-col="demande_info_externe" style={{ marginTop:16 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-            <span style={{ width:10, height:10, borderRadius:99, background:STATUTS.demande_info_externe.c }} />
-            <span style={{ fontSize:13, fontWeight:600, color:'var(--text-muted)' }}>{STATUTS.demande_info_externe.l}</span>
-            <span style={{ fontSize:12, color:'var(--text-muted)' }}>{demandesExt.length}</span>
-          </div>
-          <div className={'ha-kanban-drop' + (over==='demande_info_externe' ? ' is-over' : '')} style={{ minHeight: demandesExt.length ? 48 : 72 }}>
-            {demandesExt.map(s => (
-              <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
-                onPointerDown={e=>onPointerDown(e,s)}
-                onOuvrir={() => onOpen(s)}
-                onMission={majMissionCarte} />
-            ))}
-            {demandesExt.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici — ce n’est pas une attente interne</div>}
-          </div>
-        </div>
-      )}
-      {filtered.length > 0 && (
-        <div data-col="non_realise" style={{ marginTop:16 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-muted)', marginBottom:8 }}>Non réalisés</div>
-          <div className={'ha-kanban-drop' + (over==='non_realise' ? ' is-over' : '')} style={{ minHeight: nonRealises.length ? 48 : 72 }}>
-            {nonRealises.map(s => (
-              <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
-                onPointerDown={e=>onPointerDown(e,s)}
-                onOuvrir={() => onOpen(s)}
-                onMission={majMissionCarte} />
-            ))}
-            {nonRealises.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici pour marquer non réalisé</div>}
-          </div>
         </div>
       )}
       {ghost && (
@@ -330,6 +301,18 @@ function Kanban({ onOpen }) {
           <CarteSouhait s={ghost} />
         </div>
       )}
+    </div>
+  )
+}
+
+function MotifNonRealiseCarte({ s }) {
+  const { peutOuvrirArchives } = useAuth()
+  if (s.statut !== 'non_realise' || !peutOuvrirArchives()) return null
+  const motif = String(s.mission?.motif_non_realise || s.motif_non_realise || '').trim()
+  if (!motif) return null
+  return (
+    <div style={{ fontSize:12, color:'#A32D2D', marginTop:6, lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:4, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+      Motif : {motif}
     </div>
   )
 }
@@ -363,6 +346,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
         {s.localisation && (
           <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:4 }}>{s.localisation}</div>
         )}
+        <MotifNonRealiseCarte s={s} />
         {onOuvrir && (
           <button type="button" className="ha-kanban-open"
             onClick={e => { e.preventDefault(); e.stopPropagation(); onOuvrir() }}
@@ -398,6 +382,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
           {ATTENTE_RAISONS.filter(r=>s.mission.attente[r.v]).map(r=><span key={r.v} style={{ fontSize:10.5, background:'#FAEEDA', color:'#BA7517', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>{r.l}</span>)}
         </div>
       )}
+      <MotifNonRealiseCarte s={s} />
       <BoutonJeRecolte s={s} onMaj={mission => onMission?.(s.id, mission)} />
       {onOuvrir && (
         <button type="button" className="ha-kanban-open"

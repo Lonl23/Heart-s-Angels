@@ -17,7 +17,7 @@ import { FormPinOuverture } from '@/components/PinArchive'
 import { Link } from 'react-router-dom'
 
 export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer=false }) {
-  const { peutEncoderPatientSouhait, peutProgrammerSouhait } = useAuth()
+  const { peutEncoderPatientSouhait, peutProgrammerSouhait, peutOuvrirArchives } = useAuth()
   const encoderPatient = peutEncoderPatientSouhait()
   const programmer = peutProgrammerSouhait()
   const [s, setS] = useState(null)
@@ -239,7 +239,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
           </div>
         </Card>
       )}
-      {s.statut === 'non_realise' && s.mission?.motif_non_realise && (
+      {s.statut === 'non_realise' && s.mission?.motif_non_realise && peutOuvrirArchives() && (
         <Flash kind="err"><strong>Motif : </strong>{s.mission.motif_non_realise}</Flash>
       )}
       {msg && <Flash>{msg}</Flash>}

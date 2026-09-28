@@ -4,10 +4,12 @@ export const STATUTS = {
   pret:                  { l:'Prêt à réaliser',                c:'#185FA5', bg:'#E6F1FB' },
   en_cours:              { l:'En cours',                       c:'#1BB0CE', bg:'#E6F7FA' },
   realise:               { l:'Réalisé',                        c:'#3B6D11', bg:'#EAF3DE' },
-  demande_info_externe:  { l:'Demande d\'informations externe', c:'#3D5A80', bg:'#E8EEF5' },
+  demande_info_externe:  { l:'En attente d\'informations',     c:'#3D5A80', bg:'#E8EEF5' },
   non_realise:           { l:'Non réalisé',                    c:'#A32D2D', bg:'#FCEBEB' },
 }
 export const PIPELINE = ['nouveau','en_attente','pret','en_cours','realise']
+/** Colonnes du tableau : pipeline + attente d’informations + non réalisé. */
+export const KANBAN_COLONNES = ['nouveau','en_attente','demande_info_externe','pret','en_cours','realise','non_realise']
 export const PIPELINE_ENCODE = ['nouveau','en_attente','pret']
 export const ATTENTE_RAISONS = [
   { v:'rencontre',    l:'Rencontre bénéficiaire' },

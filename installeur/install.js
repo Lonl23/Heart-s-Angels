@@ -101,6 +101,7 @@ async function main() {
     await client.query(lireSQL('58_demande_info_externe.sql'))
     await client.query(lireSQL('59_demande_info_externe_missions.sql'))
     await client.query(lireSQL('60_verrou_non_realise.sql'))
+    await client.query(lireSQL('61_motif_non_realise_pin.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()
