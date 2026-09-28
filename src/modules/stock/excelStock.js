@@ -1,4 +1,4 @@
-import { cheminLieux, lblLieu, lblMode, lblMouv, lblCommande, fmtQuand } from './stockSchema'
+import { cheminLieux, lblLieu, lblMode, lblMouv, lblCommande, fmtQuand, tableauxLieuxParSac } from './stockSchema'
 
 function slugDate() {
   const d = new Date()
@@ -112,6 +112,117 @@ export async function exporterStockExcel(data, lieux) {
   const nom = `stock-hearts-angels-${slugDate()}.xlsx`
   XLSX.writeFile(wb, nom)
   return nom
+}
+
+function csvCell(s) {
+  const t = String(s || '')
+  if (/[",\n\r]/.test(t)) return `"${t.replace(/"/g, '""')}"`
+  return t
+}
+
+function nomFeuille(s) {
+  const t = String(s || 'Sac').replace(/[:\\/?*\[\]]/g, ' ').trim()
+  return (t || 'Sac').slice(0, 31)
+}
+
+function slugFichier(s) {
+  return String(s || 'sac').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'sac'
+}
+
+/** Un fichier Excel : un onglet par sac, colonnes nom / lot / qr (lot vide pour les emplacements). */
+export async function exporterLieuxParSacExcel(lieux) {
+  const XLSX = await import('xlsx')
+  const wb = XLSX.utils.book_new()
+  const used = new Set()
+  for (const t of tableauxLieuxParSac(lieux)) {
+    let name = nomFeuille(t.titre)
+    let n = 2
+    while (used.has(name.toLowerCase())) {
+      name = nomFeuille(`${t.titre} ${n++}`)
+    }
+    used.add(name.toLowerCase())
+    const aoa = [['nom', 'lot', 'qr'], ...t.lignes.map(l => [l.nom || '', '', l.qr_token || ''])]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    ws['!cols'] = [{ wch: 36 }, { wch: 8 }, { wch: 44 }]
+    XLSX.utils.book_append_sheet(wb, ws, name)
+  }
+  const nom = `etiquettes-lieux-par-sac.xlsx`
+  XLSX.writeFile(wb, nom)
+  return nom
+}
+
+/** ZIP de CSV P-touch : un CSV par sac (nom, lot, qr). */
+export function telechargerCsvLieuxParSac(lieux) {
+  const tables = tableauxLieuxParSac(lieux)
+  if (!tables.length) return
+  const files = tables.map(t => ({
+    name: slugFichier(t.titre) + '.csv',
+    text: '\ufeff' + ['nom,lot,qr', ...t.lignes.map(l => [csvCell(l.nom), '', csvCell(l.qr_token)].join(','))].join('\r\n') + '\r\n',
+  }))
+  if (files.length === 1) {
+    const blob = new Blob([files[0].text], { type: 'text/csv;charset=utf-8' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = files[0].name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+    return
+  }
+  telechargerZip(files, 'etiquettes-lieux-par-sac.zip')
+}
+
+function crc32(bytes) {
+  let c = ~0 >>> 0
+  for (let i = 0; i < bytes.length; i++) {
+    c ^= bytes[i]
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1)
+  }
+  return (~c) >>> 0
+}
+
+function u16(n) { const b = new Uint8Array(2); new DataView(b.buffer).setUint16(0, n, true); return b }
+function u32(n) { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n, true); return b }
+
+function telechargerZip(files, filename) {
+  const enc = new TextEncoder()
+  const locals = []
+  const centrals = []
+  let offset = 0
+  for (const f of files) {
+    const name = enc.encode(f.name)
+    const data = enc.encode(f.text)
+    const crc = crc32(data)
+    const local = new Uint8Array([
+      ...[0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), ...u16(0),
+      ...name, ...data,
+    ])
+    const central = new Uint8Array([
+      ...[0x50, 0x4b, 0x01, 0x02, 0x14, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(0), ...u32(offset),
+      ...name,
+    ])
+    locals.push(local)
+    centrals.push(central)
+    offset += local.length
+  }
+  const centralSize = centrals.reduce((n, x) => n + x.length, 0)
+  const end = new Uint8Array([
+    ...[0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00],
+    ...u16(files.length), ...u16(files.length),
+    ...u32(centralSize), ...u32(offset),
+    ...u16(0),
+  ])
+  const blob = new Blob([...locals, ...centrals, end], { type: 'application/zip' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000)
 }
 
 function normHeader(h) {

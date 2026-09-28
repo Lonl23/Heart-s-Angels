@@ -11,7 +11,7 @@ import { PhotoArticle, PhotoArticleChamp } from './stock/photoStock'
 import OngletMouvements from './stock/OngletMouvements'
 import OngletFournisseurs from './stock/OngletFournisseurs'
 import OngletAlertes from './stock/OngletAlertes'
-import { exporterStockExcel, lireInventaireExcel, resumeImport } from './stock/excelStock'
+import { exporterStockExcel, lireInventaireExcel, resumeImport, exporterLieuxParSacExcel, telechargerCsvLieuxParSac } from './stock/excelStock'
 
 export default function Stock() {
   const { peutGererStock } = useAuth()
@@ -227,7 +227,7 @@ export default function Stock() {
 }
 
 function etiqLieu(l) {
-  return { titre: l.nom, ligne2: lblLieu(l.type), lot: '', token: l.qr_token }
+  return { titre: l.nom, lot: '', token: l.qr_token, format: 'lieu' }
 }
 function etiqUnite(u) {
   const titre = u.mode === 'oxygene'
@@ -266,9 +266,10 @@ function OngletLieux({ lieux, unites, cats, dotations, onChange, onOk, onErr }) 
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
         <Btn onClick={() => setEdit({ nom:'', type:'armoire', parent_id: racines[0]?.id || '' })}>+ Emplacement</Btn>
         <Btn kind="soft" onClick={() => telechargerWord(lieux.map(etiqLieu))} disabled={!lieux.length}>Word — QR lieux</Btn>
-        <Btn kind="soft" onClick={() => telechargerCsv(lieux.map(etiqLieu))} disabled={!lieux.length}>CSV P-touch</Btn>
+        <Btn kind="soft" onClick={() => telechargerCsvLieuxParSac(lieux)} disabled={!lieux.length}>CSV P-touch par sac</Btn>
+        <Btn kind="soft" onClick={() => exporterLieuxParSacExcel(lieux)} disabled={!lieux.length}>Excel par sac</Btn>
       </div>
-      <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>Nom sous le QR pour savoir où coller. Le contenu prévu (types d’articles) s’affiche sous chaque poche — lots et quantités plus tard, à l’inventaire.</p>
+      <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>CSV / Excel : un tableau par sac (nom + QR des pochettes). Étiquette 90,3 × 29 mm : QR en haut, nom en bas.</p>
       {edit && <FormLieu item={edit} lieux={lieux} onDone={() => { setEdit(null); onChange() }} />}
       {etiq && <CarteQr lieu={etiq} onClose={() => setEtiq(null)} onOk={onOk} />}
       {racines.length === 0 ? <Empty title="Aucun lieu" hint="Créez la réserve, une armoire, un sac…" /> : (
@@ -342,19 +343,21 @@ function CarteQr({ lieu, unite, onClose, onOk }) {
     onOk?.(ok ? 'Étiquette copiée — colle-la dans P-touch ou Word (Ctrl+V).' : 'Copie impossible : télécharge le PNG.')
   }
   return (
-    <Card style={{ marginBottom:12, maxWidth:360 }}>
+    <Card style={{ marginBottom:12, maxWidth: lieu ? 480 : 360 }}>
       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
-        <strong>Étiquette 23 × 23 mm</strong>
+        <strong>Étiquette {lieu ? '90,3 × 29 mm' : '23 × 23 mm'}</strong>
         <Btn kind="soft" onClick={onClose}>Fermer</Btn>
       </div>
-      <ApercuEtiq titre={e.titre} ligne2={e.ligne2} token={e.token} />
+      <ApercuEtiq titre={e.titre} ligne2={e.ligne2} token={e.token} format={e.format} />
       <p style={{ fontSize:12.5, color:'var(--text-muted)', margin:'10px 0' }}>
-        QR + nom{unite ? ' + lot' : ''} : pour coller la bonne étiquette au bon endroit. Après, on scanne le QR.
+        {lieu
+          ? 'QR en haut, nom en bas — pour coller la bonne étiquette sur la pochette ou le sac. Ensuite on scanne.'
+          : 'QR + nom + lot : pour coller la bonne étiquette au bon endroit. Après, on scanne le QR.'}
       </p>
       <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
         <Btn onClick={() => telechargerPng(e)}>PNG pour Brother</Btn>
         <Btn kind="soft" onClick={() => telechargerCsv([e])}>CSV P-touch</Btn>
-        <Btn kind="soft" onClick={() => telechargerWord([e])}>Word (planche 23 mm)</Btn>
+        <Btn kind="soft" onClick={() => telechargerWord([e])}>Word (planche)</Btn>
         <Btn kind="soft" onClick={copier}>Copier l’image</Btn>
       </div>
     </Card>

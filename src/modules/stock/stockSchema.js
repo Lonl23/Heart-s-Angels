@@ -63,6 +63,26 @@ export function enfantsDe(lieux, parentId) {
   return (lieux || []).filter(l => (l.parent_id || null) === (parentId || null)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
 }
 
+export function descendantsDe(lieux, id) {
+  return enfantsDe(lieux, id).flatMap(k => [k, ...descendantsDe(lieux, k.id)])
+}
+
+/** Un tableau par sac : le sac puis toutes les pochettes (et sous-pochettes) qui lui sont attribuées. */
+export function tableauxLieuxParSac(lieux) {
+  const list = lieux || []
+  const sacs = list.filter(l => l.type === 'sac').sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+  const pris = new Set()
+  const tables = sacs.map(sac => {
+    const pochettes = descendantsDe(list, sac.id)
+    pris.add(sac.id)
+    pochettes.forEach(p => pris.add(p.id))
+    return { titre: sac.nom, lignes: [sac, ...pochettes] }
+  })
+  const autres = list.filter(l => !pris.has(l.id)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+  if (autres.length) tables.push({ titre: 'Autres emplacements', lignes: autres })
+  return tables
+}
+
 export const TYPES_MOUVEMENT = [
   { v:'', l:'Tous les mouvements' },
   { v:'entree', l:'Entrée / réception' },
