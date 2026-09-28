@@ -368,7 +368,6 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
         <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
           {s.beneficiaire_prenom} {s.beneficiaire_nom}
           {s.fictif && <PillFictif />}
-          {s.statut === 'demande_info_externe' && <Pill color="#3D5A80" bg="#E8EEF5">Info externe</Pill>}
         </span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
       </div>

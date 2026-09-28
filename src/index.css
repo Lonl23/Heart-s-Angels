@@ -201,6 +201,7 @@ input:focus, select:focus, textarea:focus {
 }
 .ha-kanban-col-h > span:nth-child(2) {
   font-weight: 600; color: var(--text); font-size: 13.5px; line-height: 1.25;
+  flex: 1; min-width: 0;
 }
 .ha-kanban-card {
   cursor: grab; user-select: none; touch-action: manipulation; width: 100%;
