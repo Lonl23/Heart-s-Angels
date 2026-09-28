@@ -9,7 +9,7 @@ export const STATUTS = {
 }
 export const PIPELINE = ['nouveau','en_attente','pret','en_cours','realise']
 /** Colonnes du tableau : pipeline + attente d’informations + non réalisé. */
-export const KANBAN_COLONNES = ['nouveau','en_attente','demande_info_externe','pret','en_cours','realise','non_realise']
+export const KANBAN_COLONNES = ['nouveau','en_attente','pret','en_cours','realise','non_realise','demande_info_externe']
 export const PIPELINE_ENCODE = ['nouveau','en_attente','pret']
 export const ATTENTE_RAISONS = [
   { v:'rencontre',    l:'Rencontre bénéficiaire' },
