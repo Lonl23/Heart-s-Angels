@@ -51,6 +51,8 @@ export function AuthProvider({ children }) {
         profileRef.current = null
         uid.current = null
         pret.current = true
+        setMatrix({})
+        setMatrixCount(0)
         setLoading(false)
         return
       }
@@ -60,7 +62,6 @@ export function AuthProvider({ children }) {
       if (meme && event !== 'USER_UPDATED') return
       setTimeout(() => loadProfile(s.user.id), 0)
     })
-    loadMatrix()
     return () => sub.subscription.unsubscribe()
   }, [])
 
@@ -79,6 +80,7 @@ export function AuthProvider({ children }) {
     uid.current = userId
     pret.current = true
     setLoading(false)
+    loadMatrix()
   }
 
   const role = profile?.role || null

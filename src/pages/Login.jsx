@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
@@ -15,10 +15,12 @@ export default function Login() {
   const [pwd, setPwd] = useState('')
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
+  const pendingPartenaire = useRef(false)
 
   useEffect(() => {
     if (loading || !session) return
     if (partenaire) {
+      if (pendingPartenaire.current) return
       if (can('partenaire')) { nav('/partenaire', { replace:true }); return }
       return
     }
@@ -32,15 +34,23 @@ export default function Login() {
     if (partenaire) {
       const nom = institution.trim()
       if (!nom) { setErr('Indiquez le nom de l’institution.'); setBusy(false); return }
+      pendingPartenaire.current = true
       const { error } = await supabase.auth.signInWithPassword({ email, password: pwd })
-      if (error) { setBusy(false); setErr('Identifiants incorrects.'); return }
-      const { data: v } = await supabase.rpc('confirmer_session_partenaire', { p_nom_institution: nom })
-      if (!v?.ok) {
-        await supabase.auth.signOut()
+      if (error) {
+        pendingPartenaire.current = false
         setBusy(false)
-        setErr('Identifiants incorrects.')
+        setErr('Identifiants incorrects. Ce n’est pas le mot de passe de l’espace ASBL.')
         return
       }
+      const { data: v } = await supabase.rpc('confirmer_session_partenaire', { p_nom_institution: nom })
+      if (!v?.ok) {
+        pendingPartenaire.current = false
+        await supabase.auth.signOut()
+        setBusy(false)
+        setErr('Identifiants incorrects. Vérifiez le nom exact de l’institution.')
+        return
+      }
+      pendingPartenaire.current = false
       setBusy(false)
       nav('/partenaire', { replace:true })
       return
@@ -70,6 +80,15 @@ export default function Login() {
           </p>
         )}
         {!partenaire && <div style={{ height:16 }} />}
+        {partenaire && session && !can('partenaire') && !loading && (
+          <div className="ha-flash ha-flash-warn" style={{ marginBottom:14 }}>
+            Vous êtes déjà connecté à l’espace ASBL. Déconnectez-vous avant d’entrer comme partenaire — le mot de passe n’est pas le même.
+            <button type="button" onClick={async () => { await supabase.auth.signOut(); setErr(null) }}
+              style={{ display:'block', marginTop:10, padding:'8px 12px', background:'transparent', border:'1.5px solid var(--accent)', borderRadius:10, color:'var(--accent)', fontSize:13, fontWeight:600, cursor:'pointer', width:'100%' }}>
+              Déconnexion
+            </button>
+          </div>
+        )}
         <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:12 }}>
           {partenaire && (
             <div>

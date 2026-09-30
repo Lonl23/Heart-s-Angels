@@ -41,6 +41,20 @@ self.addEventListener('message', event => {
   }
 })
 
+function htmlHorsLigne() {
+  return new Response(
+    '<!doctype html><meta charset="utf-8"><title>Hors ligne</title><p>Reconnectez-vous au réseau, puis rechargez la page.</p>',
+    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+  )
+}
+
+function reponseOuHorsLigne(res) {
+  return res || htmlHorsLigne()
+}
+
+// Toujours renvoyer un Response : caches.match() peut être undefined, et
+// fetch() d’une navigation /partenaire (SPA) peut rejeter — Chrome logue alors
+// « FetchEvent … promise was rejected » / « Failed to convert value to Response ».
 self.addEventListener('fetch', event => {
   const req = event.request
   if (req.method !== 'GET') return
@@ -50,14 +64,19 @@ self.addEventListener('fetch', event => {
 
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req).then(res => {
-        const copy = res.clone()
-        caches.open(CACHE_NAME).then(c => c.put('/index.html', copy)).catch(() => {})
-        return res
-      }).catch(() => caches.match('/index.html'))
+      fetch('/index.html', { cache: 'no-store' }).then(res => {
+        if (res && res.ok) {
+          const copy = res.clone()
+          caches.open(CACHE_NAME).then(c => c.put('/index.html', copy)).catch(() => {})
+          return res
+        }
+        return caches.match('/index.html').then(reponseOuHorsLigne)
+      }).catch(() => caches.match('/index.html').then(reponseOuHorsLigne))
     )
     return
   }
 
-  event.respondWith(fetch(req).catch(() => caches.match(req)))
+  event.respondWith(
+    fetch(req).catch(() => caches.match(req).then(cached => cached || htmlHorsLigne()))
+  )
 })
