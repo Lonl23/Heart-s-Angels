@@ -76,7 +76,7 @@ function Membres({ onOpenFiche }) {
       profile_cible_id: f.profile_cible_id || null,
     })
     if (error) { flash(error.message, false); return }
-    setForm(null); setLastInvite({ code, email: f.email.trim(), prenom: f.prenom }); load()
+    setForm(null); setLastInvite({ code, email: f.email.trim(), prenom: f.prenom, typeBenevole: f.role }); load()
   }
   function configurerCompte(u) {
     setLastInvite(null)
@@ -111,7 +111,7 @@ function Membres({ onOpenFiche }) {
           onClose={() => { setForm(null); setLastInvite(null) }}
         >
           {lastInvite ? (
-            <CodeBox embedded code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} />
+            <CodeBox embedded code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} typeBenevole={lastInvite.typeBenevole} />
           ) : (
             <>
               {form.profile_cible_id && (

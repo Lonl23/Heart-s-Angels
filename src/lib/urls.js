@@ -24,8 +24,15 @@ export function urlInvitation(code, email, { partenaire = false } = {}) {
   return q ? `${urlBasePublique()}${path}?${q}` : `${urlBasePublique()}${path}`
 }
 
+function libellePdfVolontaire(typeBenevole) {
+  const t = String(typeBenevole || '')
+  if (t === 'medical' || t === 'volontaire_medical') return 'du volontaire médical'
+  if (t === 'non_medical' || t === 'volontaire_non_medical') return 'du volontaire non médical'
+  return 'du volontaire (fichier médical ou non médical, selon le type de l’invitation)'
+}
+
 /** Texte prêt à coller dans un e-mail (envoi manuel tant qu’il n’y a pas de SMTP). */
-export function messageInvitation({ prenom, lien, partenaire, nomInstitution } = {}) {
+export function messageInvitation({ prenom, lien, partenaire, nomInstitution, typeBenevole } = {}) {
   if (partenaire) {
     const inst = nomInstitution ? ` « ${nomInstitution} »` : ''
     return `Bonjour${prenom ? ` ${prenom}` : ''},
@@ -52,7 +59,7 @@ ${lien || ''}
 
 Il te suffit de choisir un mot de passe. Si le lien ne s’ouvre pas, va sur l’écran de connexion et utilise « J’ai une invitation ».
 
-Le mode d’emploi du volontaire est en pièce jointe (PDF).
+Le mode d’emploi ${libellePdfVolontaire(typeBenevole)} est en pièce jointe (PDF).
 
 Heart's Angels ASBL`
 }

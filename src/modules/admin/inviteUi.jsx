@@ -31,14 +31,16 @@ export function BtnCopierLien({ code, email, partenaire, style }) {
   )
 }
 
-export function CodeBox({ code, email, prenom, partenaire, nomInstitution, embedded }) {
+export function CodeBox({ code, email, prenom, partenaire, nomInstitution, typeBenevole, embedded }) {
   const [copie, setCopie] = useState(null)
   const lien = urlInvitation(code, email, { partenaire })
-  const message = messageInvitation({ prenom, lien, partenaire, nomInstitution })
+  const message = messageInvitation({ prenom, lien, partenaire, nomInstitution, typeBenevole })
   const inner = (
     <>
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
-        {partenaire ? 'Lien d’activation à envoyer à l’institution (valable 7 jours) :' : 'Lien d’invitation à envoyer par e-mail (valable 7 jours). Joins le PDF du mode d’emploi au message.'}
+        {partenaire
+          ? 'Lien d’activation à envoyer à l’institution (valable 7 jours) :'
+          : 'Lien d’invitation à envoyer par e-mail (valable 7 jours). Joins le PDF du mode d’emploi correspondant (médical ou non médical).'}
       </div>
       <div style={{
         width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9,
