@@ -12,6 +12,11 @@ export function urlAccesPartenaire() {
   return `${urlBasePublique()}/login/partenaire`
 }
 
+/** Mode d’emploi du simple volontaire (page hors application, à joindre à l’invitation). */
+export function urlModeEmploiVolontaire() {
+  return `${urlBasePublique()}/mode-emploi-volontaire.html`
+}
+
 /** Lien d’inscription : le destinataire n’a plus qu’à choisir son mot de passe. */
 export function urlInvitation(code, email, { partenaire = false } = {}) {
   const params = new URLSearchParams()
@@ -44,6 +49,7 @@ Ensuite, connectez-vous sur l’espace partenaires avec :
 Heart's Angels ASBL`
   }
   const salut = prenom ? `Bonjour ${prenom},` : 'Bonjour,'
+  const guide = urlModeEmploiVolontaire()
   return `${salut}
 
 Voici ton lien pour créer ton compte Heart's Angels (valable 7 jours) :
@@ -51,6 +57,10 @@ Voici ton lien pour créer ton compte Heart's Angels (valable 7 jours) :
 ${lien || ''}
 
 Il te suffit de choisir un mot de passe. Si le lien ne s’ouvre pas, va sur l’écran de connexion et utilise « J’ai une invitation ».
+
+Le mode d’emploi du volontaire (à lire avant de te connecter) :
+
+${guide}
 
 Heart's Angels ASBL`
 }
