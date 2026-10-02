@@ -38,7 +38,7 @@ export function CodeBox({ code, email, prenom, partenaire, nomInstitution, embed
   const inner = (
     <>
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
-        {partenaire ? 'Lien d’activation à envoyer à l’institution (valable 7 jours) :' : 'Lien d’invitation à envoyer par e-mail (valable 7 jours). Le message copié contient aussi le mode d’emploi du volontaire.'}
+        {partenaire ? 'Lien d’activation à envoyer à l’institution (valable 7 jours) :' : 'Lien d’invitation à envoyer par e-mail (valable 7 jours). Joins le PDF du mode d’emploi au message.'}
       </div>
       <div style={{
         width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9,
