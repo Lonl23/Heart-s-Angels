@@ -1,39 +1,41 @@
 import { supabase } from '@/lib/supabase'
+import config from '@/app.config'
 
-async function jetonSession() {
+async function jetonFrais() {
+  const { data: refreshed } = await supabase.auth.refreshSession()
+  if (refreshed?.session?.access_token) return refreshed.session.access_token
   const { data: sess } = await supabase.auth.getSession()
-  let token = sess?.session?.access_token
-  if (!token) {
-    const { data: refreshed } = await supabase.auth.refreshSession()
-    token = refreshed?.session?.access_token
-  }
-  return token || ''
+  return sess?.session?.access_token || ''
 }
 
 async function invokeEnvoyerInvitation(body) {
-  const token = await jetonSession()
+  const token = await jetonFrais()
   if (!token) {
-    return { data: null, error: { message: 'Session expirée. Reconnecte-toi puis réessaie.' } }
+    return { data: null, error: { message: 'Session expirée. Déconnecte-toi, reconnecte-toi, puis réessaie.' } }
   }
-  return supabase.functions.invoke('envoyer-invitation', {
-    body,
-    headers: { Authorization: `Bearer ${token}` },
+  const url = `${String(config.supabase.url).replace(/\/$/, '')}/functions/v1/envoyer-invitation`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.supabase.anonKey,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
   })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    return { data, error: { message: data?.error || data?.message || 'Envoi impossible.' } }
+  }
+  return { data, error: null }
 }
 
 async function lireErreur(data, error) {
-  if (data?.error) return data.error
-  if (error?.context) {
-    try {
-      const body = await error.context.json()
-      if (body?.error) return body.error
-      if (body?.message) return body.message
-    } catch { /* ignore */ }
+  const msg = data?.error || data?.message || error?.message || 'Envoi impossible.'
+  if (msg === 'Non authentifié.' || msg === 'Non authentifié') {
+    return 'Session expirée. Déconnecte-toi, reconnecte-toi, puis réessaie.'
   }
-  if (error?.message && error.message !== 'Edge Function returned a non-2xx status code') {
-    return error.message
-  }
-  return 'Envoi impossible.'
+  return msg
 }
 
 /** Envoie l’invitation depuis laurent@heartsangels.be (fonction serveur). */

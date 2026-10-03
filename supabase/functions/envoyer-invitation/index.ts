@@ -62,9 +62,11 @@ function estMedical(typeBenevole: string | null, role: string) {
   return t === 'medical' || t === 'volontaire_medical' || role === 'volontaire_medical'
 }
 
-function libellePdf(typeBenevole: string | null, role: string) {
-  if (estMedical(typeBenevole, role)) return 'du volontaire médical'
-  return 'du volontaire non médical'
+function urlModeEmploi(typeBenevole: string | null, role: string) {
+  const nom = estMedical(typeBenevole, role)
+    ? 'Mode-emploi-volontaire-medical.pdf'
+    : 'Mode-emploi-volontaire-non-medical.pdf'
+  return `${PUB()}/guides/${nom}`
 }
 
 function boutonHtml(href: string, label: string) {
@@ -90,7 +92,6 @@ function mailInvitation(opts: {
   nomInstitution: string | null
   typeBenevole: string | null
   role: string
-  avecPdf?: boolean
 }) {
   if (opts.partenaire) {
     const inst = opts.nomInstitution ? ` « ${opts.nomInstitution} »` : ''
@@ -114,19 +115,20 @@ Heart's Angels ASBL`
     return { texte, html, sujet: `Heart’s Angels — activez l’accès${opts.nomInstitution ? ` ${opts.nomInstitution}` : ''}` }
   }
   const salut = opts.prenom ? `Bonjour ${opts.prenom}` : 'Bonjour'
-  const pdfPhrase = opts.avecPdf !== false
-    ? `Le mode d’emploi ${libellePdf(opts.typeBenevole, opts.role)} est en pièce jointe (PDF).`
-    : ''
+  const lienPdf = urlModeEmploi(opts.typeBenevole, opts.role)
   const texte = `${salut},
 
 Pour créer ton compte Heart's Angels, clique sur « Crée ton compte » (valable 7 jours). Il te suffit ensuite de choisir un mot de passe.
-${pdfPhrase ? `\n${pdfPhrase}\n` : ''}
+
+Télécharge ensuite le mode d’emploi : ${lienPdf}
+
 Heart's Angels ASBL`
   const html = cadreHtml(`
     <p style="margin:0 0 12px">${esc(salut)},</p>
     <p style="margin:0">Pour créer ton compte Heart's Angels, clique ci-dessous (valable 7 jours). Il te suffit ensuite de choisir un mot de passe.</p>
     ${boutonHtml(opts.lien, 'Crée ton compte')}
-    ${pdfPhrase ? `<p style="margin:16px 0 0;font-size:14px;color:#5A6F74">${esc(pdfPhrase)}</p>` : ''}
+    <p style="margin:20px 0 0">Le mode d’emploi se télécharge ici :</p>
+    ${boutonHtml(lienPdf, 'Télécharger le mode d’emploi')}
   `)
   return { texte, html, sujet: 'Heart’s Angels — crée ton compte' }
 }
@@ -166,23 +168,6 @@ Heart's Angels ASBL`
   return { texte, html, sujet: 'Heart’s Angels — ton compte est prêt', lien }
 }
 
-async function chargerPdf(nom: string) {
-  const bases = [
-    Deno.env.get('GUIDE_PDF_BASE'),
-    `${PUB()}/guides`,
-    'https://raw.githubusercontent.com/Lonl23/Heart-s-Angels/cursor/cloud-agent-1788358417819-vm6fv/docs/mail',
-  ].filter(Boolean) as string[]
-  for (const b of bases) {
-    try {
-      const r = await fetch(`${b.replace(/\/$/, '')}/${nom}`)
-      if (!r.ok) continue
-      const buf = new Uint8Array(await r.arrayBuffer())
-      if (buf.length > 1000 && buf[0] === 0x25 && buf[1] === 0x50) return buf
-    } catch { /* essai suivant */ }
-  }
-  throw new Error('PDF du mode d’emploi introuvable côté serveur.')
-}
-
 async function smtpAuth(admin: ReturnType<typeof createClient>) {
   let user = (Deno.env.get('SMTP_USER') || 'laurent@heartsangels.be').trim()
   let pass = (Deno.env.get('SMTP_PASS') || '').trim()
@@ -204,7 +189,6 @@ async function envoyer(opts: {
   sujet: string
   texte: string
   html: string
-  attachments?: { filename: string; content: Uint8Array; contentType: string }[]
 }) {
   const transporter = nodemailer.createTransport({
     host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
@@ -218,7 +202,6 @@ async function envoyer(opts: {
     subject: opts.sujet,
     text: opts.texte,
     html: opts.html,
-    attachments: opts.attachments || [],
   })
 }
 
@@ -231,11 +214,13 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization') || ''
     const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
     if (!jwt || jwt.startsWith('sb_')) return json({ error: 'Non authentifié.' }, 401)
-    const asCaller = createClient(url, anonKey)
-    const { data: { user }, error: uErr } = await asCaller.auth.getUser(jwt)
-    if (uErr || !user) return json({ error: 'Non authentifié.' }, 401)
-
     const admin = createClient(url, serviceKey)
+    let user = (await admin.auth.getUser(jwt)).data.user
+    if (!user) {
+      const asCaller = createClient(url, anonKey)
+      user = (await asCaller.auth.getUser(jwt)).data.user
+    }
+    if (!user) return json({ error: 'Non authentifié.' }, 401)
     const body = await req.json().catch(() => ({}))
     const action = String(body?.action || 'invitation').trim()
     const smtp = await smtpAuth(admin)
@@ -289,22 +274,6 @@ Deno.serve(async (req) => {
       nomInstitution = org?.nom || null
     }
 
-    const attachments: { filename: string; content: Uint8Array; contentType: string }[] = []
-    let avecPdf = false
-    if (!partenaire) {
-      try {
-        const filename = estMedical(inv.type_benevole, inv.role)
-          ? 'Mode-emploi-volontaire-medical.pdf'
-          : 'Mode-emploi-volontaire-non-medical.pdf'
-        attachments.push({
-          filename,
-          content: await chargerPdf(filename),
-          contentType: 'application/pdf',
-        })
-        avecPdf = true
-      } catch { /* mieux envoyer le bouton sans PDF que rater l’invitation */ }
-    }
-
     const lien = urlInvitation(inv.code, inv.email, partenaire)
     const mail = mailInvitation({
       prenom: inv.prenom,
@@ -313,10 +282,9 @@ Deno.serve(async (req) => {
       nomInstitution,
       typeBenevole: inv.type_benevole,
       role: inv.role,
-      avecPdf,
     })
 
-    await envoyer({ smtp, to: inv.email, sujet: mail.sujet, texte: mail.texte, html: mail.html, attachments })
+    await envoyer({ smtp, to: inv.email, sujet: mail.sujet, texte: mail.texte, html: mail.html })
 
     await admin.from('invitations').update({
       envoyee_le: new Date().toISOString(),

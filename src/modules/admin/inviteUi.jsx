@@ -66,7 +66,7 @@ export function CodeBox({ code, email, prenom, partenaire, nomInstitution, typeB
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
         {partenaire
           ? 'Envoi depuis laurent@heartsangels.be : bouton « Activer l’accès » (valable 7 jours). Copier le lien reste possible.'
-          : 'Envoi depuis laurent@heartsangels.be : bouton « Crée ton compte » et PDF du mode d’emploi. Valable 7 jours.'}
+          : 'Envoi depuis laurent@heartsangels.be : bouton « Crée ton compte » et lien « Télécharger le mode d’emploi ». Valable 7 jours.'}
       </div>
       <div style={{
         width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9,

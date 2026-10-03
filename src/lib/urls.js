@@ -29,11 +29,20 @@ export function urlConnexion({ partenaire = false } = {}) {
   return partenaire ? `${urlBasePublique()}/login/partenaire` : `${urlBasePublique()}/login`
 }
 
+export function urlModeEmploi(typeBenevole) {
+  const t = String(typeBenevole || '')
+  const medical = t === 'medical' || t === 'volontaire_medical'
+  const fichier = medical
+    ? 'Mode-emploi-volontaire-medical.pdf'
+    : 'Mode-emploi-volontaire-non-medical.pdf'
+  return `${urlBasePublique()}/guides/${fichier}`
+}
+
 function libellePdfVolontaire(typeBenevole) {
   const t = String(typeBenevole || '')
   if (t === 'medical' || t === 'volontaire_medical') return 'du volontaire médical'
   if (t === 'non_medical' || t === 'volontaire_non_medical') return 'du volontaire non médical'
-  return 'du volontaire (fichier médical ou non médical, selon le type de l’invitation)'
+  return 'du volontaire (médical ou non médical, selon le type de l’invitation)'
 }
 
 /** Texte du mail d’invitation (envoi auto HTML : bouton « Crée ton compte »). */
@@ -55,7 +64,7 @@ Heart's Angels ASBL`
 
 Pour créer ton compte Heart's Angels, clique sur « Crée ton compte » dans le mail (valable 7 jours). Il te suffit ensuite de choisir un mot de passe.
 
-Le mode d’emploi ${libellePdfVolontaire(typeBenevole)} est en pièce jointe (PDF).
+Le mode d’emploi ${libellePdfVolontaire(typeBenevole)} se télécharge via le bouton du mail.
 
 Heart's Angels ASBL`
 }
