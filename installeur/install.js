@@ -104,6 +104,7 @@ async function main() {
     await client.query(lireSQL('61_motif_non_realise_pin.sql'))
     await client.query(lireSQL('62_envoi_invitation.sql'))
     await client.query(lireSQL('63_smtp_vault.sql'))
+    await client.query(lireSQL('64_pin_archives_recolteurs.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

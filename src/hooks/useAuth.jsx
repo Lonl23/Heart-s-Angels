@@ -193,12 +193,12 @@ export function AuthProvider({ children }) {
     const roles = profile?.fiche?.roles_asbl || []
     return roles.includes('recolteur_souhait')
   }
-  /** Président, vice-président, responsable informatique (pas l’adjoint) : archives PIN. */
+  /** Président, vice-président, responsable informatique (pas l’adjoint) et récolteurs : archives PIN. */
   function peutOuvrirArchives() {
     if (!role || role === 'partenaire') return false
     if (!profile || profile.actif === false) return false
     const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['president', 'vice_president', 'resp_informatique'].includes(r))
+    return roles.some(r => ['president', 'vice_president', 'resp_informatique', 'recolteur_souhait'].includes(r))
   }
 
   async function signOut() { await supabase.auth.signOut() }

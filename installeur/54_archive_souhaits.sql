@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════════════════
 --  Archives souhaits : verrou 1 mois calendrier après réalisation.
 --  Ouverture PIN 5 chiffres : président, vice-président, resp. informatique
---  (pas l’adjoint). Le volontaire crée le PIN dans sa fiche.
+--  (pas l’adjoint) et récolteurs de souhait. Le volontaire crée le PIN dans sa fiche.
 --  La place de responsable informatique ne peut pas rester vacante.
 --  Idempotent. Après 53_mes_missions_a_realiser.sql.
 -- ════════════════════════════════════════════════════════════════════════════
@@ -176,6 +176,7 @@ as $$
     select public.profil_a_role_asbl(coalesce(fiche, '{}'::jsonb), 'president')
         or public.profil_a_role_asbl(coalesce(fiche, '{}'::jsonb), 'vice_president')
         or public.profil_a_role_asbl(coalesce(fiche, '{}'::jsonb), 'resp_informatique')
+        or public.profil_a_role_asbl(coalesce(fiche, '{}'::jsonb), 'recolteur_souhait')
     from public.profiles
     where id = auth.uid() and coalesce(actif, true)
   ), false)
@@ -195,6 +196,7 @@ begin
            public.profil_a_role_asbl(coalesce(new.fiche, '{}'::jsonb), 'president')
            or public.profil_a_role_asbl(coalesce(new.fiche, '{}'::jsonb), 'vice_president')
            or public.profil_a_role_asbl(coalesce(new.fiche, '{}'::jsonb), 'resp_informatique')
+           or public.profil_a_role_asbl(coalesce(new.fiche, '{}'::jsonb), 'recolteur_souhait')
          )
        ) then
       new.archive_pin_hash := null;
@@ -226,7 +228,7 @@ begin
     return json_build_object('ok', false, 'error', 'Non authentifié.');
   end if;
   if not public.peut_ouvrir_archives() then
-    return json_build_object('ok', false, 'error', 'Seul le président, la vice-présidente ou le responsable informatique peuvent créer ce code.');
+    return json_build_object('ok', false, 'error', 'Seul le président, la vice-présidente, le responsable informatique ou un récolteur peuvent créer ce code.');
   end if;
   err := public.pin_archive_invalide(p_pin);
   if err is not null then
@@ -394,7 +396,7 @@ begin
     return json_build_object('ok', false, 'error', 'Non authentifié.');
   end if;
   if not public.peut_ouvrir_archives() then
-    return json_build_object('ok', false, 'error', 'Accès réservé au président, à la vice-présidente et au responsable informatique.');
+    return json_build_object('ok', false, 'error', 'Accès réservé au président, à la vice-présidente, au responsable informatique et aux récolteurs.');
   end if;
   select * into s from public.souhaits where id = p_id;
   if s.id is null then

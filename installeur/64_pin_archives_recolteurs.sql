@@ -1,82 +1,88 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  Souhaits réalisés verrouillés : restent dans le tableau (colonne Réalisé).
---  Le PIN ouvre le dossier ; la liste n’expose pas le médical ni le NISS.
---  Idempotent. Après 56_volontaires_sans_acces.sql.
+--  PIN archives : les récolteurs de souhait peuvent ouvrir un dossier classé,
+--  comme le président, la vice-présidente et le responsable informatique
+--  (pas l’adjoint IT). Idempotent. Après 63_smtp_vault.sql.
 -- ════════════════════════════════════════════════════════════════════════════
 
-create or replace function public.etat_souhait_archive(p_id uuid)
-returns json
-language plpgsql
-stable
-security definer
-set search_path = public, extensions
-as $$
-declare
-  s public.souhaits;
-begin
-  select * into s from public.souhaits where id = p_id;
-  if s.id is null then
-    return json_build_object('ok', false, 'existe', false);
-  end if;
-  return json_build_object(
-    'ok', true,
-    'existe', true,
-    'archive', public.souhait_est_archive(s),
-    'peut_ouvrir', public.peut_ouvrir_archives(),
-    'a_pin', public.mon_pin_archive_defini(),
-    'verrouille_au', public.date_verrouillage_souhait(s.date_realisee, s.updated_at),
-    'beneficiaire', nullif(btrim(concat_ws(' ', s.beneficiaire_prenom, s.beneficiaire_nom)), '')
-  );
-end $$;
-
--- Cartes du tableau : champs d’affichage seulement (pas de NISS ni notes médicales).
-create or replace function public.lister_souhaits_verrouilles()
-returns table (
-  id uuid,
-  beneficiaire_prenom text,
-  beneficiaire_nom text,
-  description text,
-  localisation text,
-  date_souhaitee date,
-  date_fin date,
-  date_realisee date,
-  dates_possibles jsonb,
-  statut text,
-  priorite smallint,
-  fictif boolean,
-  verrouille boolean,
-  mission jsonb
-)
+create or replace function public.peut_ouvrir_archives()
+returns boolean
 language sql
 stable
 security definer
 set search_path = public, extensions
 as $$
-  select
-    s.id,
-    s.beneficiaire_prenom,
-    s.beneficiaire_nom,
-    s.description,
-    s.localisation,
-    s.date_souhaitee,
-    s.date_fin,
-    s.date_realisee,
-    s.dates_possibles,
-    s.statut::text,
-    coalesce(s.priorite, 2),
-    coalesce(s.fictif, false),
-    true,
-    jsonb_strip_nulls(jsonb_build_object(
-      'recolteur', s.mission->>'recolteur',
-      'recolteurs', s.mission->'recolteurs',
-      'attente', s.mission->'attente',
-      'motif_non_realise', s.mission->>'motif_non_realise'
-    ))
-  from public.souhaits s
-  where public.peut_voir_souhaits()
-    and public.souhait_est_archive(s)
-  order by s.date_realisee desc nulls last, s.updated_at desc
+  select coalesce((
+    select public.profil_a_role_asbl(coalesce(fiche, '{}'::jsonb), 'president')
+        or public.profil_a_role_asbl(coalesce(fiche, '{}'::jsonb), 'vice_president')
+        or public.profil_a_role_asbl(coalesce(fiche, '{}'::jsonb), 'resp_informatique')
+        or public.profil_a_role_asbl(coalesce(fiche, '{}'::jsonb), 'recolteur_souhait')
+    from public.profiles
+    where id = auth.uid() and coalesce(actif, true)
+  ), false)
 $$;
+
+create or replace function public.trg_revoquer_pin_si_plus_eligible()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if tg_op = 'UPDATE' then
+    if not (
+         coalesce(new.actif, true)
+         and (
+           public.profil_a_role_asbl(coalesce(new.fiche, '{}'::jsonb), 'president')
+           or public.profil_a_role_asbl(coalesce(new.fiche, '{}'::jsonb), 'vice_president')
+           or public.profil_a_role_asbl(coalesce(new.fiche, '{}'::jsonb), 'resp_informatique')
+           or public.profil_a_role_asbl(coalesce(new.fiche, '{}'::jsonb), 'recolteur_souhait')
+         )
+       ) then
+      new.archive_pin_hash := null;
+      new.archive_pin_at := null;
+      new.archive_pin_echecs := 0;
+      new.archive_pin_bloque_jusqua := null;
+    end if;
+  end if;
+  return new;
+end $$;
+
+create or replace function public.definir_pin_archive(p_pin text, p_ancien text default null)
+returns json
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  err text;
+  h text;
+  a text;
+begin
+  if auth.uid() is null then
+    return json_build_object('ok', false, 'error', 'Non authentifié.');
+  end if;
+  if not public.peut_ouvrir_archives() then
+    return json_build_object('ok', false, 'error', 'Seul le président, la vice-présidente, le responsable informatique ou un récolteur peuvent créer ce code.');
+  end if;
+  err := public.pin_archive_invalide(p_pin);
+  if err is not null then
+    return json_build_object('ok', false, 'error', err);
+  end if;
+  select archive_pin_hash into h from public.profiles where id = auth.uid();
+  if h is not null then
+    if p_ancien is null or crypt(regexp_replace(p_ancien, '\D', '', 'g'), h) is distinct from h then
+      return json_build_object('ok', false, 'error', 'Indiquez d’abord l’ancien code pour le remplacer.');
+    end if;
+  end if;
+  a := regexp_replace(p_pin, '\D', '', 'g');
+  update public.profiles set
+    archive_pin_hash = crypt(a, gen_salt('bf', 8)),
+    archive_pin_at = now(),
+    archive_pin_echecs = 0,
+    archive_pin_bloque_jusqua = null
+  where id = auth.uid();
+  return json_build_object('ok', true);
+end $$;
 
 create or replace function public.ouvrir_souhait_archive(p_id uuid, p_pin text)
 returns json
@@ -139,8 +145,8 @@ begin
   return json_build_object('ok', true, 'expires_at', (now() + interval '30 minutes'));
 end $$;
 
-grant execute on function public.etat_souhait_archive(uuid) to authenticated;
-grant execute on function public.lister_souhaits_verrouilles() to authenticated;
+grant execute on function public.peut_ouvrir_archives() to authenticated;
+grant execute on function public.definir_pin_archive(text, text) to authenticated;
 grant execute on function public.ouvrir_souhait_archive(uuid, text) to authenticated;
 
 notify pgrst, 'reload schema';

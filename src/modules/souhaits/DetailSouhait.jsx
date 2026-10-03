@@ -139,7 +139,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
             : 'Ce souhait réalisé est verrouillé depuis un mois calendrier après sa réalisation.'}
           {archive.peut_ouvrir
             ? ' Saisissez votre code PIN personnel pour l’ouvrir (session de 30 minutes).'
-            : ' Seuls le président, la vice-présidente et le responsable informatique peuvent l’ouvrir.'}
+            : ' Seuls le président, la vice-présidente, le responsable informatique et les récolteurs peuvent l’ouvrir.'}
         </p>
         {archive.peut_ouvrir ? (
           <>
