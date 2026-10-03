@@ -1,7 +1,7 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 // Envoie l’invitation depuis laurent@heartsangels.be (SMTP Google Workspace).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts'
+import nodemailer from 'npm:nodemailer@6.9.16'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -130,9 +130,6 @@ Deno.serve(async (req) => {
     const url = Deno.env.get('SUPABASE_URL')!
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const smtpUser = (Deno.env.get('SMTP_USER') || 'laurent@heartsangels.be').trim()
-    const smtpPass = (Deno.env.get('SMTP_PASS') || '').trim()
-    const smtpFrom = (Deno.env.get('SMTP_FROM') || `Heart's Angels <${smtpUser}>`).trim()
 
     const authHeader = req.headers.get('Authorization') || ''
     const asCaller = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } })
@@ -147,6 +144,17 @@ Deno.serve(async (req) => {
     const code = String(body?.code || '').trim()
     if (!code) return json({ error: 'Code d’invitation manquant.' }, 400)
 
+    let smtpUser = (Deno.env.get('SMTP_USER') || 'laurent@heartsangels.be').trim()
+    let smtpPass = (Deno.env.get('SMTP_PASS') || '').trim()
+    let smtpFrom = (Deno.env.get('SMTP_FROM') || `Heart's Angels <${smtpUser}>`).trim()
+    if (!smtpPass) {
+      const { data: cfg } = await admin.rpc('smtp_mail_config')
+      if (cfg?.ok && cfg.pass) {
+        smtpUser = String(cfg.user || smtpUser).trim()
+        smtpPass = String(cfg.pass).trim()
+        smtpFrom = String(cfg.from || smtpFrom).trim()
+      }
+    }
     if (!smtpPass) {
       return json({
         error: 'Envoi automatique pas encore branché. Dans le compte Google laurent@heartsangels.be : Sécurité → Validation en 2 étapes → Mots de passe des applications. Crée « Heart’s Angels » et transmets le code de 16 lettres.',
@@ -184,7 +192,7 @@ Deno.serve(async (req) => {
       ? `Heart’s Angels — accès partenaire${nomInstitution ? ` ${nomInstitution}` : ''}`
       : 'Heart’s Angels — crée ton compte volontaire'
 
-    const attachments: { filename: string; content: Uint8Array; encoding: string; contentType: string }[] = []
+    const attachments: { filename: string; content: Uint8Array; contentType: string }[] = []
     if (!partenaire) {
       const medical = estMedical(inv.type_benevole, inv.role)
       const filename = medical
@@ -193,31 +201,24 @@ Deno.serve(async (req) => {
       attachments.push({
         filename,
         content: await chargerPdf(filename),
-        encoding: 'binary',
         contentType: 'application/pdf',
       })
     }
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
-        port: Number(Deno.env.get('SMTP_PORT') || 465),
-        tls: true,
-        auth: { username: smtpUser, password: smtpPass },
-      },
+    const transporter = nodemailer.createTransport({
+      host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
+      port: Number(Deno.env.get('SMTP_PORT') || 465),
+      secure: true,
+      auth: { user: smtpUser, pass: smtpPass },
     })
-    try {
-      await client.send({
-        from: smtpFrom,
-        to: inv.email,
-        subject: sujet,
-        content: texte,
-        html: htmlInvitation(texte, lien),
-        attachments,
-      })
-    } finally {
-      try { await client.close() } catch { /* ignore */ }
-    }
+    await transporter.sendMail({
+      from: smtpFrom,
+      to: inv.email,
+      subject: sujet,
+      text: texte,
+      html: htmlInvitation(texte, lien),
+      attachments,
+    })
 
     await admin.from('invitations').update({
       envoyee_le: new Date().toISOString(),
