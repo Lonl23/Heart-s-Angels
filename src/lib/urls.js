@@ -31,7 +31,7 @@ function libellePdfVolontaire(typeBenevole) {
   return 'du volontaire (fichier médical ou non médical, selon le type de l’invitation)'
 }
 
-/** Texte prêt à coller dans un e-mail (envoi manuel tant qu’il n’y a pas de SMTP). */
+/** Texte du mail d’invitation (envoi auto depuis laurent@heartsangels.be, ou à copier). */
 export function messageInvitation({ prenom, lien, partenaire, nomInstitution, typeBenevole } = {}) {
   if (partenaire) {
     const inst = nomInstitution ? ` « ${nomInstitution} »` : ''

@@ -1,0 +1,6 @@
+# Projet distant Heart's Angels (vppmvjqbzdeftrhdoert).
+# Les secrets SMTP_USER / SMTP_PASS / SMTP_FROM se règlent dans le dashboard
+# ou : npx supabase secrets set --project-ref vppmvjqbzdeftrhdoert
+
+[functions.envoyer-invitation]
+verify_jwt = true

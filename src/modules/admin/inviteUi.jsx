@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Card, Btn, F, Sel, PhoneF } from '@/components/ui'
 import { copierTexte, messageInvitation, urlInvitation } from '@/lib/urls'
+import { envoyerInvitationEmail } from '@/lib/envoyerInvitation'
 
 export function genCode() {
   const s = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -31,6 +32,31 @@ export function BtnCopierLien({ code, email, partenaire, style }) {
   )
 }
 
+export function BtnEnvoyerInvitation({ code, onDone, style }) {
+  const [etat, setEtat] = useState(null)
+  async function go() {
+    setEtat('busy')
+    const r = await envoyerInvitationEmail(code)
+    if (r.ok) {
+      setEtat('ok')
+      onDone?.()
+      setTimeout(() => setEtat(null), 4000)
+      return
+    }
+    setEtat(r.error)
+  }
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+      <Btn onClick={go} disabled={etat === 'busy' || etat === 'ok'} style={{ padding: '4px 10px', ...style }}>
+        {etat === 'busy' ? 'Envoi…' : etat === 'ok' ? '✓ Mail envoyé' : 'Envoyer le mail'}
+      </Btn>
+      {etat && etat !== 'busy' && etat !== 'ok' && (
+        <span style={{ color: '#C8435A', fontSize: 12, maxWidth: 320, lineHeight: 1.4 }}>{etat}</span>
+      )}
+    </span>
+  )
+}
+
 export function CodeBox({ code, email, prenom, partenaire, nomInstitution, typeBenevole, embedded }) {
   const [copie, setCopie] = useState(null)
   const lien = urlInvitation(code, email, { partenaire })
@@ -39,8 +65,8 @@ export function CodeBox({ code, email, prenom, partenaire, nomInstitution, typeB
     <>
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
         {partenaire
-          ? 'Lien d’activation à envoyer à l’institution (valable 7 jours) :'
-          : 'Lien d’invitation à envoyer par e-mail (valable 7 jours). Joins le PDF du mode d’emploi correspondant (médical ou non médical).'}
+          ? 'Envoi depuis laurent@heartsangels.be (valable 7 jours). Copier le lien reste possible.'
+          : 'Envoi depuis laurent@heartsangels.be avec le PDF du mode d’emploi (médical ou non médical). Valable 7 jours.'}
       </div>
       <div style={{
         width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9,
@@ -48,7 +74,8 @@ export function CodeBox({ code, email, prenom, partenaire, nomInstitution, typeB
         boxSizing: 'border-box', marginBottom: 8, wordBreak: 'break-all', lineHeight: 1.45,
         background: 'var(--surface)', color: 'var(--text)', userSelect: 'all',
       }}>{lien}</div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'flex-start' }}>
+        <BtnEnvoyerInvitation code={code} />
         <Btn kind="soft" onClick={() => marquerCopie(setCopie, 'lien', lien)}>{copie === 'lien' ? '✓ Lien copié' : 'Copier le lien'}</Btn>
         <Btn kind="soft" onClick={() => marquerCopie(setCopie, 'message', message)}>{copie === 'message' ? '✓ Message copié' : 'Copier le message'}</Btn>
       </div>

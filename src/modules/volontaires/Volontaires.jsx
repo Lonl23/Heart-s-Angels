@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Modal } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
 import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
-import { CodeBox, FormInvit, Msg, genCode, tbl, th, td, BtnCopierLien } from '@/modules/admin/inviteUi'
+import { CodeBox, FormInvit, Msg, genCode, tbl, th, td, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
 
 const TYPES_INVIT = [
   { v: 'volontaire_medical', l: 'Volontaire médical' },
@@ -139,8 +139,9 @@ function Membres({ onOpenFiche }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {invits.map(i => (
               <div key={i.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 13 }}><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-blue)' }}>{i.code}</span> — {i.prenom} {i.nom} ({i.email}) · <span style={{ color: 'var(--text-muted)' }}>{_lblInvit(i.role)}</span></div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 13 }}><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-blue)' }}>{i.code}</span> — {i.prenom} {i.nom} ({i.email}) · <span style={{ color: 'var(--text-muted)' }}>{_lblInvit(i.role)}</span>{i.envoyee_le ? <span style={{ color: '#3B6D11' }}> · mail envoyé</span> : ''}</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <BtnEnvoyerInvitation code={i.code} />
                   <BtnCopierLien code={i.code} email={i.email} />
                   <Btn kind="danger" onClick={() => revoquer(i.code)} style={{ padding: '4px 10px' }}>Révoquer</Btn>
                 </div>

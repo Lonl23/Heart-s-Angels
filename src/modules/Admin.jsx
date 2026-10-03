@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, PillFictif } from '@/components/ui'
 import { ACCES, EQUIPES_ACCES } from '@/modules/acces/accesSchema'
-import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td, BtnCopierLien } from '@/modules/admin/inviteUi'
+import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
 import { urlAccesPartenaire, copierTexte } from '@/lib/urls'
 import { emailPartenaireAutorise, EMAIL_PRO_AIDE } from '@/lib/emailPro'
 
@@ -110,7 +110,7 @@ function Partenaires() {
       partenaire: true,
       nomInstitution: data.nom,
     })
-    flash('Demande acceptée. Envoyez le lien d’activation à l’institution.')
+    flash('Demande acceptée. Envoyez le mail d’activation à l’institution.')
     load()
   }
   async function refuserDemande(id) {
@@ -208,7 +208,8 @@ function Partenaires() {
             {invits.map(i => (
               <div key={i.code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 13 }}><span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--accent-blue)' }}>{i.code}</span> — {i.prenom} {i.nom} ({i.email}) · <span style={{ color: 'var(--text-muted)' }}>{orgNom(i.partenaire_id)}</span></div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <BtnEnvoyerInvitation code={i.code} />
                   <BtnCopierLien code={i.code} email={i.email} partenaire />
                   <Btn kind="danger" onClick={() => revoquer(i.code)} style={{ padding: '4px 10px' }}>Révoquer</Btn>
                 </div>
