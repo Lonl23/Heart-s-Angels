@@ -12,7 +12,8 @@ create extension if not exists pgcrypto;
 do $$ begin
   create type role_utilisateur as enum (
     'admin','president','coordinateur','ambulancier_bleu','ambulancier_gris',
-    'infirmier','medecin','volontaire_non_medical','tresorier','secretaire',
+    'infirmier','medecin','volontaire_medical','volontaire_non_medical',
+    'tresorier','secretaire',
     'partenaire'   -- NOUVEAU : accès partenaire
   );
 exception when duplicate_object then null; end $$;
