@@ -90,6 +90,7 @@ function mailInvitation(opts: {
   nomInstitution: string | null
   typeBenevole: string | null
   role: string
+  avecPdf?: boolean
 }) {
   if (opts.partenaire) {
     const inst = opts.nomInstitution ? ` « ${opts.nomInstitution} »` : ''
@@ -113,18 +114,19 @@ Heart's Angels ASBL`
     return { texte, html, sujet: `Heart’s Angels — activez l’accès${opts.nomInstitution ? ` ${opts.nomInstitution}` : ''}` }
   }
   const salut = opts.prenom ? `Bonjour ${opts.prenom}` : 'Bonjour'
+  const pdfPhrase = opts.avecPdf !== false
+    ? `Le mode d’emploi ${libellePdf(opts.typeBenevole, opts.role)} est en pièce jointe (PDF).`
+    : ''
   const texte = `${salut},
 
 Pour créer ton compte Heart's Angels, clique sur « Crée ton compte » (valable 7 jours). Il te suffit ensuite de choisir un mot de passe.
-
-Le mode d’emploi ${libellePdf(opts.typeBenevole, opts.role)} est en pièce jointe (PDF).
-
+${pdfPhrase ? `\n${pdfPhrase}\n` : ''}
 Heart's Angels ASBL`
   const html = cadreHtml(`
     <p style="margin:0 0 12px">${esc(salut)},</p>
     <p style="margin:0">Pour créer ton compte Heart's Angels, clique ci-dessous (valable 7 jours). Il te suffit ensuite de choisir un mot de passe.</p>
     ${boutonHtml(opts.lien, 'Crée ton compte')}
-    <p style="margin:16px 0 0;font-size:14px;color:#5A6F74">Le mode d’emploi ${esc(libellePdf(opts.typeBenevole, opts.role))} est en pièce jointe (PDF).</p>
+    ${pdfPhrase ? `<p style="margin:16px 0 0;font-size:14px;color:#5A6F74">${esc(pdfPhrase)}</p>` : ''}
   `)
   return { texte, html, sujet: 'Heart’s Angels — crée ton compte' }
 }
@@ -167,8 +169,8 @@ Heart's Angels ASBL`
 async function chargerPdf(nom: string) {
   const bases = [
     Deno.env.get('GUIDE_PDF_BASE'),
-    'https://raw.githubusercontent.com/Lonl23/Heart-s-Angels/cursor/cloud-agent-1788358417819-vm6fv/docs',
-    'https://raw.githubusercontent.com/Lonl23/Heart-s-Angels/main/docs',
+    `${PUB()}/guides`,
+    'https://raw.githubusercontent.com/Lonl23/Heart-s-Angels/cursor/cloud-agent-1788358417819-vm6fv/docs/mail',
   ].filter(Boolean) as string[]
   for (const b of bases) {
     try {
@@ -227,8 +229,10 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const authHeader = req.headers.get('Authorization') || ''
-    const asCaller = createClient(url, anonKey, { global: { headers: { Authorization: authHeader } } })
-    const { data: { user }, error: uErr } = await asCaller.auth.getUser()
+    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (!jwt || jwt.startsWith('sb_')) return json({ error: 'Non authentifié.' }, 401)
+    const asCaller = createClient(url, anonKey)
+    const { data: { user }, error: uErr } = await asCaller.auth.getUser(jwt)
     if (uErr || !user) return json({ error: 'Non authentifié.' }, 401)
 
     const admin = createClient(url, serviceKey)
@@ -285,6 +289,22 @@ Deno.serve(async (req) => {
       nomInstitution = org?.nom || null
     }
 
+    const attachments: { filename: string; content: Uint8Array; contentType: string }[] = []
+    let avecPdf = false
+    if (!partenaire) {
+      try {
+        const filename = estMedical(inv.type_benevole, inv.role)
+          ? 'Mode-emploi-volontaire-medical.pdf'
+          : 'Mode-emploi-volontaire-non-medical.pdf'
+        attachments.push({
+          filename,
+          content: await chargerPdf(filename),
+          contentType: 'application/pdf',
+        })
+        avecPdf = true
+      } catch { /* mieux envoyer le bouton sans PDF que rater l’invitation */ }
+    }
+
     const lien = urlInvitation(inv.code, inv.email, partenaire)
     const mail = mailInvitation({
       prenom: inv.prenom,
@@ -293,19 +313,8 @@ Deno.serve(async (req) => {
       nomInstitution,
       typeBenevole: inv.type_benevole,
       role: inv.role,
+      avecPdf,
     })
-
-    const attachments: { filename: string; content: Uint8Array; contentType: string }[] = []
-    if (!partenaire) {
-      const filename = estMedical(inv.type_benevole, inv.role)
-        ? 'Mode-emploi-volontaire-medical.pdf'
-        : 'Mode-emploi-volontaire-non-medical.pdf'
-      attachments.push({
-        filename,
-        content: await chargerPdf(filename),
-        contentType: 'application/pdf',
-      })
-    }
 
     await envoyer({ smtp, to: inv.email, sujet: mail.sujet, texte: mail.texte, html: mail.html, attachments })
 

@@ -62,7 +62,8 @@ export default function Inscription() {
       const { data: c } = await supabase.rpc('consommer_invitation', { p_code: code.trim() })
       if (!c?.ok) { setErr(c?.error || 'Impossible de finaliser l\'inscription.'); setBusy(false); return }
       try {
-        await supabase.functions.invoke('envoyer-invitation', { body: { action: 'bienvenue' } })
+        const { envoyerMailBienvenue } = await import('@/lib/envoyerInvitation')
+        await envoyerMailBienvenue()
       } catch { /* l’inscription a réussi même si le mail de bienvenue échoue */ }
       window.location.href = estPartenaire ? '/partenaire' : '/app'
     } catch (ex) {
