@@ -61,6 +61,9 @@ export default function Inscription() {
       if (!su.session) { setErr("La confirmation par e-mail est activée sur ce serveur : elle doit être désactivée pour l'inscription par invitation. Contactez l'administrateur."); setBusy(false); return }
       const { data: c } = await supabase.rpc('consommer_invitation', { p_code: code.trim() })
       if (!c?.ok) { setErr(c?.error || 'Impossible de finaliser l\'inscription.'); setBusy(false); return }
+      try {
+        await supabase.functions.invoke('envoyer-invitation', { body: { action: 'bienvenue' } })
+      } catch { /* l’inscription a réussi même si le mail de bienvenue échoue */ }
       window.location.href = estPartenaire ? '/partenaire' : '/app'
     } catch (ex) {
       setErr(ex.message || 'Erreur.'); setBusy(false)

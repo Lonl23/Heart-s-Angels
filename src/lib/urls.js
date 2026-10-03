@@ -24,6 +24,11 @@ export function urlInvitation(code, email, { partenaire = false } = {}) {
   return q ? `${urlBasePublique()}${path}?${q}` : `${urlBasePublique()}${path}`
 }
 
+/** Écran de connexion public (volontaire ou partenaire). */
+export function urlConnexion({ partenaire = false } = {}) {
+  return partenaire ? `${urlBasePublique()}/login/partenaire` : `${urlBasePublique()}/login`
+}
+
 function libellePdfVolontaire(typeBenevole) {
   const t = String(typeBenevole || '')
   if (t === 'medical' || t === 'volontaire_medical') return 'du volontaire médical'
@@ -31,33 +36,24 @@ function libellePdfVolontaire(typeBenevole) {
   return 'du volontaire (fichier médical ou non médical, selon le type de l’invitation)'
 }
 
-/** Texte du mail d’invitation (envoi auto depuis laurent@heartsangels.be, ou à copier). */
-export function messageInvitation({ prenom, lien, partenaire, nomInstitution, typeBenevole } = {}) {
+/** Texte du mail d’invitation (envoi auto HTML : bouton « Crée ton compte »). */
+export function messageInvitation({ prenom, partenaire, nomInstitution, typeBenevole } = {}) {
   if (partenaire) {
     const inst = nomInstitution ? ` « ${nomInstitution} »` : ''
     return `Bonjour${prenom ? ` ${prenom}` : ''},
 
 Votre institution${inst} est reconnue comme partenaire de Heart's Angels.
 
-Activez l’accès en choisissant un mot de passe (lien valable 7 jours) :
+Cliquez sur « Activer l’accès » dans le mail (valable 7 jours) pour choisir un mot de passe.
 
-${lien || ''}
-
-Ensuite, connectez-vous sur l’espace partenaires avec :
-- le nom exact de l’institution
-- votre e-mail professionnel
-- le mot de passe que vous venez de choisir
+Ensuite, connectez-vous avec le nom exact de l’institution, votre e-mail professionnel et ce mot de passe.
 
 Heart's Angels ASBL`
   }
   const salut = prenom ? `Bonjour ${prenom},` : 'Bonjour,'
   return `${salut}
 
-Voici ton lien pour créer ton compte Heart's Angels (valable 7 jours) :
-
-${lien || ''}
-
-Il te suffit de choisir un mot de passe. Si le lien ne s’ouvre pas, va sur l’écran de connexion et utilise « J’ai une invitation ».
+Pour créer ton compte Heart's Angels, clique sur « Crée ton compte » dans le mail (valable 7 jours). Il te suffit ensuite de choisir un mot de passe.
 
 Le mode d’emploi ${libellePdfVolontaire(typeBenevole)} est en pièce jointe (PDF).
 

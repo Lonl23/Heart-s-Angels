@@ -18,3 +18,10 @@ export async function envoyerInvitationEmail(code) {
   }
   return { ok: false, error: msg || 'Envoi impossible.' }
 }
+
+/** Mail « ton compte est prêt » avec le bouton Accéder à l’application. */
+export async function envoyerMailBienvenue() {
+  const { data, error } = await supabase.functions.invoke('envoyer-invitation', { body: { action: 'bienvenue' } })
+  if (data?.ok) return { ok: true }
+  return { ok: false, error: data?.error || error?.message || 'Envoi impossible.' }
+}
