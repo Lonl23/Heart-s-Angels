@@ -5,31 +5,40 @@ import { Page, Card, Btn, F, Sel, Tabs, Pill, Empty, Loading, Flash, inp } from 
 import { TYPES_LIEU, MODES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, cheminLieux, enfantsDe, resteLabel } from './stock/stockSchema'
 import { ApercuEtiq, telechargerWord, telechargerPng, copierPng, telechargerCsv } from './stock/QrImg'
 import Scanner from './stock/Scanner'
+import { EcranJour, EcranArticles, EcranMouvements, EcranCompter } from './stock/Tableau'
 
 export default function Stock() {
   const { peutGererStock } = useAuth()
   const gerer = peutGererStock()
-  const [tab, setTab] = useState('lieux')
+  const [tab, setTab] = useState('jour')
   const [lieux, setLieux] = useState([])
   const [cats, setCats] = useState([])
   const [unites, setUnites] = useState([])
+  const [alertes, setAlertes] = useState(null)
   const [loading, setLoading] = useState(true)
   const [scan, setScan] = useState(null) // ranger | inventaire | null
   const [lieuCible, setLieuCible] = useState(null)
   const [flash, setFlash] = useState(null)
   const [err, setErr] = useState(null)
   const [inv, setInv] = useState(null)
+  const [articleId, setArticleId] = useState(null)
+  const [editCat, setEditCat] = useState(null)
+  const [recv, setRecv] = useState(null)
+  const [choixReception, setChoixReception] = useState(false)
+  const [etiq, setEtiq] = useState(null)
 
   useEffect(() => { load() }, [])
-  async function load() {
-    setLoading(true)
-    const [a, b, c] = await Promise.all([
+  async function load(silencieux) {
+    if (!silencieux) setLoading(true)
+    const [a, b, c, d] = await Promise.all([
       supabase.from('stock_lieux').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_catalogue').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_unites').select('*, stock_catalogue(nom,mode,unite,volume_l), stock_lieux(nom)').order('created_at', { ascending: false }).limit(400),
+      supabase.rpc('stock_alertes'),
     ])
     setLieux(a.data || [])
     setCats(b.data || [])
+    setAlertes(d.data && d.data.ok !== false ? d.data : { perimes:[], proches:[], vides:[], bas:[], o2_basse:[] })
     setUnites((c.data || []).map(u => ({
       ...u,
       nom: u.stock_catalogue?.nom,
@@ -39,6 +48,18 @@ export default function Stock() {
       lieu_nom: u.stock_lieux?.nom,
     })))
     setLoading(false)
+  }
+  async function supprimerType(c) {
+    const n = unites.filter(u => u.catalogue_id === c.id).length
+    if (!confirm(n
+      ? `Retirer « ${c.nom} » de la liste ? ${n} pièce(s) déjà créées restent (supprimez-les dans Étiquettes si besoin).`
+      : `Supprimer le type « ${c.nom} » ?`)) return
+    const { error } = await supabase.from('stock_catalogue').update({ actif: false }).eq('id', c.id)
+    if (error) { setErr(error.message); return }
+    setArticleId(null)
+    setRecv(null)
+    ok('Type retiré.')
+    load(true)
   }
   function ok(msg) { setFlash(msg); setErr(null); setTimeout(() => setFlash(null), 2500) }
 
@@ -64,8 +85,68 @@ export default function Stock() {
       if (error || data?.ok === false) { setErr(error?.message || data?.error); return }
       setInv(data)
       setScan(null)
-      setTab('inventaire')
+      setTab('compter')
     }
+  }
+
+  function aller(t) {
+    setTab(t)
+    setErr(null)
+    if (t !== 'articles') {
+      setArticleId(null)
+      setChoixReception(false)
+      setEditCat(null)
+    }
+  }
+  function ouvrirArticle(id) {
+    setArticleId(id)
+    setChoixReception(false)
+    setRecv(null)
+    setEditCat(null)
+    setTab('articles')
+  }
+  function commencerReception(cat, opts) {
+    setTab('articles')
+    setInv(null)
+    if (opts?.creer) {
+      setChoixReception(false)
+      setRecv(null)
+      setArticleId(null)
+      setEditCat({ nom:'', mode:'piece', unite:'pièce', qte_defaut:'', stock_minimal:0 })
+      return
+    }
+    if (cat) {
+      setChoixReception(false)
+      setArticleId(cat.id)
+      setRecv(cat)
+      setEditCat(null)
+      return
+    }
+    setRecv(null)
+    setEditCat(null)
+    setArticleId(null)
+    setChoixReception(true)
+  }
+  async function choisirLieu(id) {
+    const { data, error } = await supabase.rpc('stock_inventaire', { p_lieu: id })
+    if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Inventaire impossible'); return }
+    setInv(data)
+    setTab('compter')
+  }
+  async function appliquerComptage(u, valeur) {
+    const { data, error } = await supabase.rpc('stock_scan', {
+      p_token: u.qr_token, p_action: 'ajuster', p_qte: valeur, p_souhait: null, p_lieu: null,
+    })
+    if (error || data?.ok === false) { setErr(error?.message || data?.error); return false }
+    return true
+  }
+  async function finComptage() {
+    if (inv?.lieu?.id) {
+      const frais = await supabase.rpc('stock_inventaire', { p_lieu: inv.lieu.id })
+      if (frais.data?.ok) setInv(frais.data)
+    }
+    ok('Comptage enregistré.')
+    load(true)
   }
 
   if (!gerer) {
@@ -77,31 +158,64 @@ export default function Stock() {
   }
 
   return (
-    <Page title="Stock" subtitle="QR par pièce ou boîte. Nom et lot sur l’étiquette pour coller au bon endroit."
-      action={<div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-        <Btn kind="soft" onClick={() => { setLieuCible(null); setScan('ranger') }}>Ranger (scan)</Btn>
-        <Btn onClick={() => setScan('inventaire')}>Inventaire (scan lieu)</Btn>
-      </div>}>
+    <Page title="Stock" subtitle="Ce qu’il y a, ce qui entre, ce qui se déplace. Les missions scannent sur le terrain.">
       {flash && <Flash>{flash}</Flash>}
       {err && <Flash kind="err">{err}</Flash>}
+      {etiq && <CarteQr unite={etiq} onClose={() => setEtiq(null)} onOk={ok} />}
       {lieuCible && scan === 'ranger' && (
-        <div style={{ fontSize:13.5, marginBottom:10, color:'var(--heading)' }}>Lieu cible : <strong>{lieuCible.nom}</strong> — scannez les articles à y placer.</div>
+        <div style={{ fontSize:13.5, marginBottom:10, color:'var(--heading)' }}>Lieu : <strong>{lieuCible.nom}</strong> — scannez les articles à y poser.</div>
       )}
       <Tabs items={[
-        { v:'lieux', l:'Lieux' },
-        { v:'articles', l:'Types d’articles' },
-        { v:'unites', l:'Pièces & boîtes' },
-        { v:'alertes', l:'Alertes' },
-        ...(inv ? [{ v:'inventaire', l:'Inventaire' }] : []),
-      ]} value={tab} onChange={setTab} />
+        { v:'jour', l:'Vue d’ensemble' },
+        { v:'articles', l:'Articles' },
+        { v:'compter', l:'Inventaire' },
+        { v:'mouvements', l:'Mouvements' },
+        { v:'lieux', l:'Emplacements' },
+        { v:'etiquettes', l:'Étiquettes' },
+      ]} value={tab} onChange={aller} />
 
       {loading ? <Loading /> : (
         <>
+          {recv && (
+            <FormReception cat={recv} lieux={lieux} onDone={() => { setRecv(null); load() }} onOk={ok} onErr={setErr} />
+          )}
+          {tab === 'jour' && (
+            <EcranJour
+              cats={cats} unites={unites} lieux={lieux} alertes={alertes}
+              onReception={commencerReception}
+              onRanger={() => { setLieuCible(null); setScan('ranger') }}
+              onCompter={() => { setInv(null); setTab('compter') }}
+              onArticle={ouvrirArticle}
+            />
+          )}
+          {tab === 'articles' && (
+            editCat
+              ? <FormCatalogue item={editCat} onDone={() => { setEditCat(null); load(true) }} />
+              : <EcranArticles
+                  cats={cats} unites={unites} lieux={lieux}
+                  articleId={articleId} choixReception={choixReception}
+                  onArticle={ouvrirArticle}
+                  onReception={commencerReception}
+                  onNouveau={() => setEditCat({ nom:'', mode:'piece', unite:'pièce', qte_defaut:'', stock_minimal:0 })}
+                  onModifier={setEditCat}
+                  onSupprimer={supprimerType}
+                  onEtiquette={setEtiq}
+                  onBack={() => { setArticleId(null); setRecv(null) }}
+                />
+          )}
+          {tab === 'compter' && (
+            <EcranCompter
+              lieux={lieux} unites={unites} inv={inv}
+              onChoisir={choisirLieu}
+              onScan={() => setScan('inventaire')}
+              onApplique={appliquerComptage}
+              onTermine={finComptage}
+              onFermer={() => setInv(null)}
+            />
+          )}
+          {tab === 'mouvements' && <EcranMouvements cats={cats} lieux={lieux} />}
           {tab === 'lieux' && <OngletLieux lieux={lieux} unites={unites} onChange={load} onOk={ok} onErr={setErr} />}
-          {tab === 'articles' && <OngletCatalogue cats={cats} lieux={lieux} unites={unites} onChange={load} onOk={ok} onErr={setErr} />}
-          {tab === 'unites' && <OngletUnites unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} />}
-          {tab === 'alertes' && <OngletAlertes />}
-          {tab === 'inventaire' && inv && <OngletInventaire inv={inv} onChange={load} />}
+          {tab === 'etiquettes' && <OngletUnites unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} />}
         </>
       )}
       {scan && (
@@ -239,51 +353,6 @@ function CarteQr({ lieu, unite, onClose, onOk }) {
   )
 }
 
-function OngletCatalogue({ cats, lieux, unites, onChange, onOk, onErr }) {
-  const [edit, setEdit] = useState(null)
-  const [recv, setRecv] = useState(null)
-  async function supprimer(c) {
-    const n = (unites || []).filter(u => u.catalogue_id === c.id).length
-    if (!confirm(n
-      ? `Retirer « ${c.nom} » de la liste ? ${n} pièce(s) déjà créées restent (supprime-les à part si besoin).`
-      : `Supprimer le type « ${c.nom} » ?`)) return
-    const { error } = await supabase.from('stock_catalogue').update({ actif: false }).eq('id', c.id)
-    if (error) { onErr?.(error.message); return }
-    onOk?.('Type retiré.')
-    onChange()
-  }
-  return (
-    <div>
-      <Btn onClick={() => setEdit({ nom:'', mode:'piece', unite:'pièce', qte_defaut:'', stock_minimal:0 })} style={{ marginBottom:12 }}>+ Type d’article</Btn>
-      {edit && <FormCatalogue item={edit} onDone={() => { setEdit(null); onChange() }} />}
-      {recv && <FormReception cat={recv} lieux={lieux} onDone={() => { setRecv(null); onChange() }} onOk={onOk} onErr={onErr} />}
-      {cats.length === 0 ? <Empty title="Aucun type" hint="Ex. Gants nitrile M (boîte), Compresse, Oxygène 2 / 5 / 10 L." /> : (
-        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {cats.map(c => (
-            <Card key={c.id} style={{ padding:'12px 14px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
-                <div>
-                  <div style={{ fontWeight:600 }}>{c.nom}</div>
-                  <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
-                    {lblMode(c.mode)}{c.mode === 'boite' && c.qte_defaut ? ` · ${Number(c.qte_defaut)} ${c.unite} / boîte` : ''}
-                    {c.mode === 'oxygene' && c.volume_l ? ` · ${Number(c.volume_l)} L · ${PRESSION_PLEINE} bar à la livraison` : ''}
-                    {c.stock_minimal ? ` · seuil ${Number(c.stock_minimal)}` : ''}
-                  </div>
-                </div>
-                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  <Btn onClick={() => setRecv(c)} style={{ padding:'5px 10px' }}>+ Réception</Btn>
-                  <Btn kind="soft" onClick={() => setEdit(c)} style={{ padding:'5px 10px' }}>Modifier</Btn>
-                  <Btn kind="danger" onClick={() => supprimer(c)} style={{ padding:'5px 10px' }}>Supprimer</Btn>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 function FormCatalogue({ item, onDone }) {
   const [f, setF] = useState({ unite:'pièce', mode:'piece', stock_minimal:0, ...item })
   const [saving, setSaving] = useState(false)
@@ -371,6 +440,11 @@ function FormReception({ cat, lieux, onDone, onOk, onErr }) {
         <strong>Réception — {cat.nom}</strong>
         <Btn kind="soft" onClick={onDone}>Annuler</Btn>
       </div>
+      <div className="ha-etapes" style={{ gridTemplateColumns:'repeat(3, 1fr)', marginTop:0 }}>
+        <div className="ha-etape is-done"><span className="ha-etape-n">1</span><span className="ha-etape-l">Article</span></div>
+        <div className="ha-etape is-on"><span className="ha-etape-n">2</span><span className="ha-etape-l">Quantité</span></div>
+        <div className="ha-etape"><span className="ha-etape-n">3</span><span className="ha-etape-l">Étiquette</span></div>
+      </div>
       {cat.mode === 'boite' && (
         <F label="Combien dans cette boîte ?" type="number" value={f.qte} set={v=>setF(s=>({ ...s, qte:v }))} required />
       )}
@@ -454,78 +528,3 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr }) {
   )
 }
 
-function OngletAlertes() {
-  const [a, setA] = useState(null)
-  useEffect(() => { supabase.rpc('stock_alertes').then(({ data }) => setA(data)) }, [])
-  if (!a) return <Loading />
-  const blocs = [
-    { k:'perimes', t:'Périmés', c:'#A32D2D' },
-    { k:'o2_basse', t:'Oxygène ≤ 50 bar', c:'#A32D2D' },
-    { k:'proches', t:'Péremption ≤ 90 jours', c:'#BA7517' },
-    { k:'vides', t:'Vides / presque vides', c:'#185FA5' },
-    { k:'bas', t:'Sous le seuil', c:'#A32D2D' },
-  ]
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-      {blocs.map(b => {
-        const rows = a[b.k] || []
-        return (
-          <div key={b.k}>
-            <div style={{ fontWeight:700, color: b.c, marginBottom:8 }}>{b.t} ({rows.length})</div>
-            {rows.length === 0 ? <div style={{ fontSize:13, color:'var(--text-muted)' }}>Rien.</div> : rows.map((u, i) => (
-              <Card key={u.id || i} style={{ padding:'10px 14px', marginBottom:6 }}>
-                <div style={{ fontWeight:600 }}>{u.nom}</div>
-                <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
-                  {u.reste != null ? `Reste total ${u.reste} / seuil ${u.stock_minimal}` : `${resteLabel(u)}${u.lieu_nom ? ' · ' + u.lieu_nom : ''}${u.date_peremption ? ' · DLC ' + u.date_peremption : ''}`}
-                </div>
-              </Card>
-            ))}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function OngletInventaire({ inv, onChange }) {
-  const items = inv.items || []
-  const [qtes, setQtes] = useState({})
-  async function ajuster(u) {
-    const n = qtes[u.id]
-    if (n === '' || n == null) return
-    const { data, error } = await supabase.rpc('stock_scan', {
-      p_token: u.qr_token, p_action: 'ajuster', p_qte: Number(n), p_souhait: null, p_lieu: null,
-    })
-    if (error || data?.ok === false) { alert(error?.message || data?.error); return }
-    onChange()
-  }
-  return (
-    <div>
-      <h3 style={{ margin:'0 0 12px', color:'var(--heading)' }}>{inv.lieu?.nom}</h3>
-      {items.length === 0 ? <Empty title="Rien ici" hint="Rangez des articles en scannant le lieu puis les QR." /> : items.map(u => (
-        <Card key={u.id} style={{ padding:'10px 14px', marginBottom:8 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap', alignItems:'center' }}>
-            <div>
-              <div style={{ fontWeight:600 }}>{u.nom}</div>
-              <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>{resteLabel(u)}{u.lot ? ` · lot ${u.lot}` : ''}{u.date_peremption ? ` · DLC ${u.date_peremption}` : ''} · {u.lieu_nom}</div>
-            </div>
-            {u.mode === 'boite' && (
-              <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                <input type="number" placeholder="compté" value={qtes[u.id] ?? ''} onChange={e=>setQtes(s=>({ ...s, [u.id]: e.target.value }))}
-                  style={{ ...inp, width:88, margin:0 }} />
-                <Btn kind="soft" onClick={() => ajuster(u)}>Corriger</Btn>
-              </div>
-            )}
-            {u.mode === 'oxygene' && (
-              <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                <input type="number" placeholder="bar" value={qtes[u.id] ?? ''} onChange={e=>setQtes(s=>({ ...s, [u.id]: e.target.value }))}
-                  style={{ ...inp, width:88, margin:0 }} />
-                <Btn kind="soft" onClick={() => ajuster(u)}>Relevé bar</Btn>
-              </div>
-            )}
-          </div>
-        </Card>
-      ))}
-    </div>
-  )
-}

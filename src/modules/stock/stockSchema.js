@@ -57,3 +57,89 @@ export function cheminLieux(lieux, id) {
 export function enfantsDe(lieux, parentId) {
   return (lieux || []).filter(l => (l.parent_id || null) === (parentId || null)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
 }
+
+export const LIB_MVT = {
+  entree: 'Réception',
+  sortie: 'Sortie',
+  transfert: 'Rangement',
+  ajustement: 'Inventaire',
+  usage: 'Utilisation',
+  emport: 'Emporté',
+  releve_o2: 'Relevé O₂',
+}
+
+export function idsLieuEtEnfants(lieux, lieuId) {
+  const ids = new Set()
+  const walk = (id) => {
+    if (!id || ids.has(id)) return
+    ids.add(id)
+    ;(lieux || []).filter(l => l.parent_id === id).forEach(l => walk(l.id))
+  }
+  walk(lieuId)
+  return ids
+}
+
+export function profondeurLieu(lieux, id) {
+  const byId = Object.fromEntries((lieux || []).map(l => [l.id, l]))
+  let n = 0
+  let cur = byId[id]
+  let guard = 0
+  while (cur?.parent_id && guard++ < 12) {
+    n++
+    cur = byId[cur.parent_id]
+  }
+  return n
+}
+
+/** Quantité visible « en stock », comme la colonne On Hand d’un inventaire. */
+export function qteEnStock(cat, unites) {
+  const lignes = (unites || []).filter(u => u.catalogue_id === cat.id && u.etat === 'dispo')
+  if (cat.mode === 'boite') {
+    const pieces = lignes.reduce((s, u) => s + Number(u.qte_restante || 0), 0)
+    const boites = lignes.filter(u => Number(u.qte_restante) > 0).length
+    return {
+      nombre: pieces,
+      unite: cat.unite || 'pièces',
+      detail: `${boites} boîte${boites > 1 ? 's' : ''}`,
+      lignes,
+    }
+  }
+  if (cat.mode === 'oxygene') {
+    const basses = lignes.filter(u => Number(u.pression_bar) <= PRESSION_ALERTE).length
+    const vol = cat.volume_l ? `${Number(cat.volume_l)} L` : ''
+    return {
+      nombre: lignes.length,
+      unite: lignes.length > 1 ? 'bouteilles' : 'bouteille',
+      detail: [vol, basses ? `${basses} ≤ ${PRESSION_ALERTE} bar` : ''].filter(Boolean).join(' · '),
+      lignes,
+      attention: basses > 0,
+    }
+  }
+  if (cat.mode === 'durable') {
+    return { nombre: lignes.length, unite: 'en place', detail: '', lignes }
+  }
+  const n = lignes.filter(u => Number(u.qte_restante) > 0).length
+  return { nombre: n, unite: n > 1 ? 'pièces' : 'pièce', detail: '', lignes }
+}
+
+export function niveauStock(cat, qte) {
+  if (!qte || qte.nombre <= 0) return 'vide'
+  if (cat.mode !== 'oxygene' && cat.mode !== 'durable' && Number(cat.stock_minimal) > 0 && qte.nombre <= Number(cat.stock_minimal)) return 'bas'
+  if (qte.attention) return 'attention'
+  return 'ok'
+}
+
+export function systemeDe(u) {
+  if (!u) return 0
+  if (u.mode === 'oxygene') return u.pression_bar == null ? 0 : Number(u.pression_bar)
+  if (u.mode === 'durable') return 1
+  return Number(u.qte_restante || 0)
+}
+
+export function uniteComptage(u) {
+  if (!u) return ''
+  if (u.mode === 'oxygene') return 'bar'
+  if (u.mode === 'boite') return u.unite || 'pcs'
+  if (u.mode === 'durable') return 'présent'
+  return 'pièce'
+}
