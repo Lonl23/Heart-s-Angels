@@ -39,6 +39,7 @@ export default function Stock() {
       lieu_nom: u.stock_lieux?.nom,
     })))
     setLoading(false)
+    if (gerer) supabase.functions.invoke('alertes-stock', { body: { action: 'envoyer' } }).catch(() => {})
   }
   function ok(msg) { setFlash(msg); setErr(null); setTimeout(() => setFlash(null), 2500) }
 

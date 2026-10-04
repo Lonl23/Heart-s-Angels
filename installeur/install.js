@@ -1,9 +1,9 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
-// ════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 //  INSTALLEUR — à lancer UNE FOIS à la mise en place d'un nouveau serveur.
 //  Applique le schéma, crée le bucket de stockage et le premier compte admin.
 //  Aucune dépendance Supabase CLI. Usage :  npm install  puis  npm start
-// ════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 import { createClient } from '@supabase/supabase-js'
 import pg from 'pg'
 import { readFileSync } from 'node:fs'
@@ -62,6 +62,7 @@ async function main() {
     await client.query(lireSQL('19_calendrier_rdv_base.sql'))
     await client.query(lireSQL('20_roles_par_vecteur.sql'))
     await client.query(lireSQL('21_statuts_terrain.sql'))
+    await client.query(lireSQL('22_alertes_logistique.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()
