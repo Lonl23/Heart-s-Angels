@@ -1,0 +1,5 @@
+# Le cron du matin et le déclencheur stock appellent cette fonction
+# avec un secret partagé, pas avec le jeton d'un utilisateur.
+# La fonction vérifie elle-même le secret, ou le droit de gérer le stock.
+[functions.alertes-stock]
+verify_jwt = false
