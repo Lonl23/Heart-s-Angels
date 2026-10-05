@@ -6,6 +6,7 @@ import { TYPES_LIEU, MODES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLie
 import VueLots from './stock/VueLots'
 import { aggregerLots, lotConnuPour, fmtDlc } from './stock/lotsStock'
 import { ApercuEtiq, telechargerWord, telechargerPng, copierPng, telechargerCsv } from './stock/QrImg'
+import { etatDotationLieu, correspondArticle, idsLieuxFiltres } from './stock/dotationStock'
 import Scanner from './stock/Scanner'
 import { PhotoArticle, PhotoArticleChamp } from './stock/photoStock'
 import OngletMouvements from './stock/OngletMouvements'
@@ -38,16 +39,28 @@ export default function Stock() {
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    const [a, b, c, d, e] = await Promise.all([
+    const page = 1000
+    const selUnites = '*, stock_catalogue(nom,mode,unite,volume_l,photo_path,fournisseur_id), stock_lieux(nom)'
+    const [a, b, c0, d, e] = await Promise.all([
       supabase.from('stock_lieux').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_catalogue').select('*').eq('actif', true).order('nom'),
-      supabase.from('stock_unites').select('*, stock_catalogue(nom,mode,unite,volume_l,photo_path,fournisseur_id), stock_lieux(nom)').order('created_at', { ascending: false }).limit(400),
+      supabase.from('stock_unites').select(selUnites).order('created_at', { ascending: false }).range(0, page - 1),
       supabase.from('stock_fournisseurs').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_dotation').select('id, lieu_id, catalogue_id'),
     ])
+    const unitesBrutes = [...(c0.data || [])]
+    if ((c0.data || []).length === page) {
+      for (let from = page; from < 8000; from += page) {
+        const { data: chunk, error } = await supabase.from('stock_unites')
+          .select(selUnites).order('created_at', { ascending: false }).range(from, from + page - 1)
+        if (error) break
+        unitesBrutes.push(...(chunk || []))
+        if (!chunk || chunk.length < page) break
+      }
+    }
     setLieux(a.data || [])
     setCats(b.data || [])
-    setUnites((c.data || []).map(u => ({
+    setUnites(unitesBrutes.map(u => ({
       ...u,
       nom: u.stock_catalogue?.nom,
       mode: u.stock_catalogue?.mode,
@@ -196,7 +209,8 @@ export default function Stock() {
           {tab === 'unites' && <OngletUnites unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />}
           {tab === 'mouvements' && <OngletMouvements cats={cats} />}
           {tab === 'alertes' && (
-            <OngletAlertes cats={cats} fournisseurs={fournisseurs} onOk={ok} onErr={setErr}
+            <OngletAlertes cats={cats} fournisseurs={fournisseurs} lieux={lieux} unites={unites} dotations={dotations}
+              onOk={ok} onErr={setErr}
               onPerime={async (u) => {
                 if (!confirm(`Retirer « ${u.nom} » du stock disponible (péremption) ?`)) return
                 const { data, error } = await supabase.rpc('stock_marquer_perime', { p_unite: u.id, p_motif: 'périmé — retiré' })
@@ -241,15 +255,13 @@ function etiqUnite(u) {
   }
 }
 
-function articlesPrevus(dotations, cats, lieuId) {
-  const ids = (dotations || []).filter(d => d.lieu_id === lieuId).map(d => d.catalogue_id)
-  return ids.map(id => (cats || []).find(c => c.id === id)).filter(Boolean)
-}
-
 function OngletLieux({ lieux, unites, cats, dotations, onChange, onOk, onErr }) {
   const [edit, setEdit] = useState(null)
   const [etiq, setEtiq] = useState(null)
+  const [dot, setDot] = useState(null)
+  const [q, setQ] = useState('')
   const racines = enfantsDe(lieux, null)
+  const keep = idsLieuxFiltres(lieux, q)
   async function supprimer(n) {
     const kids = enfantsDe(lieux, n.id)
     if (kids.length) { onErr?.('Supprimez d’abord les emplacements à l’intérieur.'); return }
@@ -269,44 +281,145 @@ function OngletLieux({ lieux, unites, cats, dotations, onChange, onOk, onErr }) 
         <Btn kind="soft" onClick={() => telechargerCsvLieuxParSac(lieux)} disabled={!lieux.length}>CSV P-touch par sac</Btn>
         <Btn kind="soft" onClick={() => exporterLieuxParSacExcel(lieux)} disabled={!lieux.length}>Excel par sac</Btn>
       </div>
-      <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>CSV / Excel : un tableau par sac (nom + QR des pochettes). Étiquette 90,3 × 29 mm : QR en haut, nom en bas.</p>
+      <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>
+        Pour chaque pochette : le contenu prévu (modifiable) et ce qui est réellement rangé. CSV / Excel : un tableau par sac. Étiquette 90,3 × 29 mm : QR en haut, nom en bas.
+      </p>
+      <label className="ha-stock-search-lab" htmlFor="stock-recherche-lieu">Rechercher un emplacement</label>
+      <input id="stock-recherche-lieu" className="ha-search" value={q} onChange={e=>setQ(e.target.value)}
+        placeholder="Sac, pochette, véhicule…" autoComplete="off" style={{ ...inp, marginBottom:12, width:'min(100%, 420px)' }} />
       {edit && <FormLieu item={edit} lieux={lieux} onDone={() => { setEdit(null); onChange() }} />}
+      {dot && (
+        <FormDotation lieu={dot} cats={cats} dotations={dotations}
+          onDone={() => { setDot(null); onChange() }} onOk={onOk} onErr={onErr} />
+      )}
       {etiq && <CarteQr lieu={etiq} onClose={() => setEtiq(null)} onOk={onOk} />}
       {racines.length === 0 ? <Empty title="Aucun lieu" hint="Créez la réserve, une armoire, un sac…" /> : (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {racines.map(l => <NoeudLieu key={l.id} n={l} lieux={lieux} cats={cats} dotations={dotations} onEdit={setEdit} onQr={setEtiq} onDel={supprimer} />)}
+          {racines.filter(l => !keep || keep.has(l.id)).map(l => (
+            <NoeudLieu key={l.id} n={l} lieux={lieux} cats={cats} dotations={dotations} unites={unites}
+              keep={keep} onEdit={setEdit} onQr={setEtiq} onDel={supprimer} onDot={setDot} />
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-function NoeudLieu({ n, lieux, cats, dotations, onEdit, onQr, onDel, profondeur = 0 }) {
-  const kids = enfantsDe(lieux, n.id)
-  const prevus = articlesPrevus(dotations, cats, n.id)
+function NoeudLieu({ n, lieux, cats, dotations, unites, keep, onEdit, onQr, onDel, onDot, profondeur = 0 }) {
+  const kids = enfantsDe(lieux, n.id).filter(k => !keep || keep.has(k.id))
+  const ici = etatDotationLieu(n, lieux, cats, dotations, unites, false)
+  const arbre = profondeur === 0 ? etatDotationLieu(n, lieux, cats, dotations, unites, true) : null
+  const badge = ici.nbPrevu
+    ? `${ici.nbOk}/${ici.nbPrevu} en place`
+    : (arbre?.nbPrevu ? `${arbre.nbOk}/${arbre.nbPrevu} dans les pochettes` : null)
+  const badgeColor = (ici.nbPrevu ? ici.manque.length : arbre?.manque.length)
+    ? '#A32D2D' : '#3B6D11'
   return (
     <div>
       <Card style={{ padding:'10px 14px', marginLeft: profondeur * 16 }}>
         <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap', alignItems:'center' }}>
           <div>
-            <div style={{ fontWeight:600 }}>{n.nom}</div>
+            <div style={{ fontWeight:600, display:'flex', gap:8, flexWrap:'wrap', alignItems:'baseline' }}>
+              {n.nom}
+              {badge && <span style={{ fontSize:12, fontWeight:700, color: badgeColor }}>{badge}</span>}
+            </div>
             <div style={{ fontSize:12, color:'var(--text-muted)' }}>{lblLieu(n.type)}</div>
-            {prevus.length > 0 && (
-              <ul style={{ margin:'6px 0 0', paddingLeft:18, fontSize:13, color:'var(--text-2)' }}>
-                {prevus.map(c => <li key={c.id}>{c.nom}</li>)}
+            {ici.prevus.length > 0 && (
+              <ul style={{ margin:'6px 0 0', paddingLeft:18, fontSize:13 }}>
+                {ici.prevus.map(c => {
+                  const la = ici.ok.some(x => x.id === c.id)
+                  return (
+                    <li key={c.id} className={la ? 'ha-stock-dotation-ok' : 'ha-stock-dotation-manque'}>
+                      {c.nom}{la ? '' : ' — manque'}
+                    </li>
+                  )
+                })}
               </ul>
+            )}
+            {ici.extraCats.length > 0 && ici.nbPrevu > 0 && (
+              <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:4 }}>
+                Hors liste : {ici.extraCats.map(c => c.nom).join(', ')}
+              </div>
             )}
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
             <Btn kind="soft" onClick={() => onQr(n)} style={{ padding:'5px 10px' }}>QR</Btn>
+            <Btn kind="soft" onClick={() => onDot(n)} style={{ padding:'5px 10px' }}>Contenu prévu</Btn>
             <Btn kind="soft" onClick={() => onEdit(n)} style={{ padding:'5px 10px' }}>Modifier</Btn>
             <Btn kind="soft" onClick={() => onEdit({ nom:'', type: n.type === 'sac' ? 'pochette' : 'armoire', parent_id: n.id })} style={{ padding:'5px 10px' }}>+ Dedans</Btn>
             <Btn kind="danger" onClick={() => onDel(n)} style={{ padding:'5px 10px' }}>Supprimer</Btn>
           </div>
         </div>
       </Card>
-      {kids.map(k => <NoeudLieu key={k.id} n={k} lieux={lieux} cats={cats} dotations={dotations} onEdit={onEdit} onQr={onQr} onDel={onDel} profondeur={profondeur + 1} />)}
+      {kids.map(k => (
+        <NoeudLieu key={k.id} n={k} lieux={lieux} cats={cats} dotations={dotations} unites={unites}
+          keep={keep} onEdit={onEdit} onQr={onQr} onDel={onDel} onDot={onDot} profondeur={profondeur + 1} />
+      ))}
     </div>
+  )
+}
+
+function FormDotation({ lieu, cats, dotations, onDone, onOk, onErr }) {
+  const deja = new Set((dotations || []).filter(d => d.lieu_id === lieu.id).map(d => d.catalogue_id))
+  const [ids, setIds] = useState([...deja])
+  const [q, setQ] = useState('')
+  const [saving, setSaving] = useState(false)
+  const choisis = (cats || []).filter(c => ids.includes(c.id)).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+  const propositions = (cats || [])
+    .filter(c => !ids.includes(c.id) && correspondArticle(c, q))
+    .slice(0, 12)
+  async function save() {
+    setSaving(true)
+    const next = new Set(ids)
+    const add = [...next].filter(id => !deja.has(id))
+    const del = [...deja].filter(id => !next.has(id))
+    if (add.length) {
+      const { error } = await supabase.from('stock_dotation').insert(add.map(catalogue_id => ({ lieu_id: lieu.id, catalogue_id })))
+      if (error) { setSaving(false); onErr?.(error.message); return }
+    }
+    if (del.length) {
+      const { error } = await supabase.from('stock_dotation').delete().eq('lieu_id', lieu.id).in('catalogue_id', del)
+      if (error) { setSaving(false); onErr?.(error.message); return }
+    }
+    setSaving(false)
+    onOk?.('Contenu prévu enregistré.')
+    onDone()
+  }
+  return (
+    <Card style={{ marginBottom:12 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10, gap:8 }}>
+        <strong>Contenu prévu — {lieu.nom}</strong>
+        <Btn kind="soft" onClick={onDone}>Annuler</Btn>
+      </div>
+      <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 10px' }}>
+        Types d’articles qui doivent se trouver ici (d’après les fiches papier). Ce n’est pas encore le stock réel : rangez ensuite les QR.
+      </p>
+      {choisis.length === 0 ? (
+        <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>Rien de prévu pour l’instant.</div>
+      ) : (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
+          {choisis.map(c => (
+            <button key={c.id} type="button" className="ha-stock-dotation-chip"
+              onClick={() => setIds(s => s.filter(id => id !== c.id))}>
+              {c.nom} ×
+            </button>
+          ))}
+        </div>
+      )}
+      <label className="ha-stock-search-lab" htmlFor="dotation-ajout">Ajouter un type d’article</label>
+      <input id="dotation-ajout" className="ha-search" value={q} onChange={e=>setQ(e.target.value)}
+        placeholder="Nom (gants, compresses, O2…)" autoComplete="off" style={{ ...inp, marginBottom:8 }} />
+      {q.trim() && propositions.map(c => (
+        <button key={c.id} type="button" className="ha-stock-dotation-add"
+          onClick={() => { setIds(s => s.includes(c.id) ? s : [...s, c.id]); setQ('') }}>
+          + {c.nom}{c.categorie ? ` · ${c.categorie}` : ''}
+        </button>
+      ))}
+      {q.trim() && propositions.length === 0 && (
+        <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>Aucun type ne correspond — créez-le dans l’onglet Articles.</div>
+      )}
+      <Btn onClick={save} disabled={saving} style={{ width:'100%', marginTop:8 }}>{saving ? '…' : 'Enregistrer'}</Btn>
+    </Card>
   )
 }
 
@@ -364,8 +477,33 @@ function CarteQr({ lieu, unite, onClose, onOk }) {
   )
 }
 
+function CarteQrLot({ unites, onClose, onOk }) {
+  const etiq = (unites || []).map(etiqUnite)
+  return (
+    <Card style={{ marginBottom:12, maxWidth: 480 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
+        <strong>{etiq.length} étiquettes — même lot</strong>
+        <Btn kind="soft" onClick={onClose}>Fermer</Btn>
+      </div>
+      <p style={{ fontSize:12.5, color:'var(--text-muted)', margin:'0 0 10px' }}>
+        Un QR par pièce / boîte / bouteille. Imprimez la planche Word ou le CSV P-touch, puis collez chaque étiquette.
+      </p>
+      <div style={{ fontSize:13.5, marginBottom:12 }}>
+        <div style={{ fontWeight:600 }}>{unites[0]?.nom}</div>
+        {unites[0]?.lot && <div style={{ color:'var(--text-muted)' }}>Lot {unites[0].lot}</div>}
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+        <Btn onClick={() => telechargerWord(etiq)}>Word — {etiq.length} étiquettes</Btn>
+        <Btn kind="soft" onClick={() => telechargerCsv(etiq)}>CSV P-touch</Btn>
+        <Btn kind="soft" onClick={() => { onOk?.('Étiquettes prêtes.'); onClose() }}>Terminé</Btn>
+      </div>
+    </Card>
+  )
+}
+
 function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChange, onOk, onErr, onRecv }) {
   const [edit, setEdit] = useState(null)
+  const [q, setQ] = useState('')
   async function supprimer(c) {
     const n = (unites || []).filter(u => u.catalogue_id === c.id).length
     if (!confirm(n
@@ -377,13 +515,18 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
     onChange()
   }
   const fourById = Object.fromEntries((fournisseurs || []).map(f => [f.id, f]))
+  const vis = (cats || []).filter(c => correspondArticle(c, q))
   return (
     <div>
       <Btn onClick={() => setEdit({ nom:'', mode:'piece', unite:'pièce', qte_defaut:'', stock_minimal:0, fournisseur_id:'', ref_fournisseur:'' })} style={{ marginBottom:12 }}>+ Type d’article</Btn>
+      <label className="ha-stock-search-lab" htmlFor="stock-recherche-article">Rechercher un type d’article</label>
+      <input id="stock-recherche-article" className="ha-search" value={q} onChange={e=>setQ(e.target.value)}
+        placeholder="Nom, catégorie, référence…" autoComplete="off" style={{ ...inp, marginBottom:12, width:'min(100%, 420px)' }} />
       {edit && <FormCatalogue item={edit} fournisseurs={fournisseurs} onDone={() => { setEdit(null); onChange() }} onOk={onOk} onErr={onErr} />}
-      {cats.length === 0 ? <Empty title="Aucun type" hint="Ex. Gants nitrile M (boîte), Compresse, O2 B2L / B5L / B10L. Ajoutez une photo pour reconnaître l’article." /> : (
+      {cats.length === 0 ? <Empty title="Aucun type" hint="Ex. Gants nitrile M (boîte), Compresse, O2 B2L / B5L / B10L. Ajoutez une photo pour reconnaître l’article." />
+        : vis.length === 0 ? <Empty title="Aucun article pour cette recherche" hint="Essayez le nom, la catégorie ou la référence fournisseur." /> : (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {cats.map(c => (
+          {vis.map(c => (
             <Card key={c.id} style={{ padding:'12px 14px' }}>
               <div className="ha-stock-row" style={{ alignItems:'flex-start' }}>
                 <PhotoArticle path={c.photo_path} size={64} />
@@ -492,6 +635,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
 function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
   const [f, setF] = useState({
     qte: cat.mode === 'boite' ? (cat.qte_defaut || '') : '1',
+    nb: '1',
     lot:'', dlc:'', lieu_id: lieux[0]?.id || '',
     pression: String(PRESSION_PLEINE),
   })
@@ -545,8 +689,9 @@ function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
 
   async function save() {
     if (cat.mode === 'boite' && !(Number(f.qte) > 0)) { onErr?.('Indiquez combien il y a dans la boîte.'); return }
+    const nb = Math.max(1, Math.min(80, Math.round(Number(f.nb) || 1)))
     setSaving(true)
-    const { data, error } = await supabase.rpc('stock_creer_unite', {
+    const { data, error } = await supabase.rpc('stock_creer_unites', {
       p_catalogue: cat.id,
       p_qte: Number(f.qte) || 1,
       p_lot: f.lot || null,
@@ -554,6 +699,7 @@ function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
       p_lieu: f.lieu_id || null,
       p_notes: null,
       p_pression: cat.mode === 'oxygene' ? (Number(f.pression) || PRESSION_PLEINE) : 200,
+      p_nb: nb,
     })
     setSaving(false)
     if (error || data?.ok === false) {
@@ -564,11 +710,15 @@ function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
       onErr?.(error?.message || data?.error)
       return
     }
-    setCreated(data.unite)
-    onOk?.('Réception enregistrée — imprimez l’étiquette.')
+    const list = data.unites || (data.unite ? [data.unite] : [])
+    setCreated(list)
+    onOk?.(list.length > 1
+      ? `${list.length} QR créés — imprimez les étiquettes.`
+      : 'Réception enregistrée — imprimez l’étiquette.')
   }
   if (created) {
-    return <CarteQr unite={created} onClose={onDone} onOk={onOk} />
+    if (created.length > 1) return <CarteQrLot unites={created} onClose={onDone} onOk={onOk} />
+    return <CarteQr unite={created[0]} onClose={onDone} onOk={onOk} />
   }
   const optsLieu = [{ v:'', l:'— Pas encore rangé —' }, ...lieux.map(l => ({ v:l.id, l: cheminLieux(lieux, l.id) }))]
   return (
@@ -607,6 +757,8 @@ function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
       {hintLot && <div style={{ fontSize:12.5, color:'var(--heading)', margin:'-4px 0 10px' }}>{hintLot}</div>}
       {warnDlc && <div style={{ fontSize:12.5, color:'#A32D2D', margin:'-4px 0 10px' }}>{warnDlc}</div>}
       <Sel label="Ranger dans" value={f.lieu_id} set={v=>setF(s=>({ ...s, lieu_id:v }))} options={optsLieu} />
+      <F label={cat.mode === 'boite' ? 'Nombre de boîtes (1 QR chacune)' : cat.mode === 'oxygene' ? 'Nombre de bouteilles (1 QR chacune)' : 'Nombre de pièces (1 QR chacune)'}
+        type="number" value={f.nb} set={v=>setF(s=>({ ...s, nb:v }))} />
       <Btn onClick={save} disabled={saving} style={{ width:'100%' }}>{saving ? '…' : 'Créer et imprimer le QR'}</Btn>
     </Card>
   )
@@ -615,6 +767,7 @@ function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
 function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }) {
   const [etiq, setEtiq] = useState(null)
   const [filtre, setFiltre] = useState('')
+  const [lieuFiltre, setLieuFiltre] = useState('')
   const [vue, setVue] = useState('lots')
   const [rpcLots, setRpcLots] = useState(null)
   useEffect(() => {
@@ -627,10 +780,15 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }
   }, [unites])
   const lots = rpcLots ?? aggregerLots(unites, lieux)
   const vis = unites.filter(u => {
+    if (lieuFiltre && u.lieu_id !== lieuFiltre) return false
     const q = filtre.trim().toLowerCase()
     if (!q) return true
     const chemin = cheminLieux(lieux, u.lieu_id)
     return [u.nom, u.lot, u.lieu_nom, chemin, u.qr_token, u.date_peremption].some(x => (x || '').toLowerCase().includes(q))
+  })
+  const lotsVis = (lots || []).filter(l => {
+    if (lieuFiltre && !(l.lieux || []).some(x => x.lieu_id === lieuFiltre)) return false
+    return true
   })
   async function supprimer(u) {
     if (!confirm(`Supprimer « ${u.nom || 'cette pièce'} » et son QR ? L’historique de mouvements est conservé.`)) return
@@ -644,6 +802,18 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }
     const { data, error } = await supabase.rpc('stock_marquer_perime', { p_unite: u.id, p_motif: 'mise en péremption' })
     if (error || data?.ok === false) { onErr?.(error?.message || data?.error); return }
     onOk?.('Article marqué périmé.')
+    onChange()
+  }
+  async function perimeLot(lot) {
+    const n = Number(lot.nb_unites) || 0
+    if (!confirm(`Retirer du stock disponible les ${n} unité${n > 1 ? 's' : ''} du lot « ${lot.lot || 'sans n°'} » (${lot.article}) ?`)) return
+    const { data, error } = await supabase.rpc('stock_marquer_perime_lot', {
+      p_catalogue: lot.catalogue_id,
+      p_lot: lot.lot || null,
+      p_motif: 'périmé — lot retiré',
+    })
+    if (error || data?.ok === false) { onErr?.(error?.message || data?.error); return }
+    onOk?.(`${data.nb} unité(s) marquées périmées.`)
     onChange()
   }
   function voirPiecesDuLot(lot) {
@@ -671,11 +841,17 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }
           ? 'Un n° de lot = une DLC. Quantité restante et emplacements (où c’est rangé). Les QR restent une pièce / une boîte.'
           : 'Chaque QR est une pièce ou une boîte. Transfert, sortie et péremption restent tracés dans Mouvements.'}
       </p>
-      <label className="ha-stock-search-lab" htmlFor="stock-recherche-lot">Rechercher un n° de lot</label>
-      <input id="stock-recherche-lot" value={filtre} onChange={e=>setFiltre(e.target.value)}
-        placeholder="N° de lot, article ou lieu…" autoComplete="off" style={{ ...inp, marginBottom:12 }} />
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }} className="ha-stock-recv-lot">
+        <div>
+          <label className="ha-stock-search-lab" htmlFor="stock-recherche-lot">Rechercher</label>
+          <input id="stock-recherche-lot" value={filtre} onChange={e=>setFiltre(e.target.value)}
+            placeholder="N° de lot, article ou lieu…" autoComplete="off" style={{ ...inp, marginBottom:0 }} />
+        </div>
+        <Sel label="Emplacement" value={lieuFiltre} set={setLieuFiltre}
+          options={[{ v:'', l:'Tous les emplacements' }, ...lieux.map(l => ({ v:l.id, l: cheminLieux(lieux, l.id) || l.nom }))]} />
+      </div>
       {vue === 'lots' ? (
-        <VueLots lots={lots} filtre={filtre} onVoirPieces={voirPiecesDuLot} />
+        <VueLots lots={lotsVis} filtre={filtre} onVoirPieces={voirPiecesDuLot} onPerimeLot={perimeLot} />
       ) : vis.length === 0 ? (
         <Empty title="Aucune pièce" hint="Réceptionnez un type d’article pour générer un QR, ou cherchez un autre n° de lot." />
       ) : (

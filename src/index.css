@@ -710,6 +710,17 @@ img, svg, video, table { max-width: 100%; }
 }
 .ha-stock-lot-lieu strong { font-variant-numeric: tabular-nums; }
 .ha-stock-search-lab { font-size: 12.5px; color: var(--text-muted); display: block; margin-bottom: 5px; }
+.ha-stock-dotation-ok { color: #3B6D11; }
+.ha-stock-dotation-manque { color: #A32D2D; }
+.ha-stock-dotation-chip {
+  border: 1px solid var(--border); background: var(--bg-alt); color: var(--text);
+  border-radius: 999px; padding: 4px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.ha-stock-dotation-add {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  padding: 7px 2px; font-size: 13.5px; color: var(--accent); font-weight: 600; cursor: pointer;
+}
+.ha-stock-dotation-add:hover { color: var(--heading); }
 @media (max-width: 520px) {
   .ha-stock-recv-lot { grid-template-columns: 1fr !important; }
 }

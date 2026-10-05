@@ -107,6 +107,7 @@ async function main() {
     await client.query(lireSQL('64_pin_archives_recolteurs.sql'))
     await client.query(lireSQL('65_notifications_roles.sql'))
     await client.query(lireSQL('66_nom_souhaits_verrouilles.sql'))
+    await client.query(lireSQL('67_stock_reception_lot.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

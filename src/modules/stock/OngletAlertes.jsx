@@ -3,11 +3,13 @@ import { supabase } from '@/lib/supabase'
 import { Card, Btn, F, Sel, TA, Loading } from '@/components/ui'
 import { resteLabel, lblCommande } from './stockSchema'
 import { PhotoArticle } from './photoStock'
+import { sacsIncomplets } from './dotationStock'
 
-export default function OngletAlertes({ cats, fournisseurs, onOk, onErr, onPerime, onCommander }) {
+export default function OngletAlertes({ cats, fournisseurs, lieux, unites, dotations, onOk, onErr, onPerime, onCommander }) {
   const [a, setA] = useState(null)
   const [cmds, setCmds] = useState([])
   const [edit, setEdit] = useState(null)
+  const [voirFermees, setVoirFermees] = useState(false)
 
   async function load() {
     const [{ data }, c] = await Promise.all([
@@ -36,6 +38,8 @@ export default function OngletAlertes({ cats, fournisseurs, onOk, onErr, onPerim
 
   if (!a) return <Loading />
   const ouvertes = cmds.filter(c => c.statut === 'a_commander' || c.statut === 'commandee')
+  const cmdsAffichees = voirFermees ? cmds : ouvertes
+  const incomplets = sacsIncomplets(lieux, cats, dotations, unites)
   const blocs = [
     { k:'commandes', t:'Rappels de commande', c:'#185FA5', rows: a.commandes || [] },
     { k:'perimes', t:'Périmés (à retirer)', c:'#A32D2D' },
@@ -50,13 +54,20 @@ export default function OngletAlertes({ cats, fournisseurs, onOk, onErr, onPerim
       <div>
         <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap', marginBottom:8 }}>
           <div style={{ fontWeight:700, color:'var(--heading)' }}>Commandes ({ouvertes.length} ouvertes)</div>
-          <Btn onClick={() => setEdit({ catalogue_id: cats[0]?.id || '', fournisseur_id:'', quantite:'1', date_rappel:'', notes:'', statut:'a_commander' })}>+ Rappel / commande</Btn>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            {cmds.length > ouvertes.length && (
+              <Btn kind="soft" onClick={() => setVoirFermees(v => !v)}>
+                {voirFermees ? 'Masquer reçues / annulées' : 'Voir l’historique'}
+              </Btn>
+            )}
+            <Btn onClick={() => setEdit({ catalogue_id: cats[0]?.id || '', fournisseur_id:'', quantite:'1', date_rappel:'', notes:'', statut:'a_commander' })}>+ Rappel / commande</Btn>
+          </div>
         </div>
         {edit && (
           <FormCommande item={edit} cats={cats} fournisseurs={fournisseurs}
             onDone={() => { setEdit(null); load() }} onOk={onOk} onErr={onErr} />
         )}
-        {cmds.length === 0 ? <div style={{ fontSize:13, color:'var(--text-muted)' }}>Aucune commande enregistrée.</div> : cmds.map(cmd => (
+        {cmdsAffichees.length === 0 ? <div style={{ fontSize:13, color:'var(--text-muted)' }}>Aucune commande enregistrée.</div> : cmdsAffichees.map(cmd => (
           <Card key={cmd.id} style={{ padding:'10px 14px', marginBottom:6, opacity: cmd.statut === 'annulee' || cmd.statut === 'recue' ? 0.65 : 1 }}>
             <div className="ha-stock-row">
               <PhotoArticle path={cmd.photo_path} size={44} />
@@ -83,6 +94,34 @@ export default function OngletAlertes({ cats, fournisseurs, onOk, onErr, onPerim
                 <Btn kind="danger" onClick={() => statutCmd(cmd, 'annulee')} style={{ padding:'5px 10px' }}>Annuler</Btn>
               )}
             </div>
+          </Card>
+        ))}
+      </div>
+
+      <div>
+        <div style={{ fontWeight:700, color:'#A32D2D', marginBottom:8 }}>
+          Sacs incomplets ({incomplets.length})
+        </div>
+        {incomplets.length === 0 ? (
+          <div style={{ fontSize:13, color:'var(--text-muted)' }}>
+            Tous les contenus prévus sont en place, ou aucun contenu prévu n’est défini.
+          </div>
+        ) : incomplets.map(s => (
+          <Card key={s.lieu.id} style={{ padding:'10px 14px', marginBottom:6 }}>
+            <div style={{ fontWeight:600 }}>{s.lieu.nom}</div>
+            <div style={{ fontSize:12.5, color:'#A32D2D', marginTop:2 }}>
+              {s.nbOk}/{s.nbPrevu} types en place
+            </div>
+            <ul style={{ margin:'8px 0 0', paddingLeft:18, fontSize:13 }}>
+              {s.pochettes.filter(p => p.manque.length).map(p => (
+                <li key={p.lieu.id} style={{ marginBottom:4 }}>
+                  <span style={{ fontWeight:600 }}>{p.lieu.nom}</span>
+                  {' — '}
+                  {p.manque.slice(0, 4).map(c => c.nom).join(', ')}
+                  {p.manque.length > 4 ? ` et ${p.manque.length - 4} autre${p.manque.length - 4 > 1 ? 's' : ''}` : ''}
+                </li>
+              ))}
+            </ul>
           </Card>
         ))}
       </div>

@@ -2,7 +2,7 @@ import { Card, Btn, Empty } from '@/components/ui'
 import { PhotoArticle } from './photoStock'
 import { fmtDlc, dlcPassee, dlcProche, qteLotLabel, lotCorrespond } from './lotsStock'
 
-export default function VueLots({ lots, filtre, onVoirPieces }) {
+export default function VueLots({ lots, filtre, onVoirPieces, onPerimeLot }) {
   const q = (filtre || '').trim().toLowerCase()
   const vis = (lots || []).filter(l => lotCorrespond(l, q))
 
@@ -60,13 +60,20 @@ export default function VueLots({ lots, filtre, onVoirPieces }) {
                     </div>
                   ))}
                 </div>
-                {onVoirPieces && lot.lot && (
-                  <div style={{ marginTop:8 }}>
-                    <Btn kind="soft" onClick={() => onVoirPieces(lot.lot)} style={{ padding:'5px 10px' }}>
-                      Voir les QR de ce lot
-                    </Btn>
+                {(onVoirPieces && lot.lot) || onPerimeLot ? (
+                  <div style={{ marginTop:8, display:'flex', gap:6, flexWrap:'wrap' }}>
+                    {onVoirPieces && lot.lot && (
+                      <Btn kind="soft" onClick={() => onVoirPieces(lot.lot)} style={{ padding:'5px 10px' }}>
+                        Voir les QR de ce lot
+                      </Btn>
+                    )}
+                    {onPerimeLot && (
+                      <Btn kind="danger" onClick={() => onPerimeLot(lot)} style={{ padding:'5px 10px' }}>
+                        Retirer ce lot
+                      </Btn>
+                    )}
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </Card>
