@@ -1,5 +1,6 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 // Envoie les mails d’invitation et de bienvenue depuis laurent@heartsangels.be.
+// Chaque envoi met laurent@heartsangels.be en copie cachée.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import nodemailer from 'npm:nodemailer@6.9.16'
 
@@ -23,6 +24,7 @@ const ROLES_GERER_APP = [
 const ROLES_FICHES = ['coord_benevoles', 'coord_benevoles_adjoint']
 const PUB = () => (Deno.env.get('APP_PUBLIC_URL') || 'https://heart-s-angels.web.app').replace(/\/$/, '')
 const ACCENT = '#1BB0CE'
+const CCI = 'laurent@heartsangels.be'
 
 function rolesAsbl(fiche: unknown): string[] {
   const r = (fiche as { roles_asbl?: unknown } | null)?.roles_asbl
@@ -196,9 +198,12 @@ async function envoyer(opts: {
     secure: true,
     auth: { user: opts.smtp.user, pass: opts.smtp.pass },
   })
+  const dest = String(opts.to || '').trim()
+  const bcc = dest.toLowerCase() === CCI ? undefined : CCI
   await transporter.sendMail({
     from: opts.smtp.from,
-    to: opts.to,
+    to: dest,
+    bcc,
     subject: opts.sujet,
     text: opts.texte,
     html: opts.html,
