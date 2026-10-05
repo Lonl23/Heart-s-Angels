@@ -3,4 +3,5 @@
 # ou : npx supabase secrets set --project-ref vppmvjqbzdeftrhdoert
 
 [functions.envoyer-invitation]
-verify_jwt = true
+# L’oubli de mot de passe est public ; invitation et bienvenue vérifient le JWT dans le code.
+verify_jwt = false

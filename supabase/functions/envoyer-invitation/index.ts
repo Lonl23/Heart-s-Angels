@@ -135,6 +135,26 @@ Heart's Angels ASBL`
   return { texte, html, sujet: 'Heart’s Angels — crée ton compte' }
 }
 
+function mailReset(opts: { prenom: string | null; lien: string }) {
+  const salut = opts.prenom ? `Bonjour ${opts.prenom}` : 'Bonjour'
+  const texte = `${salut},
+
+Tu as demandé à réinitialiser ton mot de passe Heart's Angels.
+
+Clique sur « Réinitialiser le mot de passe » (valable 1 heure), puis encode deux fois le nouveau mot de passe.
+
+Si tu n’es pas à l’origine de cette demande, ignore ce message.
+
+Heart's Angels ASBL`
+  const html = cadreHtml(`
+    <p style="margin:0 0 12px">${esc(salut)},</p>
+    <p style="margin:0">Tu as demandé à réinitialiser ton mot de passe Heart's Angels. Clique ci-dessous (valable 1 heure), puis encode deux fois le nouveau mot de passe.</p>
+    ${boutonHtml(opts.lien, 'Réinitialiser le mot de passe')}
+    <p style="margin:16px 0 0;font-size:14px;color:#5A6F74">Si tu n’es pas à l’origine de cette demande, ignore ce message.</p>
+  `)
+  return { texte, html, sujet: 'Heart’s Angels — réinitialise ton mot de passe' }
+}
+
 function mailBienvenue(opts: { prenom: string | null; partenaire: boolean; nomInstitution: string | null }) {
   const lien = urlConnexion(opts.partenaire)
   if (opts.partenaire) {
@@ -216,16 +236,7 @@ Deno.serve(async (req) => {
     const url = Deno.env.get('SUPABASE_URL')!
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const authHeader = req.headers.get('Authorization') || ''
-    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
-    if (!jwt || jwt.startsWith('sb_')) return json({ error: 'Non authentifié.' }, 401)
     const admin = createClient(url, serviceKey)
-    let user = (await admin.auth.getUser(jwt)).data.user
-    if (!user) {
-      const asCaller = createClient(url, anonKey)
-      user = (await asCaller.auth.getUser(jwt)).data.user
-    }
-    if (!user) return json({ error: 'Non authentifié.' }, 401)
     const body = await req.json().catch(() => ({}))
     const action = String(body?.action || 'invitation').trim()
     const smtp = await smtpAuth(admin)
@@ -234,6 +245,47 @@ Deno.serve(async (req) => {
         error: 'Envoi automatique pas encore branché.',
       }, 503)
     }
+
+    if (action === 'mot_de_passe_oublie') {
+      const email = String(body?.email || '').trim().toLowerCase()
+      if (!email || !email.includes('@')) return json({ error: 'Adresse e-mail manquante.' }, 400)
+      const { data: prof } = await admin.from('profiles')
+        .select('id,email,prenom,role,actif')
+        .ilike('email', email)
+        .maybeSingle()
+      const compteVolontaire = !!prof
+        && String(prof.email || '').trim().toLowerCase() === email
+        && prof.actif !== false
+        && prof.role !== 'partenaire'
+      if (compteVolontaire) {
+        const { data: authUser } = await admin.auth.admin.getUserById(prof.id)
+        if (authUser?.user?.email) {
+          const { data: lienGen, error: lienErr } = await admin.auth.admin.generateLink({
+            type: 'recovery',
+            email: authUser.user.email,
+          })
+          const hashed = lienGen?.properties?.hashed_token
+          if (lienErr || !hashed) {
+            const msg = lienErr?.message || 'Lien de réinitialisation impossible.'
+            return json({ error: msg }, 500)
+          }
+          const lien = `${PUB()}/reinitialiser-mot-de-passe?token=${encodeURIComponent(hashed)}`
+          const mail = mailReset({ prenom: prof.prenom, lien })
+          await envoyer({ smtp, to: authUser.user.email, sujet: mail.sujet, texte: mail.texte, html: mail.html })
+        }
+      }
+      return json({ ok: true, action: 'mot_de_passe_oublie' })
+    }
+
+    const authHeader = req.headers.get('Authorization') || ''
+    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (!jwt || jwt.startsWith('sb_')) return json({ error: 'Non authentifié.' }, 401)
+    let user = (await admin.auth.getUser(jwt)).data.user
+    if (!user) {
+      const asCaller = createClient(url, anonKey)
+      user = (await asCaller.auth.getUser(jwt)).data.user
+    }
+    if (!user) return json({ error: 'Non authentifié.' }, 401)
 
     if (action === 'bienvenue') {
       const { data: prof } = await admin.from('profiles').select('email,prenom,nom,role,partenaire_id,actif').eq('id', user.id).maybeSingle()

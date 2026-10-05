@@ -80,6 +80,9 @@ export default function Login() {
           </p>
         )}
         {!partenaire && <div style={{ height:16 }} />}
+        {loc.state?.info && (
+          <div className="ha-flash ha-flash-ok" style={{ marginBottom:14 }}>{loc.state.info}</div>
+        )}
         {partenaire && session && !can('partenaire') && !loading && (
           <div className="ha-flash ha-flash-warn" style={{ marginBottom:14 }}>
             Vous êtes déjà connecté à l’espace ASBL. Déconnectez-vous avant d’entrer comme partenaire — le mot de passe n’est pas le même.
@@ -107,6 +110,11 @@ export default function Login() {
           {err && <div className="ha-flash ha-flash-err" style={{ marginBottom:0 }}>{err}</div>}
           <button type="submit" disabled={busy} style={{ padding:12, background:'var(--accent)', color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:600 }}>{busy?'Connexion…':'Se connecter'}</button>
         </form>
+        {!partenaire && (
+          <div style={{ textAlign:'center', marginTop:12 }}>
+            <Link to="/mot-de-passe-oublie" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>Mot de passe oublié ?</Link>
+          </div>
+        )}
 
         {partenaire ? (
           <div style={{ textAlign:'center', marginTop:16 }}>
@@ -125,9 +133,6 @@ export default function Login() {
               border:'1.5px solid var(--accent)', borderRadius:10, color:'var(--accent)',
               fontSize:14, fontWeight:600, textDecoration:'none',
             }}>Accès partenaire</Link>
-            <div style={{ textAlign:'center', marginTop:16 }}>
-              <Link to="/inscription" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>J'ai une invitation</Link>
-            </div>
           </>
         )}
         <div style={{ textAlign:'center', fontSize:10.5, color:'var(--text-faint)', marginTop:18 }}>{COPYRIGHT}</div>

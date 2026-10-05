@@ -4,8 +4,10 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { RequireStaff, RequirePartenaire } from '@/components/Protected'
 import Layout from '@/components/Layout'
-import Login from '@/pages/Login'
 
+const Login = lazy(() => import('@/pages/Login'))
+const MotDePasseOublie = lazy(() => import('@/pages/MotDePasseOublie'))
+const ReinitialiserMotDePasse = lazy(() => import('@/pages/ReinitialiserMotDePasse'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const DemandeSouhait = lazy(() => import('@/pages/DemandeSouhait'))
 const Inscription = lazy(() => import('@/pages/Inscription'))
@@ -33,6 +35,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/login/partenaire" element={<Login />} />
+        <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
+        <Route path="/reinitialiser-mot-de-passe" element={<ReinitialiserMotDePasse />} />
         <Route path="/login/partenaire/demande" element={<DemandePartenaire />} />
         <Route path="/demande" element={<DemandeSouhait />} />
         <Route path="/inscription" element={<Inscription />} />

@@ -53,3 +53,24 @@ export async function envoyerMailBienvenue() {
   if (data?.ok) return { ok: true }
   return { ok: false, error: await lireErreur(data, error) }
 }
+
+/** Demande un lien de réinitialisation (sans session). Toujours le même message côté écran. */
+export async function demanderResetMotDePasse(email) {
+  const adresse = String(email || '').trim()
+  if (!adresse) return { ok: false, error: 'Indique ton adresse e-mail.' }
+  const url = `${String(config.supabase.url).replace(/\/$/, '')}/functions/v1/envoyer-invitation`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.supabase.anonKey,
+      Authorization: `Bearer ${config.supabase.anonKey}`,
+    },
+    body: JSON.stringify({ action: 'mot_de_passe_oublie', email: adresse }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    return { ok: false, error: data?.error || data?.message || 'Envoi impossible.' }
+  }
+  return { ok: true }
+}

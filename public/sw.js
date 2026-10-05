@@ -4,7 +4,7 @@
    skipWaiting n'est PAS appelé à l'install : la page envoie SKIP_WAITING
    seulement quand l'utilisateur confirme « Mettre à jour ».
    Manifest, icônes et favicon passent toujours par le réseau (jamais le cache). */
-const CACHE_NAME = 'ha-app-v5-__SW_BUILD__'
+const CACHE_NAME = 'ha-app-v6-__SW_BUILD__'
 const PRECACHE = ['/index.html']
 
 function isVolatile(pathname) {
