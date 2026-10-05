@@ -8,6 +8,7 @@ const runtime = (typeof window !== 'undefined' && window.__APP_CONFIG__) || {}
 const d = {
   organisation: { nom: "Application", forme: "", pays: "BE", langue: "fr", devise: "EUR", tauxKm: 0.4326, accent: "#1BB0CE", logoUrl: "/icons/ha-logo-512-v4.png" },
   domaine: "",
+  vapidPublicKey: "BItos40GJksoCJRK7W0cWt5VgloRmYkwwf9Q9rZ3hkCXR9xEruCiZhN-yboXw5ijt54bvIMo83wle2QoM5VTz_U",
   supabase: { url: "https://vppmvjqbzdeftrhdoert.supabase.co", anonKey: "sb_publishable_A_Bu4P4-Fn-sy3xF58U4Cg_kJ_aLSIH" },
   bases: [
     {
@@ -20,5 +21,6 @@ export default {
   ...d, ...runtime,
   organisation: { ...d.organisation, ...(runtime.organisation || {}) },
   supabase:     { ...d.supabase,     ...(runtime.supabase || {}) },
+  vapidPublicKey: runtime.vapidPublicKey || d.vapidPublicKey,
   bases:        (runtime.bases && runtime.bases.length) ? runtime.bases : d.bases,
 }

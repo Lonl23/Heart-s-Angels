@@ -5,3 +5,7 @@
 [functions.envoyer-invitation]
 # L’oubli de mot de passe est public ; invitation et bienvenue vérifient le JWT dans le code.
 verify_jwt = false
+
+[functions.envoyer-push]
+# Secret partagé x-ha-push-secret (Vault ha_push_hook_secret), pas le JWT utilisateur.
+verify_jwt = false

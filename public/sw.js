@@ -4,7 +4,7 @@
    skipWaiting n'est PAS appelé à l'install : la page envoie SKIP_WAITING
    seulement quand l'utilisateur confirme « Mettre à jour ».
    Manifest, icônes et favicon passent toujours par le réseau (jamais le cache). */
-const CACHE_NAME = 'ha-app-v6-__SW_BUILD__'
+const CACHE_NAME = 'ha-app-v7-__SW_BUILD__'
 const PRECACHE = ['/index.html']
 
 function isVolatile(pathname) {
@@ -40,6 +40,39 @@ self.addEventListener('message', event => {
   if (event.data === 'SKIP_WAITING' || event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting()
   }
+})
+
+self.addEventListener('push', event => {
+  let data = {}
+  try { data = event.data ? event.data.json() : {} } catch {
+    data = { body: event.data ? event.data.text() : '' }
+  }
+  const titre = data.title || data.titre || "Heart's Angels"
+  const corps = data.body || data.message || ''
+  event.waitUntil(
+    self.registration.showNotification(titre, {
+      body: corps,
+      icon: '/icons/ha-logo-192-v4.png',
+      badge: '/icons/ha-logo-192-v4.png',
+      data: { lien: data.lien || '/app' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  const lien = event.notification.data?.lien || '/app'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const cible = new URL(lien, self.location.origin).href
+      const deja = list.find(c => c.url.startsWith(self.location.origin) && 'focus' in c)
+      if (deja) {
+        deja.navigate?.(cible)
+        return deja.focus()
+      }
+      return self.clients.openWindow(cible)
+    })
+  )
 })
 
 function htmlHorsLigne() {

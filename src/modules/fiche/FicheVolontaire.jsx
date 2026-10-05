@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
 import { QUALIFS, ROLES_ASBL, SPECIALISATIONS_INF, qualifsPourType, qualificationsCompatibles } from './ficheSchema'
+import { TYPES_NOTIF, prefsDepuisFiche } from '@/lib/notifications'
 import { FormPinFiche } from '@/components/PinArchive'
 
 const vide = {
@@ -12,15 +13,17 @@ const vide = {
   ambulancier:{ visa_atnup:'', badge_112:'' },
   infirmier:{ visa:'', specialisations:[] },
   contacts_urgence:[],
+  notif_prefs: prefsDepuisFiche(null),
 }
 
 export default function FicheVolontaire({ userId, onBack }) {
-  const { user, reload, peutGererFiches, accesTotal, peutOuvrirArchives } = useAuth()
+  const { user, reload, peutGererFiches, accesTotal, peutOuvrirArchives, peutReglerNotifications } = useAuth()
   const uid = userId || user?.id
   const gestionQualif = peutGererFiches()   // type + qualifications
   const gestionRoles = accesTotal()         // rôles ASBL (admin/présidence/resp info)
   const maFiche = uid === user?.id
   const pinEligible = maFiche && peutOuvrirArchives()
+  const prefsNotif = maFiche && peutReglerNotifications()
   const [prof, setProf] = useState(null)
   const [f, setF] = useState(vide)
   const [saving, setSaving] = useState(false)
@@ -56,6 +59,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       qualifications:(data?.fiche||{}).qualifications||[],
       roles_asbl:(data?.fiche||{}).roles_asbl||[],
       contacts_urgence:(data?.fiche||{}).contacts_urgence||[],
+      notif_prefs: prefsDepuisFiche(data?.fiche),
     })
     if (uid === user?.id) {
       const { data: pin } = await supabase.rpc('mon_pin_archive_defini')
@@ -72,6 +76,9 @@ export default function FicheVolontaire({ userId, onBack }) {
   const setIn = (grp,k,v) => setF(s => ({ ...s, [grp]:{ ...s[grp], [k]:v } }))
   const toggleArr = (k,val) => setF(s => ({ ...s, [k]: s[k].includes(val) ? s[k].filter(x=>x!==val) : [...s[k], val] }))
   const toggleSpec = (val) => setF(s => ({ ...s, infirmier:{ ...s.infirmier, specialisations: s.infirmier.specialisations.includes(val) ? s.infirmier.specialisations.filter(x=>x!==val) : [...s.infirmier.specialisations, val] } }))
+  function togglePref(cle) {
+    setF(s => ({ ...s, notif_prefs: { ...prefsDepuisFiche(s), [cle]: !prefsDepuisFiche(s)[cle] } }))
+  }
 
   const estAmbu = f.qualifications.includes('ambulancier')
   const estInfi = f.qualifications.includes('infirmier')
@@ -96,6 +103,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       qualifications:(data[0].fiche||{}).qualifications||[],
       roles_asbl:(data[0].fiche||{}).roles_asbl||[],
       contacts_urgence:(data[0].fiche||{}).contacts_urgence||[],
+      notif_prefs: prefsDepuisFiche(data[0].fiche),
     })
     setMsg({ t:'Fiche enregistrée.', ok:true }); setTimeout(()=>setMsg(null), 3000)
     if (!userId) reload()
@@ -210,6 +218,25 @@ export default function FicheVolontaire({ userId, onBack }) {
         <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
           <Sec>Code d’ouverture des dossiers verrouillés</Sec>
           <FormPinFiche aPin={aPin} onSauver={sauverPin} saving={savingPin} msg={pinMsg} />
+        </Card>
+      )}
+
+      {prefsNotif && (
+        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+          <Sec>Notifications reçues</Sec>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
+            Président et responsable informatique : vous recevez toutes les alertes. Décochez celles que vous ne voulez plus.
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {TYPES_NOTIF.map(t => (
+              <Toggle
+                key={t.v}
+                label={`${t.icon} ${t.l}`}
+                on={!!(f.notif_prefs || {})[t.v]}
+                onClick={() => togglePref(t.v)}
+              />
+            ))}
+          </div>
         </Card>
       )}
 

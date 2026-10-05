@@ -193,6 +193,13 @@ export function AuthProvider({ children }) {
     const roles = profile?.fiche?.roles_asbl || []
     return roles.includes('recolteur_souhait')
   }
+  /** Président et responsable informatique : toutes les alertes, avec cases à cocher. */
+  function peutReglerNotifications() {
+    if (!role || role === 'partenaire') return false
+    if (role === 'admin' || role === 'president') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => r === 'president' || r === 'resp_informatique')
+  }
   /** Président, vice-président, responsable informatique (pas l’adjoint) et récolteurs : archives PIN. */
   function peutOuvrirArchives() {
     if (!role || role === 'partenaire') return false
@@ -207,7 +214,7 @@ export function AuthProvider({ children }) {
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, estVolontaireNonMedical, estRecolteurSouhait,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

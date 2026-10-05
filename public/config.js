@@ -15,6 +15,7 @@ window.__APP_CONFIG__ = {
     logoUrl: "/icons/ha-logo-512-v4.png",
   },
   domaine: "https://heart-s-angels.web.app",
+  vapidPublicKey: "BItos40GJksoCJRK7W0cWt5VgloRmYkwwf9Q9rZ3hkCXR9xEruCiZhN-yboXw5ijt54bvIMo83wle2QoM5VTz_U",
   supabase: {
     url:     "https://vppmvjqbzdeftrhdoert.supabase.co",
     anonKey: "sb_publishable_A_Bu4P4-Fn-sy3xF58U4Cg_kJ_aLSIH",

@@ -4,6 +4,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '@/hooks/useAuth'
+import { NotificationsProvider } from '@/hooks/useNotifications'
 import { SwUpdateProvider } from '@/hooks/useSwUpdate'
 import App from '@/App'
 import './index.css'
@@ -21,7 +22,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <SwUpdateProvider>
         <AuthProvider>
-          <App />
+          <NotificationsProvider>
+            <App />
+          </NotificationsProvider>
         </AuthProvider>
       </SwUpdateProvider>
     </BrowserRouter>
