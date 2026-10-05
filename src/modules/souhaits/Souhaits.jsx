@@ -20,6 +20,46 @@ export {
 }
 export { statutsDisponibles } from './statuts'
 
+function replierTexte(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/['’`-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Chaque mot doit figurer dans le prénom ou le nom (ordre indifférent, accents ignorés). */
+function correspondNomPrenom(prenom, nom, q) {
+  const needle = replierTexte(q)
+  if (!needle) return true
+  const p = replierTexte(prenom)
+  const n = replierTexte(nom)
+  return needle.split(' ').filter(Boolean).every(t => p.includes(t) || n.includes(t))
+}
+
+function ChampRechercheNom({ value, onChange, id }) {
+  return (
+    <div className="ha-souhait-recherche">
+      <label htmlFor={id} style={{ fontSize:12.5, color:'var(--text-muted)', display:'block', marginBottom:5 }}>
+        Rechercher un souhait
+      </label>
+      <input
+        id={id}
+        className="ha-search"
+        type="search"
+        autoComplete="off"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="Nom et/ou prénom du bénéficiaire"
+        aria-label="Rechercher un souhait par nom ou prénom"
+        style={{ width:'min(100%, 420px)', maxWidth:'100%' }}
+      />
+    </div>
+  )
+}
+
 export default function Souhaits() {
   const nav = useNavigate()
   const { id } = useParams()
@@ -233,17 +273,14 @@ function Kanban({ onOpen }) {
   }
 
   if (loading) return <Loading />
-  const needle = q.trim().toLowerCase()
-  const filtered = needle
-    ? items.filter(s => `${s.beneficiaire_prenom || ''} ${s.beneficiaire_nom || ''} ${s.description||''} ${s.localisation||''} ${s.date_souhaitee||''}`.toLowerCase().includes(needle))
-    : items
+  const filtered = items.filter(s => correspondNomPrenom(s.beneficiaire_prenom, s.beneficiaire_nom, q))
   const ghost = drag && items.find(s => s.id === drag.id)
 
   return (
     <div className="ha-kanban-page">
-      <div className="ha-kanban-toolbar" style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:14 }}>
-        <input className="ha-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un bénéficiaire, un lieu…" />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Un souhait réalisé ou non réalisé ne se déplace plus.</span>
+      <div className="ha-kanban-toolbar" style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-end', gap:12, marginBottom:14 }}>
+        <ChampRechercheNom id="recherche-souhaits" value={q} onChange={setQ} />
+        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Un souhait réalisé ou non réalisé ne se déplace plus.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -260,7 +297,7 @@ function Kanban({ onOpen }) {
         <Empty title="Aucun souhait pour l'instant" hint="Acceptez une demande reçue, ou créez un souhait avec le bouton ci-dessus." />
       )}
       {items.length > 0 && filtered.length === 0 && (
-        <Empty title="Aucun résultat" hint="Essayez un autre mot, ou effacez la recherche." />
+        <Empty title="Aucun souhait pour ce nom ou prénom" hint="Essayez le prénom seul, le nom seul, ou les deux. Les accents ne comptent pas." />
       )}
       {filtered.length > 0 && (
         <div className="ha-kanban-board">
@@ -335,7 +372,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
         onPointerDown={onPointerDown}
         title={titre}>
         <div style={{ fontWeight:600, color:'var(--text)', fontSize:13.5, marginBottom:5 }}>
-          {s.beneficiaire_prenom || '—'}
+          {[s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ') || '—'}
         </div>
         {s.description && (
           <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
@@ -400,6 +437,7 @@ function Demandes({ onOpen }) {
   const { profile } = useAuth()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
@@ -459,11 +497,16 @@ function Demandes({ onOpen }) {
 
   if (loading) return <Loading />
   const actives = items.filter(d => d.statut !== 'refusee')
+  const filtered = actives.filter(d => correspondNomPrenom(d.patient_prenom, d.patient_nom, q))
   if (actives.length === 0) return <Empty title="Aucune demande en attente" hint="Les formulaires publics et les encodages partenaires apparaissent ici." />
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-      {actives.map(d => (
+      <ChampRechercheNom id="recherche-demandes" value={q} onChange={setQ} />
+      {filtered.length === 0 && (
+        <Empty title="Aucune demande pour ce nom ou prénom" hint="Essayez le prénom seul, le nom seul, ou les deux." />
+      )}
+      {filtered.map(d => (
         <Card key={d.id}>
           <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:8 }}>
             <div>
