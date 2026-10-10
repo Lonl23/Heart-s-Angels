@@ -4,9 +4,12 @@ import { Btn, F, Sel, inp, lbl } from '@/components/ui'
 import {
   ROLES_MISSION, lblRoleMission, teinteDepuisQuals, roleSuggere, qualsImplicites,
   rolesRequisEffectifs, rolesRequisVecteur, phraseIlManque, rolesEncoreManquants,
-  countRole, withRoleCount,
+  rolesManquantsMultiset, couvertureMission, countRole, withRoleCount,
 } from '@/modules/fiche/ficheSchema'
-import { fmtDatesSouhait, joursDesPeriodes, periodesDepuisSouhait, plageGlobale } from './datesSouhait'
+import {
+  fmtDatesSouhait, joursDesPeriodes, periodesDepuisSouhait, plageGlobale,
+  normaliserPeriodes, clePeriode, asJours, fmtPeriode, fmtPeriodeCourt, annoterPeriodes,
+} from './datesSouhait'
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'v' + Date.now() + Math.random().toString(16).slice(2))
 const TYPES = ['', 'Ambulance', 'VSL', 'Voiture', 'Autre']
@@ -15,7 +18,8 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
   const vecteurs = m.vecteurs || []
   const [equipe, setEquipe] = useState([])
   const [pool, setPool] = useState([])
-  const [dates, setDates] = useState({ label: '', jours: [], d0: null, d1: null })
+  const [dates, setDates] = useState({ label: '', jours: [], d0: null, d1: null, periodes: [] })
+  const [periodeSel, setPeriodeSel] = useState(null)
 
   useEffect(() => { charger() }, [souhaitId])
 
@@ -25,7 +29,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
       supabase.from('souhait_personnel').select('*, profiles(prenom,nom,role,fiche)').eq('souhait_id', souhaitId),
       supabase.rpc('personnel_disponible_souhait', { p_souhait: souhaitId }),
     ])
-    const periodes = periodesDepuisSouhait(sh)
+    const periodes = normaliserPeriodes(periodesDepuisSouhait(sh))
     const plage = plageGlobale(periodes)
     const jours = joursDesPeriodes(periodes)
     setDates({
@@ -33,11 +37,50 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
       jours,
       d0: plage.date_souhaitee,
       d1: plage.date_fin,
+      periodes,
     })
     setEquipe(eq || [])
     let pers = normaliserPool(rpc.data)
     if (!pers.length) pers = await poolDepuisProfils(jours, plage.date_souhaitee, plage.date_fin)
-    setPool(pers.map(p => ({ ...p, quals: asQuals(p.quals) })))
+    const joursByUser = {}
+    if (plage.date_souhaitee) {
+      const { data: dispos } = await supabase.from('disponibilites')
+        .select('user_id,date_debut,date_fin')
+        .lte('date_debut', plage.date_fin).gte('date_fin', plage.date_souhaitee)
+      for (const d of dispos || []) {
+        const set = joursByUser[d.user_id] || new Set()
+        for (const j of joursDesPeriodes([{ debut: d.date_debut, fin: d.date_fin || d.date_debut }])) set.add(j)
+        joursByUser[d.user_id] = set
+      }
+    }
+    pers = pers.map(p => {
+      const joursDispo = asJours(p.jours_dispo).length ? asJours(p.jours_dispo) : [...(joursByUser[p.user_id] || [])]
+      const conflitPrecis = Array.isArray(p.jours_conflit)
+      const joursConflit = asJours(p.jours_conflit)
+      const ann = annoterPeriodes(joursDispo, joursConflit, periodes)
+      const conflitPeriode = { ...ann.conflitPeriode }
+      if (!conflitPrecis && p.conflit && periodes.length === 1) {
+        conflitPeriode[clePeriode(periodes[0])] = true
+      }
+      return {
+        ...p,
+        quals: asQuals(p.quals),
+        jours_dispo: joursDispo,
+        jours_conflit: joursConflit,
+        conflitPrecis,
+        parPeriode: ann.parPeriode,
+        conflitPeriode,
+        dispo: ann.dispo,
+        conflit: conflitPrecis ? ann.conflit : !!p.conflit,
+      }
+    })
+    setPool(pers)
+    setPeriodeSel(prev => {
+      if (prev && periodes.some(p => clePeriode(p) === clePeriode(prev))) {
+        return periodes.find(p => clePeriode(p) === clePeriode(prev))
+      }
+      return meilleurePeriode(periodes, pers)
+    })
   }
 
   function majVecteur(id, patch) { setM(o => ({ ...o, vecteurs: (o.vecteurs||[]).map(v => v.id===id ? { ...v, ...patch } : v) })) }
@@ -57,13 +100,21 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
   async function affecter(vid, userId) {
     if (!userId) return
     const p = pool.find(x => x.user_id === userId)
-    if (p?.dispo === 'non') {
-      if (!confirm('Cette personne n’a pas indiqué de disponibilité sur ces dates. L’affecter quand même ?')) return
-    } else if (p?.dispo === 'partiel') {
-      if (!confirm('Disponibilité partielle sur la période. L’affecter quand même ?')) return
+    const st = statutSur(p, periodeSel)
+    const conf = conflitSur(p, periodeSel)
+    if (st === 'non') {
+      if (!confirm(periodeSel
+        ? `Cette personne n’est pas disponible le ${fmtPeriode(periodeSel)}. L’affecter quand même ?`
+        : 'Cette personne n’a pas indiqué de disponibilité sur ces dates. L’affecter quand même ?')) return
+    } else if (st === 'partiel') {
+      if (!confirm(periodeSel
+        ? `Disponibilité partielle sur ${fmtPeriode(periodeSel)}. L’affecter quand même ?`
+        : 'Disponibilité partielle sur la période. L’affecter quand même ?')) return
     }
-    if (p?.conflit) {
-      if (!confirm('Déjà affectée à une autre mission sur ces dates. L’affecter quand même ?')) return
+    if (conf) {
+      if (!confirm(periodeSel
+        ? `Déjà affectée à une autre mission le ${fmtPeriode(periodeSel)}. L’affecter quand même ?`
+        : 'Déjà affectée à une autre mission sur ces dates. L’affecter quand même ?')) return
     }
     await flushMission()
     const v = (m.vecteurs||[]).find(x => x.id === vid)
@@ -118,7 +169,9 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
     }))
   }
 
-  const libres = pool.filter(p => !dejaIds.has(p.user_id) && p.dispo === 'plein' && !p.conflit)
+  const alternatives = (dates.periodes || []).length >= 2
+  const requisTous = rolesTousVecteurs(m)
+  const libres = pool.filter(p => !dejaIds.has(p.user_id) && statutSur(p, periodeSel) === 'plein' && !conflitSur(p, periodeSel))
   const periode = dates.label && dates.label !== 'Date à définir' ? dates.label : null
 
   return (
@@ -126,7 +179,41 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
       {!dates.d0 && (
         <div className="ha-flash ha-flash-warn" style={{ marginBottom:14 }}>Indiquez les dates du souhait (fiche bénéficiaire) pour croiser avec les disponibilités.</div>
       )}
-      {dates.d0 && (
+      {dates.d0 && alternatives && (
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:8 }}>
+            Dates possibles — <strong>l’une ou l’autre</strong>, pas les deux. Choisissez le jour où vous bouclez l’équipage.
+          </div>
+          <div className="ha-date-opts">
+            {dates.periodes.map(p => {
+              const on = clePeriode(p) === clePeriode(periodeSel)
+              const manques = manquesSurPeriode(m, equipe, pool, p)
+              const noms = nomsDispoPeriode(pool, p, requisTous)
+              const ok = !manques.length
+              return (
+                <button key={clePeriode(p)} type="button" className={'ha-date-opt' + (on ? ' is-on' : '')}
+                  onClick={() => setPeriodeSel(p)}>
+                  <div className="ha-date-opt-titre">{fmtPeriodeCourt(p)}</div>
+                  <div className={'ha-date-opt-meta' + (ok ? ' is-ok' : ' is-no')}>
+                    {ok ? 'équipage possible ce jour-là' : (phraseIlManque(manques) || 'personne disponible')}
+                  </div>
+                  {!!noms.length && (
+                    <div className="ha-date-opt-noms">
+                      {noms.map(n => n.txt).join(' · ')}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ fontSize:13, color:'var(--text-2)' }}>
+            Pour le {fmtPeriode(periodeSel) || 'jour choisi'} : {libres.length === 0
+              ? 'personne n’est disponible et libre.'
+              : `${libres.length} volontaire${libres.length>1?'s':''} disponible${libres.length>1?'s':''}.`}
+          </div>
+        </div>
+      )}
+      {dates.d0 && !alternatives && (
         <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:12 }}>
           Période : <strong>{periode}</strong>
           {libres.length === 0
@@ -171,19 +258,22 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
               <div style={{ marginTop:8 }}>
                 <div style={{ fontSize:12, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:.5, marginBottom:6 }}>Équipage</div>
                 {!lecture && <AjoutMembre pool={pool} dejaIds={dejaIds} requis={requisEffectifsV} remaining={remaining} rolesDeja={rolesDejaV}
-                  phraseManque={phraseManque} onAdd={u => affecter(v.id, u)} />}
+                  phraseManque={phraseManque} onAdd={u => affecter(v.id, u)}
+                  periodeSel={periodeSel} alternatives={alternatives} />}
                 <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:8 }}>
                   {membres.filter(e => e.user_id && (e.profiles?.prenom || e.profiles?.nom)).map(e => {
                     const info = pool.find(p => p.user_id === e.user_id)
                     const teinte = teinteDepuisQuals(info?.quals || qualsImplicites(e.profiles?.role, e.profiles?.fiche))
-                    const dispoTxt = info?.dispo === 'plein' ? 'disponible' : info?.dispo === 'partiel' ? 'dispo. partielle' : info?.dispo === 'non' ? 'pas de dispo' : ''
+                    const st = statutSur(info, periodeSel)
+                    const conf = conflitSur(info, periodeSel)
+                    const dispoTxt = libelleDispoMembre(info, dates.periodes, periodeSel, alternatives)
                     return (
                       <div key={e.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, fontSize:13.5, background:'var(--bg-alt)', borderRadius:8, padding:'6px 10px' }}>
                         <span>
                           {e.profiles?.prenom} {e.profiles?.nom}
                           {e.role_mission && <span style={{ color:'var(--text-muted)' }}> — {lblRoleMission(e.role_mission) || e.role_mission}</span>}
-                          {dispoTxt && <span style={{ fontSize:11.5, color: info?.dispo === 'plein' ? '#3B6D11' : '#C62828', marginLeft:8 }}>{dispoTxt}</span>}
-                          {info?.conflit && <span style={{ fontSize:11.5, color:'#C62828', marginLeft:6 }}>autre mission</span>}
+                          {dispoTxt && <span style={{ fontSize:11.5, color: st === 'plein' ? '#3B6D11' : '#C62828', marginLeft:8 }}>{dispoTxt}</span>}
+                          {conf && <span style={{ fontSize:11.5, color:'#C62828', marginLeft:6 }}>autre mission</span>}
                         </span>
                         <span style={{ display:'flex', alignItems:'center', gap:8 }}>
                           <i className={'ha-cal-dot ' + (teinte === 'dual' ? 'dual' : teinte === 'infi' ? 'infi' : teinte === 'ambu' ? 'ambu' : 'nonmed')} />
@@ -213,6 +303,86 @@ function asQuals(q) {
     try { const p = JSON.parse(q); return Array.isArray(p) ? p : [] } catch { return [] }
   }
   return []
+}
+
+function statutSur(p, periode) {
+  if (!p) return 'non'
+  if (!periode?.debut) return p.dispo || 'non'
+  return p.parPeriode?.[clePeriode(periode)] || 'non'
+}
+
+function conflitSur(p, periode) {
+  if (!p) return false
+  if (!periode?.debut) return !!p.conflit
+  if (p.conflitPrecis) return !!p.conflitPeriode?.[clePeriode(periode)]
+  return !!p.conflit
+}
+
+function rolesTousVecteurs(m) {
+  const vs = m?.vecteurs || []
+  if (!vs.length) return rolesRequisEffectifs(m?.roles_requis)
+  return vs.flatMap(v => rolesRequisVecteur(v, m?.roles_requis))
+}
+
+function manquesSurPeriode(m, equipe, pool, periode) {
+  const extras = []
+  const equipeOk = (equipe || []).filter(e => statutSur(pool.find(p => p.user_id === e.user_id), periode) === 'plein')
+  for (const p of pool || []) {
+    if (statutSur(p, periode) !== 'plein') continue
+    if (conflitSur(p, periode)) continue
+    extras.push({ user_id: p.user_id, quals: p.quals })
+  }
+  const cov = couvertureMission(m || {}, equipeOk, extras)
+  return rolesManquantsMultiset(cov.requis, cov.couverts)
+}
+
+function nomsDispoPeriode(pool, periode, requis) {
+  const need = rolesRequisEffectifs(requis)
+  const out = []
+  for (const p of pool || []) {
+    if (statutSur(p, periode) !== 'plein') continue
+    if (need.length && !(p.quals || []).some(q => need.includes(q))) continue
+    const role = roleSuggere(p.quals || [], need, [])
+    const tag = conflitSur(p, periode) ? ' (autre mission)' : ''
+    out.push({
+      id: p.user_id,
+      txt: `${p.prenom} ${p.nom}${role ? ' · ' + lblRoleMission(role) : ''}${tag}`,
+    })
+  }
+  return out
+}
+
+function meilleurePeriode(periodes, pool) {
+  if (!periodes?.length) return null
+  let best = periodes[0]
+  let score = -1
+  for (const p of periodes) {
+    const n = (pool || []).filter(x => statutSur(x, p) === 'plein' && !conflitSur(x, p)).length
+    if (n > score) { score = n; best = p }
+  }
+  return best
+}
+
+function libelleDispoMembre(p, periodes, periodeSel, alternatives) {
+  if (!p) return ''
+  if (periodeSel) {
+    const st = statutSur(p, periodeSel)
+    if (st === 'plein') return 'disponible'
+    if (st === 'partiel') return 'dispo. partielle'
+    if (st === 'non') return 'pas de dispo ce jour'
+    return ''
+  }
+  if (alternatives && periodes?.length) {
+    const ok = periodes.filter(per => statutSur(p, per) === 'plein')
+    if (ok.length === periodes.length) return 'disponible'
+    if (ok.length) return 'dispo ' + ok.map(fmtPeriodeCourt).join(', ')
+    if (periodes.some(per => statutSur(p, per) === 'partiel')) return 'dispo. partielle'
+    return 'pas de dispo'
+  }
+  if (p.dispo === 'plein') return 'disponible'
+  if (p.dispo === 'partiel') return 'dispo. partielle'
+  if (p.dispo === 'non') return 'pas de dispo'
+  return ''
 }
 
 function normaliserPool(data) {
@@ -280,19 +450,25 @@ async function poolDepuisProfils(jours, d0, d1) {
   }))
 }
 
-function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque, onAdd }) {
+function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque, onAdd, periodeSel, alternatives }) {
   const [u, setU] = useState('')
   const needAll = rolesRequisEffectifs(requis)
   const needNow = (remaining && remaining.length) ? remaining : needAll
   const matchNeed = p => (p.quals || []).some(q => needAll.includes(q))
   const candidats = pool.filter(p => !dejaIds.has(p.user_id) && matchNeed(p))
   const autres = pool.filter(p => !dejaIds.has(p.user_id) && !matchNeed(p))
+  const st = p => statutSur(p, periodeSel)
+  const conf = p => conflitSur(p, periodeSel)
+  const libellePlein = alternatives && periodeSel
+    ? `Disponibles le ${fmtPeriode(periodeSel)}`
+    : 'Disponibles sur toute la période'
   const groupes = [
-    { k:'plein', l:'Disponibles sur toute la période', items: candidats.filter(p => p.dispo === 'plein' && !p.conflit) },
-    { k:'partiel', l:'Disponibilité partielle', items: candidats.filter(p => p.dispo === 'partiel' && !p.conflit) },
-    { k:'conflit', l:'Déjà sur une autre mission', items: candidats.filter(p => p.conflit) },
-    { k:'non', l:'Pas de disponibilité indiquée', items: candidats.filter(p => p.dispo === 'non' && !p.conflit) },
-    { k:'inconnu', l:'Autres volontaires', items: candidats.filter(p => p.dispo === 'inconnu' && !p.conflit) },
+    { k:'plein', l: libellePlein, items: candidats.filter(p => st(p) === 'plein' && !conf(p)) },
+    { k:'autre-jour', l:'Disponibles un autre jour', items: alternatives ? candidats.filter(p => st(p) !== 'plein' && p.dispo === 'plein' && !conf(p)) : [] },
+    { k:'partiel', l:'Disponibilité partielle', items: candidats.filter(p => st(p) === 'partiel' && !conf(p)) },
+    { k:'conflit', l: alternatives && periodeSel ? `Déjà sur une autre mission le ${fmtPeriode(periodeSel)}` : 'Déjà sur une autre mission', items: candidats.filter(p => conf(p)) },
+    { k:'non', l:'Pas de disponibilité indiquée', items: candidats.filter(p => st(p) === 'non' && !conf(p) && p.dispo !== 'plein') },
+    { k:'inconnu', l:'Autres volontaires', items: candidats.filter(p => st(p) === 'inconnu' && !conf(p)) },
   ]
   const places = new Set(groupes.flatMap(g => g.items.map(p => p.user_id)))
   const rest = candidats.filter(p => !places.has(p.user_id))

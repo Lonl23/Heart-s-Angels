@@ -86,3 +86,63 @@ export function fmtDatesSouhait(s) {
   if (!n.length) return 'Date à définir'
   return n.map(fmtPeriode).join(' · ')
 }
+
+export function clePeriode(p) {
+  if (!p?.debut) return ''
+  return `${p.debut}|${p.fin || p.debut}`
+}
+
+export function asJours(v) {
+  if (!v) return []
+  if (Array.isArray(v)) return [...new Set(v.map(x => String(x).slice(0, 10)).filter(Boolean))]
+  return []
+}
+
+export function fmtPeriodeCourt(p) {
+  if (!p?.debut) return ''
+  const opts = { weekday: 'short', day: 'numeric', month: 'short' }
+  const a = new Date(p.debut + 'T12:00:00').toLocaleDateString('fr-BE', opts)
+  if (p.fin && p.fin !== p.debut) {
+    return `${a} → ${new Date(p.fin + 'T12:00:00').toLocaleDateString('fr-BE', opts)}`
+  }
+  return a
+}
+
+export function couvrePeriode(joursDispo, p) {
+  const need = joursDesPeriodes([p])
+  if (!need.length) return 'inconnu'
+  const have = new Set(asJours(joursDispo))
+  let n = 0
+  for (const j of need) if (have.has(j)) n++
+  if (n >= need.length) return 'plein'
+  if (n > 0) return 'partiel'
+  return 'non'
+}
+
+export function conflitSurPeriode(joursConflit, p) {
+  const need = new Set(joursDesPeriodes([p]))
+  return asJours(joursConflit).some(j => need.has(j))
+}
+
+/** Une personne : plein sur une option = dispo pour CETTE date (pas les deux). */
+export function annoterPeriodes(joursDispo, joursConflit, periodes) {
+  const list = normaliserPeriodes(periodes)
+  const parPeriode = {}
+  const conflitPeriode = {}
+  for (const p of list) {
+    const k = clePeriode(p)
+    parPeriode[k] = couvrePeriode(joursDispo, p)
+    conflitPeriode[k] = conflitSurPeriode(joursConflit, p)
+  }
+  const vals = list.map(p => parPeriode[clePeriode(p)])
+  const dispo = !vals.length ? 'inconnu'
+    : vals.some(v => v === 'plein') ? 'plein'
+    : vals.some(v => v === 'partiel') ? 'partiel'
+    : 'non'
+  return {
+    parPeriode,
+    conflitPeriode,
+    dispo,
+    conflit: list.some(p => conflitPeriode[clePeriode(p)]),
+  }
+}

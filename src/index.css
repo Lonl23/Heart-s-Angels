@@ -567,6 +567,18 @@ img, svg, video, table { max-width: 100%; }
 .ha-cal-ev.dispo-nonmed, .ha-cal-ev.dispo-autre,
 .ha-aff-p.dispo-nonmed, .ha-aff-p.dispo-autre { background: #6B6560; color: #fff; }
 .ha-aff-rapides { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.ha-date-opts { display:flex; flex-direction:column; gap:8px; margin:0 0 14px; }
+.ha-date-opt {
+  display:block; width:100%; text-align:left; border:1.5px solid var(--border);
+  border-radius:12px; padding:10px 12px; background:var(--card); cursor:pointer;
+  color:var(--text);
+}
+.ha-date-opt.is-on { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+.ha-date-opt-titre { font-weight:700; font-size:14px; color:var(--heading); }
+.ha-date-opt-meta { font-size:12.5px; margin-top:3px; color:var(--text-2); }
+.ha-date-opt-meta.is-ok { color:#3B6D11; }
+.ha-date-opt-meta.is-no { color:#C62828; }
+.ha-date-opt-noms { font-size:12.5px; margin-top:6px; color:var(--text-2); line-height:1.35; }
 .ha-role-ambu { display:inline-flex; align-items:center; gap:4px; }
 .ha-role-n {
   min-width: 32px; min-height: 32px; padding: 0 8px; border-radius: 99px;
