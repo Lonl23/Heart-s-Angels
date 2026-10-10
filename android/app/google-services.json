@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "945097041662",
+    "project_id": "heart-s-angels",
+    "storage_bucket": "heart-s-angels.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:945097041662:android:7db8f3f554db3a92c9e7af",
+        "android_client_info": {
+          "package_name": "be.heartsangels.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAkwQcsEXxNt8Y7nuHSUyHFy8-wcRnQV7Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

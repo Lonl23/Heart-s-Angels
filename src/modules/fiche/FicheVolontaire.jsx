@@ -3,25 +3,34 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
 import { QUALIFS, ROLES_ASBL, SPECIALISATIONS_INF, qualifsPourType, qualificationsCompatibles } from './ficheSchema'
+import { TYPES_NOTIF, prefsDepuisFiche } from '@/lib/notifications'
+import { FormPinFiche } from '@/components/PinArchive'
 
 const vide = {
-  date_naissance:'', telephone:'', type_benevole:'',
+  date_naissance:'', telephone:'', iban:'', type_benevole:'',
   qualifications:[], roles_asbl:[],
   permis:{ B:false, C:false, E:false, selection_medicale:false, selection_validite:'' },
   ambulancier:{ visa_atnup:'', badge_112:'' },
   infirmier:{ visa:'', specialisations:[] },
   contacts_urgence:[],
+  notif_prefs: prefsDepuisFiche(null),
 }
 
 export default function FicheVolontaire({ userId, onBack }) {
-  const { user, reload, peutGererFiches, accesTotal } = useAuth()
+  const { user, reload, peutGererFiches, accesTotal, peutOuvrirArchives, peutReglerNotifications } = useAuth()
   const uid = userId || user?.id
   const gestionQualif = peutGererFiches()   // type + qualifications
   const gestionRoles = accesTotal()         // rôles ASBL (admin/présidence/resp info)
+  const maFiche = uid === user?.id
+  const pinEligible = maFiche && peutOuvrirArchives()
+  const prefsNotif = maFiche && peutReglerNotifications()
   const [prof, setProf] = useState(null)
   const [f, setF] = useState(vide)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [aPin, setAPin] = useState(false)
+  const [pinMsg, setPinMsg] = useState(null)
+  const [savingPin, setSavingPin] = useState(false)
   const fileRef = useRef()
 
   async function uploadPhoto(e) {
@@ -50,8 +59,13 @@ export default function FicheVolontaire({ userId, onBack }) {
       qualifications:(data?.fiche||{}).qualifications||[],
       roles_asbl:(data?.fiche||{}).roles_asbl||[],
       contacts_urgence:(data?.fiche||{}).contacts_urgence||[],
+      notif_prefs: prefsDepuisFiche(data?.fiche),
     })
-  })() }, [uid])
+    if (uid === user?.id) {
+      const { data: pin } = await supabase.rpc('mon_pin_archive_defini')
+      setAPin(!!pin)
+    }
+  })() }, [uid, user?.id])
 
   const set = (k,v) => setF(s => ({ ...s, [k]:v }))
   const setTypeBenevole = (v) => setF(s => ({
@@ -62,13 +76,16 @@ export default function FicheVolontaire({ userId, onBack }) {
   const setIn = (grp,k,v) => setF(s => ({ ...s, [grp]:{ ...s[grp], [k]:v } }))
   const toggleArr = (k,val) => setF(s => ({ ...s, [k]: s[k].includes(val) ? s[k].filter(x=>x!==val) : [...s[k], val] }))
   const toggleSpec = (val) => setF(s => ({ ...s, infirmier:{ ...s.infirmier, specialisations: s.infirmier.specialisations.includes(val) ? s.infirmier.specialisations.filter(x=>x!==val) : [...s.infirmier.specialisations, val] } }))
+  function togglePref(cle) {
+    setF(s => ({ ...s, notif_prefs: { ...prefsDepuisFiche(s), [cle]: !prefsDepuisFiche(s)[cle] } }))
+  }
 
   const estAmbu = f.qualifications.includes('ambulancier')
   const estInfi = f.qualifications.includes('infirmier')
 
   async function save() {
     if (!prof?.prenom || !prof?.nom) { setMsg({ t:'Prénom et nom requis.', ok:false }); return }
-    if (estAmbu && !f.ambulancier.visa_atnup.trim()) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier.', ok:false }); return }
+    if (estAmbu && !f.ambulancier.visa_atnup.trim() && !f.compte_a_configurer) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier.', ok:false }); return }
     setSaving(true)
     const fiche = { ...f, qualifications: qualificationsCompatibles(f.type_benevole, f.qualifications) }
     const { data, error } = await supabase.from('profiles')
@@ -86,9 +103,22 @@ export default function FicheVolontaire({ userId, onBack }) {
       qualifications:(data[0].fiche||{}).qualifications||[],
       roles_asbl:(data[0].fiche||{}).roles_asbl||[],
       contacts_urgence:(data[0].fiche||{}).contacts_urgence||[],
+      notif_prefs: prefsDepuisFiche(data[0].fiche),
     })
     setMsg({ t:'Fiche enregistrée.', ok:true }); setTimeout(()=>setMsg(null), 3000)
     if (!userId) reload()
+  }
+
+  async function sauverPin({ pin, ancien }) {
+    setSavingPin(true)
+    setPinMsg(null)
+    const { data, error } = await supabase.rpc('definir_pin_archive', { p_pin: pin, p_ancien: ancien || null })
+    setSavingPin(false)
+    if (error) { setPinMsg({ t: error.message, ok: false }); return false }
+    if (data?.ok === false) { setPinMsg({ t: data.error || 'Impossible d’enregistrer le code.', ok: false }); return false }
+    setAPin(true)
+    setPinMsg({ t: 'Code enregistré. Il n’est pas affiché ensuite, seul vous le connaissez.', ok: true })
+    return true
   }
 
   if (!prof) return <Page title="Fiche volontaire"><p style={{ color:'var(--text-muted)' }}>Chargement…</p></Page>
@@ -96,6 +126,11 @@ export default function FicheVolontaire({ userId, onBack }) {
   return (
     <Page title={userId ? `Fiche — ${prof.prenom} ${prof.nom}` : 'Ma fiche volontaire'} action={onBack && <Btn kind="soft" onClick={onBack}>← Retour</Btn>}>
       {msg && <Card style={{ marginBottom:12, padding:'10px 14px', background: msg.ok?'#F0FAF0':'#FEF2F2', border:`1px solid ${msg.ok?'#C3E6C3':'#FCD5D5'}`, color: msg.ok?'#1E5C1E':'#991B1B' }}>{msg.t}</Card>}
+      {(f.compte_a_configurer || !(prof.email || '').trim()) && (
+        <Card style={{ marginBottom:12, padding:'10px 14px', background:'#FAEEDA', border:'1px solid #E8C98A', color:'#7A4E0B' }}>
+          Cette personne est dans les volontaires mais n’a pas encore de compte. Dans Volontaires, utilisez « Configurer le compte » pour encoder son e-mail et lui envoyer le lien d’invitation.
+        </Card>
+      )}
 
       <div style={{ columns:'300px', columnGap:14 }}>
       {/* Identité */}
@@ -116,8 +151,11 @@ export default function FicheVolontaire({ userId, onBack }) {
           <F label="Nom" value={prof.nom||''} set={v=>setProf(p=>({...p,nom:v}))} required />
           <F label="Date de naissance" type="date" value={f.date_naissance} set={v=>set('date_naissance',v)} />
           <PhoneF label="Téléphone" value={f.telephone} set={v=>set('telephone',v)} />
+          <F label="IBAN (défraiements)" value={f.iban||''} set={v=>set('iban', v.toUpperCase())} placeholder="BE00 0000 0000 0000" />
         </div>
-        <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>E-mail (connexion) : {prof.email}</div>
+        <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>
+          E-mail (connexion) : {(prof.email || '').trim() || 'pas encore de compte'} — l’IBAN sert aux notes de frais forfaitaires.
+        </div>
       </Card>
 
       {/* Type + qualifications */}
@@ -175,6 +213,32 @@ export default function FicheVolontaire({ userId, onBack }) {
           <ReadPills options={ROLES_ASBL} selected={f.roles_asbl} vide="Aucun rôle ASBL attribué." />
         )}
       </Card>
+
+      {pinEligible && (
+        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+          <Sec>Code d’ouverture des dossiers verrouillés</Sec>
+          <FormPinFiche aPin={aPin} onSauver={sauverPin} saving={savingPin} msg={pinMsg} />
+        </Card>
+      )}
+
+      {prefsNotif && (
+        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+          <Sec>Notifications reçues</Sec>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
+            Président et responsable informatique : vous recevez toutes les alertes. Décochez celles que vous ne voulez plus.
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {TYPES_NOTIF.map(t => (
+              <Toggle
+                key={t.v}
+                label={`${t.icon} ${t.l}`}
+                on={!!(f.notif_prefs || {})[t.v]}
+                onClick={() => togglePref(t.v)}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Permis */}
       <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>

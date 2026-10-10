@@ -10,13 +10,20 @@ window.__APP_CONFIG__ = {
     pays:    "BE",
     langue:  "fr",
     devise:  "EUR",
-    tauxKm:  0.4201,              // barème kilométrique (BE 2026 : 0.4201 €/km)
+    tauxKm:  0.4326,              // barème kilométrique (BE 2026 : 0,4326 €/km)
     accent:  "#1BB0CE",
     logoUrl: "/icons/ha-logo-512-v4.png",
   },
   domaine: "https://heart-s-angels.web.app",
+  vapidPublicKey: "BItos40GJksoCJRK7W0cWt5VgloRmYkwwf9Q9rZ3hkCXR9xEruCiZhN-yboXw5ijt54bvIMo83wle2QoM5VTz_U",
   supabase: {
     url:     "https://vppmvjqbzdeftrhdoert.supabase.co",
     anonKey: "sb_publishable_A_Bu4P4-Fn-sy3xF58U4Cg_kJ_aLSIH",
   },
+  bases: [
+    {
+      nom: "Solumob Jemeppe-sur-Meuse",
+      adresse: { rue: "Rue sous les vignes", numero: "8", cp: "4101", localite: "Seraing", pays: "Belgique" },
+    },
+  ],
 }

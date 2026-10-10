@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { Page, Card, Empty, Loading, Pill } from '@/components/ui'
+import { Page, Card, Empty, Loading, Pill, PillFictif, LiensGps } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { stInfo } from './souhaits/Souhaits'
-import { lblStatutBase } from './souhaits/missionSchema'
+import { lblStatutBase, lblEtapeTerrain } from './souhaits/missionSchema'
+import { fmtDatesSouhait } from './souhaits/datesSouhait'
 import MissionExecution from './souhaits/MissionExecution'
 
 const FILTRES = [
   { v:'a_faire', l:'À faire' },
   { v:'en_cours', l:'En cours' },
-  { v:'terminees', l:'Terminées' },
 ]
 
+function missionTerminee(m) {
+  return m.statut === 'realise' || m.statut === 'non_realise' || m.statut === 'annule' || m.statut === 'demande_info_externe'
+}
+
 export default function MesMissions() {
-  const { session } = useAuth()
+  const { session, estMedical } = useAuth()
   const nav = useNavigate()
   const { id } = useParams()
   const [items, setItems] = useState([])
@@ -33,15 +37,15 @@ export default function MesMissions() {
 
   if (id) return <MissionExecution souhaitId={id} onBack={() => nav('/app/missions')} />
 
-  const visible = items.filter(m => {
+  const aRealiser = items.filter(m => !missionTerminee(m))
+  const visible = aRealiser.filter(m => {
     if (filtre === 'en_cours') return m.statut === 'en_cours'
-    if (filtre === 'terminees') return m.statut === 'realise' || m.statut === 'non_realise'
-    return m.statut !== 'realise' && m.statut !== 'non_realise'
+    return m.statut !== 'en_cours'
   })
-  const nbCours = items.filter(m => m.statut === 'en_cours').length
+  const nbCours = aRealiser.filter(m => m.statut === 'en_cours').length
 
   return (
-    <Page title="Mes missions" subtitle="Sur le terrain, étape par étape : votre véhicule, puis la prise en charge, le retour, la base.">
+    <Page title="Mes missions" subtitle="Uniquement les missions où vous êtes affecté, tant qu’elles restent à réaliser.">
       {err && <div style={{ color:'#A32D2D', fontSize:13, marginBottom:10 }}>{err}</div>}
       <div className="ha-tabs" style={{ marginBottom:16 }}>
         {FILTRES.map(f => (
@@ -51,8 +55,8 @@ export default function MesMissions() {
         ))}
       </div>
       {loading ? <Loading />
-        : items.length === 0 ? <Empty title="Aucune mission pour le moment" hint="La coordination vous affectera ici lorsqu'un équipage sera constitué." />
-        : visible.length === 0 ? <Empty title="Rien dans cet onglet" hint="Changez de filtre, ou revenez quand une mission sera prête." />
+        : aRealiser.length === 0 ? <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici. Une fois la mission faite, elle disparaît." />
+        : visible.length === 0 ? <Empty title="Rien dans cet onglet" hint={filtre === 'en_cours' ? 'Aucune mission en cours. Celles à faire sont dans l’autre onglet.' : 'Les missions en cours sont dans l’onglet En cours.'} />
         : (
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
             {visible.map(m => {
@@ -68,17 +72,38 @@ export default function MesMissions() {
                         <div style={{ fontSize:14, color:'var(--text-2)', marginTop:4, lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{m.description}</div>
                       )}
                       <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:6 }}>
-                        {m.date_souhaitee ? new Date(m.date_souhaitee).toLocaleDateString('fr-BE') : 'Date à définir'}
+                        {fmtDatesSouhait(m)}
                         {m.lieu ? ` · ${m.lieu}` : ''}
                         {m.vehicule ? ` · ${m.vehicule}` : ''}
                         {m.role_mission ? ` · ${m.role_mission}` : ''}
                         {lblStatutBase(m.statut_base) ? ` · ${lblStatutBase(m.statut_base)}` : ''}
+                        {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>
+                      {estMedical() && m.medecin_tel && (
+                        <div style={{ fontSize:13.5, marginTop:8 }} onClick={e => e.stopPropagation()}>
+                          <a href={`tel:${String(m.medecin_tel).replace(/\s/g,'')}`} style={{ color:'#A32D2D', fontWeight:700, textDecoration:'none' }}>📞 Médecin {m.medecin_tel}</a>
+                          {m.medecin_nom && <span style={{ color:'var(--text-muted)', fontSize:12.5 }}> · {m.medecin_nom}</span>}
+                        </div>
+                      )}
+                      {m.tel_a_appeler && (
+                        <div style={{ fontSize:13.5, marginTop:8 }} onClick={e => e.stopPropagation()}>
+                          <a href={`tel:${String(m.tel_a_appeler).replace(/\s/g,'')}`} style={{ color:'var(--accent)', fontWeight:600, textDecoration:'none' }}>📞 {m.tel_a_appeler}</a>
+                          {m.tel_a_appeler_libelle && <span style={{ color:'var(--text-muted)', fontSize:12.5 }}> · {m.tel_a_appeler_libelle}</span>}
+                        </div>
+                      )}
+                      {m.lieu && (
+                        <div style={{ marginTop: 8 }} onClick={e => e.stopPropagation()}>
+                          <LiensGps texte={m.lieu} />
+                        </div>
+                      )}
                     </div>
-                    <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
+                      {m.fictif && <PillFictif />}
+                      <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+                    </div>
                   </div>
                   <div style={{ marginTop:10, fontSize:13.5, fontWeight:600, color:'var(--accent)' }}>
-                    {m.statut === 'en_cours' ? 'Continuer ›' : m.statut === 'realise' ? 'Consulter ›' : 'Ouvrir ›'}
+                    {m.statut === 'en_cours' ? 'Continuer ›' : 'Ouvrir ›'}
                   </div>
                 </Card>
               )

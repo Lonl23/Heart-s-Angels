@@ -139,6 +139,62 @@ export function estHoraire(m) {
   return !!(m?.rdv_base || (m?.courte_duree && (hhmm(m.heure_debut) || hhmm(m.heure_fin))))
 }
 
+function bornesHeures(m) {
+  if (!estHoraire(m)) return { start: 0, end: 24 * 60 }
+  if (m.rdv_base) return { start: minutesOf(m.rdv_base) ?? 0, end: 24 * 60 }
+  const start = minutesOf(m.heure_debut) ?? 0
+  let end = minutesOf(m.heure_fin)
+  if (end == null || end <= start) end = 24 * 60
+  return { start, end }
+}
+
+/** Deux missions se chevauchent si leurs jours se recouvrent et que les horaires aussi (journée = toute la journée). */
+export function missionsConcurrentes(a, b) {
+  if (!a || !b) return false
+  const a0 = String(a.date_debut || '').slice(0, 10)
+  const a1 = String(a.date_fin || a.date_debut || '').slice(0, 10)
+  const b0 = String(b.date_debut || '').slice(0, 10)
+  const b1 = String(b.date_fin || b.date_debut || '').slice(0, 10)
+  if (!a0 || !b0 || a1 < b0 || b1 < a0) return false
+  const ta = bornesHeures(a)
+  const tb = bornesHeures(b)
+  return !(ta.end <= tb.start || tb.end <= ta.start)
+}
+
+export function dispoChevaucheMission(d, m) {
+  if (!d || !m) return false
+  const d0 = String(d.date_debut || '').slice(0, 10)
+  const d1 = String(d.date_fin || d.date_debut || '').slice(0, 10)
+  const m0 = String(m.date_debut || '').slice(0, 10)
+  const m1 = String(m.date_fin || m.date_debut || '').slice(0, 10)
+  return !!d0 && !!m0 && d0 <= m1 && d1 >= m0
+}
+
+/** Jours inclus d’une plage (YYYY-MM-DD). */
+export function joursPlage(debut, fin) {
+  const a = parseISO(String(debut || '').slice(0, 10))
+  const b = parseISO(String(fin || debut || '').slice(0, 10)) || a
+  if (!a) return []
+  const out = []
+  for (let x = a, n = 0; x <= b && n < 400; x = addDays(x, 1), n++) out.push(iso(x))
+  return out
+}
+
+/**
+ * Dispo(s) d’une personne : il faut couvrir CHAQUE jour du souhait.
+ * Un séjour de 3 jours demande le même équipage les 3 jours — une journée ne suffit pas.
+ * Plusieurs dispos d’un jour peuvent se combiner (vendredi + samedi + dimanche).
+ */
+export function personneCouvreTouteLaMission(dispos, m) {
+  const need = joursPlage(m?.date_debut, m?.date_fin || m?.date_debut)
+  if (!need.length) return false
+  const have = new Set()
+  for (const d of dispos || []) {
+    for (const j of joursPlage(d.date_debut, d.date_fin || d.date_debut)) have.add(j)
+  }
+  return need.every(j => have.has(j))
+}
+
 /** Grille semaine : toujours 00 h → 24 h. */
 export const H_CAL_DEBUT = 0
 export const H_CAL_FIN = 24

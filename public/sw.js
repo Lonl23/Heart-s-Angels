@@ -4,7 +4,7 @@
    skipWaiting n'est PAS appelé à l'install : la page envoie SKIP_WAITING
    seulement quand l'utilisateur confirme « Mettre à jour ».
    Manifest, icônes et favicon passent toujours par le réseau (jamais le cache). */
-const CACHE_NAME = 'ha-app-v4-__SW_BUILD__'
+const CACHE_NAME = 'ha-app-v7-__SW_BUILD__'
 const PRECACHE = ['/index.html']
 
 function isVolatile(pathname) {
@@ -14,7 +14,11 @@ function isVolatile(pathname) {
     pathname.startsWith('/icons/') ||
     pathname.startsWith('/apple-touch-icon') ||
     pathname.startsWith('/ha-logo-') ||
-    pathname.startsWith('/favicon')
+    pathname.startsWith('/favicon') ||
+    pathname === '/native-version.json' ||
+    pathname === '/android.html' ||
+    pathname.startsWith('/guides/') ||
+    pathname.endsWith('.apk')
   )
 }
 
@@ -38,6 +42,53 @@ self.addEventListener('message', event => {
   }
 })
 
+self.addEventListener('push', event => {
+  let data = {}
+  try { data = event.data ? event.data.json() : {} } catch {
+    data = { body: event.data ? event.data.text() : '' }
+  }
+  const titre = data.title || data.titre || "Heart's Angels"
+  const corps = data.body || data.message || ''
+  event.waitUntil(
+    self.registration.showNotification(titre, {
+      body: corps,
+      icon: '/icons/ha-logo-192-v4.png',
+      badge: '/icons/ha-logo-192-v4.png',
+      data: { lien: data.lien || '/app' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  const lien = event.notification.data?.lien || '/app'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const cible = new URL(lien, self.location.origin).href
+      const deja = list.find(c => c.url.startsWith(self.location.origin) && 'focus' in c)
+      if (deja) {
+        deja.navigate?.(cible)
+        return deja.focus()
+      }
+      return self.clients.openWindow(cible)
+    })
+  )
+})
+
+function htmlHorsLigne() {
+  return new Response(
+    '<!doctype html><meta charset="utf-8"><title>Hors ligne</title><p>Reconnectez-vous au réseau, puis rechargez la page.</p>',
+    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+  )
+}
+
+function reponseOuHorsLigne(res) {
+  return res || htmlHorsLigne()
+}
+
+// Toujours renvoyer un Response : caches.match() peut être undefined, et
+// fetch() d’une navigation /partenaire (SPA) peut rejeter — Chrome logue alors
+// « FetchEvent … promise was rejected » / « Failed to convert value to Response ».
 self.addEventListener('fetch', event => {
   const req = event.request
   if (req.method !== 'GET') return
@@ -47,14 +98,19 @@ self.addEventListener('fetch', event => {
 
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req).then(res => {
-        const copy = res.clone()
-        caches.open(CACHE_NAME).then(c => c.put('/index.html', copy)).catch(() => {})
-        return res
-      }).catch(() => caches.match('/index.html'))
+      fetch('/index.html', { cache: 'no-store' }).then(res => {
+        if (res && res.ok) {
+          const copy = res.clone()
+          caches.open(CACHE_NAME).then(c => c.put('/index.html', copy)).catch(() => {})
+          return res
+        }
+        return caches.match('/index.html').then(reponseOuHorsLigne)
+      }).catch(() => caches.match('/index.html').then(reponseOuHorsLigne))
     )
     return
   }
 
-  event.respondWith(fetch(req).catch(() => caches.match(req)))
+  event.respondWith(
+    fetch(req).catch(() => caches.match(req).then(cached => cached || htmlHorsLigne()))
+  )
 })

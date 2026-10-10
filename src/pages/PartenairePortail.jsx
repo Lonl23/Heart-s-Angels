@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { COPYRIGHT } from '@/copyright'
-import { Card, Btn, F, TA, Sel, Pill, inp, lbl, Empty, Loading, Logo } from '@/components/ui'
+import { Card, Btn, F, TA, Pill, PillFictif, Empty, Loading, Logo, PhoneF, AddressFields, Flash } from '@/components/ui'
+import { ApercuPartenaire } from '@/modules/souhaits/RapportPartenaire'
+import { GenrePicker } from '@/modules/annuaire/genre'
 
 const STATUT = {
   nouvelle:  { l:'Reçue',       c:'#BA7517', bg:'#FAEEDA' },
@@ -19,18 +21,37 @@ export default function PartenairePortail() {
   const nav = useNavigate()
   const [view, setView] = useState('liste')   // liste | nouvelle | detail
   const [selId, setSelId] = useState(null)
+  const [org, setOrg] = useState(null)
+
+  useEffect(() => {
+    if (!profile?.partenaire_id) return
+    supabase.from('partenaires').select('id,nom,fictif').eq('id', profile.partenaire_id).maybeSingle()
+      .then(({ data }) => setOrg(data || null))
+  }, [profile?.partenaire_id])
+
+  const fictif = !!org?.fictif
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
       <header style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'var(--surface)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:20 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <Logo size={40} />
-          <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>Espace partenaire</span>
+          <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>
+            {org?.nom ? org.nom : 'Espace institution'}
+          </span>
+          {fictif && <PillFictif />}
         </div>
-        <Btn kind="soft" onClick={async()=>{ await signOut(); nav('/login') }}>Déconnexion</Btn>
+        <Btn kind="soft" onClick={async()=>{ await signOut(); nav('/login/partenaire') }}>Déconnexion</Btn>
       </header>
 
       <div style={{ maxWidth:860, margin:'0 auto', padding:'clamp(16px,3vw,28px)' }}>
+        {fictif && (
+          <div style={{ marginBottom:16 }}>
+            <Flash kind="warn">
+              Compte de démonstration ({org?.nom || 'partenaire fictif'}). Les demandes encodées ici sont fictives et ne correspondent à aucun vrai patient.
+            </Flash>
+          </div>
+        )}
         {view === 'liste' && (
           <ListeDemandes profile={profile} onNew={() => setView('nouvelle')} onOpen={(id) => { setSelId(id); setView('detail') }} />
         )}
@@ -75,7 +96,10 @@ function ListeDemandes({ profile, onNew, onOpen }) {
                 <Card key={d.id} clickable onClick={()=>onOpen(d.id)}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
                     <div>
-                      <div style={{ fontWeight:600, color:'var(--text)' }}>{d.patient_prenom} {d.patient_nom}</div>
+                      <div style={{ fontWeight:600, color:'var(--text)', display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                        {d.patient_prenom} {d.patient_nom}
+                        {d.fictif && <PillFictif />}
+                      </div>
                       <div style={{ fontSize:13, color:'var(--text-2)', marginTop:2, display:'-webkit-box', WebkitLineClamp:1, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{d.souhait_description}</div>
                       <div style={{ fontSize:11.5, color:'var(--text-faint)', marginTop:2 }}>Encodée le {new Date(d.created_at).toLocaleDateString('fr-BE')}</div>
                     </div>
@@ -93,7 +117,9 @@ function ListeDemandes({ profile, onNew, onOpen }) {
 // ── Nouvelle demande (patient + souhait + médical + médicaments) ──────────────
 const empty = {
   patient_prenom:'', patient_nom:'', patient_ddn:'', etablissement:'', medecin_referent:'',
+  patient_genre:'', patient_tel_gsm:'', patient_tel_fixe:'', patient_adresse:null,
   contact_prenom:'', contact_nom:'', contact_relation:'', contact_email:'', contact_telephone:'',
+  contact_tel_fixe:'', contact_ddn:'', contact_adresse:null,
   souhait_description:'', souhait_date:'', souhait_lieu:'',
   mobilite:'', equipement_medical:'', allergies:'', urgence:false,
   consent_patient:false, consent_rgpd:false,
@@ -117,6 +143,13 @@ function NouvelleDemande({ profile, onDone }) {
     const { data: dem, error } = await supabase.from('demandes_souhaits').insert({
       ...f, source:'partenaire', partenaire_id: profile?.partenaire_id, cree_par: profile?.id,
       patient_ddn: f.patient_ddn || null, souhait_date: f.souhait_date || null,
+      patient_genre: f.patient_genre || null,
+      patient_tel_gsm: f.patient_tel_gsm || null,
+      patient_tel_fixe: f.patient_tel_fixe || null,
+      patient_adresse: f.patient_adresse || null,
+      contact_tel_fixe: f.contact_tel_fixe || null,
+      contact_ddn: f.contact_ddn || null,
+      contact_adresse: f.contact_adresse || null,
     }).select().single()
     if (error) { setErr('Erreur : ' + error.message); setSaving(false); return }
     const valides = meds.filter(m => m.medicament.trim())
@@ -144,9 +177,18 @@ function NouvelleDemande({ profile, onDone }) {
           <F label="Prénom" value={f.patient_prenom} set={v=>set('patient_prenom',v)} required />
           <F label="Nom" value={f.patient_nom} set={v=>set('patient_nom',v)} required />
         </div>
+        <GenrePicker value={f.patient_genre} set={v=>set('patient_genre',v)} />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <F label="Date de naissance" type="date" value={f.patient_ddn} set={v=>set('patient_ddn',v)} />
           <F label="Établissement / lieu" value={f.etablissement} set={v=>set('etablissement',v)} />
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <PhoneF label="GSM" value={f.patient_tel_gsm} set={v=>set('patient_tel_gsm',v)} />
+          <PhoneF label="Fixe" value={f.patient_tel_fixe} set={v=>set('patient_tel_fixe',v)} />
+        </div>
+        <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse légale</div>
+          <AddressFields value={f.patient_adresse} set={v=>set('patient_adresse',v)} />
         </div>
         <F label="Médecin référent" value={f.medecin_referent} set={v=>set('medecin_referent',v)} />
       </Card>
@@ -158,10 +200,18 @@ function NouvelleDemande({ profile, onDone }) {
           <F label="Nom" value={f.contact_nom} set={v=>set('contact_nom',v)} required />
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-          <F label="Lien avec le patient" value={f.contact_relation} set={v=>set('contact_relation',v)} />
-          <F label="Téléphone" value={f.contact_telephone} set={v=>set('contact_telephone',v)} />
+          <F label="Lien d'affiliation" value={f.contact_relation} set={v=>set('contact_relation',v)} />
+          <F label="Date de naissance" type="date" value={f.contact_ddn} set={v=>set('contact_ddn',v)} />
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <PhoneF label="GSM" value={f.contact_telephone} set={v=>set('contact_telephone',v)} />
+          <PhoneF label="Fixe" value={f.contact_tel_fixe} set={v=>set('contact_tel_fixe',v)} />
         </div>
         <F label="E-mail" type="email" value={f.contact_email} set={v=>set('contact_email',v)} required />
+        <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse légale</div>
+          <AddressFields value={f.contact_adresse} set={v=>set('contact_adresse',v)} />
+        </div>
       </Card>
 
       <Card style={{ marginBottom:14 }}>
@@ -241,7 +291,10 @@ function DetailDemande({ id, onBack }) {
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
         <Btn kind="soft" onClick={onBack}>← Mes demandes</Btn>
-        <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          {d.fictif && <PillFictif />}
+          <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+        </div>
       </div>
 
       <Card style={{ marginBottom:14 }}>
@@ -269,14 +322,17 @@ function DetailDemande({ id, onBack }) {
       </Card>
 
       <Card>
-        <Sec>Rapport</Sec>
+        <Sec>Rapport de la journée</Sec>
         {rapport ? (
-          <div style={{ display:'flex', flexDirection:'column', gap:8, fontSize:13.5, color:'var(--text-2)', lineHeight:1.6 }}>
-            {rapport.deroulement && <p style={{ margin:0 }}><strong>Déroulement.</strong> {rapport.deroulement}</p>}
-            {rapport.etat_patient && <p style={{ margin:0 }}><strong>État du patient.</strong> {rapport.etat_patient}</p>}
-            {rapport.observations && <p style={{ margin:0 }}><strong>Observations.</strong> {rapport.observations}</p>}
-            <div style={{ fontSize:11.5, color:'var(--text-faint)' }}>Publié le {rapport.publie_le ? new Date(rapport.publie_le).toLocaleDateString('fr-BE') : ''}</div>
-          </div>
+          <ApercuPartenaire
+            patient={`${d.patient_prenom || ''} ${d.patient_nom || ''}`.trim()}
+            dateTxt={d.souhait_date ? new Date(d.souhait_date + 'T12:00:00').toLocaleDateString('fr-BE') : ''}
+            souhait={d.souhait_description}
+            vecteurs={Array.isArray(rapport.horaires) ? rapport.horaires : []}
+            deroulement={rapport.deroulement}
+            etat={rapport.etat_patient}
+            observations={rapport.observations}
+          />
         ) : (
           <div style={{ fontSize:13, color:'var(--text-muted)' }}>Le rapport sera disponible ici une fois le souhait réalisé et publié par l'équipe.</div>
         )}

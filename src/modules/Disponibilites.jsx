@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Empty } from '@/components/ui'
-import { libelleQualsImplicites, teinteDispo, rolesRequisEffectifs, phraseIlManque, couvertureMission, rolesManquantsMultiset, qualsImplicites } from '@/modules/fiche/ficheSchema'
+import { libelleQualsImplicites, teinteDispo, rolesRequisEffectifs, phraseIlManque, rolesManquantsMultiset } from '@/modules/fiche/ficheSchema'
+import { allouerCouverturesCalendrier, cleCouvertureCalendrier } from './disponibilites/couverture'
 import {
   iso, addDays, todayISO, JOURS,
   titreMois, titreSemaine, grilleMois, grilleSemaine, packLanes, hhmm,
@@ -59,17 +60,23 @@ export default function Disponibilites() {
 
   async function charger() {
     setErr(null)
-    const [{ data: miss, error: e1 }, dispoRes] = await Promise.all([
-      supabase.rpc('calendrier_missions', { p_debut: grille.debut, p_fin: grille.fin }),
-      (async () => {
-        let q = supabase.from('disponibilites').select('id,user_id,date_debut,date_fin,commentaire,profiles(prenom,nom,role,fiche)').lte('date_debut', grille.fin).gte('date_fin', grille.debut).order('date_debut')
-        if (!voirTous) q = q.eq('user_id', profile?.id)
-        return q
-      })(),
-    ])
+    const { data: miss, error: e1 } = await supabase.rpc('calendrier_missions', { p_debut: grille.debut, p_fin: grille.fin })
     if (e1) setErr(e1.message)
-    if (dispoRes.error) setErr(dispoRes.error.message)
     let rows = Array.isArray(miss) ? miss : []
+    let d0 = grille.debut
+    let d1 = grille.fin
+    for (const m of rows) {
+      const a = String(m.date_debut || '').slice(0, 10)
+      const b = String(m.date_fin || m.date_debut || '').slice(0, 10)
+      if (a && a < d0) d0 = a
+      if (b && b > d1) d1 = b
+    }
+    let q = supabase.from('disponibilites')
+      .select('id,user_id,date_debut,date_fin,commentaire,profiles(prenom,nom,role,fiche)')
+      .lte('date_debut', d1).gte('date_fin', d0).order('date_debut')
+    if (!voirTous) q = q.eq('user_id', profile?.id)
+    const dispoRes = await q
+    if (dispoRes.error) setErr(dispoRes.error.message)
     const ids = rows.map(m => m.souhait_id).filter(Boolean)
     if (ids.length) {
       const [{ data: extra }, { data: pers }] = await Promise.all([
@@ -79,18 +86,14 @@ export default function Disponibilites() {
       const by = Object.fromEntries((extra || []).map(s => [s.id, s.mission || {}]))
       const persBy = {}
       for (const e of pers || []) (persBy[e.souhait_id] ||= []).push(e)
+      const covByRow = allouerCouverturesCalendrier(rows, by, persBy, dispoRes.data || [])
       rows = rows.map(m => {
-        if (!Object.prototype.hasOwnProperty.call(by, m.souhait_id)) {
-          return { ...m }
-        }
-        const mission = by[m.souhait_id] || {}
-        const extras = (dispoRes.data || [])
-          .filter(d => d.date_debut <= m.date_fin && (d.date_fin || d.date_debut) >= m.date_debut)
-          .map(d => ({ user_id: d.user_id, quals: qualsImplicites(d.profiles?.role, d.profiles?.fiche) }))
-        const cov = couvertureMission(mission, persBy[m.souhait_id] || [], extras)
+        const mission = by[m.souhait_id]
+        const cov = covByRow.get(cleCouvertureCalendrier(m))
+        if (!cov) return { ...m }
         return {
           ...m,
-          rdv_base: m.rdv_base || mission.rdv_base || null,
+          rdv_base: m.rdv_base || mission?.rdv_base || null,
           roles_requis: cov.requis.length ? cov.requis : rolesRequisEffectifs(m.roles_requis),
           roles_couverts: cov.couverts,
         }
@@ -121,12 +124,12 @@ export default function Disponibilites() {
   }
 
   const sousTitre = gerer
-    ? 'Vous pouvez encoder les disponibilités de l’équipe. Les missions indiquent ce qui manque (ambulancier, infirmier…) — sans ouvrir le dossier, sans nom de patient.'
+    ? 'Deux souhaits le même jour, deux équipages. Un séjour de plusieurs jours demande le même équipage tous les jours — une dispo d’un jour ne suffit pas.'
     : voirTous
-      ? 'Tout le personnel. Une disponibilité = la journée entière (minuit à minuit).'
+      ? 'Une disponibilité = la journée entière. Un séjour de 3 jours demande le même équipage les 3 jours.'
       : nonMed
         ? 'Vos jours. Seules les missions qui demandent un volontaire non médical apparaissent — avec ce qui manque, sans nom de patient.'
-        : 'Vos jours. Les missions indiquent ce qui manque — sans nom de patient, sans ouvrir le dossier.'
+        : 'Vos jours. Un séjour de plusieurs jours n’est complet que si le même équipage est dispo tous les jours.'
 
   const today = todayISO()
 
@@ -270,7 +273,7 @@ function SemaineHoraire({ weekStart, today, missions, dispos, moi, gerer, onJour
         <div className="ha-cal-h-allday-body">
           {missLanes.map((lane, li) => (
             <div key={'m'+li} className="ha-cal-lane">
-              {lane.map(it => <ChipMission key={it.ev.souhait_id} it={it} />)}
+              {lane.map(it => <ChipMission key={`${it.ev.souhait_id}-${it.ev.date_debut}`} it={it} />)}
             </div>
           ))}
           {dispoLanes.map((lane, li) => (
@@ -329,7 +332,7 @@ function SemaineHoraire({ weekStart, today, missions, dispos, moi, gerer, onJour
                   const left = it.col * w
                   const txt = libelleMission({ ev: it.ev, total: 1, j0: 1, j1: 1 })
                   return (
-                    <div key={it.ev.souhait_id}
+                    <div key={`${it.ev.souhait_id}-${it.ev.date_debut}`}
                       className={'ha-cal-h-ev mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet')}
                       style={{ top, height: hgt, left: `calc(${left}% + 2px)`, width: `calc(${w}% - 4px)` }}
                       title={txt}
@@ -358,7 +361,7 @@ function Semaine({ weekStart, anchor, vue, today, missions, dispos, moi, gerer, 
     <div className="ha-cal-week">
       {missLanes.map((lane, li) => (
         <div key={'m'+li} className="ha-cal-lane">
-          {lane.map(it => <ChipMission key={it.ev.souhait_id} it={it} />)}
+          {lane.map(it => <ChipMission key={`${it.ev.souhait_id}-${it.ev.date_debut}`} it={it} />)}
         </div>
       ))}
       {dispoLanes.map((lane, li) => (
