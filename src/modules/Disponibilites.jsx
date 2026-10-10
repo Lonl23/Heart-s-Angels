@@ -60,17 +60,23 @@ export default function Disponibilites() {
 
   async function charger() {
     setErr(null)
-    const [{ data: miss, error: e1 }, dispoRes] = await Promise.all([
-      supabase.rpc('calendrier_missions', { p_debut: grille.debut, p_fin: grille.fin }),
-      (async () => {
-        let q = supabase.from('disponibilites').select('id,user_id,date_debut,date_fin,commentaire,profiles(prenom,nom,role,fiche)').lte('date_debut', grille.fin).gte('date_fin', grille.debut).order('date_debut')
-        if (!voirTous) q = q.eq('user_id', profile?.id)
-        return q
-      })(),
-    ])
+    const { data: miss, error: e1 } = await supabase.rpc('calendrier_missions', { p_debut: grille.debut, p_fin: grille.fin })
     if (e1) setErr(e1.message)
-    if (dispoRes.error) setErr(dispoRes.error.message)
     let rows = Array.isArray(miss) ? miss : []
+    let d0 = grille.debut
+    let d1 = grille.fin
+    for (const m of rows) {
+      const a = String(m.date_debut || '').slice(0, 10)
+      const b = String(m.date_fin || m.date_debut || '').slice(0, 10)
+      if (a && a < d0) d0 = a
+      if (b && b > d1) d1 = b
+    }
+    let q = supabase.from('disponibilites')
+      .select('id,user_id,date_debut,date_fin,commentaire,profiles(prenom,nom,role,fiche)')
+      .lte('date_debut', d1).gte('date_fin', d0).order('date_debut')
+    if (!voirTous) q = q.eq('user_id', profile?.id)
+    const dispoRes = await q
+    if (dispoRes.error) setErr(dispoRes.error.message)
     const ids = rows.map(m => m.souhait_id).filter(Boolean)
     if (ids.length) {
       const [{ data: extra }, { data: pers }] = await Promise.all([
@@ -118,12 +124,12 @@ export default function Disponibilites() {
   }
 
   const sousTitre = gerer
-    ? 'Vous pouvez encoder les disponibilités de l’équipe. Deux souhaits le même jour, ce sont deux équipages : une personne ne compte que pour un souhait à la fois.'
+    ? 'Deux souhaits le même jour, deux équipages. Un séjour de plusieurs jours demande le même équipage tous les jours — une dispo d’un jour ne suffit pas.'
     : voirTous
-      ? 'Tout le personnel. Une disponibilité = la journée entière. Deux souhaits le même jour demandent deux équipages.'
+      ? 'Une disponibilité = la journée entière. Un séjour de 3 jours demande le même équipage les 3 jours.'
       : nonMed
         ? 'Vos jours. Seules les missions qui demandent un volontaire non médical apparaissent — avec ce qui manque, sans nom de patient.'
-        : 'Vos jours. Les missions indiquent ce qui manque. Deux souhaits le même jour, ce sont deux équipages.'
+        : 'Vos jours. Un séjour de plusieurs jours n’est complet que si le même équipage est dispo tous les jours.'
 
   const today = todayISO()
 

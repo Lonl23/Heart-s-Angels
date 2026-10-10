@@ -1,5 +1,5 @@
 import { couvertureMission, qualsImplicites } from '@/modules/fiche/ficheSchema'
-import { missionsConcurrentes, dispoChevaucheMission } from './dates'
+import { missionsConcurrentes, personneCouvreTouteLaMission } from './dates'
 
 function rowKey(m) {
   return `${m.souhait_id}|${m.date_debut}|${m.date_fin || m.date_debut}`
@@ -13,9 +13,9 @@ function dureeJours(m) {
 }
 
 /**
- * Une personne disponible (ou déjà affectée) ne peut couvrir qu’un souhait à la fois
- * quand deux missions se chevauchent. Les autres dates possibles d’un même souhait
- * ne se volent pas l’équipage (ce sont des options, pas deux missions).
+ * Une personne disponible ne compte que si elle est là TOUS les jours du séjour,
+ * et ne peut couvrir qu’un souhait à la fois quand deux missions se chevauchent.
+ * Les autres dates possibles d’un même souhait ne se volent pas l’équipage.
  */
 export function allouerCouverturesCalendrier(rows, missionsById, persBy, dispos) {
   const occupations = []
@@ -32,23 +32,29 @@ export function allouerCouverturesCalendrier(rows, missionsById, persBy, dispos)
     || String(a.souhait_id).localeCompare(String(b.souhait_id))
   )
 
+  const disposParPersonne = new Map()
+  for (const d of dispos || []) {
+    if (!d.user_id) continue
+    const list = disposParPersonne.get(d.user_id) || []
+    list.push(d)
+    disposParPersonne.set(d.user_id, list)
+  }
+
   const covByRow = new Map()
   for (const m of sorted) {
-    const seenExtra = new Set()
     const extras = []
-    for (const d of dispos || []) {
-      if (!d.user_id || seenExtra.has(d.user_id)) continue
-      if (!dispoChevaucheMission(d, m)) continue
+    for (const [uid, ds] of disposParPersonne) {
+      if (!personneCouvreTouteLaMission(ds, m)) continue
       const prisAilleurs = occupations.some(o =>
-        o.user_id === d.user_id
+        o.user_id === uid
         && o.souhait_id !== m.souhait_id
         && missionsConcurrentes(o, m)
       )
       if (prisAilleurs) continue
-      seenExtra.add(d.user_id)
+      const profil = ds.find(x => x.profiles)?.profiles
       extras.push({
-        user_id: d.user_id,
-        quals: qualsImplicites(d.profiles?.role, d.profiles?.fiche),
+        user_id: uid,
+        quals: qualsImplicites(profil?.role, profil?.fiche),
       })
     }
     const cov = couvertureMission(missionsById[m.souhait_id] || {}, persBy[m.souhait_id] || [], extras)

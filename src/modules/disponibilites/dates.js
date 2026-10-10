@@ -170,6 +170,31 @@ export function dispoChevaucheMission(d, m) {
   return !!d0 && !!m0 && d0 <= m1 && d1 >= m0
 }
 
+/** Jours inclus d’une plage (YYYY-MM-DD). */
+export function joursPlage(debut, fin) {
+  const a = parseISO(String(debut || '').slice(0, 10))
+  const b = parseISO(String(fin || debut || '').slice(0, 10)) || a
+  if (!a) return []
+  const out = []
+  for (let x = a, n = 0; x <= b && n < 400; x = addDays(x, 1), n++) out.push(iso(x))
+  return out
+}
+
+/**
+ * Dispo(s) d’une personne : il faut couvrir CHAQUE jour du souhait.
+ * Un séjour de 3 jours demande le même équipage les 3 jours — une journée ne suffit pas.
+ * Plusieurs dispos d’un jour peuvent se combiner (vendredi + samedi + dimanche).
+ */
+export function personneCouvreTouteLaMission(dispos, m) {
+  const need = joursPlage(m?.date_debut, m?.date_fin || m?.date_debut)
+  if (!need.length) return false
+  const have = new Set()
+  for (const d of dispos || []) {
+    for (const j of joursPlage(d.date_debut, d.date_fin || d.date_debut)) have.add(j)
+  }
+  return need.every(j => have.has(j))
+}
+
 /** Grille semaine : toujours 00 h → 24 h. */
 export const H_CAL_DEBUT = 0
 export const H_CAL_FIN = 24
