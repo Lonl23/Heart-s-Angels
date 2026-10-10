@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Empty } from '@/components/ui'
-import { libelleQualsImplicites, teinteDispo, rolesRequisEffectifs, phraseIlManque, couvertureMission, rolesManquantsMultiset, qualsImplicites } from '@/modules/fiche/ficheSchema'
+import { libelleQualsImplicites, teinteDispo, rolesRequisEffectifs, phraseIlManque, rolesManquantsMultiset } from '@/modules/fiche/ficheSchema'
+import { allouerCouverturesCalendrier, cleCouvertureCalendrier } from './disponibilites/couverture'
 import {
   iso, addDays, todayISO, JOURS,
   titreMois, titreSemaine, grilleMois, grilleSemaine, packLanes, hhmm,
@@ -79,18 +80,14 @@ export default function Disponibilites() {
       const by = Object.fromEntries((extra || []).map(s => [s.id, s.mission || {}]))
       const persBy = {}
       for (const e of pers || []) (persBy[e.souhait_id] ||= []).push(e)
+      const covByRow = allouerCouverturesCalendrier(rows, by, persBy, dispoRes.data || [])
       rows = rows.map(m => {
-        if (!Object.prototype.hasOwnProperty.call(by, m.souhait_id)) {
-          return { ...m }
-        }
-        const mission = by[m.souhait_id] || {}
-        const extras = (dispoRes.data || [])
-          .filter(d => d.date_debut <= m.date_fin && (d.date_fin || d.date_debut) >= m.date_debut)
-          .map(d => ({ user_id: d.user_id, quals: qualsImplicites(d.profiles?.role, d.profiles?.fiche) }))
-        const cov = couvertureMission(mission, persBy[m.souhait_id] || [], extras)
+        const mission = by[m.souhait_id]
+        const cov = covByRow.get(cleCouvertureCalendrier(m))
+        if (!cov) return { ...m }
         return {
           ...m,
-          rdv_base: m.rdv_base || mission.rdv_base || null,
+          rdv_base: m.rdv_base || mission?.rdv_base || null,
           roles_requis: cov.requis.length ? cov.requis : rolesRequisEffectifs(m.roles_requis),
           roles_couverts: cov.couverts,
         }
@@ -121,12 +118,12 @@ export default function Disponibilites() {
   }
 
   const sousTitre = gerer
-    ? 'Vous pouvez encoder les disponibilités de l’équipe. Les missions indiquent ce qui manque (ambulancier, infirmier…) — sans ouvrir le dossier, sans nom de patient.'
+    ? 'Vous pouvez encoder les disponibilités de l’équipe. Deux souhaits le même jour, ce sont deux équipages : une personne ne compte que pour un souhait à la fois.'
     : voirTous
-      ? 'Tout le personnel. Une disponibilité = la journée entière (minuit à minuit).'
+      ? 'Tout le personnel. Une disponibilité = la journée entière. Deux souhaits le même jour demandent deux équipages.'
       : nonMed
         ? 'Vos jours. Seules les missions qui demandent un volontaire non médical apparaissent — avec ce qui manque, sans nom de patient.'
-        : 'Vos jours. Les missions indiquent ce qui manque — sans nom de patient, sans ouvrir le dossier.'
+        : 'Vos jours. Les missions indiquent ce qui manque. Deux souhaits le même jour, ce sont deux équipages.'
 
   const today = todayISO()
 
@@ -270,7 +267,7 @@ function SemaineHoraire({ weekStart, today, missions, dispos, moi, gerer, onJour
         <div className="ha-cal-h-allday-body">
           {missLanes.map((lane, li) => (
             <div key={'m'+li} className="ha-cal-lane">
-              {lane.map(it => <ChipMission key={it.ev.souhait_id} it={it} />)}
+              {lane.map(it => <ChipMission key={`${it.ev.souhait_id}-${it.ev.date_debut}`} it={it} />)}
             </div>
           ))}
           {dispoLanes.map((lane, li) => (
@@ -329,7 +326,7 @@ function SemaineHoraire({ weekStart, today, missions, dispos, moi, gerer, onJour
                   const left = it.col * w
                   const txt = libelleMission({ ev: it.ev, total: 1, j0: 1, j1: 1 })
                   return (
-                    <div key={it.ev.souhait_id}
+                    <div key={`${it.ev.souhait_id}-${it.ev.date_debut}`}
                       className={'ha-cal-h-ev mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet')}
                       style={{ top, height: hgt, left: `calc(${left}% + 2px)`, width: `calc(${w}% - 4px)` }}
                       title={txt}
@@ -358,7 +355,7 @@ function Semaine({ weekStart, anchor, vue, today, missions, dispos, moi, gerer, 
     <div className="ha-cal-week">
       {missLanes.map((lane, li) => (
         <div key={'m'+li} className="ha-cal-lane">
-          {lane.map(it => <ChipMission key={it.ev.souhait_id} it={it} />)}
+          {lane.map(it => <ChipMission key={`${it.ev.souhait_id}-${it.ev.date_debut}`} it={it} />)}
         </div>
       ))}
       {dispoLanes.map((lane, li) => (

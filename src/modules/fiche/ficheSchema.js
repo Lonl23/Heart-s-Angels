@@ -189,8 +189,9 @@ export function couvertureMission(mission, equipe = [], extras = []) {
     remaining.splice(remaining.indexOf(role), 1)
     couvertsAll.push(role)
     dejaGreedy.push(role)
+    if (p.user_id) used.add(p.user_id)
   }
-  return { requis: requisAll, couverts: couvertsAll }
+  return { requis: requisAll, couverts: couvertsAll, utilises: [...used] }
 }
 
 /** Rôle proposé à l’affectation : un infi+ambu va du côté le moins déjà pourvu. */
