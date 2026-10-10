@@ -38,7 +38,7 @@ export default function Volontaires() {
   return (
     <Page
       title="Volontaires"
-      subtitle="Invitations, membres et fiches. La gestion de l’application (accès, partenaires) est dans Administration."
+      subtitle="Ajoutez une fiche sans e-mail si besoin ; l’invitation pourra suivre plus tard. La gestion de l’application (accès, partenaires) est dans Administration."
     >
       <Membres onOpenFiche={setFiche} />
     </Page>
@@ -65,18 +65,37 @@ function Membres({ onOpenFiche }) {
   function flash(t, ok = true) { setMsg({ t, ok }); setTimeout(() => setMsg(null), 4000) }
 
   async function inviter(f) {
+    const email = (f.email || '').trim()
+    let profileId = f.profile_cible_id || null
+    if (!profileId) {
+      const { data, error } = await supabase.rpc('creer_volontaire_sans_compte', {
+        p_prenom: (f.prenom || '').trim(),
+        p_nom: (f.nom || '').trim(),
+        p_role: f.role,
+        p_telephone: (f.telephone || '').trim() || null,
+      })
+      if (error || !data?.ok) { flash(data?.error || error?.message || 'Impossible de créer la fiche.', false); return }
+      profileId = data.id
+    }
+    if (!email) {
+      setForm(null)
+      setLastInvite(null)
+      flash('Fiche créée. Vous pourrez envoyer l’invitation plus tard via « Configurer le compte ».')
+      load()
+      return
+    }
     const code = genCode()
     const { error } = await supabase.from('invitations').insert({
       code,
-      email: f.email.trim(),
+      email,
       prenom: f.prenom,
       nom: f.nom,
       role: f.role,
       type_benevole: f.role === 'volontaire_medical' ? 'medical' : 'non_medical',
-      profile_cible_id: f.profile_cible_id || null,
+      profile_cible_id: profileId,
     })
-    if (error) { flash(error.message, false); return }
-    setForm(null); setLastInvite({ code, email: f.email.trim(), prenom: f.prenom, typeBenevole: f.role }); load()
+    if (error) { flash(profileId && !f.profile_cible_id ? 'Fiche créée, mais invitation : ' + error.message : error.message, false); load(); return }
+    setForm(null); setLastInvite({ code, email, prenom: f.prenom, typeBenevole: f.role }); load()
   }
   function configurerCompte(u) {
     setLastInvite(null)
@@ -101,13 +120,13 @@ function Membres({ onOpenFiche }) {
     <div>
       {msg && <Msg msg={msg} />}
       <div style={{ marginBottom: 14 }}>
-        <Btn onClick={() => { setLastInvite(null); setForm({ role: 'volontaire_non_medical' }) }}>+ Inviter un volontaire</Btn>
+        <Btn onClick={() => { setLastInvite(null); setForm({ role: 'volontaire_non_medical', prenom: '', nom: '', email: '', telephone: '' }) }}>+ Ajouter un volontaire</Btn>
       </div>
       {(form || lastInvite) && (
         <Modal
           title={lastInvite
             ? 'Lien d’invitation'
-            : (form.profile_cible_id ? 'Configurer le compte' : 'Inviter un volontaire')}
+            : (form.profile_cible_id ? 'Configurer le compte' : 'Ajouter un volontaire')}
           onClose={() => { setForm(null); setLastInvite(null) }}
         >
           {lastInvite ? (
@@ -126,7 +145,8 @@ function Membres({ onOpenFiche }) {
                 onSave={inviter}
                 roles={TYPES_INVIT}
                 roleLabel="Type de volontaire"
-                titre={form.profile_cible_id ? 'Configurer le compte' : 'Inviter un volontaire'}
+                titre={form.profile_cible_id ? 'Configurer le compte' : 'Ajouter un volontaire'}
+                emailFacultatif={!form.profile_cible_id}
               />
             </>
           )}

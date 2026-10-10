@@ -90,14 +90,16 @@ export function CodeBox({ code, email, prenom, partenaire, nomInstitution, typeB
   return <Card style={{ marginBottom: 14, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>{inner}</Card>
 }
 
-export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre, embedded }) {
+export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre, embedded, emailFacultatif }) {
   const set = (k, v) => setForm(s => ({ ...s, [k]: v }))
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const roleOpts = (roles || []).map(r => (typeof r === 'object' ? r : { v: r, l: r }))
-  const titreForm = titre || (roles ? 'Inviter un volontaire' : 'Inviter un partenaire')
+  const titreForm = titre || (roles ? 'Ajouter un volontaire' : 'Inviter un partenaire')
+  const aUnEmail = !!(form.email || '').trim()
   async function go() {
-    if (roles && (!form.prenom || !form.nom || !form.email)) { setErr('Prénom, nom et e-mail requis.'); return }
+    if (roles && (!form.prenom || !form.nom)) { setErr('Prénom et nom requis.'); return }
+    if (roles && !emailFacultatif && !aUnEmail) { setErr('Prénom, nom et e-mail requis.'); return }
     if (orgs && !form.partenaire_id) { setErr('Choisissez une organisation.'); return }
     if (orgs && !form.email) { setErr('E-mail professionnel de l’institution requis.'); return }
     setBusy(true); setErr(null); await onSave(form); setBusy(false)
@@ -116,7 +118,23 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre
           <F label="Nom" value={form.nom} set={v => set('nom', v)} required />
         </div>
       )}
-      <F label={roles ? 'E-mail' : 'E-mail professionnel (identifiant de connexion)'} type="email" value={form.email} set={v => set('email', v)} required />
+      {roles && emailFacultatif && (
+        <PhoneF label="Téléphone (optionnel)" value={form.telephone} set={v => set('telephone', v)} />
+      )}
+      <F
+        label={roles
+          ? (emailFacultatif ? 'E-mail (optionnel — pour le lien d’invitation)' : 'E-mail')
+          : 'E-mail professionnel (identifiant de connexion)'}
+        type="email"
+        value={form.email}
+        set={v => set('email', v)}
+        required={!emailFacultatif}
+      />
+      {roles && emailFacultatif && (
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '-4px 0 12px', lineHeight: 1.45 }}>
+          Sans e-mail, la fiche est créée tout de suite (sans accès). Vous pourrez envoyer l’invitation plus tard via « Configurer le compte ».
+        </div>
+      )}
       {roles && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>{roleLabel || 'Type de volontaire'}</div>
@@ -163,7 +181,9 @@ export function FormInvit({ form, setForm, onSave, roles, roleLabel, orgs, titre
         />
       )}
       {err && <div style={{ color: '#C8435A', fontSize: 13, marginBottom: 8 }}>{err}</div>}
-      <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>{busy ? '…' : '✓ Générer le lien d\'invitation'}</Btn>
+      <Btn onClick={go} disabled={busy} style={{ width: '100%' }}>
+        {busy ? '…' : (roles && emailFacultatif && !aUnEmail ? '✓ Ajouter sans compte' : '✓ Générer le lien d\'invitation')}
+      </Btn>
     </>
   )
   if (embedded) return inner
