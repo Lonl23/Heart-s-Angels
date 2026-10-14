@@ -167,7 +167,7 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
     if (!checkPhones()) return
     const statut = inline
       ? undefined
-      : (f.statut === 'non_realise' && initial?.id && !peutPasserNonRealise(initial.statut))
+      : (f.statut === 'non_realise' && initial?.id && !peutPasserNonRealise(initial.statut, initial))
         ? initial.statut
         : f.statut
     setSaving(true)
@@ -357,7 +357,7 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
           {!inline && !f.id && <Sel label="Statut" value={f.statut} set={v => set('statut', v)} options={PIPELINE_ENCODE.map(k => ({ v: k, l: STATUTS[k].l }))} />}
-          {!inline && f.id && <Sel label="Statut" value={f.statut} set={v => set('statut', v)} options={statutsDisponibles(initial?.statut || f.statut).map(k => ({ v: k, l: STATUTS[k].l }))} />}
+          {!inline && f.id && <Sel label="Statut" value={f.statut} set={v => set('statut', v)} options={statutsDisponibles(initial?.statut || f.statut, initial || f).map(k => ({ v: k, l: STATUTS[k].l }))} />}
           <Sel label="Priorité" value={String(f.priorite)} set={v => set('priorite', v)} options={[
             { v: '1', l: '1 · Basse' }, { v: '2', l: '2 · Normale' }, { v: '3', l: '3 · Haute' }, { v: '4', l: '4 · Urgente' }, { v: '5', l: '5 · Critique' },
           ]} />

@@ -26,7 +26,15 @@ export const DEMANDE_STATUTS = {
 }
 export const stInfo = v => STATUTS[v] || STATUTS.en_attente
 
-export function statutFige(statut) {
+export const MOTIF_DEMO_NON_REALISE = 'Formation (souhait test)'
+
+/** Souhait de formation fictif (Camille TEST-Angel, demo_cle), jamais un vrai patient. */
+export function estSouhaitDemo(s) {
+  return !!(s?.fictif && (s?.mission?.demo_cle || s?.demo_cle))
+}
+
+export function statutFige(statut, souhait) {
+  if (estSouhaitDemo(souhait)) return false
   return statut === 'realise' || statut === 'non_realise'
 }
 
@@ -37,17 +45,19 @@ export function libelleStatutFige(statut) {
   return 'Un souhait réalisé ne peut plus changer de statut.'
 }
 
-export function peutPasserNonRealise(statut) {
+export function peutPasserNonRealise(statut, souhait) {
+  if (estSouhaitDemo(souhait)) return true
   return !['en_cours', 'realise'].includes(statut)
 }
 
-export function peutChangerStatut(actuel, cible) {
+export function peutChangerStatut(actuel, cible, souhait) {
   if (!cible || actuel === cible) return false
-  if (statutFige(actuel)) return false
-  if (cible === 'non_realise' && !peutPasserNonRealise(actuel)) return false
+  if (statutFige(actuel, souhait)) return false
+  if (cible === 'non_realise' && !peutPasserNonRealise(actuel, souhait)) return false
   return true
 }
 
-export function statutsDisponibles(actuel) {
-  return Object.keys(STATUTS).filter(k => k !== 'non_realise' || k === actuel || peutPasserNonRealise(actuel))
+export function statutsDisponibles(actuel, souhait) {
+  if (estSouhaitDemo(souhait)) return Object.keys(STATUTS)
+  return Object.keys(STATUTS).filter(k => k !== 'non_realise' || k === actuel || peutPasserNonRealise(actuel, souhait))
 }

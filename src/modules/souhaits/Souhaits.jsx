@@ -12,11 +12,13 @@ import { nomsRecolteurs } from './missionSchema'
 import {
   STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, peutChangerStatut, statutFige, libelleStatutFige,
+  estSouhaitDemo, MOTIF_DEMO_NON_REALISE,
 } from './statuts'
 
 export {
   STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige,
+  estSouhaitDemo, MOTIF_DEMO_NON_REALISE,
 }
 export { statutsDisponibles } from './statuts'
 
@@ -75,7 +77,7 @@ export default function Souhaits() {
     const id = typeof s === 'string' ? s : s?.id
     const statut = typeof s === 'string' ? null : s?.statut
     if (!id) return
-    if (statut === 'realise' || statut === 'non_realise' || s?.verrouille) nav(`/app/souhaits/${id}`)
+    if ((statut === 'realise' || statut === 'non_realise' || s?.verrouille) && !estSouhaitDemo(s)) nav(`/app/souhaits/${id}`)
     else nav(`/app/souhaits/${id}/preparer`)
   }
 
@@ -162,13 +164,14 @@ function Kanban({ onOpen }) {
   async function appliquer(id, col, extra={}) {
     const item = itemsRef.current.find(s => s.id === id)
     if (!item || item.statut === col) return
-    if (!peutChangerStatut(item.statut, col)) {
-      if (statutFige(item.statut)) flash(libelleStatutFige(item.statut), 'warn')
+    if (!peutChangerStatut(item.statut, col, item)) {
+      if (statutFige(item.statut, item)) flash(libelleStatutFige(item.statut), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }
     const patch = { statut: col, ...extra }
     if (col === 'realise' && !item.date_realisee) patch.date_realisee = new Date().toISOString().slice(0,10)
+    if (item.statut === 'realise' && col !== 'realise') patch.date_realisee = null
     setItems(list => list.map(s => s.id === id ? { ...s, ...patch } : s))
     const { error } = await supabase.from('souhaits').update(patch).eq('id', id)
     if (error) {
@@ -185,12 +188,17 @@ function Kanban({ onOpen }) {
   function deposer(s, col) {
     const item = typeof s === 'string' ? itemsRef.current.find(x => x.id === s) : s
     if (!item || !col || item.statut === col) return
-    if (!peutChangerStatut(item.statut, col)) {
-      if (statutFige(item.statut)) flash(libelleStatutFige(item.statut), 'warn')
+    if (!peutChangerStatut(item.statut, col, item)) {
+      if (statutFige(item.statut, item)) flash(libelleStatutFige(item.statut), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }
     if (col === 'non_realise') {
+      if (estSouhaitDemo(item)) {
+        const motif = String(item.mission?.motif_non_realise || '').trim() || MOTIF_DEMO_NON_REALISE
+        appliquer(item.id, col, { mission: { ...(item.mission || {}), motif_non_realise: motif } })
+        return
+      }
       setMotif({ id: item.id, from: item.statut })
       setMotifTxt(item.mission?.motif_non_realise || '')
       return
@@ -221,7 +229,7 @@ function Kanban({ onOpen }) {
       if (!o || o.touch) return
       const dist = Math.hypot(e.clientX - o.x, e.clientY - o.y)
       if (!o.started && dist < 8) return
-      if (statutFige(o.s.statut)) {
+      if (statutFige(o.s.statut, o.s)) {
         if (!o.started) {
           o.started = true
           flashRef.current(libelleStatutFige(o.s.statut), 'warn')
@@ -280,7 +288,7 @@ function Kanban({ onOpen }) {
     <div className="ha-kanban-page">
       <div className="ha-kanban-toolbar" style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-end', gap:12, marginBottom:14 }}>
         <ChampRechercheNom id="recherche-souhaits" value={q} onChange={setQ} />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Un souhait réalisé ou non réalisé ne se déplace plus.</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Le souhait de formation peut être déplacé dans n’importe quelle colonne à tout moment, y compris depuis Réalisé ou Non réalisé. Les autres souhaits réalisés ou non réalisés restent verrouillés.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -357,11 +365,13 @@ function MotifNonRealiseCarte({ s }) {
 function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
   const recolteurs = nomsRecolteurs(s.mission)
   const verrouille = !!s.verrouille
+  const demo = estSouhaitDemo(s)
   const dateAffichee = fmtDatesSouhait(s)
   const titre = verrouille
     ? (s.statut === 'non_realise'
       ? 'Non réalisé — verrouillé. Ouvrir avec le PIN.'
       : 'Réalisé — verrouillé un mois calendrier après la réalisation. Ouvrir avec le PIN.')
+    : demo ? 'Souhait de formation — glissez pour changer de colonne à tout moment.'
     : s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.'
     : s.statut === 'non_realise' ? 'Non réalisé — verrouillé.'
     : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'
@@ -398,7 +408,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
   }
 
   return (
-    <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '') + (statutFige(s.statut) ? ' is-locked' : '')} style={{ padding:'12px 14px' }}
+    <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '') + (statutFige(s.statut, s) ? ' is-locked' : '')} style={{ padding:'12px 14px' }}
       onPointerDown={onPointerDown}
       title={titre}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:6, marginBottom:5 }}>
@@ -426,7 +436,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
           onPointerDown={e => e.stopPropagation()}
           onPointerUp={e => e.stopPropagation()}
           onPointerCancel={e => e.stopPropagation()}>
-          {s.statut === 'realise' ? 'Rapport ›' : 'Préparer ›'}
+          {s.statut === 'realise' && !demo ? 'Rapport ›' : 'Préparer ›'}
         </button>
       )}
     </Card>

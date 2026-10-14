@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
-import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige } from './statuts'
+import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige, estSouhaitDemo, MOTIF_DEMO_NON_REALISE } from './statuts'
 import { fmtDatesSouhait } from './datesSouhait'
 import { medecinPluri, nomPluri, nomsRecolteurs } from './missionSchema'
 import FormSouhait from './FormSouhait'
@@ -42,7 +42,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     setPinMsg(null)
   }, [id])
   useEffect(() => {
-    if (preparer && s && statutFige(s.statut)) onVoir?.()
+    if (preparer && s && statutFige(s.statut, s)) onVoir?.()
   }, [preparer, s?.id, s?.statut])
   async function load() {
     const { data } = await supabase.from('souhaits').select('*').eq('id', id).maybeSingle()
@@ -64,29 +64,35 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
   function flash(t){ setMsg(t); setTimeout(()=>setMsg(null), 3000) }
 
   async function appliquerStatut(v, missionPatch={}) {
-    if (statutFige(s.statut) && v !== s.statut) {
+    if (statutFige(s.statut, s) && v !== s.statut) {
       flash(libelleStatutFige(s.statut))
       return
     }
     const patch = { statut: v }
     if (v === 'realise' && !s.date_realisee) patch.date_realisee = new Date().toISOString().slice(0,10)
+    if (s.statut === 'realise' && v !== 'realise') patch.date_realisee = null
     if (Object.keys(missionPatch).length) {
       const { data: fresh } = await supabase.from('souhaits').select('mission').eq('id', id).single()
       patch.mission = { ...(fresh?.mission || s.mission || {}), ...missionPatch }
     }
     const { error } = await supabase.from('souhaits').update(patch).eq('id', id)
     if (error) { flash(error.message); return }
-    if (v === 'non_realise') return
+    if (v === 'non_realise' && !estSouhaitDemo(s)) return
     setS(x => ({ ...x, ...patch })); flash('Statut mis à jour.')
   }
   function majStatut(v) {
     if (v === s.statut) return
-    if (!peutChangerStatut(s.statut, v) && v !== 'non_realise') {
-      if (statutFige(s.statut)) flash(libelleStatutFige(s.statut))
+    if (!peutChangerStatut(s.statut, v, s) && v !== 'non_realise') {
+      if (statutFige(s.statut, s)) flash(libelleStatutFige(s.statut))
       return
     }
     if (v === 'non_realise') {
-      if (!peutPasserNonRealise(s.statut)) return
+      if (!peutPasserNonRealise(s.statut, s)) return
+      if (estSouhaitDemo(s)) {
+        const t = String(s.mission?.motif_non_realise || '').trim() || MOTIF_DEMO_NON_REALISE
+        appliquerStatut('non_realise', { motif_non_realise: t })
+        return
+      }
       setMotif(s.mission?.motif_non_realise || '')
       setMotifOpen(true)
       return
@@ -157,15 +163,19 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     )
   }
   if (!s) return <div style={{ padding:24 }}><Loading /></div>
-  if (preparer && statutFige(s.statut)) return <div style={{ padding:24 }}><Loading /></div>
+  if (preparer && statutFige(s.statut, s)) return <div style={{ padding:24 }}><Loading /></div>
   if (fiche) return <FicheMission souhaitId={id} onClose={()=>setFiche(false)} />
+  const demo = estSouhaitDemo(s)
   const tabActif = (!tabFixe && s.statut === 'realise') ? 'jour' : tab
 
   const st = stInfo(s.statut)
-  const extras = [
-    ...(['en_cours','realise'].includes(s.statut) ? [s.statut] : []),
-    ...statutsDisponibles(s.statut).filter(k => !PIPELINE.includes(k)),
-  ]
+  const extras = demo
+    ? KANBAN_COLONNES.filter(k => !PIPELINE.includes(k))
+    : [
+        ...(['en_cours','realise'].includes(s.statut) ? [s.statut] : []),
+        ...statutsDisponibles(s.statut, s).filter(k => !PIPELINE.includes(k)),
+      ]
+  const pipelineStatut = demo ? PIPELINE : PIPELINE_ENCODE
   const m = s.mission || {}
   const pretHints = []
   if (!(m.vecteurs||[]).length) pretHints.push(m.demo_cle ? 'un vecteur' : 'un vecteur et un équipage')
@@ -188,7 +198,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
         </div>
         <div className="ha-souhait-actions">
           <Btn kind="soft" onClick={()=>setFiche(true)}>Imprimer la fiche</Btn>
-          {statutFige(s.statut)
+          {statutFige(s.statut, s)
             ? null
             : (
               <Btn kind={mode==='edit'?'ok':'primary'} onClick={()=>mode==='edit' ? onVoir?.() : onPreparer?.()}>
@@ -200,13 +210,15 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
       <Card style={{ marginBottom:12, padding:'12px 16px' }}>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
-          {statutFige(s.statut)
+          {statutFige(s.statut, s)
             ? (s.statut === 'non_realise'
               ? 'Souhait non réalisé — verrouillé, plus rien à préparer.'
               : 'Souhait réalisé — le statut ne peut plus être modifié, les heures de mission sont conservées.')
-            : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes missions' : ''}`}
+            : demo
+              ? 'Souhait de formation — déplaçable dans n’importe quelle colonne à tout moment, y compris Réalisé et Non réalisé.'
+              : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes missions' : ''}`}
         </div>
-        <StatutFlow value={s.statut} info={stInfo} pipeline={PIPELINE_ENCODE} extras={extras} onPick={majStatut} locked={statutFige(s.statut)} />
+        <StatutFlow value={s.statut} info={stInfo} pipeline={pipelineStatut} extras={extras} onPick={majStatut} locked={statutFige(s.statut, s)} />
         {programmer && s.statut === 'pret' && pretHints.length > 0 && (
           <div style={{ fontSize:12.5, color:'#BA7517', marginTop:8 }}>Avant le terrain, il manque encore : {pretHints.join(', ')}.</div>
         )}
@@ -226,7 +238,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       {s.fictif && (
         <Flash kind="warn">
           {s.mission?.demo_cle
-            ? 'Souhait de formation fictif — dossier complet (institutions, trajet, protocole de détresse). Ce n’est pas un vrai patient. Pas besoin d’affecter un équipage : tous les volontaires le voient dans Mes missions pour se faire la main. Une fois clôturé, il revient en Nouveau le lendemain (départ base 9h30).'
+            ? 'Souhait de formation fictif — dossier préencodé, déplaçable dans n’importe quelle colonne à tout moment. Ce n’est pas un vrai patient. Pas besoin d’affecter un équipage : tous les volontaires le voient dans Mes missions pour se faire la main. Une fois clôturé, il revient en Nouveau le lendemain (départ base 9h30) ; l’encodage (protocole, trajet, institutions) reste.'
             : 'Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.'}
         </Flash>
       )}
