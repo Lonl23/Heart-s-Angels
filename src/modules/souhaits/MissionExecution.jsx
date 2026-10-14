@@ -191,7 +191,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
   async function aller(next) {
     const n = normaliserEtape(next)
-    if (!locked && idxEtape(etape) < 1 && n !== 'a_la_base') {
+    if (!locked && !jouette && idxEtape(etape) < 1 && n !== 'a_la_base') {
       if (!cotesOk) {
         setErr('Photographiez les 4 côtés du véhicule avant de partir.')
         return
@@ -474,10 +474,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const essenceN = Number(String(vecteur?.essence_pct ?? '').replace(',', '.'))
   const essenceConnue = vecteur && vecteur.essence_pct !== '' && vecteur.essence_pct != null && Number.isFinite(essenceN)
   const besoinPleinMatin = !!(essenceConnue && essenceN < 100)
-  const extrasManquants = (aLaBase && besoinPleinMatin && !photos?.ticket_carburant_matin?.path)
+  const extrasManquants = (!jouette && aLaBase && besoinPleinMatin && !photos?.ticket_carburant_matin?.path)
     ? ['ticket du plein du matin']
     : []
-  const manquantsHint = [...miss, ...extrasManquants].join(', ') || null
+  const manquantsHint = jouette ? null : ([...miss, ...extrasManquants].join(', ') || null)
   /* Traitements : tant que le patient est à bord (PEC → retour inclus, y compris en route). */
   const showMAR = userMedical && vecteurMedical && complet && !!def.patient
   /* Matériel utilisé : du départ base jusqu’au rentré base. L’emport reste à la base. */
@@ -533,7 +533,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
       )}
       {jouette && (
         <Flash>
-          Souhait de formation fictif — ce n’est pas un vrai patient. Tous les volontaires peuvent le jouer ici, sans être affectés à un équipage. Une fois clôturé, il revient le lendemain.
+          Souhait de formation fictif — ce n’est pas un vrai patient. Photos, scans et tickets sont là pour voir ce qu’il faudra faire sur un vrai souhait : rien n’est obligatoire ici. Une fois clôturé, il revient le lendemain.
         </Flash>
       )}
       {err && <Flash kind="err">{err}</Flash>}
@@ -587,12 +587,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
               </Section>
               <Section titre="Photos des 4 côtés">
                 <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
-                {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés avant de partir.</div>}
+                {!cotesOk && (
+                  <div style={{ fontSize:13, color: jouette ? 'var(--text-muted)' : '#BA7517', marginTop:8 }}>
+                    {jouette
+                      ? 'Sur un vrai souhait : photographier les 4 côtés avant de partir. Ici vous pouvez passer.'
+                      : 'Les 4 côtés avant de partir.'}
+                  </div>
+                )}
               </Section>
               <Section titre={vecteurMedical ? 'Checklist départ' : 'Kilomètres et essence'}>
                 {userMedical && vecteurMedical && (
                   <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
-                    checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
+                    checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} optionnel={jouette} />
                 )}
                 {itemsVis.base.length > 0 && (
                   <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
@@ -608,6 +614,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   meta={photos.ticket_carburant_matin}
                   onCapture={f => captureTicket(f, 'ticket_carburant_matin')}
                   disabled={locked || !vecteurId}
+                  optionnel={jouette}
                 />
               </Section>
               {docsSejour.length > 0 && (
@@ -621,7 +628,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
           {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
           {showScanConso && (
             <Section titre="Matériel utilisé">
-              <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} />
+              <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} optionnel={jouette} />
             </Section>
           )}
 
@@ -696,7 +703,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
               <Section titre="Photos des 4 côtés — remise">
                 <CoinPhotos
                   coins={photos.coins_retour || {}}
-                  hint="Photographiez à nouveau les 4 côtés. Marquez tout dégât apparu pendant la mission."
+                  hint={jouette
+                    ? 'Sur un vrai souhait : 4 côtés à la remise, avec les dégâts. Ici ce n’est pas obligatoire.'
+                    : 'Photographiez à nouveau les 4 côtés. Marquez tout dégât apparu pendant la mission.'}
                   onCapture={(slot, f)=>captureCoin(slot, f, 'coins_retour')}
                   onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins_retour' })}
                   onDelete={slot=>removeCoin(slot, 'coins_retour')}
@@ -708,7 +717,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   meta={photos.ticket_carburant}
                   onCapture={f => captureTicket(f, 'ticket_carburant')}
                   disabled={locked || !vecteurId}
-                  hint="Si vous faites le plein au retour, photographiez aussi ce ticket."
+                  hint={jouette
+                    ? 'Sur un vrai souhait : ticket du plein du retour. Ici ce n’est pas obligatoire.'
+                    : 'Si vous faites le plein au retour, photographiez aussi ce ticket.'}
                   label="Ticket du retour"
                 />
               </Section>
@@ -933,7 +944,14 @@ function MiniNum({ l, v, set }) {
   )
 }
 
-function PleinMatin({ essenceConnue, essenceN, besoinPlein, meta, onCapture, disabled }) {
+function PleinMatin({ essenceConnue, essenceN, besoinPlein, meta, onCapture, disabled, optionnel }) {
+  if (optionnel) {
+    return (
+      <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>
+        Sur un vrai souhait : essence + ticket du plein du matin si le réservoir n’est pas à 100 %. Ici vous pouvez passer.
+      </p>
+    )
+  }
   if (!essenceConnue && !meta?.path) {
     return (
       <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>
