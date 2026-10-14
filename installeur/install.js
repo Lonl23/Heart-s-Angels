@@ -116,6 +116,8 @@ async function main() {
     await client.query(lireSQL('73_sejour_documents.sql'))
     await client.query(lireSQL('74_demo_colonnes_libres.sql'))
     await client.query(lireSQL('75_fonds_pages.sql'))
+    await client.query(lireSQL('76_smtp_from_noreply.sql'))
+    await client.query(lireSQL('77_role_utilisateur_asbl.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

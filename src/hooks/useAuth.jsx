@@ -3,11 +3,10 @@ import { supabase } from '@/lib/supabase'
 
 const AuthContext = createContext(null)
 
-// Groupes de rôles (alignés sur l'énuméré role_utilisateur en base)
-const STAFF = ['admin','president','coordinateur','ambulancier_bleu','ambulancier_gris',
-               'infirmier','medecin','volontaire_medical','volontaire_non_medical','tresorier','secretaire']
+// Identités de compte (énuméré role_utilisateur). Qualifications ≠ rôle.
+const STAFF = ['admin','president','coordinateur','tresorier','secretaire',
+               'volontaire_medical','volontaire_non_medical']
 const ADMINS  = ['admin','president']
-const MEDICAL = ['admin','president','medecin','infirmier']
 
 /** Coordination transport, présidence, informatique : équipages, horaires, ambulances. */
 const ROLES_PROGRAMME_SOUHAIT = [
@@ -98,7 +97,7 @@ export function AuthProvider({ children }) {
   function can(perm) {
     if (!role) return false
     if (perm === 'admin')       return peutGererApp()
-    if (perm === 'medical')     return MEDICAL.includes(role)
+    if (perm === 'medical')     return ADMINS.includes(role) || estMedical()
     if (perm === 'staff')       return STAFF.includes(role)
     if (perm === 'partenaire')  return role === 'partenaire' && profile?.actif !== false
     return STAFF.includes(role)
@@ -115,8 +114,10 @@ export function AuthProvider({ children }) {
   }
 
   function estMedical() {
-    if (['medecin','infirmier','ambulancier_bleu','ambulancier_gris','volontaire_medical'].includes(role)) return true
-    return (profile?.fiche?.type_benevole) === 'medical'
+    const t = profile?.fiche?.type_benevole
+    if (t === 'non_medical') return false
+    if (t === 'medical') return true
+    return role === 'volontaire_medical'
   }
   function rolesAsbl() { return profile?.fiche?.roles_asbl || [] }
   function matriceAutorise(feature) {

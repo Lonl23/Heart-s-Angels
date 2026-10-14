@@ -35,7 +35,19 @@ export const ROLES_MISSION = [
 
 export const lblRoleMission = v => ROLES_MISSION.find(r => r.v === v)?.l || v
 
-const ROLES_PROFIL_MEDICAUX = ['medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris', 'volontaire_medical']
+/** Identités de compte (profiles.role). Pas les qualifications. */
+export const ROLES_COMPTE = [
+  { v:'admin',                    l:'Administrateur' },
+  { v:'president',                l:'Président' },
+  { v:'coordinateur',             l:'Coordinateur' },
+  { v:'tresorier',                l:'Trésorier' },
+  { v:'secretaire',               l:'Secrétaire' },
+  { v:'volontaire_medical',       l:'Volontaire médical' },
+  { v:'volontaire_non_medical',   l:'Volontaire non médical' },
+]
+export const lblRoleCompte = v => ROLES_COMPTE.find(r => r.v === v)?.l || v
+
+const ROLES_PROFIL_MEDICAUX = ['volontaire_medical', 'medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris']
 const QUALS_MEDICALES = ['ambulancier', 'infirmier', 'medecin']
 const ROLES_MISSION_NON_MED = [
   'volontaire_non_medical', 'chauffeur', 'secouriste', 'kine', 'psychologue', 'autre',
@@ -316,6 +328,116 @@ export const ROLES_ASBL = [
   { v:'resp_informatique_adjoint',   l:'Adjoint informatique' },
   { v:'administrateur_asbl',         l:"Administrateur de l'ASBL" },
 ]
+
+/** Alias historique : même siège que coord_medical. */
+const ALIAS_ROLE_ASBL = { coordinateur_medical: 'coord_medical' }
+
+const RANG_PAR_ROLE = {
+  president: 'Président',
+  vice_president: 'Vice-président',
+}
+
+/**
+ * Équipes ASBL (fiche.roles_asbl). Mêmes sièges que EQUIPES_ACCES, sans « simple volontaire ».
+ * Les rangs (responsable / adjoint, président / vice-président) ne s’affichent qu’après clic.
+ */
+export const EQUIPES_ASBL = [
+  { v:'presidence',    l:'Présidence',                 roles:['president','vice_president'] },
+  { v:'benevoles',     l:'Coordination',               roles:['coord_benevoles','coord_benevoles_adjoint'] },
+  { v:'logistique',    l:'Logistique',                 roles:['resp_logistique','resp_logistique_adjoint'] },
+  { v:'transport',     l:'Transport',                  roles:['coord_transport','coord_transport_adjoint'] },
+  { v:'medical',       l:'Coordination médicale',      roles:['coord_medical','coord_medical_adjoint','coordinateur_medical'] },
+  { v:'tresorerie',    l:'Trésorerie',                 roles:['tresorier','tresorier_adjoint'] },
+  { v:'informatique',  l:'Informatique',               roles:['resp_informatique','resp_informatique_adjoint'] },
+  { v:'rp',            l:'Relations publiques',        roles:['relations_publiques','relations_publiques_adjoint'] },
+  { v:'recolte',       l:'Récolteurs de souhait',      roles:['recolteur_souhait'] },
+  { v:'admin_asbl',    l:"Administrateur de l'ASBL",   roles:['administrateur_asbl'] },
+]
+
+export function canonRoleAsbl(role) {
+  return ALIAS_ROLE_ASBL[role] || role
+}
+
+export function lblRoleAsbl(v) {
+  const k = canonRoleAsbl(v)
+  return ROLES_ASBL.find(r => r.v === k)?.l || k
+}
+
+export function rangsDeLequipe(equipe) {
+  const seen = new Set()
+  const out = []
+  for (const r of equipe.roles || []) {
+    const k = canonRoleAsbl(r)
+    if (!k || k === 'simple_volontaire' || seen.has(k)) continue
+    seen.add(k)
+    out.push({ v: k, l: libelleRangAsbl(k, equipe) })
+  }
+  return out
+}
+
+export function libelleRangAsbl(role, equipe) {
+  const k = canonRoleAsbl(role)
+  if (RANG_PAR_ROLE[k]) return RANG_PAR_ROLE[k]
+  const n = rangsUniques(equipe).length
+  if (n <= 1) return lblRoleAsbl(k)
+  if (k.endsWith('_adjoint')) return 'Adjoint'
+  return 'Responsable'
+}
+
+function rangsUniques(equipe) {
+  const seen = new Set()
+  const out = []
+  for (const r of equipe.roles || []) {
+    const k = canonRoleAsbl(r)
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(k)
+  }
+  return out
+}
+
+export function equipeDuRoleAsbl(role) {
+  const k = canonRoleAsbl(role)
+  return EQUIPES_ASBL.find(e => (e.roles || []).some(r => canonRoleAsbl(r) === k))
+}
+
+/** Clés d’office spécifiques (pas simple_volontaire). */
+export function rolesAsblSpecifiques(roles) {
+  const seen = new Set()
+  const out = []
+  for (const r of Array.isArray(roles) ? roles : []) {
+    const k = canonRoleAsbl(r)
+    if (!k || k === 'simple_volontaire' || seen.has(k)) continue
+    seen.add(k)
+    out.push(k)
+  }
+  return out
+}
+
+export function aRoleAsblParticulier(roles) {
+  return rolesAsblSpecifiques(roles).length > 0
+}
+
+/** Libellé lu par le volontaire : « Coordination — adjoint », sans « simple volontaire ». */
+export function libelleRoleAsblPropre(role) {
+  const k = canonRoleAsbl(role)
+  const eq = equipeDuRoleAsbl(k)
+  if (!eq) return lblRoleAsbl(k)
+  const rangs = rangsDeLequipe(eq)
+  if (rangs.length <= 1) return eq.l
+  const rang = rangs.find(r => r.v === k)
+  return eq.l + ' — ' + String(rang?.l || lblRoleAsbl(k)).toLowerCase()
+}
+
+export function libellesRolesAsblPropres(roles) {
+  return rolesAsblSpecifiques(roles).map(libelleRoleAsblPropre)
+}
+
+/** Enregistrement : Non → simple_volontaire ; Oui → sièges choisis (jamais un rôle d’équipe sans rang). */
+export function rolesAsblPourEnregistrement(particulier, roles) {
+  if (!particulier) return ['simple_volontaire']
+  return rolesAsblSpecifiques(roles)
+}
 
 export const SPECIALISATIONS_INF = [
   { v:'siamu',            l:'SIAMU (soins intensifs / urgences)' },

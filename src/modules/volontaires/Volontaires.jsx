@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Modal, Empty, Loading } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
-import { QUALIFS, ROLES_ASBL, personneEstMedicale } from '@/modules/fiche/ficheSchema'
+import { QUALIFS, lblRoleCompte, libelleRoleAsblPropre, libellesRolesAsblPropres, personneEstMedicale, rolesAsblSpecifiques } from '@/modules/fiche/ficheSchema'
 import { CodeBox, FormInvit, Msg, genCode, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
 
 const TYPES_INVIT = [
@@ -12,16 +12,19 @@ const TYPES_INVIT = [
   { v: 'volontaire_non_medical', l: 'Volontaire non médical' },
 ]
 
-const _lblRole = v => (ROLES_ASBL.find(r => r.v === v)?.l) || v
 const _lblQual = v => (QUALIFS.find(q => q.v === v)?.l) || v
 const _lblInvit = v => (TYPES_INVIT.find(r => r.v === v)?.l) || v
-function rolesAsblTxt(u) { const rs = u.fiche?.roles_asbl || []; return rs.length ? rs.map(_lblRole).join(', ') : '—' }
+function rolesAsblTxt(u) {
+  const rs = rolesAsblSpecifiques(u.fiche?.roles_asbl)
+  if (!rs.length) return ''
+  return rs.map(r => [libelleRoleAsblPropre(r), r].join(' ')).join(' ')
+}
 function qualifsTxt(u) { const qs = u.fiche?.qualifications || []; return qs.length ? qs.map(_lblQual).join(', ') : '—' }
 function typeBenevoleTxt(u) {
   const t = u.fiche?.type_benevole
   if (t === 'medical') return 'Volontaire médical'
   if (t === 'non_medical') return 'Volontaire non médical'
-  return _lblInvit(u.role)
+  return lblRoleCompte(u.role)
 }
 function compteAConfigurer(u) {
   return !!(u?.fiche?.compte_a_configurer) || !(u?.email || '').trim()
@@ -272,7 +275,7 @@ function GroupeTuiles({ titre, hint, items, onOpenFiche, onConfigurer, onToggle 
 
 function TuileVolontaire({ u, onOpenFiche, onConfigurer, onToggle }) {
   const aConfigurer = compteAConfigurer(u)
-  const roles = (u.fiche?.roles_asbl || []).map(_lblRole)
+  const roles = libellesRolesAsblPropres(u.fiche?.roles_asbl)
   const quals = (u.fiche?.qualifications || []).map(_lblQual)
   return (
     <Card

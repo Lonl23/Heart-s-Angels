@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, Btn, F, inp, lbl } from '@/components/ui'
+import { lblRoleCompte } from '@/modules/fiche/ficheSchema'
 
 // Affectation de volontaires à un souhait (avec véhicule) — utilisé en édition.
 export default function Affectation({ souhaitId }) {
@@ -25,7 +26,7 @@ export default function Affectation({ souhaitId }) {
     <div>
       <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10 }}>Les volontaires affectés retrouvent la mission dans « Mes missions » (vue restreinte : prénom, lieu, destination, heures, check véhicule).</div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, alignItems:'end', marginBottom:12 }}>
-        <div><label style={lbl}>Volontaire</label><select value={uid} onChange={e=>setUid(e.target.value)} style={inp}><option value="">— Choisir —</option>{profils.map(p=><option key={p.id} value={p.id}>{p.prenom} {p.nom} ({p.role})</option>)}</select></div>
+        <div><label style={lbl}>Volontaire</label><select value={uid} onChange={e=>setUid(e.target.value)} style={inp}><option value="">— Choisir —</option>{profils.map(p=><option key={p.id} value={p.id}>{p.prenom} {p.nom} ({lblRoleCompte(p.role)})</option>)}</select></div>
         <F label="Rôle dans la mission" value={role} set={setRole} placeholder="chauffeur, brancardier…" />
         <F label="Véhicule affecté" value={vehicule} set={setVehicule} placeholder="Ambulance 1…" />
         <Btn onClick={ajouter}>+ Affecter</Btn>
@@ -35,7 +36,7 @@ export default function Affectation({ souhaitId }) {
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', border:'1px solid var(--border)', borderRadius:10, padding:'8px 12px' }}>
             <div>
               <div style={{ fontWeight:600, color:'var(--text)' }}>{r.profiles?.prenom} {r.profiles?.nom} <span style={{ fontWeight:400, color:'var(--text-muted)' }}>{r.role_mission?`— ${r.role_mission}`:''}</span></div>
-              <div style={{ fontSize:12, color:'var(--text-faint)' }}>{r.profiles?.role}{r.vehicule?` · 🚐 ${r.vehicule}`:''}</div>
+              <div style={{ fontSize:12, color:'var(--text-faint)' }}>{lblRoleCompte(r.profiles?.role)}{r.vehicule?` · 🚐 ${r.vehicule}`:''}</div>
             </div>
             <div style={{ display:'flex', gap:6 }}>
               <Btn kind={r.confirme?'ok':'soft'} onClick={()=>toggle(r)} style={{ padding:'5px 10px' }}>{r.confirme?'✓ Confirmé':'Confirmer'}</Btn>
