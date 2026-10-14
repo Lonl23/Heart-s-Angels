@@ -87,6 +87,12 @@ export function grilleSemaine(anchor) {
   return { debut: iso(a), fin: iso(addDays(a, 6)), weeks: [a] }
 }
 
+export function grilleJour(anchor) {
+  const d = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
+  const id = iso(d)
+  return { debut: id, fin: id, weeks: [startOfWeek(d)], jour: d }
+}
+
 export function packLanes(events, weekStart) {
   const weekEnd = addDays(weekStart, 6)
   const items = []

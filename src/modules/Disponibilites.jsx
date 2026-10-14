@@ -6,9 +6,15 @@ import { libelleQualsImplicites, teinteCalendrier, rolesRequisEffectifs, phraseI
 import { allouerCouverturesCalendrier, cleCouvertureCalendrier } from './disponibilites/couverture'
 import GrilleMois from './disponibilites/GrilleMois'
 import {
-  iso, addDays, todayISO, JOURS, titreMois, titreSemaine, grilleMois, grilleSemaine, packLanes, hhmm,
+  iso, addDays, todayISO, JOURS, titreMois, titreSemaine, grilleMois, grilleSemaine, grilleJour, packLanes, hhmm,
   estHoraire, plageCalendrier, packTimedDay, PX_HEURE, fmtJourLong, couvreJour,
 } from './disponibilites/dates'
+
+const VUES = [
+  { v: 'mois', l: 'Mois' },
+  { v: 'semaine', l: 'Semaine' },
+  { v: 'jour', l: 'Jour' },
+]
 
 const DEMI = [
   { v: 'journee_complete', l: 'Journée complète' },
@@ -52,7 +58,10 @@ export default function Disponibilites() {
   const voirTous = peutVoirToutesDispos()
   const encoderAutrui = peutEncoderDisposPourAutrui()
   const nonMed = estVolontaireNonMedical()
-  const [vue, setVue] = useState(() => sessionStorage.getItem('dispo-vue') || 'mois')
+  const [vue, setVue] = useState(() => {
+    const v = sessionStorage.getItem('dispo-vue')
+    return VUES.some(x => x.v === v) ? v : 'mois'
+  })
   const [anchor, setAnchor] = useState(() => new Date())
   const [missions, setMissions] = useState([])
   const [dispos, setDispos] = useState([])
@@ -60,7 +69,11 @@ export default function Disponibilites() {
   const [form, setForm] = useState(null)
   const [err, setErr] = useState(null)
 
-  const grille = useMemo(() => vue === 'semaine' ? grilleSemaine(anchor) : grilleMois(anchor), [vue, anchor])
+  const grille = useMemo(() => {
+    if (vue === 'semaine') return grilleSemaine(anchor)
+    if (vue === 'jour') return grilleJour(anchor)
+    return grilleMois(anchor)
+  }, [vue, anchor])
 
   useEffect(() => { sessionStorage.setItem('dispo-vue', vue) }, [vue])
   useEffect(() => { charger() }, [grille.debut, grille.fin, profile?.id, voirTous])
@@ -116,7 +129,16 @@ export default function Disponibilites() {
   }
 
   function aller(delta) {
-    setAnchor(a => vue === 'semaine' ? addDays(a, delta * 7) : new Date(a.getFullYear(), a.getMonth() + delta, 1))
+    setAnchor(a => {
+      if (vue === 'jour') return addDays(a, delta)
+      if (vue === 'semaine') return addDays(a, delta * 7)
+      return new Date(a.getFullYear(), a.getMonth() + delta, 1)
+    })
+  }
+  function titrePeriode() {
+    if (vue === 'jour') return fmtJourLong(anchor)
+    if (vue === 'semaine') return titreSemaine(anchor)
+    return titreMois(anchor)
   }
   function peutEditer(d) {
     return d?.user_id === profile?.id || encoderAutrui
@@ -173,10 +195,13 @@ export default function Disponibilites() {
           <Btn kind="soft" onClick={() => setAnchor(new Date())}>Aujourd’hui</Btn>
           <Btn kind="soft" onClick={() => aller(1)}>→</Btn>
         </div>
-        <div className="ha-cal-titre">{vue === 'semaine' ? titreSemaine(anchor) : titreMois(anchor)}</div>
-        <div style={{ display:'flex', gap:6 }}>
-          <button type="button" className={'ha-tab-like' + (vue==='semaine' ? ' is-on' : '')} onClick={() => setVue('semaine')}>Semaine</button>
-          <button type="button" className={'ha-tab-like' + (vue==='mois' ? ' is-on' : '')} onClick={() => setVue('mois')}>Mois</button>
+        <div className="ha-cal-titre">{titrePeriode()}</div>
+        <div className="ha-cal-vues" role="tablist" aria-label="Vue du calendrier">
+          {VUES.map(x => (
+            <button key={x.v} type="button" role="tab" aria-selected={vue === x.v}
+              className={'ha-tab-like' + (vue === x.v ? ' is-on' : '')}
+              onClick={() => setVue(x.v)}>{x.l}</button>
+          ))}
         </div>
       </div>
 
@@ -202,6 +227,11 @@ export default function Disponibilites() {
       <div className="ha-cal-scroll">
         {vue === 'semaine' ? (
           <SemaineHoraire weekStart={grille.weeks[0]} today={today}
+            missions={missions} dispos={dispos} moi={profile?.id}
+            encoderAutrui={encoderAutrui}
+            onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
+        ) : vue === 'jour' ? (
+          <VueJour day={anchor} today={today}
             missions={missions} dispos={dispos} moi={profile?.id}
             encoderAutrui={encoderAutrui}
             onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
@@ -287,6 +317,173 @@ function ChipDispo({ it, moi, encoderAutrui, onDispo, onSuppr }) {
       onContextMenu={e => { if (editable) { e.preventDefault(); onSuppr(it.ev) } }}>
       {label}
     </button>
+  )
+}
+
+function libelleDemi(v) {
+  if (v === 'matin') return 'Matin'
+  if (v === 'apres_midi') return 'Après-midi'
+  return 'Journée'
+}
+
+function creneauDemi(v) {
+  if (v === 'matin') return { start: 8 * 60, end: 13 * 60 }
+  if (v === 'apres_midi') return { start: 13 * 60, end: 18 * 60 }
+  return null
+}
+
+function TagPersonne({ d, moi, encoderAutrui, onDispo, onSuppr, className }) {
+  const mine = d.user_id === moi
+  const editable = mine || encoderAutrui
+  const p = d.profiles
+  const teinte = teinteCalendrier(p?.role, p?.fiche, d.user_id)
+  const nom = prenomTag(p, mine)
+  const quals = libelleQualsImplicites(p?.role, p?.fiche)
+  const demi = libelleDemi(d.demi_journee)
+  const title = [nom, quals, demi].filter(Boolean).join(' · ')
+  return (
+    <button type="button"
+      className={'ha-mois-pill dispo-' + teinte + (className ? ' ' + className : '')}
+      title={title}
+      style={{ cursor: editable ? 'pointer' : 'default', width: 'auto' }}
+      onClick={e => { e.stopPropagation(); if (editable) onDispo(d) }}
+      onContextMenu={e => { if (editable) { e.preventDefault(); onSuppr(d) } }}>
+      {nom}{d.demi_journee && d.demi_journee !== 'journee_complete' ? ` · ${demi}` : ''}
+    </button>
+  )
+}
+
+function VueJour({ day, today, missions, dispos, moi, encoderAutrui, onJour, onDispo, onSuppr }) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(t)
+  }, [])
+  const id = iso(day)
+  const dJour = dispos.filter(d => couvreJour(d, id))
+  const mJour = missions.filter(m => couvreJour(m, id))
+  const creneaux = dJour.filter(d => creneauDemi(d.demi_journee))
+  const journeeMiss = mJour.filter(m => !estHoraire(m))
+  const horaires = mJour.filter(estHoraire)
+  const { h0, h1 } = plageCalendrier()
+  const px = PX_HEURE
+  const gridH = (h1 - h0) * px
+  const heures = []
+  for (let h = h0; h <= h1; h++) heures.push(h)
+  const nowIso = iso(now)
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  const nowTop = ((nowMin - h0 * 60) / 60) * px
+  const showNow = id === nowIso && nowMin >= h0 * 60 && nowMin <= h1 * 60
+  const blocks = packTimedDay(horaires, id)
+  function packDemi(list) {
+    const n = Math.max(1, list.length)
+    return list.map((d, i) => ({ ev: d, ...creneauDemi(d.demi_journee), col: i, cols: n }))
+  }
+  const demiBlocks = [
+    ...packDemi(creneaux.filter(d => d.demi_journee === 'matin')),
+    ...packDemi(creneaux.filter(d => d.demi_journee === 'apres_midi')),
+  ]
+
+  return (
+    <div className="ha-jour">
+      <button type="button" className={'ha-jour-head' + (id === today ? ' is-today' : '')} onClick={() => onJour(day)}>
+        <span className={'ha-mois-num' + (id === today ? ' is-today' : '')}>{day.getDate()}</span>
+        <span className="ha-jour-titre">{fmtJourLong(id)}</span>
+        <span className="ha-jour-hint">Cliquer pour encoder</span>
+      </button>
+
+      <div className="ha-jour-bloc">
+        <div className="ha-jour-lab">Disponibles</div>
+        {dJour.length === 0
+          ? <p className="ha-jour-vide">Personne n’a encore indiqué être disponible.</p>
+          : (
+            <div className="ha-jour-tags">
+              {dJour.map(d => (
+                <TagPersonne key={d.id} d={d} moi={moi} encoderAutrui={encoderAutrui} onDispo={onDispo} onSuppr={onSuppr} />
+              ))}
+            </div>
+          )}
+      </div>
+
+      {journeeMiss.length > 0 && (
+        <div className="ha-jour-bloc">
+          <div className="ha-jour-lab">Missions (journée)</div>
+          <div className="ha-jour-tags">
+            {journeeMiss.map(m => {
+              const cov = couverture(m)
+              const txt = (m.lieu || m.activite || 'Mission').trim()
+              return (
+                <span key={m.souhait_id + m.date_debut}
+                  className={'ha-mois-pill mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet')}
+                  title={libelleMission({ ev: m, total: 1, j0: 1, j1: 1 })}
+                  style={{ width: 'auto' }}>{txt}</span>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="ha-cal ha-cal-horaire is-jour" onClick={() => onJour(day)}>
+        <div className="ha-cal-h-row ha-cal-h-body">
+          <div className="ha-cal-h-hours" style={{ height: gridH }}>
+            {heures.map(h => (
+              <div key={h} className="ha-cal-h-tick" style={{ top: (h - h0) * px }}>
+                {String(h).padStart(2, '0')} h
+              </div>
+            ))}
+          </div>
+          <div className="ha-cal-h-days" style={{ height: gridH }}>
+            <div className={'ha-cal-h-col' + (id === today ? ' is-today' : '')}>
+              {heures.filter(h => h < h1).map(h => (
+                <div key={h} className="ha-cal-h-line" style={{ top: (h - h0) * px }} />
+              ))}
+              <div className="ha-cal-h-line" style={{ top: gridH }} />
+              {showNow && <div className="ha-cal-h-now" style={{ top: nowTop }} />}
+              {demiBlocks.map(it => {
+                const top = Math.max(0, ((it.start - h0 * 60) / 60) * px)
+                const bot = Math.min(gridH, ((it.end - h0 * 60) / 60) * px)
+                if (bot <= 0 || top >= gridH) return null
+                const p = it.ev.profiles
+                const teinte = teinteCalendrier(p?.role, p?.fiche, it.ev.user_id)
+                const mine = it.ev.user_id === moi
+                const editable = mine || encoderAutrui
+                const nom = prenomTag(p, mine)
+                const w = 100 / it.cols
+                const left = it.col * w
+                return (
+                  <button key={'demi-' + it.ev.id} type="button"
+                    className={'ha-cal-h-ev dispo-' + teinte}
+                    style={{ top, height: Math.max(px * 0.65, bot - top), left: `calc(${left}% + 2px)`, width: `calc(${w}% - 4px)` }}
+                    title={`${nom} · ${libelleDemi(it.ev.demi_journee)}`}
+                    onClick={e => { e.stopPropagation(); if (editable) onDispo(it.ev) }}>
+                    {nom} · {libelleDemi(it.ev.demi_journee)}
+                  </button>
+                )
+              })}
+              {blocks.map(it => {
+                const cov = couverture(it.ev)
+                const top = Math.max(0, ((it.start - h0 * 60) / 60) * px)
+                const bot = Math.min(gridH, ((it.end - h0 * 60) / 60) * px)
+                if (bot <= 0 || top >= gridH) return null
+                const hgt = Math.max(px * 0.65, bot - top)
+                const w = 100 / it.cols
+                const left = it.col * w
+                const txt = libelleMission({ ev: it.ev, total: 1, j0: 1, j1: 1 })
+                return (
+                  <div key={`${it.ev.souhait_id}-${it.ev.date_debut}`}
+                    className={'ha-cal-h-ev mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet')}
+                    style={{ top, height: hgt, left: `calc(${left}% + 2px)`, width: `calc(${w}% - 4px)` }}
+                    title={txt}
+                    onClick={e => e.stopPropagation()}>
+                    {txt}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

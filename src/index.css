@@ -588,6 +588,7 @@ img, svg, video, table { max-width: 100%; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
 }
+.ha-cal-vues { display: flex; gap: 6px; flex-wrap: wrap; }
 .ha-cal-titre { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.25rem; color: var(--heading); font-weight: 500; }
 .ha-cal-legend {
   display: flex; flex-wrap: wrap; gap: 12px 16px; font-size: 12px; color: var(--text-muted);
@@ -756,6 +757,37 @@ img, svg, video, table { max-width: 100%; }
 }
 .ha-cal-h-ev.mission.is-incomplet { background: #C62828; color: #fff; }
 .ha-cal-h-ev.mission.is-complet { background: #D4FF00; color: #1A2200; }
+.ha-cal-h-ev.dispo-ambu { background: #185FA5; color: #fff; border: none; font-family: inherit; }
+.ha-cal-h-ev.dispo-infi { background: #3B6D11; color: #fff; border: none; font-family: inherit; }
+.ha-cal-h-ev.dispo-dual { background: linear-gradient(90deg, #185FA5 0%, #3B6D11 100%); color: #fff; border: none; font-family: inherit; }
+.ha-cal-h-ev.dispo-nonmed, .ha-cal-h-ev.dispo-autre { background: #6B6560; color: #fff; border: none; font-family: inherit; }
+.ha-cal-h-ev.dispo-peach { background: #F4D0B8; color: #6A3A1C; border: none; font-family: inherit; }
+.ha-cal-h-ev.dispo-lavender { background: #D4C4F0; color: #3C2A6A; border: none; font-family: inherit; }
+.ha-cal-h-ev.dispo-sage { background: #C9E2C4; color: #24522A; border: none; font-family: inherit; }
+.ha-cal-h-ev.dispo-sand { background: #E8D9A8; color: #5A4720; border: none; font-family: inherit; }
+.ha-cal-horaire.is-jour .ha-cal-h-row { grid-template-columns: 48px minmax(0, 1fr); }
+.ha-cal-horaire.is-jour .ha-cal-h-days { grid-template-columns: minmax(0, 1fr); }
+
+.ha-jour {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.ha-jour-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  width: 100%; text-align: left; padding: 12px 14px;
+  border: none; background: transparent; cursor: pointer; color: var(--text);
+  font-family: inherit;
+}
+.ha-jour-head.is-today { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ha-jour-titre { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.2rem; color: var(--heading); font-weight: 600; flex: 1; }
+.ha-jour-hint { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.ha-jour-bloc { padding: 0 14px 14px; }
+.ha-jour-lab { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.ha-jour-vide { margin: 0; font-size: 13.5px; color: var(--text-muted); }
+.ha-jour-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ha-jour-tags .ha-mois-pill { width: auto; font-size: 13px; padding: 6px 10px; border-radius: 8px; }
 [data-theme="dark"] .ha-cal-ev.mission.is-incomplet { background: #E24B4B; color: #fff; }
 [data-theme="dark"] .ha-cal-ev.mission.is-complet { background: #E8FF4A; color: #141800; }
 [data-theme="dark"] .ha-cal-ev.dispo-ambu { background: #2B8AD4; }
@@ -768,6 +800,14 @@ img, svg, video, table { max-width: 100%; }
 [data-theme="dark"] .ha-cal-ev.dispo-sand, [data-theme="dark"] .ha-mois-pill.dispo-sand { background: #B8A05A; color: #1A1608; }
 [data-theme="dark"] .ha-cal-h-ev.mission.is-incomplet { background: #E24B4B; color: #fff; }
 [data-theme="dark"] .ha-cal-h-ev.mission.is-complet { background: #E8FF4A; color: #141800; }
+[data-theme="dark"] .ha-cal-h-ev.dispo-ambu { background: #2B8AD4; }
+[data-theme="dark"] .ha-cal-h-ev.dispo-infi { background: #5A9A2A; }
+[data-theme="dark"] .ha-cal-h-ev.dispo-dual { background: linear-gradient(90deg, #2B8AD4 0%, #5A9A2A 100%); }
+[data-theme="dark"] .ha-cal-h-ev.dispo-nonmed, [data-theme="dark"] .ha-cal-h-ev.dispo-autre { background: #8A837C; }
+[data-theme="dark"] .ha-cal-h-ev.dispo-peach { background: #C48A62; color: #1A1008; }
+[data-theme="dark"] .ha-cal-h-ev.dispo-lavender { background: #8B74C4; color: #F4F0FF; }
+[data-theme="dark"] .ha-cal-h-ev.dispo-sage { background: #5A8A52; color: #F2FBEA; }
+[data-theme="dark"] .ha-cal-h-ev.dispo-sand { background: #B8A05A; color: #1A1608; }
 
 /* ── Grille mois (dispos + événements internes) ───────────────────────────── */
 .ha-mois {
@@ -846,6 +886,11 @@ img, svg, video, table { max-width: 100%; }
   .ha-mois-cell { min-height: 74px; padding: 2px 1px 4px; }
   .ha-mois-pill { font-size: 9.5px; padding: 1px 4px; border-radius: 5px; }
   .ha-mois-num { width: 24px; height: 24px; font-size: 12px; }
+  .ha-cal-vues { width: 100%; }
+  .ha-cal-vues .ha-tab-like { flex: 1; text-align: center; }
+  .ha-cal-horaire:not(.is-jour) { min-width: 680px; }
+  .ha-jour-hint { display: none; }
+  .ha-jour-tags .ha-mois-pill { font-size: 13px; padding: 6px 10px; }
 }
 @media (min-width: 900px) {
   .ha-mois-cell { min-height: 114px; }
