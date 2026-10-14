@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, F, Sel, inp, lbl } from '@/components/ui'
+import { Btn, F, Sel, inp, lbl, Flash } from '@/components/ui'
 import {
   ROLES_MISSION, lblRoleMission, teinteDepuisQuals, roleSuggere, qualsImplicites,
   rolesRequisEffectifs, rolesRequisVecteur, phraseIlManque, rolesEncoreManquants,
@@ -222,8 +222,18 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
         </div>
       )}
 
+      {m.demo_cle && (
+        <Flash>
+          Souhait de formation : pas besoin d’affecter un équipage. Tous les volontaires le voient dans Mes missions pour se faire la main.
+        </Flash>
+      )}
+
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:10, flexWrap:'wrap' }}>
-        <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Un vecteur = un véhicule et son équipage. Cochez les qualifications sur chaque véhicule — vous pouvez demander 1 ou 2 ambulanciers. Les personnes affectées voient la mission dans Mes missions. Le rôle (infi / ambulancier) se pose tout seul selon le besoin de ce vecteur.</div>
+        <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
+          {m.demo_cle
+            ? 'Le vecteur (véhicule et rôles) reste dans le dossier pour le parcours terrain. L’affectation de personnes n’est pas nécessaire.'
+            : 'Un vecteur = un véhicule et son équipage. Cochez les qualifications sur chaque véhicule — vous pouvez demander 1 ou 2 ambulanciers. Les personnes affectées voient la mission dans Mes missions. Le rôle (infi / ambulancier) se pose tout seul selon le besoin de ce vecteur.'}
+        </div>
         {!lecture && <Btn onClick={ajouterVecteur}>+ Vecteur</Btn>}
       </div>
 

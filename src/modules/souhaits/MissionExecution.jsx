@@ -110,6 +110,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
         date_souhaitee: data.date_souhaitee,
         date_fin: data.date_fin,
         dates_possibles: data.dates_possibles,
+        fictif: !!data.fictif,
+        mission: data.demo_cle ? { demo_cle: data.demo_cle } : {},
       })
       setAppel({
         tel: data.tel_a_appeler,
@@ -149,9 +151,15 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const crewVecteur = complet
     ? equipe.filter(e => e.vecteur_id === vecteurId)
     : (rpc?.equipage || [])
-  const vecteurMedical = complet
-    ? vecteurAEquipageMedical(crewVecteur)
-    : (rpc?.equipage_medical != null ? !!rpc.equipage_medical : vecteurAEquipageMedical(crewVecteur))
+  const jouette = !!(sh?.fictif || rpc?.fictif || sh?.mission?.demo_cle || rpc?.demo_cle)
+  const rolesVecteurMedicaux = (vecteur?.roles_requis || []).some(r =>
+    r === 'ambulancier' || r === 'infirmier' || r === 'medecin'
+  )
+  const vecteurMedical = jouette
+    ? (vecteurAEquipageMedical(crewVecteur) || rolesVecteurMedicaux || !!rpc?.equipage_medical)
+    : complet
+      ? vecteurAEquipageMedical(crewVecteur)
+      : (rpc?.equipage_medical != null ? !!rpc.equipage_medical : vecteurAEquipageMedical(crewVecteur))
   const userMedical = medicalDeCetteMission(aff || rpc)
   const clOpts = {
     userMedical,
@@ -511,6 +519,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
           <h1 style={{ fontSize:'1.45rem', color:'var(--heading)', margin:'4px 0 8px' }}>{titre || 'Mission'}</h1>
         </>
       )}
+      {jouette && (
+        <Flash>
+          Souhait de formation fictif — ce n’est pas un vrai patient. Tous les volontaires peuvent le jouer ici, sans être affectés à un équipage. Une fois clôturé, il revient le lendemain.
+        </Flash>
+      )}
       {err && <Flash kind="err">{err}</Flash>}
 
       {aChoisir && (
@@ -526,7 +539,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
         </Section>
       )}
 
-      {!aChoisir && !vecteur && (
+      {!aChoisir && !vecteur && !jouette && (
         <Flash kind="warn">Aucun véhicule ne vous est affecté. Demandez à la coordination de vous placer sur un vecteur.</Flash>
       )}
 

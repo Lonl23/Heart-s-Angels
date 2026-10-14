@@ -188,7 +188,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
           </Sec>
           <Sec t="🚐 Équipage" plain>
             {v && <div className="vec"><div className="vh">{vecteurLabel}</div>
-              <div className="crew">{f.crew.length ? f.crew.map(c => `${c.profiles?.prenom||''} ${c.profiles?.nom||''}${c.role_mission?` (${c.role_mission})`:''}`).join(' · ') : <span className="muted">équipage à compléter</span>}</div>
+              <div className="crew">{f.crew.length ? f.crew.map(c => `${c.profiles?.prenom||''} ${c.profiles?.nom||''}${c.role_mission?` (${c.role_mission})`:''}`).join(' · ') : <span className="muted">{m.demo_cle ? 'tous les volontaires (formation, sans équipage à poser)' : 'équipage à compléter'}</span>}</div>
             </div>}
             {!v && (m.vecteurs || []).map((vv, i) => <div key={vv.id} className="vec"><div className="vh">Vecteur {i+1} — {vv.nom||'—'}</div></div>)}
           </Sec>

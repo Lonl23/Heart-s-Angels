@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/hooks/useNotifications'
 import { supabase } from '@/lib/supabase'
-import { Card, Empty, Loading, Btn } from '@/components/ui'
+import { Card, Empty, Loading, Btn, PillFictif } from '@/components/ui'
 import { lblEtapeTerrain } from '@/modules/souhaits/missionSchema'
 import { fmtDatesSouhait } from '@/modules/souhaits/datesSouhait'
 import { iconTypeNotif } from '@/lib/notifications'
@@ -127,7 +127,10 @@ export default function Dashboard() {
                         {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>
                     </div>
-                    <span style={{ color:'var(--accent)', fontWeight:600, fontSize:13 }}>Ouvrir ›</span>
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
+                      {m.fictif && <PillFictif />}
+                      <span style={{ color:'var(--accent)', fontWeight:600, fontSize:13 }}>Ouvrir ›</span>
+                    </div>
                   </div>
                 </Card>
               </Link>
@@ -138,7 +141,7 @@ export default function Dashboard() {
 
       {missions && missions.length === 0 && canAccess('missions') && (
         <div style={{ marginBottom:24 }}>
-          <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici et dans Mes missions. Une fois faite, la mission disparaît." />
+          <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici et dans Mes missions. Le souhait de formation fictif y est aussi, sans équipage à poser." />
         </div>
       )}
 

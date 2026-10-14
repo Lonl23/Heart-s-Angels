@@ -168,7 +168,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
   ]
   const m = s.mission || {}
   const pretHints = []
-  if (!(m.vecteurs||[]).length) pretHints.push('un vecteur et un équipage')
+  if (!(m.vecteurs||[]).length) pretHints.push(m.demo_cle ? 'un vecteur' : 'un vecteur et un équipage')
   if (!m.pec_type && !m.dest_adresse) pretHints.push('le trajet (prise en charge / destination)')
 
   return (
@@ -226,7 +226,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       {s.fictif && (
         <Flash kind="warn">
           {s.mission?.demo_cle
-            ? 'Souhait de formation fictif — dossier complet (institutions, trajet, protocole de détresse). Ce n’est pas un vrai patient. Une fois clôturé, il revient en Nouveau le lendemain (départ base 9h30) pour que chacun puisse prendre l’application en main.'
+            ? 'Souhait de formation fictif — dossier complet (institutions, trajet, protocole de détresse). Ce n’est pas un vrai patient. Pas besoin d’affecter un équipage : tous les volontaires le voient dans Mes missions pour se faire la main. Une fois clôturé, il revient en Nouveau le lendemain (départ base 9h30).'
             : 'Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.'}
         </Flash>
       )}

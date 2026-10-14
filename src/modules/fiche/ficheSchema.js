@@ -30,6 +30,7 @@ export function qualificationsCompatibles(type, qs) {
 export const ROLES_MISSION = [
   ...QUALIFS,
   { v:'volontaire_non_medical', l:'Volontaire non médical' },
+  { v:'formation', l:'Formation' },
 ]
 
 export const lblRoleMission = v => ROLES_MISSION.find(r => r.v === v)?.l || v

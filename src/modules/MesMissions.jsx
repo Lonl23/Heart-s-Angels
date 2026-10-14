@@ -5,6 +5,7 @@ import { Page, Card, Empty, Loading, Pill, PillFictif, LiensGps } from '@/compon
 import { useAuth } from '@/hooks/useAuth'
 import { stInfo } from './souhaits/Souhaits'
 import { lblStatutBase, lblEtapeTerrain } from './souhaits/missionSchema'
+import { lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './souhaits/datesSouhait'
 import MissionExecution from './souhaits/MissionExecution'
 
@@ -45,7 +46,7 @@ export default function MesMissions() {
   const nbCours = aRealiser.filter(m => m.statut === 'en_cours').length
 
   return (
-    <Page title="Mes missions" subtitle="Uniquement les missions où vous êtes affecté, tant qu’elles restent à réaliser.">
+    <Page title="Mes missions" subtitle="Vos missions affectées, et le souhait de formation (fictif) pour vous faire la main — sans équipage à poser.">
       {err && <div style={{ color:'#A32D2D', fontSize:13, marginBottom:10 }}>{err}</div>}
       <div className="ha-tabs" style={{ marginBottom:16 }}>
         {FILTRES.map(f => (
@@ -55,7 +56,7 @@ export default function MesMissions() {
         ))}
       </div>
       {loading ? <Loading />
-        : aRealiser.length === 0 ? <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici. Une fois la mission faite, elle disparaît." />
+        : aRealiser.length === 0 ? <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici. Le souhait de formation fictif y est aussi, sans équipage à poser. Une fois la mission faite, elle disparaît." />
         : visible.length === 0 ? <Empty title="Rien dans cet onglet" hint={filtre === 'en_cours' ? 'Aucune mission en cours. Celles à faire sont dans l’autre onglet.' : 'Les missions en cours sont dans l’onglet En cours.'} />
         : (
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
@@ -75,7 +76,7 @@ export default function MesMissions() {
                         {fmtDatesSouhait(m)}
                         {m.lieu ? ` · ${m.lieu}` : ''}
                         {m.vehicule ? ` · ${m.vehicule}` : ''}
-                        {m.role_mission ? ` · ${m.role_mission}` : ''}
+                        {m.role_mission ? ` · ${lblRoleMission(m.role_mission) || m.role_mission}` : ''}
                         {lblStatutBase(m.statut_base) ? ` · ${lblStatutBase(m.statut_base)}` : ''}
                         {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
                       </div>
