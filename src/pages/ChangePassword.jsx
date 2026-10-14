@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { lbl, inp, Logo } from '@/components/ui'
+import { FondEcran } from '@/hooks/useFondPage'
 import { motDePasseErreur, MDP_AIDE } from '@/lib/motDePasse'
 
 export default function ChangePassword() {
@@ -25,7 +26,7 @@ export default function ChangePassword() {
   }
 
   return (
-    <div style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
+    <FondEcran page="login" style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20 }}>
       <div style={{ width:'100%', maxWidth:400, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'28px 26px' }}>
         <Logo size={120} style={{ margin:'0 auto 12px' }} />
         <h1 style={{ fontSize:'1.4rem', color:'var(--heading)', marginTop:0 }}>Choisissez votre mot de passe</h1>
@@ -44,6 +45,6 @@ export default function ChangePassword() {
           <button type="button" onClick={signOut} style={{ padding:8, background:'none', border:'none', color:'var(--text-muted)', fontSize:13 }}>Se déconnecter</button>
         </form>
       </div>
-    </div>
+    </FondEcran>
   )
 }

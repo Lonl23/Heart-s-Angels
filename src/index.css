@@ -47,7 +47,13 @@ html.ha-natif, html.ha-natif body, html.ha-natif #root {
   overflow: hidden;
 }
 
+.ha-main-fond {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
 @media print {
+  .ha-main-fond { background-image: none !important; background: #fff !important; }
   html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
   .ha-sidebar, .ha-scrim, .ha-update-banner, .ha-update-flash, .no-print, .ha-notif-panel { display: none !important; }
   header { display: none !important; }

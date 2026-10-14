@@ -3,6 +3,7 @@ import { Link, useSearchParams, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { COPYRIGHT } from '@/copyright'
 import { lbl, inp, Logo } from '@/components/ui'
+import { FondEcran } from '@/hooks/useFondPage'
 import { motDePasseErreur, MDP_AIDE } from '@/lib/motDePasse'
 
 export default function Inscription() {
@@ -84,7 +85,7 @@ export default function Inscription() {
         : 'Créer mon compte avec une invitation')
 
   return (
-    <div style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
+    <FondEcran page="login" style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20 }}>
       <div style={{ width:'100%', maxWidth:400, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'28px 26px' }}>
         <Logo size={140} style={{ margin:'0 auto 8px' }} />
         <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, margin:'4px 0 18px' }}>{sousTitre}</p>
@@ -118,6 +119,6 @@ export default function Inscription() {
         </form>
         <div style={{ textAlign:'center', fontSize:10.5, color:'var(--text-faint)', marginTop:16 }}>{COPYRIGHT}</div>
       </div>
-    </div>
+    </FondEcran>
   )
 }

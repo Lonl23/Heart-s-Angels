@@ -7,6 +7,7 @@ import { iconTypeNotif } from '@/lib/notifications'
 import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
 import { syncNativeTheme } from '@/lib/native'
+import { useFondPage } from '@/hooks/useFondPage'
 
 const NAV = [
   { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
@@ -47,6 +48,7 @@ export default function Layout() {
   const { checkForUpdate, checking } = useSwUpdate()
   const nav = useNavigate()
   const loc = useLocation()
+  const fond = useFondPage(loc.pathname)
   const [collapsed, setCollapsed] = useState(localStorage.getItem('nav_collapsed') === '1')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width:900px)').matches)
@@ -155,7 +157,10 @@ export default function Layout() {
             )}
           </div>
         </header>
-        <main style={{ flex:1, minWidth:0, width:'100%', overflowX:'hidden', overflowY:'auto', minHeight:0 }}><Outlet /></main>
+        <main
+          className={fond.actif ? 'ha-main-fond' : undefined}
+          style={{ flex:1, minWidth:0, width:'100%', overflowX:'hidden', overflowY:'auto', minHeight:0, ...fond.style }}
+        ><Outlet /></main>
       </div>
 
       <style>{`

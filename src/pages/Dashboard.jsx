@@ -36,7 +36,7 @@ export default function Dashboard() {
   const cartes = [
     ...CARDS.filter(c => canAccess(c.key)),
     ...(peutGererFiches() ? [{ to:'/app/volontaires', icon:'👥', label:'Volontaires', desc:'Invitations, membres et fiches' }] : []),
-    ...(peutGererApp() ? [{ to:'/app/admin', icon:'⚙️', label:'Administration', desc:'Partenaires et accès de l’application' }] : []),
+    ...(peutGererApp() ? [{ to:'/app/admin', icon:'⚙️', label:'Administration', desc:'Partenaires, accès et fonds d’écran' }] : []),
   ]
   const date = new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' })
   const alertes = (nonLues.length ? nonLues : items.filter(n => !n.lu)).slice(0, 8)

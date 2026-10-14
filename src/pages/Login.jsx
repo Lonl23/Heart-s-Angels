@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { COPYRIGHT } from '@/copyright'
 import { lbl, inp, Logo } from '@/components/ui'
+import { FondEcran } from '@/hooks/useFondPage'
 
 export default function Login() {
   const { session, can, loading, profile } = useAuth()
@@ -68,7 +69,7 @@ export default function Login() {
   }
 
   return (
-    <div style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
+    <FondEcran page="login" style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20 }}>
       <div style={{ width:'100%', maxWidth:380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
         <Logo size={140} style={{ margin:'0 auto 8px' }} />
         <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, marginBottom:6 }}>
@@ -137,6 +138,6 @@ export default function Login() {
         )}
         <div style={{ textAlign:'center', fontSize:10.5, color:'var(--text-faint)', marginTop:18 }}>{COPYRIGHT}</div>
       </div>
-    </div>
+    </FondEcran>
   )
 }
