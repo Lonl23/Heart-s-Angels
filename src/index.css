@@ -65,22 +65,21 @@ html, body, #root { height: 100%; margin: 0; }
   flex-direction: column;
   overflow: auto;
 }
-.ha-fondu-calque.is-under {
+.ha-fondu-calque.is-cover,
+.ha-fondu-calque.is-out {
   position: absolute;
   inset: 0;
-  z-index: 0;
-  pointer-events: none;
+  z-index: 2;
   overflow: auto;
+  background-color: var(--bg);
 }
-.ha-fondu-calque.is-in {
-  position: relative;
-  z-index: 1;
-  opacity: 0;
-  animation: ha-fondu-in .34s cubic-bezier(.22, 1, .36, 1) forwards;
+.ha-fondu-calque.is-out {
+  pointer-events: none;
+  animation: ha-fondu-out .45s cubic-bezier(.33, 0, .2, 1) forwards;
 }
-@keyframes ha-fondu-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@keyframes ha-fondu-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 .ha-fondu-calque:has(.ha-page-fill) {
   overflow: hidden;
@@ -91,7 +90,7 @@ html, body, #root { height: 100%; margin: 0; }
   height: 100%;
 }
 @media (prefers-reduced-motion: reduce) {
-  .ha-fondu-calque.is-in { animation: none !important; opacity: 1 !important; }
+  .ha-fondu-calque.is-out { animation: none !important; opacity: 0 !important; }
 }
 html.ha-natif, html.ha-natif body, html.ha-natif #root {
   height: 100%;
@@ -107,7 +106,8 @@ html.ha-natif, html.ha-natif body, html.ha-natif #root {
 }
 @media print {
   .ha-fondu-calque { opacity: 1 !important; animation: none !important; position: relative !important; }
-  .ha-fondu-calque.is-under { display: none !important; }
+  .ha-fondu-calque.is-cover,
+  .ha-fondu-calque.is-out { display: none !important; }
   .ha-main-fond { background-image: none !important; background: #fff !important; }
   html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
   .ha-sidebar, .ha-scrim, .ha-update-banner, .ha-update-flash, .no-print, .ha-notif-panel { display: none !important; }

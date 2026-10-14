@@ -6,10 +6,17 @@ function FondVide() {
   return <div style={{ minHeight: '100%', flex: 1, background: 'var(--bg)' }} aria-hidden />
 }
 
+function SignalPret({ onPret, children }) {
+  const cb = useRef(onPret)
+  cb.current = onPret
+  useLayoutEffect(() => { cb.current() }, [])
+  return children
+}
+
 function finFondu(onFin) {
   return e => {
     if (e.target !== e.currentTarget) return
-    if (e.animationName && e.animationName !== 'ha-fondu-in') return
+    if (e.animationName && e.animationName !== 'ha-fondu-out') return
     onFin()
   }
 }
@@ -19,14 +26,40 @@ function liberer(setSortant, prevKey) {
 }
 
 /**
- * Fondu enchaîné login ↔ app (et tout changement hors menu interne).
- * L’écran sortant reste monté en dessous ; le nouveau fond de 0 à 1 par-dessus.
- * Pas de frame vide : on ne passe jamais par opacity 0 sans contenu dessous.
+ * Pile : la nouvelle page est déjà peinte en dessous (opacity 1).
+ * L’ancienne reste au-dessus et fond de 1 à 0 — on voit l’écran actuel
+ * se dissoudre, jamais les deux UIs l’un sur l’autre.
  */
+function Pile({ className, enCours, revele, sortantKey, sortantChildren, liveKey, liveChildren, onPret, onFin }) {
+  return (
+    <div className={'ha-fondu-pile' + (className ? ' ' + className : '') + (enCours ? ' is-cross' : '')}>
+      <div key={liveKey} className="ha-fondu-calque">
+        <Suspense fallback={enCours ? null : <FondVide />}>
+          {enCours
+            ? <SignalPret onPret={onPret}>{liveChildren}</SignalPret>
+            : liveChildren}
+        </Suspense>
+      </div>
+      {enCours && (
+        <div
+          key={sortantKey}
+          className={'ha-fondu-calque ' + (revele ? 'is-out' : 'is-cover')}
+          aria-hidden
+          onAnimationEnd={revele ? finFondu(onFin) : undefined}
+        >
+          <Suspense fallback={null}>{sortantChildren}</Suspense>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Fondu login ↔ app (et tout changement hors menu interne). */
 export function RoutesAvecFondu({ children }) {
   const location = useLocation()
   const live = useRef(location)
   const [sortant, setSortant] = useState(null)
+  const [revele, setRevele] = useState(false)
   const [, bump] = useState(0)
 
   useLayoutEffect(() => {
@@ -40,37 +73,31 @@ export function RoutesAvecFondu({ children }) {
 
     if (skip) {
       setSortant(null)
+      setRevele(false)
       bump(n => n + 1)
       return
     }
 
     setSortant(prev)
+    setRevele(false)
     bump(n => n + 1)
-    const t = setTimeout(() => liberer(setSortant, prev.key), DUREE_FONDU_MS + 80)
+    const t = setTimeout(() => liberer(setSortant, prev.key), DUREE_FONDU_MS + 200)
     return () => clearTimeout(t)
   }, [location.key])
 
   const enCours = !!(sortant && sortant.key !== live.current.key)
 
   return (
-    <div className={'ha-fondu-pile' + (enCours ? ' is-cross' : '')}>
-      {enCours && (
-        <div key={cleCouche(sortant)} className="ha-fondu-calque is-under" aria-hidden>
-          <Suspense fallback={null}>
-            <Routes location={sortant}>{children}</Routes>
-          </Suspense>
-        </div>
-      )}
-      <div
-        key={cleCouche(live.current)}
-        className={'ha-fondu-calque' + (enCours ? ' is-in' : '')}
-        onAnimationEnd={enCours ? finFondu(() => liberer(setSortant, sortant.key)) : undefined}
-      >
-        <Suspense fallback={enCours ? null : <FondVide />}>
-          <Routes location={live.current}>{children}</Routes>
-        </Suspense>
-      </div>
-    </div>
+    <Pile
+      enCours={enCours}
+      revele={revele}
+      sortantKey={enCours ? cleCouche(sortant) : undefined}
+      sortantChildren={enCours ? <Routes location={sortant}>{children}</Routes> : null}
+      liveKey={cleCouche(live.current)}
+      liveChildren={<Routes location={live.current}>{children}</Routes>}
+      onPret={() => setRevele(true)}
+      onFin={() => sortant && liberer(setSortant, sortant.key)}
+    />
   )
 }
 
@@ -80,6 +107,7 @@ export function SortieFondu() {
   const outlet = useOutlet()
   const live = useRef({ key: location.key, node: outlet })
   const [sortant, setSortant] = useState(null)
+  const [revele, setRevele] = useState(false)
   const [, bump] = useState(0)
 
   if (live.current.key === location.key) {
@@ -94,34 +122,31 @@ export function SortieFondu() {
 
     if (motionReduite()) {
       setSortant(null)
+      setRevele(false)
       bump(n => n + 1)
       return
     }
 
     setSortant(prev)
+    setRevele(false)
     bump(n => n + 1)
-    const t = setTimeout(() => liberer(setSortant, prev.key), DUREE_FONDU_MS + 80)
+    const t = setTimeout(() => liberer(setSortant, prev.key), DUREE_FONDU_MS + 200)
     return () => clearTimeout(t)
   }, [location.key])
 
   const enCours = !!(sortant && sortant.key !== live.current.key)
 
   return (
-    <div className={'ha-fondu-pile ha-fondu-page' + (enCours ? ' is-cross' : '')}>
-      {enCours && (
-        <div key={sortant.key} className="ha-fondu-calque is-under" aria-hidden>
-          <Suspense fallback={null}>{sortant.node}</Suspense>
-        </div>
-      )}
-      <div
-        key={live.current.key}
-        className={'ha-fondu-calque' + (enCours ? ' is-in' : '')}
-        onAnimationEnd={enCours ? finFondu(() => liberer(setSortant, sortant.key)) : undefined}
-      >
-        <Suspense fallback={enCours ? null : <FondVide />}>
-          {live.current.node}
-        </Suspense>
-      </div>
-    </div>
+    <Pile
+      className="ha-fondu-page"
+      enCours={enCours}
+      revele={revele}
+      sortantKey={enCours ? sortant.key : undefined}
+      sortantChildren={enCours ? sortant.node : null}
+      liveKey={live.current.key}
+      liveChildren={live.current.node}
+      onPret={() => setRevele(true)}
+      onFin={() => sortant && liberer(setSortant, sortant.key)}
+    />
   )
 }

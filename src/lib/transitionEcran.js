@@ -1,4 +1,4 @@
-export const DUREE_FONDU_MS = 340
+export const DUREE_FONDU_MS = 450
 
 export function motionReduite() {
   if (typeof window === 'undefined' || !window.matchMedia) return false
