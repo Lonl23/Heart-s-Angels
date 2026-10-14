@@ -8,7 +8,9 @@ import {
   estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
   marquerHeureEtape, marquerHeurePersonnel, injectionsDetresse,
   medecinPluri, nomPluri, etapeProtocoleDetresse, etapeDuVecteur,
+  lieuxAnnexes, prochainsTransports, documentsSejourVisibles, lblTypeLieu,
 } from './missionSchema'
+import { signedDocSejour } from './sejour'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './datesSouhait'
 import MedicamentsMAR from './MedicamentsMAR'
@@ -41,6 +43,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [appel, setAppel] = useState(null)
   const [detresse, setDetresse] = useState(false)
   const [complet, setComplet] = useState(false)
+  const [lieuxSejour, setLieuxSejour] = useState([])
 
   function medicalDeCetteMission(me) {
     return personneEstMedicale({
@@ -122,6 +125,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
       })
       setEtape(etapeDefaut(data.etape_terrain, data.vecteur_statut))
     }
+    const { data: sej } = await supabase.rpc('sejour_mission', { p_souhait: souhaitId })
+    setLieuxSejour(Array.isArray(sej?.lieux) ? sej.lieux : [])
     setLoading(false)
   }
 
@@ -426,6 +431,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
   if (err && !sh) return <div style={{ padding:24 }}><Flash kind="err">{err}</Flash><Btn kind="soft" onClick={onBack}>← Retour</Btn></div>
 
   const statut = sh?.statut
+  const missionCtx = {
+    ...(complet ? (m || {}) : (rpc || {})),
+    lieux_annexes: (complet && Array.isArray(m?.lieux_annexes) ? m.lieux_annexes : lieuxSejour),
+  }
   const titre = userMedical && complet
     ? `${sh?.beneficiaire_prenom || ''} ${sh?.beneficiaire_nom || ''}`.trim()
     : (sh?.beneficiaire_prenom || 'Mission')
@@ -445,10 +454,13 @@ export default function MissionExecution({ souhaitId, onBack }) {
     retour_base: itemsChecklistVisibles('retour_base', clOpts),
   }
   const pecMedicalACharge = vecteurMedical && !userMedical
-  const def = etapeParId(etape)
+  const def = etapeParId(etape, missionCtx)
   const aLaBase = estALaBase(etape)
-  const suivant = etapeSuivante(etape)
-  const precedent = etapePrecedente(etape)
+  const suivant = etapeSuivante(etape, missionCtx)
+  const precedent = etapePrecedente(etape, missionCtx)
+  const choixTransports = prochainsTransports(etape, missionCtx)
+  const docsSejour = documentsSejourVisibles(etape, missionCtx)
+  const lieuCourant = def.lieuId ? lieuxAnnexes(missionCtx).find(l => l.id === def.lieuId) : null
   const locked = statut === 'realise' || vecteurStatut === 'realise'
   const monStatut = aff?.statut_base || m?.personnel_statuts?.[user?.id] || rpc?.statut_base || ''
   const jeSuisSurPlace = estSurPlace(monStatut)
@@ -598,6 +610,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   disabled={locked || !vecteurId}
                 />
               </Section>
+              {docsSejour.length > 0 && (
+                <Section titre="Documents (hôtel, parking…)">
+                  <ListeDocsSejour docs={docsSejour} onErr={setErr} />
+                </Section>
+              )}
             </>
           )}
 
@@ -622,9 +639,33 @@ export default function MissionExecution({ souhaitId, onBack }) {
               {vecteur.nom && (
                 <div style={{ fontSize:13, color:'var(--text-muted)', margin:'8px 0 0' }}>{vecteur.nom}{vecteur.plaque ? ` · ${vecteur.plaque}` : ''}</div>
               )}
-              <Section titre={def.itin === 'pec' ? 'Prise en charge' : def.itin === 'destination' ? 'Destination' : def.itin === 'retour' ? 'Retour' : 'Base'}>
-                <Itineraire d={itin} only={def.itin} />
+              <Section titre={def.itin === 'pec' ? 'Prise en charge' : def.itin === 'destination' ? 'Destination' : def.itin === 'retour' ? 'Retour' : def.itin === 'annexe' ? (lieuCourant?.nom || lblTypeLieu(def.typeLieu) || 'Lieu') : 'Base'}>
+                {def.itin === 'annexe'
+                  ? <LieuAnnexeBloc lieu={lieuCourant} />
+                  : <Itineraire d={itin} only={def.itin} />}
               </Section>
+              {docsSejour.length > 0 && !showCloture && (
+                <Section titre="Documents (hôtel, parking…)">
+                  <ListeDocsSejour docs={docsSejour} onErr={setErr} />
+                </Section>
+              )}
+              {choixTransports.length > 0 && !showCloture && !locked && (
+                <Section titre="Où allez-vous ?">
+                  <p style={{ fontSize:13.5, color:'var(--text-muted)', marginTop:0 }}>
+                    Choisissez le prochain déplacement : destination, hôtel, restaurant, retour du patient…
+                  </p>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {choixTransports.map(o => (
+                      <button key={o.id} type="button" className="ha-check-btn" onClick={() => aller(o.id)}>
+                        <span>
+                          {o.l}
+                          {o.hint ? <span style={{ display:'block', fontSize:12.5, color:'var(--text-muted)', fontWeight:500 }}>{o.hint}</span> : null}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </Section>
+              )}
               {def.checklist === 'pec' && itemsVis.pec.length > 0 && (
                 <Section titre="À cocher">
                   <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
@@ -686,22 +727,30 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
       {!userMedical && vecteur && <div style={{ fontSize:12, color:'var(--text-faint)', marginTop:12 }}>Aucune information médicale n'est accessible depuis cette vue.</div>}
 
-      {vecteur && cta && !locked && statut !== 'realise' && (
+      {vecteur && !locked && statut !== 'realise' && (choixTransports.length > 0 || cta) && (
         <div className="ha-terrain-bar">
-          {manquantsHint && (
+          {manquantsHint && choixTransports.length === 0 && (
             <div style={{ fontSize:12.5, color:'#BA7517', marginBottom:8, textAlign:'center' }}>
               Encore à cocher : {manquantsHint}.
             </div>
           )}
-          <div className="ha-wizard-actions">
-            {precedent && (
-              <button type="button" className="ha-terrain-cta back" onClick={() => aller(precedent.id)}>Retour</button>
-            )}
-            <button type="button" className={'ha-terrain-cta ' + cta.kind} onClick={cta.go}>
-              {cta.l}
-              {cta.hint ? <span className="ha-cta-hint">{cta.hint}</span> : null}
-            </button>
-          </div>
+          {choixTransports.length > 0 ? (
+            precedent ? (
+              <div className="ha-wizard-actions">
+                <button type="button" className="ha-terrain-cta back" onClick={() => aller(precedent.id)}>Retour</button>
+              </div>
+            ) : null
+          ) : (
+            <div className="ha-wizard-actions">
+              {precedent && (
+                <button type="button" className="ha-terrain-cta back" onClick={() => aller(precedent.id)}>Retour</button>
+              )}
+              <button type="button" className={'ha-terrain-cta ' + cta.kind} onClick={cta.go}>
+                {cta.l}
+                {cta.hint ? <span className="ha-cta-hint">{cta.hint}</span> : null}
+              </button>
+            </div>
+          )}
         </div>
       )}
       {vecteurStatut === 'realise' && statut !== 'realise' && (
@@ -818,6 +867,39 @@ function RapportLogistique({ value, onSave }) {
       <textarea value={txt} onChange={e=>setTxt(e.target.value)} onBlur={()=>onSave(txt)}
         rows={3} style={{ ...inp, resize:'vertical' }} placeholder="Véhicule, matériel, incidents logistiques…" />
     </Section>
+  )
+}
+
+function LieuAnnexeBloc({ lieu }) {
+  if (!lieu) return <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Lieu non renseigné.</div>
+  return (
+    <div>
+      <Ligne k="Type" v={lblTypeLieu(lieu.type)} />
+      <Ligne k="Nom" v={lieu.nom} />
+      {fmtAdresse(lieu.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={lieu.adresse} />} /> : null}
+      {lieu.notes && <Ligne k="Notes" v={lieu.notes} />}
+    </div>
+  )
+}
+
+function ListeDocsSejour({ docs, onErr }) {
+  async function ouvrir(d) {
+    try {
+      const url = await signedDocSejour(d.path)
+      if (url) window.open(url, '_blank', 'noopener,noreferrer')
+      else onErr?.('Document inaccessible.')
+    } catch (e) {
+      onErr?.(e.message || 'Document inaccessible.')
+    }
+  }
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+      {docs.map(d => (
+        <button key={d.id || d.path} type="button" className="ha-check-btn" onClick={() => ouvrir(d)}>
+          <span>{d.nom || 'Document'}{d.lieuNom ? ` · ${d.lieuNom}` : ''}</span>
+        </button>
+      ))}
+    </div>
   )
 }
 

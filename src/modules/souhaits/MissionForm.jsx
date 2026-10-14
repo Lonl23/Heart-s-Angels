@@ -7,6 +7,7 @@ import Traitements from './Traitements'
 import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
 import MaterielRequis from './MaterielRequis'
+import DocumentsSejour from './DocumentsSejour'
 import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 import EquipePluriForm, { LignesPluri } from './EquipePluri'
 import { RecolteursPicker } from './Recolteurs'
@@ -21,6 +22,7 @@ const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'priorite_elevee',
 const TABS = [
   { id:'administratif', label:'Administratif', groupes:['administratif'], zone:'patient' },
   { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'], zone:'programme' },
+  { id:'sejour',        label:'Séjour & documents', zone:'programme' },
   { id:'vecteurs',      label:'Vecteurs & équipages', zone:'programme' },
   { id:'materiel',      label:'Matériel & checklists', zone:'programme' },
   { id:'medical',       label:'Médical', groupes:['medical'], zone:'patient' },
@@ -121,6 +123,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
         extra={<span style={{ fontSize:12, color: status==='saved'?'#3B6D11':'var(--text-faint)' }}>{lectureOnglet ? 'Lecture seule' : status==='saving' ? 'Enregistrement…' : status==='saved' ? 'Enregistré' : 'Enregistrement automatique'}</span>}
       />
 
+      {cur.id === 'sejour' && <DocumentsSejour souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} />}
       {cur.id === 'vecteurs' && <Vecteurs souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} />}
       {cur.id === 'materiel' && <MaterielRequis m={m} setM={setMSi} lecture={lecture} />}
       {cur.id === 'traitements' && (

@@ -48,7 +48,7 @@ export default function MissionSummary({ souhaitId, infoOnly=false }) {
   const suiviVecteurs = (m.vecteurs || []).map(v => ({
     id: v.id,
     nom: v.nom || v.plaque || 'Véhicule',
-    etape: lblEtapeTerrain(etapeDuVecteur(m, v.id, m.vecteur_statuts?.[v.id]), m.vecteur_statuts?.[v.id]),
+    etape: lblEtapeTerrain(etapeDuVecteur(m, v.id, m.vecteur_statuts?.[v.id]), m.vecteur_statuts?.[v.id], m),
   }))
 
   return (

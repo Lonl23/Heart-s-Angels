@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, fmtAdresse } from '@/components/ui'
-import { CHECKLISTS, itemsChecklistVisibles, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse, equipePluri, personnePluriRemplie, lblRolePluri, medecinPluri, nomPluri, nomsRecolteurs } from './missionSchema'
+import { CHECKLISTS, itemsChecklistVisibles, lblAutorisationPhotos, protocoleDetresse, lblVoieDetresse, equipePluri, personnePluriRemplie, lblRolePluri, medecinPluri, nomPluri, nomsRecolteurs, lieuxAnnexes, lblTypeLieu, documentsLieu } from './missionSchema'
 import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
@@ -181,6 +181,19 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Précisions" v={m.dest_precisions} wide />
             <Fld l="Heure souhaitée sur place" v={dt(m.arrivee_destination)} />
           </Sec>
+          {lieuxAnnexes(m).length > 0 && (
+            <Sec t="🏨 Séjour">
+              {lieuxAnnexes(m).map(l => (
+                <div key={l.id} style={{ marginBottom: 8 }}>
+                  <Fld l={lblTypeLieu(l.type)} v={[l.nom, fmtAdresse(l.adresse)].filter(Boolean).join(' — ') || '—'} wide />
+                  {l.notes ? <Fld l="Notes" v={l.notes} wide /> : null}
+                  {documentsLieu(l).length > 0 && (
+                    <Fld l="Documents" v={documentsLieu(l).map(x => x.nom).join(' · ')} wide />
+                  )}
+                </div>
+              ))}
+            </Sec>
+          )}
           <Sec t="↩︎ Retour">
             <Fld l="Type de retour" v={m.retour_type} />
             <Fld l="Heure attendue" v={dt(m.retour_heure)} />

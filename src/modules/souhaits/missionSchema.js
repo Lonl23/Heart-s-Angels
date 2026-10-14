@@ -194,9 +194,135 @@ const ETAPE_LEGACY = {
   retour_route: 'depart_retour',
 }
 
+/** Hôtel, parking, restaurant… encodés en préparation, jouables sur le terrain. */
+export const TYPES_LIEU_ANNEXE = [
+  { v: 'hotel', l: 'Hôtel' },
+  { v: 'parking', l: 'Parking' },
+  { v: 'restaurant', l: 'Restaurant' },
+  { v: 'autre', l: 'Autre lieu' },
+]
+export const lblTypeLieu = v => TYPES_LIEU_ANNEXE.find(t => t.v === v)?.l || 'Lieu'
+
+const RE_ETAPE_LIEU = /^(depart_lieu|lieu_sur_place):(hotel|parking|restaurant|autre):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/
+
+export function parseEtapeLieu(etape) {
+  const m = String(etape || '').match(RE_ETAPE_LIEU)
+  if (!m) return null
+  return {
+    phase: m[1] === 'depart_lieu' ? 'depart' : 'sur_place',
+    type: m[2],
+    lieuId: m[3],
+    id: etape,
+  }
+}
+
+export function idEtapeLieu(phase, type, lieuId) {
+  return `${phase === 'depart' ? 'depart_lieu' : 'lieu_sur_place'}:${type}:${lieuId}`
+}
+
+export function lieuxAnnexes(mission) {
+  return Array.isArray(mission?.lieux_annexes) ? mission.lieux_annexes.filter(l => l && l.id) : []
+}
+
+export function documentsLieu(l) {
+  return Array.isArray(l?.documents) ? l.documents.filter(d => d && d.path) : []
+}
+
+export function lieuEstWaypoint(l) {
+  if (!l || !l.id) return false
+  const nom = (l.nom || '').trim()
+  const adr = l.adresse && typeof l.adresse === 'object'
+    ? !!(l.adresse.rue || l.adresse.localite || l.adresse.cp)
+    : false
+  if (l.type === 'parking') return !!(nom || adr)
+  return l.type === 'hotel' || l.type === 'restaurant' || l.type === 'autre'
+}
+
+export function defEtapeLieu(etape, mission) {
+  const extra = parseEtapeLieu(etape)
+  if (!extra) return null
+  const lieu = lieuxAnnexes(mission).find(l => l.id === extra.lieuId)
+  const typeL = lblTypeLieu(extra.type)
+  const nom = (lieu?.nom || '').trim()
+  const cible = nom || typeL
+  return {
+    id: extra.id,
+    l: extra.phase === 'depart' ? `Départ vers ${cible}` : `Sur place ${cible}`,
+    chip: extra.phase === 'depart' ? `Vers ${typeL.toLowerCase()}` : typeL,
+    lieu: 'annexe',
+    itin: 'annexe',
+    checklist: null,
+    patient: true,
+    lieuId: extra.lieuId,
+    typeLieu: extra.type,
+    phase: extra.phase,
+  }
+}
+
+export function prochainsTransports(etape, mission) {
+  const id = normaliserEtape(etape)
+  const extra = parseEtapeLieu(id)
+  const waypoints = lieuxAnnexes(mission).filter(lieuEstWaypoint)
+  const atDest = id === 'dest_sur_place'
+  const atPec = id === 'pec_sur_place'
+  const atLieu = extra?.phase === 'sur_place'
+  if (!atDest && !atPec && !atLieu) return []
+  if (!waypoints.length && !atLieu) return []
+
+  const opts = []
+  const seen = new Set()
+  const add = o => {
+    if (!o?.id || seen.has(o.id)) return
+    seen.add(o.id)
+    opts.push(o)
+  }
+
+  if (!atDest) {
+    add({ id: 'depart_dest', l: 'Départ vers destination', hint: 'Lieu de réalisation du souhait' })
+  }
+  for (const l of waypoints) {
+    if (l.id === extra?.lieuId) continue
+    const nom = (l.nom || '').trim() || lblTypeLieu(l.type)
+    add({
+      id: idEtapeLieu('depart', l.type || 'autre', l.id),
+      l: `Départ vers ${nom}`,
+      hint: lblTypeLieu(l.type),
+    })
+  }
+  if (!atPec) {
+    add({ id: 'depart_retour', l: 'Départ vers prise en charge', hint: 'Retour du patient' })
+    add({ id: 'depart_base', l: 'Départ retour base', hint: 'Fin de mission' })
+  }
+  return opts
+}
+
+export function besoinChoixTransport(etape, mission) {
+  return prochainsTransports(etape, mission).length > 0
+}
+
+export function documentsSejourVisibles(etape, mission) {
+  const all = lieuxAnnexes(mission).flatMap(l => documentsLieu(l).map(d => ({
+    ...d,
+    lieuId: l.id,
+    lieuNom: (l.nom || '').trim() || lblTypeLieu(l.type),
+    typeLieu: l.type,
+  })))
+  if (!all.length) return []
+  const extra = parseEtapeLieu(etape)
+  const id = normaliserEtape(etape)
+  const priorite = extra?.lieuId
+    || ((id === 'dest_sur_place' || id === 'depart_dest') ? 'parking' : null)
+  if (!priorite) return all
+  return [
+    ...all.filter(d => d.lieuId === priorite || d.typeLieu === priorite),
+    ...all.filter(d => d.lieuId !== priorite && d.typeLieu !== priorite),
+  ]
+}
+
 export function normaliserEtape(etape) {
   if (!etape || etape === 'vehicule' || etape === 'base_sur_place' || etape === 'a_la_base') return 'a_la_base'
   if (ETAPE_LEGACY[etape]) return ETAPE_LEGACY[etape]
+  if (parseEtapeLieu(etape)) return etape
   if (PARCOURS_TERRAIN.some(e => e.id === etape)) return etape
   return 'a_la_base'
 }
@@ -205,38 +331,48 @@ export function estALaBase(etape) {
   return normaliserEtape(etape) === 'a_la_base'
 }
 
-export function etapeParId(etape) {
+export function etapeParId(etape, mission) {
+  const extra = defEtapeLieu(etape, mission)
+  if (extra) return extra
   const id = normaliserEtape(etape)
   if (id === 'a_la_base') return ETAPE_A_LA_BASE
   return PARCOURS_TERRAIN.find(e => e.id === id) || ETAPE_A_LA_BASE
 }
 
 export function idxEtape(etape) {
+  const extra = parseEtapeLieu(etape)
+  if (extra) return extra.phase === 'depart' ? idxEtape('depart_dest') : idxEtape('dest_sur_place')
   const id = normaliserEtape(etape)
   if (id === 'a_la_base') return -1
   return PARCOURS_TERRAIN.findIndex(e => e.id === id)
 }
 
-export function etapeSuivante(etape) {
+export function etapeSuivante(etape, mission) {
+  const extra = parseEtapeLieu(etape)
+  if (extra?.phase === 'depart') return etapeParId(idEtapeLieu('sur_place', extra.type, extra.lieuId), mission)
+  if (besoinChoixTransport(etape, mission)) return null
   return PARCOURS_TERRAIN[idxEtape(etape) + 1] || null
 }
 
-export function etapePrecedente(etape) {
+export function etapePrecedente(etape, mission) {
+  const extra = parseEtapeLieu(etape)
+  if (extra?.phase === 'sur_place') return etapeParId(idEtapeLieu('depart', extra.type, extra.lieuId), mission)
+  if (extra?.phase === 'depart') return etapeParId('dest_sur_place', mission)
   const i = idxEtape(etape)
   if (i < 0) return null
   if (i === 0) return ETAPE_A_LA_BASE
   return PARCOURS_TERRAIN[i - 1]
 }
 
-/** Patient à bord : sur place PEC jusqu’au sur place retour (détresse + traitements). */
+/** Patient à bord : sur place PEC jusqu’au départ base (détresse + traitements), y compris hôtel. */
 export function etapeProtocoleDetresse(etape) {
   const i = idxEtape(etape)
   return i >= idxEtape('pec_sur_place') && i < idxEtape('depart_base')
 }
 
-export function lblEtapeTerrain(etape, vecteurStatut) {
+export function lblEtapeTerrain(etape, vecteurStatut, mission) {
   if (vecteurStatut === 'realise') return 'Rentré base'
-  return etapeParId(etape).l
+  return etapeParId(etape, mission).l
 }
 
 /** Étape de CE vecteur. Ne jamais reprendre l’étape globale (souvent celle d’un autre véhicule). */
