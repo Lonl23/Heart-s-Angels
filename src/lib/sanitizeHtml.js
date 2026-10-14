@@ -96,12 +96,16 @@ function clean(el) {
 }
 
 export function sanitizeHtml(html) {
-  const raw = String(html || '')
-  if (!raw.trim()) return ''
-  if (typeof DOMParser === 'undefined') return ''
-  const doc = new DOMParser().parseFromString(`<div id="ha-root">${raw}</div>`, 'text/html')
-  const root = doc.getElementById('ha-root')
-  if (!root) return ''
-  clean(root)
-  return root.innerHTML
+  try {
+    const raw = String(html || '')
+    if (!raw.trim()) return ''
+    if (typeof DOMParser === 'undefined') return ''
+    const doc = new DOMParser().parseFromString(`<div id="ha-root">${raw}</div>`, 'text/html')
+    const root = doc.getElementById('ha-root')
+    if (!root) return ''
+    clean(root)
+    return root.innerHTML
+  } catch {
+    return ''
+  }
 }

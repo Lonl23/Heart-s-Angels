@@ -36,59 +36,83 @@ export default function EvenementsInternes() {
   const gerer = peutGererEvenementsInternes()
   const voirInscrits = peutVoirInscritsEvenements()
   const nav = useNavigate()
-  const edition = id === 'nouveau' || (id && loc.pathname.endsWith('/editer'))
+  // Même schéma que Souhaits : /nouveau n’a pas de :id, donc pathname et pas useParams.
+  const path = String(loc.pathname || '').replace(/\/+$/, '')
+  const estNouveau = path.endsWith('/evenements/nouveau') || id === 'nouveau'
+  const estEditer = path.endsWith('/editer')
+  const edition = estNouveau || estEditer
   const [items, setItems] = useState([])
   const [inscrits, setInscrits] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
 
-  useEffect(() => { charger() }, [voirInscrits, profile?.id, id, loc.pathname])
+  useEffect(() => { charger() }, [voirInscrits, profile?.id])
 
   async function charger() {
     setLoading(true)
     setErr(null)
-    const { data, error } = await supabase
-      .from('evenements_internes')
-      .select(SELECT)
-      .order('created_at', { ascending: false })
-    if (error) setErr(error.message)
-    const rows = [...(data || [])].sort((a, b) => {
-      const da = a.date_debut || '9999-99-99'
-      const db = b.date_debut || '9999-99-99'
-      if (da !== db) return da.localeCompare(db)
-      return String(b.created_at || '').localeCompare(String(a.created_at || ''))
-    })
-    setItems(rows)
-    if (voirInscrits) {
-      const { data: ins } = await supabase
-        .from('evenements_internes_inscrits')
-        .select('id,evenement_id,user_id,created_at,profiles:user_id(prenom,nom)')
-        .order('created_at')
-      setInscrits(ins || [])
-    } else if (profile?.id) {
-      const { data: ins } = await supabase
-        .from('evenements_internes_inscrits')
-        .select('id,evenement_id,user_id,created_at')
-        .eq('user_id', profile.id)
-      setInscrits(ins || [])
-    } else {
+    try {
+      const { data, error } = await supabase
+        .from('evenements_internes')
+        .select(SELECT)
+        .order('created_at', { ascending: false })
+      if (error) setErr(error.message)
+      const rows = (Array.isArray(data) ? data : []).slice().sort((a, b) => {
+        const da = a.date_debut || '9999-99-99'
+        const db = b.date_debut || '9999-99-99'
+        if (da !== db) return da.localeCompare(db)
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''))
+      })
+      setItems(rows)
+      if (voirInscrits) {
+        let insRes = await supabase
+          .from('evenements_internes_inscrits')
+          .select('id,evenement_id,user_id,created_at,profiles:user_id(prenom,nom)')
+          .order('created_at')
+        if (insRes.error) {
+          insRes = await supabase
+            .from('evenements_internes_inscrits')
+            .select('id,evenement_id,user_id,created_at')
+            .order('created_at')
+        }
+        setInscrits(Array.isArray(insRes.data) ? insRes.data : [])
+      } else if (profile?.id) {
+        const { data: ins } = await supabase
+          .from('evenements_internes_inscrits')
+          .select('id,evenement_id,user_id,created_at')
+          .eq('user_id', profile.id)
+        setInscrits(Array.isArray(ins) ? ins : [])
+      } else {
+        setInscrits([])
+      }
+    } catch (e) {
+      setErr(e?.message || 'Chargement impossible.')
+      setItems([])
       setInscrits([])
     }
     setLoading(false)
   }
 
+  const listeInscrits = Array.isArray(inscrits) ? inscrits : []
+
   if (edition) {
     if (!gerer) return <Page title="Événements internes"><Empty title="Réservé à l’informatique" hint="Seule l’équipe informatique compose les pages d’inscription." /></Page>
-    return <FormEvenement profile={profile} onDone={() => nav(id && id !== 'nouveau' ? `/app/evenements/${id}` : '/app/evenements')} />
+    return (
+      <FormEvenement
+        profile={profile}
+        editId={estEditer && id && id !== 'nouveau' ? id : null}
+        onDone={() => nav(estEditer && id && id !== 'nouveau' ? `/app/evenements/${id}` : '/app/evenements')}
+      />
+    )
   }
-  if (id) {
+  if (id && id !== 'nouveau') {
     const ev = items.find(e => e.id === id)
     if (loading && !ev) return <Page title="Événements internes"><Loading /></Page>
     if (!ev) return <Page title="Événements internes"><Empty title="Événement introuvable" action={<Btn kind="soft" onClick={() => nav('/app/evenements')}>Retour</Btn>} /></Page>
     return (
       <DetailEvenement
         ev={ev} profile={profile} gerer={gerer} voirInscrits={voirInscrits}
-        inscrits={inscrits.filter(i => i.evenement_id === ev.id)}
+        inscrits={listeInscrits.filter(i => i.evenement_id === ev.id)}
         onBack={() => nav('/app/evenements')}
         onEdit={() => nav(`/app/evenements/${ev.id}/editer`)}
         onReload={charger}
@@ -97,7 +121,7 @@ export default function EvenementsInternes() {
   }
 
   const counts = {}
-  for (const i of inscrits) counts[i.evenement_id] = (counts[i.evenement_id] || 0) + 1
+  for (const i of listeInscrits) counts[i.evenement_id] = (counts[i.evenement_id] || 0) + 1
 
   return (
     <Page title="Événements internes" subtitle="Choisissez un événement pour lire la page et vous inscrire."
@@ -186,10 +210,8 @@ function DetailEvenement({ ev, profile, gerer, voirInscrits, inscrits, onBack, o
   )
 }
 
-function FormEvenement({ onDone, profile, initial }) {
-  const { id } = useParams()
-  const editId = id && id !== 'nouveau' ? id : initial?.id
-  const [form, setForm] = useState(initial || {
+function FormEvenement({ onDone, profile, editId }) {
+  const [form, setForm] = useState({
     titre: '', date_debut: '', date_fin: '', html_page: '', html_vignette: '', vignette_path: '',
   })
   const [loaded, setLoaded] = useState(!editId)
@@ -198,9 +220,11 @@ function FormEvenement({ onDone, profile, initial }) {
   const [err, setErr] = useState(null)
 
   useEffect(() => {
-    if (!editId) return
+    if (!editId) { setLoaded(true); return }
+    let on = true
     supabase.from('evenements_internes').select(SELECT).eq('id', editId).maybeSingle()
       .then(({ data, error }) => {
+        if (!on) return
         if (error) setErr(error.message)
         if (data) setForm({
           id: data.id,
@@ -213,6 +237,8 @@ function FormEvenement({ onDone, profile, initial }) {
         })
         setLoaded(true)
       })
+      .catch(e => { if (on) { setErr(e?.message || 'Chargement impossible.'); setLoaded(true) } })
+    return () => { on = false }
   }, [editId])
 
   async function uploadVignette(file) {
@@ -243,19 +269,24 @@ function FormEvenement({ onDone, profile, initial }) {
       titre,
       date_debut: debut,
       date_fin: fin,
-      html_page: sanitizeHtml(form.html_page),
+      html_page: sanitizeHtml(form.html_page) || '',
       html_vignette: sanitizeHtml(form.html_vignette) || null,
       vignette_path: form.vignette_path || null,
     }
-    let error
-    if (form.id) {
-      ({ error } = await supabase.from('evenements_internes').update(payload).eq('id', form.id))
-    } else {
-      ({ error } = await supabase.from('evenements_internes').insert({ ...payload, created_by: profile?.id || null }))
+    try {
+      let error
+      if (form.id) {
+        ({ error } = await supabase.from('evenements_internes').update(payload).eq('id', form.id))
+      } else {
+        ({ error } = await supabase.from('evenements_internes').insert({ ...payload, created_by: profile?.id || null }))
+      }
+      setSaving(false)
+      if (error) { alert(error.message); return }
+      onDone()
+    } catch (e) {
+      setSaving(false)
+      alert(e?.message || 'Enregistrement impossible.')
     }
-    setSaving(false)
-    if (error) { alert(error.message); return }
-    onDone()
   }
 
   if (!loaded) return <Page title="Événement"><Loading /></Page>
