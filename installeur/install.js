@@ -111,6 +111,7 @@ async function main() {
     await client.query(lireSQL('68_dispo_sejour_complet.sql'))
     await client.query(lireSQL('69_dispo_par_date_option.sql'))
     await client.query(lireSQL('70_creer_volontaire_sans_compte.sql'))
+    await client.query(lireSQL('71_souhait_demo_detresse.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

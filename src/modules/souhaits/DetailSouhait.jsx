@@ -224,7 +224,11 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       )}
 
       {s.fictif && (
-        <Flash kind="warn">Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.</Flash>
+        <Flash kind="warn">
+          {s.mission?.demo_cle
+            ? 'Souhait de formation fictif — dossier complet (institutions, trajet, protocole de détresse). Ce n’est pas un vrai patient. Une fois clôturé, il revient en Nouveau le lendemain (départ base 9h30) pour que chacun puisse prendre l’application en main.'
+            : 'Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.'}
+        </Flash>
       )}
       {s.statut === 'demande_info_externe' && (
         <Flash kind="warn">Demande d’informations externe — ce n’est pas une attente interne du pipeline.</Flash>
