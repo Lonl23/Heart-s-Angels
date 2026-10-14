@@ -1,255 +1,309 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, F, TA, Empty, Modal, Loading } from '@/components/ui'
-import { teintePastel } from '@/modules/fiche/ficheSchema'
-import GrilleMois from '@/modules/disponibilites/GrilleMois'
-import { iso, todayISO, titreMois, grilleMois, fmtJourLong, couvreJour, parseISO } from '@/modules/disponibilites/dates'
+import { Page, Card, Btn, F, TA, Empty, Loading } from '@/components/ui'
+import { compressImage } from '@/modules/souhaits/TerrainPhotos'
+import { sanitizeHtml } from '@/lib/sanitizeHtml'
+import { fmtJourLong } from '@/modules/disponibilites/dates'
 
-/**
- * Création / édition : peutGererApp, peutGererFiches, ou tout siège ASBL
- * (responsable / adjoint). Les volontaires voient la liste et ouvrent le lien.
- */
+const BUCKET = 'evenements-vignettes'
+const SELECT = 'id,titre,date_debut,date_fin,html_page,html_vignette,vignette_path,created_by,created_at'
+
+function urlVignette(path) {
+  if (!path) return ''
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+  return data?.publicUrl || ''
+}
 
 function fmtPlage(e) {
+  if (!e?.date_debut) return ''
   const a = fmtJourLong(e.date_debut)
   const b = e.date_fin && e.date_fin !== e.date_debut ? fmtJourLong(e.date_fin) : ''
   return b ? `${a} → ${b}` : a
 }
 
-function urlInscription(raw) {
-  const s = String(raw || '').trim()
-  if (!s) return ''
-  if (/^https?:\/\//i.test(s)) return s
-  return 'https://' + s
+function HtmlSafe({ html, className }) {
+  const clean = sanitizeHtml(html)
+  if (!clean) return null
+  return <div className={className} dangerouslySetInnerHTML={{ __html: clean }} />
 }
 
 export default function EvenementsInternes() {
-  const { profile, peutGererEvenementsInternes } = useAuth()
+  const { id } = useParams()
+  const loc = useLocation()
+  const { profile, peutGererEvenementsInternes, peutVoirInscritsEvenements } = useAuth()
   const gerer = peutGererEvenementsInternes()
-  const [anchor, setAnchor] = useState(() => new Date())
+  const voirInscrits = peutVoirInscritsEvenements()
+  const nav = useNavigate()
+  const edition = id === 'nouveau' || (id && loc.pathname.endsWith('/editer'))
   const [items, setItems] = useState([])
+  const [inscrits, setInscrits] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
-  const [form, setForm] = useState(null)
-  const [detail, setDetail] = useState(null)
 
-  const grille = useMemo(() => grilleMois(anchor), [anchor])
-  const today = todayISO()
-
-  useEffect(() => { charger() }, [])
+  useEffect(() => { charger() }, [voirInscrits, profile?.id, id, loc.pathname])
 
   async function charger() {
     setLoading(true)
     setErr(null)
     const { data, error } = await supabase
       .from('evenements_internes')
-      .select('id,titre,date_debut,date_fin,description,inscription_url,created_by,created_at,profiles:created_by(prenom,nom)')
-      .order('date_debut', { ascending: true })
+      .select(SELECT)
+      .order('created_at', { ascending: false })
     if (error) setErr(error.message)
-    setItems(data || [])
+    const rows = [...(data || [])].sort((a, b) => {
+      const da = a.date_debut || '9999-99-99'
+      const db = b.date_debut || '9999-99-99'
+      if (da !== db) return da.localeCompare(db)
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''))
+    })
+    setItems(rows)
+    if (voirInscrits) {
+      const { data: ins } = await supabase
+        .from('evenements_internes_inscrits')
+        .select('id,evenement_id,user_id,created_at,profiles:user_id(prenom,nom)')
+        .order('created_at')
+      setInscrits(ins || [])
+    } else if (profile?.id) {
+      const { data: ins } = await supabase
+        .from('evenements_internes_inscrits')
+        .select('id,evenement_id,user_id,created_at')
+        .eq('user_id', profile.id)
+      setInscrits(ins || [])
+    } else {
+      setInscrits([])
+    }
     setLoading(false)
   }
 
-  function aller(delta) {
-    setAnchor(a => new Date(a.getFullYear(), a.getMonth() + delta, 1))
+  if (edition) {
+    if (!gerer) return <Page title="Événements internes"><Empty title="Réservé à l’informatique" hint="Seule l’équipe informatique compose les pages d’inscription." /></Page>
+    return <FormEvenement profile={profile} onDone={() => nav(id && id !== 'nouveau' ? `/app/evenements/${id}` : '/app/evenements')} />
   }
-  function nouveau(day) {
-    const id = day ? iso(day) : today
-    setDetail(null)
-    setForm({
-      titre: '',
-      date_debut: id,
-      date_fin: id,
-      description: '',
-      inscription_url: '',
-    })
+  if (id) {
+    const ev = items.find(e => e.id === id)
+    if (loading && !ev) return <Page title="Événements internes"><Loading /></Page>
+    if (!ev) return <Page title="Événements internes"><Empty title="Événement introuvable" action={<Btn kind="soft" onClick={() => nav('/app/evenements')}>Retour</Btn>} /></Page>
+    return (
+      <DetailEvenement
+        ev={ev} profile={profile} gerer={gerer} voirInscrits={voirInscrits}
+        inscrits={inscrits.filter(i => i.evenement_id === ev.id)}
+        onBack={() => nav('/app/evenements')}
+        onEdit={() => nav(`/app/evenements/${ev.id}/editer`)}
+        onReload={charger}
+      />
+    )
   }
-  function editer(e) {
-    setDetail(null)
-    setForm({
-      id: e.id,
-      titre: e.titre || '',
-      date_debut: e.date_debut,
-      date_fin: e.date_fin || e.date_debut,
-      description: e.description || '',
-      inscription_url: e.inscription_url || '',
-    })
+
+  const counts = {}
+  for (const i of inscrits) counts[i.evenement_id] = (counts[i.evenement_id] || 0) + 1
+
+  return (
+    <Page title="Événements internes" subtitle="Choisissez un événement pour lire la page et vous inscrire."
+      action={gerer ? <Btn onClick={() => nav('/app/evenements/nouveau')}>+ Événement</Btn> : null}>
+      {err && <div className="ha-flash ha-flash-err">{err}</div>}
+      {loading ? <Loading />
+        : items.length === 0 ? (
+          <Empty title="Aucun événement" hint={gerer ? 'Ajoutez une vignette et la page HTML d’inscription.' : 'Quand l’informatique publiera un événement, il apparaîtra ici.'} />
+        ) : (
+          <div className="ha-evt-grid">
+            {items.map(e => (
+              <Card key={e.id} clickable className="ha-evt-card" onClick={() => nav(`/app/evenements/${e.id}`)} style={{ padding: 0, overflow: 'hidden' }}>
+                <div className="ha-evt-vignette">
+                  {e.vignette_path
+                    ? <img src={urlVignette(e.vignette_path)} alt="" />
+                    : sanitizeHtml(e.html_vignette)
+                      ? <HtmlSafe html={e.html_vignette} className="ha-evt-html ha-evt-html-card" />
+                      : <div className="ha-evt-ph">{(e.titre || '?').slice(0, 1).toUpperCase()}</div>}
+                </div>
+                <div className="ha-evt-body">
+                  <div className="ha-evt-titre">{e.titre}</div>
+                  {fmtPlage(e) && <div className="ha-evt-meta">{fmtPlage(e)}</div>}
+                  {voirInscrits && (
+                    <div className="ha-evt-meta">{counts[e.id] || 0} inscrit{(counts[e.id] || 0) > 1 ? 's' : ''}</div>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+    </Page>
+  )
+}
+
+function DetailEvenement({ ev, profile, gerer, voirInscrits, inscrits, onBack, onEdit, onReload }) {
+  const [busy, setBusy] = useState(false)
+  const mine = inscrits.find(i => i.user_id === profile?.id)
+  async function toggle() {
+    if (!profile?.id) return
+    setBusy(true)
+    const { error } = mine
+      ? await supabase.from('evenements_internes_inscrits').delete().eq('id', mine.id)
+      : await supabase.from('evenements_internes_inscrits').insert({ evenement_id: ev.id, user_id: profile.id })
+    setBusy(false)
+    if (error) { alert(error.message); return }
+    onReload()
   }
+  async function supprimer() {
+    if (!confirm(`Supprimer « ${ev.titre} » ? Les inscriptions seront perdues.`)) return
+    if (ev.vignette_path) await supabase.storage.from(BUCKET).remove([ev.vignette_path]).catch(() => {})
+    const { error } = await supabase.from('evenements_internes').delete().eq('id', ev.id)
+    if (error) { alert(error.message); return }
+    onBack()
+  }
+  const n = inscrits.length
+  return (
+    <Page title={ev.titre} subtitle={fmtPlage(ev) || 'Événement interne ASBL'}
+      action={<Btn kind="soft" onClick={onBack}>Retour</Btn>}>
+      {ev.vignette_path && (
+        <div className="ha-evt-hero"><img src={urlVignette(ev.vignette_path)} alt="" /></div>
+      )}
+      <HtmlSafe html={ev.html_page} className="ha-evt-html ha-evt-page" />
+      {!ev.html_page && <p style={{ color:'var(--text-muted)', fontSize:14 }}>La page d’inscription n’est pas encore rédigée.</p>}
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:16 }}>
+        <Btn onClick={toggle} disabled={busy}>{mine ? 'Se désinscrire' : 'S’inscrire'}</Btn>
+        {gerer && <Btn kind="soft" onClick={onEdit}>Modifier le code</Btn>}
+        {gerer && <Btn kind="danger" onClick={supprimer}>Supprimer</Btn>}
+      </div>
+      {voirInscrits && (
+        <Card style={{ marginTop:18 }}>
+          <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:8 }}>
+            {n} inscrit{n > 1 ? 's' : ''}
+          </div>
+          {n === 0
+            ? <div style={{ fontSize:13, color:'var(--text-muted)' }}>Personne ne s’est encore inscrit.</div>
+            : (
+              <ul className="ha-evt-noms">
+                {inscrits.map(i => (
+                  <li key={i.id}>{i.profiles ? `${i.profiles.prenom} ${i.profiles.nom}` : 'Volontaire'}</li>
+                ))}
+              </ul>
+            )}
+        </Card>
+      )}
+    </Page>
+  )
+}
+
+function FormEvenement({ onDone, profile, initial }) {
+  const { id } = useParams()
+  const editId = id && id !== 'nouveau' ? id : initial?.id
+  const [form, setForm] = useState(initial || {
+    titre: '', date_debut: '', date_fin: '', html_page: '', html_vignette: '', vignette_path: '',
+  })
+  const [loaded, setLoaded] = useState(!editId)
+  const [saving, setSaving] = useState(false)
+  const [apercu, setApercu] = useState('page')
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    if (!editId) return
+    supabase.from('evenements_internes').select(SELECT).eq('id', editId).maybeSingle()
+      .then(({ data, error }) => {
+        if (error) setErr(error.message)
+        if (data) setForm({
+          id: data.id,
+          titre: data.titre || '',
+          date_debut: data.date_debut || '',
+          date_fin: data.date_fin || '',
+          html_page: data.html_page || '',
+          html_vignette: data.html_vignette || '',
+          vignette_path: data.vignette_path || '',
+        })
+        setLoaded(true)
+      })
+  }, [editId])
+
+  async function uploadVignette(file) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { alert('Choisissez une image (JPG, PNG, WebP).'); return }
+    setSaving(true)
+    try {
+      const blob = await compressImage(file)
+      const uid = crypto.randomUUID ? crypto.randomUUID() : String(Date.now())
+      const path = `${profile?.id || 'it'}/${uid}.jpg`
+      const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+      if (error) throw error
+      if (form.vignette_path) await supabase.storage.from(BUCKET).remove([form.vignette_path]).catch(() => {})
+      setForm(s => ({ ...s, vignette_path: path }))
+    } catch (e) {
+      alert(e.message || 'Envoi impossible.')
+    }
+    setSaving(false)
+  }
+
   async function save() {
     const titre = String(form.titre || '').trim()
     if (!titre) { alert('Indiquez un titre.'); return }
-    if (!form.date_debut) { alert('Indiquez la date.'); return }
-    const fin = form.date_fin && form.date_fin >= form.date_debut ? form.date_fin : form.date_debut
+    const debut = form.date_debut || null
+    const fin = form.date_fin && debut && form.date_fin >= debut ? form.date_fin : debut
+    setSaving(true)
     const payload = {
       titre,
-      date_debut: form.date_debut,
+      date_debut: debut,
       date_fin: fin,
-      description: String(form.description || '').trim() || null,
-      inscription_url: urlInscription(form.inscription_url) || null,
-      created_by: form.id ? undefined : (profile?.id || null),
+      html_page: sanitizeHtml(form.html_page),
+      html_vignette: sanitizeHtml(form.html_vignette) || null,
+      vignette_path: form.vignette_path || null,
     }
-    if (!form.id) payload.created_by = profile?.id || null
-    else delete payload.created_by
-    const { error } = form.id
-      ? await supabase.from('evenements_internes').update({
-          titre: payload.titre,
-          date_debut: payload.date_debut,
-          date_fin: payload.date_fin,
-          description: payload.description,
-          inscription_url: payload.inscription_url,
-        }).eq('id', form.id)
-      : await supabase.from('evenements_internes').insert(payload)
+    let error
+    if (form.id) {
+      ({ error } = await supabase.from('evenements_internes').update(payload).eq('id', form.id))
+    } else {
+      ({ error } = await supabase.from('evenements_internes').insert({ ...payload, created_by: profile?.id || null }))
+    }
+    setSaving(false)
     if (error) { alert(error.message); return }
-    setForm(null)
-    charger()
-  }
-  async function supprimer(e) {
-    if (!confirm(`Supprimer « ${e.titre} » ?`)) return
-    const { error } = await supabase.from('evenements_internes').delete().eq('id', e.id)
-    if (error) { alert(error.message); return }
-    setDetail(null)
-    setForm(null)
-    charger()
+    onDone()
   }
 
-  function clicJour(day) {
-    const id = iso(day)
-    const duJour = items.filter(e => couvreJour(e, id))
-    if (duJour.length === 1) { setDetail(duJour[0]); return }
-    if (duJour.length > 1) { setDetail({ jour: id, liste: duJour }); return }
-    if (gerer) nouveau(day)
-  }
-
-  const duMois = items.filter(e => {
-    const a = parseISO(e.date_debut)
-    const b = parseISO(e.date_fin || e.date_debut)
-    if (!a) return false
-    const m0 = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
-    const m1 = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)
-    return a <= m1 && (b || a) >= m0
-  })
-
+  if (!loaded) return <Page title="Événement"><Loading /></Page>
   return (
-    <Page title="Événements internes" subtitle="Réunions, assemblées et rendez-vous ASBL. Ouvrez le lien pour vous inscrire."
-      action={gerer ? <Btn onClick={() => nouveau()}>+ Événement</Btn> : null}>
-
-      <div className="ha-cal-toolbar">
-        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-          <Btn kind="soft" onClick={() => aller(-1)}>←</Btn>
-          <Btn kind="soft" onClick={() => setAnchor(new Date())}>Aujourd’hui</Btn>
-          <Btn kind="soft" onClick={() => aller(1)}>→</Btn>
-        </div>
-        <div className="ha-cal-titre">{titreMois(anchor)}</div>
-        <div />
-      </div>
-
+    <Page title={form.id ? 'Modifier l’événement' : 'Nouvel événement interne'}
+      subtitle="Vignette du menu et HTML de la page d’inscription. Vous pourrez y revenir."
+      action={<Btn kind="soft" onClick={onDone}>Annuler</Btn>}>
       {err && <div className="ha-flash ha-flash-err">{err}</div>}
-      {loading ? <Loading /> : (
-        <div className="ha-cal-scroll">
-          <GrilleMois weeks={grille.weeks} anchor={anchor} today={today} onJour={clicJour}
-            renderJour={(id) => {
-              const duJour = items.filter(e => couvreJour(e, id))
-              const shown = duJour.slice(0, 3)
-              return (
-                <>
-                  {shown.map(e => (
-                    <button key={e.id} type="button"
-                      className={'ha-mois-pill dispo-' + teintePastel(e.id)}
-                      title={e.titre}
-                      onClick={ev => { ev.stopPropagation(); setDetail(e) }}>
-                      {e.titre}
-                    </button>
-                  ))}
-                  {duJour.length > shown.length && <span className="ha-mois-more">…</span>}
-                </>
-              )
-            }} />
+      <F label="Titre" value={form.titre} set={v => setForm(s => ({ ...s, titre: v }))} required />
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <F label="Date (optionnel)" type="date" value={form.date_debut} set={v => setForm(s => ({ ...s, date_debut: v }))} />
+        <F label="Au (optionnel)" type="date" value={form.date_fin} set={v => setForm(s => ({ ...s, date_fin: v }))} />
+      </div>
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:6 }}>Vignette (image)</div>
+        {form.vignette_path && (
+          <img src={urlVignette(form.vignette_path)} alt="" className="ha-evt-preview-img" />
+        )}
+        <label className="ha-stock-photo-btn" style={{ marginTop:8 }}>
+          {form.vignette_path ? 'Changer l’image' : 'Choisir une image'}
+          <input type="file" accept="image/*" onChange={e => { uploadVignette(e.target.files?.[0]); e.target.value = '' }} />
+        </label>
+        {form.vignette_path && (
+          <button type="button" className="ha-stock-photo-del" style={{ marginLeft:10 }}
+            onClick={() => setForm(s => ({ ...s, vignette_path: '' }))}>Retirer</button>
+        )}
+      </div>
+      <TA label="HTML de la vignette (optionnel, si pas d’image)" value={form.html_vignette}
+        set={v => setForm(s => ({ ...s, html_vignette: v }))} rows={3}
+        placeholder="<p>Court texte sur la carte</p>" />
+      <div className="ha-tabs" style={{ marginBottom:10 }}>
+        <button type="button" className={'ha-tab' + (apercu === 'page' ? ' is-on' : '')} onClick={() => setApercu('page')}>Code de la page</button>
+        <button type="button" className={'ha-tab' + (apercu === 'preview' ? ' is-on' : '')} onClick={() => setApercu('preview')}>Aperçu</button>
+      </div>
+      {apercu === 'page' ? (
+        <TA label="HTML de la page d’inscription" value={form.html_page}
+          set={v => setForm(s => ({ ...s, html_page: v }))} rows={14}
+          placeholder={'<h2>Assemblée générale</h2>\n<p>Inscrivez-vous ci-dessous.</p>'} />
+      ) : (
+        <div className="ha-evt-preview">
+          <HtmlSafe html={form.html_page} className="ha-evt-html" />
+          {!sanitizeHtml(form.html_page) && <div style={{ color:'var(--text-muted)', fontSize:13 }}>Rien à prévisualiser.</div>}
         </div>
       )}
-
-      <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', margin:'18px 0 10px' }}>
-        {duMois.length ? 'Ce mois-ci' : 'Aucun événement ce mois-ci'}
-      </div>
-      {duMois.length === 0 && !loading && (
-        <Empty title="Rien de prévu" hint={gerer ? 'Ajoutez un événement interne et le lien d’inscription.' : 'Quand un événement sera publié, il apparaîtra ici.'} />
-      )}
-      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        {duMois.map(e => (
-          <Card key={e.id} clickable onClick={() => setDetail(e)}>
-            <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
-              <div>
-                <div style={{ fontWeight:700, color:'var(--text)' }}>{e.titre}</div>
-                <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:3 }}>{fmtPlage(e)}</div>
-              </div>
-              {e.inscription_url && (
-                <a href={urlInscription(e.inscription_url)} target="_blank" rel="noreferrer"
-                  onClick={ev => ev.stopPropagation()}
-                  style={{ color:'var(--accent)', fontWeight:600, fontSize:13, alignSelf:'center' }}>
-                  S’inscrire ›
-                </a>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {gerer && (
-        <button type="button" className="ha-fab" onClick={() => nouveau()} aria-label="Ajouter un événement">+</button>
-      )}
-
-      {detail && !detail.liste && (
-        <Modal title={detail.titre} onClose={() => setDetail(null)} footer={
-          <>
-            {detail.inscription_url && (
-              <Btn onClick={() => window.open(urlInscription(detail.inscription_url), '_blank', 'noopener')}>S’inscrire</Btn>
-            )}
-            {gerer && <Btn kind="soft" onClick={() => editer(detail)}>Modifier</Btn>}
-            {gerer && <Btn kind="danger" onClick={() => supprimer(detail)}>Supprimer</Btn>}
-            <Btn kind="soft" onClick={() => setDetail(null)}>Fermer</Btn>
-          </>
-        }>
-          <div style={{ fontSize:13.5, color:'var(--text-2)', marginBottom:10 }}>{fmtPlage(detail)}</div>
-          {detail.description && (
-            <p style={{ fontSize:14, color:'var(--text)', whiteSpace:'pre-wrap', margin:'0 0 10px', lineHeight:1.45 }}>{detail.description}</p>
-          )}
-          {detail.profiles && (
-            <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
-              Publié par {detail.profiles.prenom} {detail.profiles.nom}
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {detail?.liste && (
-        <Modal title={fmtJourLong(detail.jour)} onClose={() => setDetail(null)}>
-          {detail.liste.map(e => (
-            <button key={e.id} type="button" className="ha-pick-row" onClick={() => setDetail(e)}>
-              <strong>{e.titre}</strong>
-              <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>{fmtPlage(e)}</div>
-            </button>
-          ))}
-          {gerer && <Btn onClick={() => nouveau(parseISO(detail.jour))} style={{ marginTop:8 }}>+ Événement ce jour</Btn>}
-        </Modal>
-      )}
-
-      {form && (
-        <Modal title={form.id ? 'Modifier l’événement' : 'Nouvel événement interne'} onClose={() => setForm(null)} footer={
-          <>
-            <Btn onClick={save}>Enregistrer</Btn>
-            {form.id && <Btn kind="danger" onClick={() => supprimer(form)}>Supprimer</Btn>}
-            <Btn kind="soft" onClick={() => setForm(null)}>Annuler</Btn>
-          </>
-        }>
-          <F label="Titre" value={form.titre} set={v => setForm(s => ({ ...s, titre: v }))} required />
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-            <F label="Du" type="date" value={form.date_debut} set={v => setForm(s => ({ ...s, date_debut: v }))} required />
-            <F label="Au" type="date" value={form.date_fin || form.date_debut} set={v => setForm(s => ({ ...s, date_fin: v }))} />
-          </div>
-          <TA label="Description" value={form.description} set={v => setForm(s => ({ ...s, description: v }))} rows={4} />
-          <F label="Lien d’inscription" value={form.inscription_url} set={v => setForm(s => ({ ...s, inscription_url: v }))} placeholder="https://…" />
-        </Modal>
-      )}
+      <p style={{ fontSize:12.5, color:'var(--text-muted)', margin:'4px 0 14px' }}>
+        Titres, paragraphes, listes, liens et images. Les scripts et gestionnaires d’événements sont retirés.
+      </p>
+      <Btn onClick={save} disabled={saving}>{saving ? '…' : 'Enregistrer'}</Btn>
     </Page>
   )
 }

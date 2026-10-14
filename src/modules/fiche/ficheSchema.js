@@ -485,6 +485,40 @@ export function peutEncoderDisposPourAutruiDepuisFiche(roleCompte, rolesAsblList
   return rolesAsblEncoderDisposAutrui().some(r => spec.has(r))
 }
 
+/** Rang « responsable » de chaque équipe EQUIPES_ASBL (pas les adjoints / vice-président). */
+export function rolesAsblResponsables() {
+  const out = []
+  const seen = new Set()
+  for (const eq of EQUIPES_ASBL) {
+    const rangs = rangsDeLequipe(eq)
+    for (const r of rangs) {
+      if (rangs.length > 1 && (r.v.endsWith('_adjoint') || r.v === 'vice_president')) continue
+      if (seen.has(r.v)) continue
+      seen.add(r.v)
+      out.push(r.v)
+    }
+  }
+  return out
+}
+
+export function estResponsableAsblDepuisFiche(roleCompte, rolesAsblList) {
+  if (!roleCompte || roleCompte === 'partenaire') return false
+  if (roleCompte === 'admin' || roleCompte === 'president' || roleCompte === 'coordinateur' || roleCompte === 'tresorier') return true
+  const spec = new Set(rolesAsblSpecifiques(rolesAsblList))
+  return rolesAsblResponsables().some(r => spec.has(r))
+}
+
+/**
+ * Code HTML / vignette des événements internes : équipe informatique
+ * (responsable + adjoint) et admin / président — pas tous les managers.
+ */
+export function peutEditerEvenementsInternesDepuisFiche(roleCompte, rolesAsblList) {
+  if (!roleCompte || roleCompte === 'partenaire') return false
+  if (roleCompte === 'admin' || roleCompte === 'president') return true
+  const spec = new Set(rolesAsblSpecifiques(rolesAsblList))
+  return ['president', 'resp_informatique', 'resp_informatique_adjoint'].some(r => spec.has(r))
+}
+
 const PASTELS = ['peach', 'lavender', 'sage', 'sand']
 
 export function teintePastel(id) {

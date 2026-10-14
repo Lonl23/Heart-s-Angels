@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { aRoleAsblParticulier, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
+import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
 
 const AuthContext = createContext(null)
 
@@ -161,15 +161,14 @@ export function AuthProvider({ children }) {
   function peutGererDispos() {
     return peutEncoderDisposPourAutrui()
   }
-  /**
-   * Événements internes : création / édition = peutGererApp, peutGererFiches,
-   * ou tout siège ASBL (responsable / adjoint). Les volontaires sans office lisent
-   * et ouvrent le lien d’inscription.
-   */
+  /** HTML + vignette : informatique (et admin / président). */
   function peutGererEvenementsInternes() {
-    if (!role || role === 'partenaire') return false
-    if (peutGererApp() || peutGererFiches()) return true
-    return aRoleAsblParticulier(rolesAsbl())
+    return peutEditerEvenementsInternesDepuisFiche(role, rolesAsbl())
+  }
+  /** Nombre (et noms) d’inscrits : responsables d’équipe ASBL, plus l’informatique. */
+  function peutVoirInscritsEvenements() {
+    if (peutGererEvenementsInternes()) return true
+    return estResponsableAsblDepuisFiche(role, rolesAsbl())
   }
   function peutGererStock() {
     if (!role || role === 'partenaire') return false
@@ -224,7 +223,7 @@ export function AuthProvider({ children }) {
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutGererEvenementsInternes, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

@@ -1014,3 +1014,48 @@ img, svg, video, table { max-width: 100%; }
 }
 .ha-notif-item:hover { background: var(--bg-alt); }
 
+/* ── Événements internes (vignettes, pas de calendrier) ───────────────────── */
+.ha-evt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.ha-evt-vignette {
+  aspect-ratio: 16 / 10;
+  background: var(--bg-alt);
+  overflow: hidden;
+  display: flex; align-items: stretch; justify-content: center;
+}
+.ha-evt-vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ha-evt-ph {
+  width: 100%; display: grid; place-items: center;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 2.4rem; font-weight: 600; color: var(--heading);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-alt));
+}
+.ha-evt-body { padding: 12px 14px 14px; }
+.ha-evt-titre { font-weight: 700; color: var(--text); font-size: 15px; line-height: 1.3; }
+.ha-evt-meta { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+.ha-evt-hero {
+  border-radius: 14px; overflow: hidden; margin-bottom: 16px;
+  border: 1px solid var(--border); max-height: 280px;
+}
+.ha-evt-hero img { width: 100%; max-height: 280px; object-fit: cover; display: block; }
+.ha-evt-html { font-size: 15px; color: var(--text); line-height: 1.55; }
+.ha-evt-html h1, .ha-evt-html h2, .ha-evt-html h3 { color: var(--heading); margin: 0 0 10px; }
+.ha-evt-html p { margin: 0 0 10px; }
+.ha-evt-html a { color: var(--accent); }
+.ha-evt-html img { max-width: 100%; height: auto; border-radius: 10px; }
+.ha-evt-html ul, .ha-evt-html ol { margin: 0 0 10px; padding-left: 1.3em; }
+.ha-evt-html-card { padding: 10px 12px; font-size: 13px; width: 100%; overflow: hidden; }
+.ha-evt-page { margin-bottom: 8px; }
+.ha-evt-preview {
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+  background: var(--surface); max-height: 320px; overflow: auto; margin-bottom: 10px;
+}
+.ha-evt-preview-img {
+  display: block; width: min(100%, 320px); height: 140px; object-fit: cover;
+  border-radius: 10px; border: 1px solid var(--border); margin-bottom: 8px;
+}
+.ha-evt-noms { margin: 0; padding-left: 1.2em; font-size: 14px; color: var(--text-2); line-height: 1.55; }
+

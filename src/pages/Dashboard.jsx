@@ -13,7 +13,7 @@ const CARDS = [
   { to:'/app/souhaits',      key:'souhaits',      icon:'⭐', label:'Souhaits',       desc:'Encoder et préparer les dossiers' },
   { to:'/app/defraiements',  key:'defraiements',  icon:'🧾', label:'Défraiements',   desc:'Note de frais : forfait et km (récolte / hors base)' },
   { to:'/app/disponibilites',key:'disponibilites',icon:'📅', label:'Disponibilités', desc:'Agenda : vos jours et les missions (sans nom de patient)' },
-  { to:'/app/evenements',    key:'evenements',    icon:'📣', label:'Événements internes', desc:'Réunions ASBL et lien d’inscription' },
+  { to:'/app/evenements',    key:'evenements',    icon:'📣', label:'Événements internes', desc:'Vignettes ASBL : page d’inscription dans l’app' },
   { to:'/app/stock',         key:'stock',         icon:'📦', label:'Stock',          desc:'Matériel et mouvements' },
   { to:'/app/annuaire',      key:'annuaire',      icon:'📇', label:'Annuaire',       desc:'Bénéficiaires, contacts rattachés, institutions' },
 ]

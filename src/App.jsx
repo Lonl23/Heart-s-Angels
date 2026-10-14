@@ -54,6 +54,9 @@ export default function App() {
           <Route path="missions" element={<MesMissions />} />
           <Route path="defraiements"   element={<Defraiements />} />
           <Route path="disponibilites" element={<Disponibilites />} />
+          <Route path="evenements/nouveau" element={<EvenementsInternes />} />
+          <Route path="evenements/:id/editer" element={<EvenementsInternes />} />
+          <Route path="evenements/:id" element={<EvenementsInternes />} />
           <Route path="evenements"     element={<EvenementsInternes />} />
           <Route path="stock"          element={<Stock />} />
           <Route path="annuaire"       element={<Annuaire />} />
