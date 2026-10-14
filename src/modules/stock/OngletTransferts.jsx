@@ -14,47 +14,14 @@ const TYPES_VECTEUR = new Set(['sac', 'pochette', 'vehicule', 'armoire_vehicule'
 const TYPES_RETOUR = new Set(['reserve', 'armoire'])
 
 const OPTIONS = [
-  {
-    v: 'reception',
-    l: 'Réception fournisseur',
-    hint: 'Enregistrer une livraison et créer les QR.',
-  },
-  {
-    v: 'ranger',
-    l: 'Ranger / mise en stock',
-    hint: 'Scanner le lieu, puis les articles à y placer.',
-  },
-  {
-    v: 'doter',
-    l: 'Doter un sac / vecteur',
-    hint: 'Prendre du stock et le mettre dans un sac, une pochette ou un véhicule.',
-  },
-  {
-    v: 'emporter',
-    l: 'Emporter en mission',
-    hint: 'Scanner ce qui part (sac, article, O₂) sans le consommer.',
-  },
-  {
-    v: 'retour',
-    l: 'Retour',
-    hint: 'Ramener un article vers la réserve ou un autre lieu.',
-  },
-  {
-    v: 'interne',
-    l: 'Transfert interne',
-    hint: 'Déplacer un article (ou tout un lot) d’un emplacement à un autre.',
-  },
-  {
-    v: 'sortie',
-    l: 'Sortie / cession',
-    hint: 'Retirer du stock : casse, don, destruction.',
-  },
-  {
-    v: 'o2',
-    l: 'Relevé oxygène',
-    hint: 'Noter la pression d’une bouteille (bar).',
-    siO2: true,
-  },
+  { v: 'reception', l: 'Réception', hint: 'Livraison, QR' },
+  { v: 'ranger', l: 'Ranger', hint: 'Lieu, puis articles' },
+  { v: 'doter', l: 'Doter', hint: 'Sac, pochette, véhicule' },
+  { v: 'emporter', l: 'Emporter', hint: 'Mission, sans consommer' },
+  { v: 'retour', l: 'Retour', hint: 'Vers la réserve' },
+  { v: 'interne', l: 'Transfert', hint: 'Autre emplacement' },
+  { v: 'sortie', l: 'Sortie', hint: 'Casse, don, destruction' },
+  { v: 'o2', l: 'Oxygène', hint: 'Pression (bar)', siO2: true },
 ]
 
 function unitesDispo(unites, { o2 = false } = {}) {
@@ -503,7 +470,7 @@ function FormEmporter({ onDone, onOk, onErr, onChange }) {
       ) : missions.length === 0 ? (
         <Empty
           title="Aucune mission à venir"
-          hint="L’emport se fait aussi au départ depuis Mes missions. Pour placer du matériel dans un sac ou un véhicule, utilisez « Doter un sac / vecteur »." />
+          hint="L’emport se fait aussi au départ depuis Mes missions. Pour placer du matériel dans un sac ou un véhicule, utilisez « Doter »." />
       ) : missions.map(s => (
         <button key={s.id} type="button" className="ha-pick-row" onClick={() => setChoix(s)}>
           <div style={{ fontWeight:600 }}>{`${s.beneficiaire_prenom || ''} ${s.beneficiaire_nom || ''}`.trim() || 'Mission'}</div>
@@ -514,8 +481,34 @@ function FormEmporter({ onDone, onOk, onErr, onChange }) {
   )
 }
 
+function PiedStock({ onAller, inv }) {
+  const [plus, setPlus] = useState(false)
+  return (
+    <nav className="ha-xfer-pied" aria-label="Autres rubriques stock">
+      <button type="button" onClick={() => onAller('unites')}>Inventaire</button>
+      <span className="ha-xfer-pied-sep" aria-hidden>·</span>
+      <button type="button" onClick={() => onAller('mouvements')}>Mouvements</button>
+      <span className="ha-xfer-pied-sep" aria-hidden>·</span>
+      <button type="button" onClick={() => setPlus(p => !p)} aria-expanded={plus}>Plus</button>
+      {plus && (
+        <div className="ha-xfer-plus">
+          {[
+            ['alertes', 'Alertes'],
+            ['articles', 'Articles'],
+            ['fournisseurs', 'Fournisseurs'],
+            ['lieux', 'Lieux'],
+            ...(inv ? [['inventaire', 'Scan lieu']] : []),
+          ].map(([v, l]) => (
+            <button key={v} type="button" onClick={() => onAller(v)}>{l}</button>
+          ))}
+        </div>
+      )}
+    </nav>
+  )
+}
+
 export default function OngletTransferts({
-  cats, lieux, unites, onChange, onOk, onErr, onRanger,
+  cats, lieux, unites, onChange, onOk, onErr, onRanger, onAller, inv,
 }) {
   const [etape, setEtape] = useState(null)
   const aO2 = (cats || []).some(c => c.mode === 'oxygene') || (unites || []).some(u => u.mode === 'oxygene')
@@ -592,9 +585,6 @@ export default function OngletTransferts({
 
   return (
     <div>
-      <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'0 0 14px' }}>
-        Choisissez ce que vous faites. Un seul écran ensuite : d’où, vers où, quoi.
-      </p>
       <div className="ha-xfer-menu">
         {opts.map(o => (
           <button key={o.v} type="button" className="ha-xfer-opt" onClick={() => setEtape(o.v)}>
@@ -603,6 +593,7 @@ export default function OngletTransferts({
           </button>
         ))}
       </div>
+      {onAller && <PiedStock onAller={onAller} inv={inv} />}
     </div>
   )
 }

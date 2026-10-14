@@ -5,15 +5,18 @@ export const inp = { width:'100%', padding:'9px 12px', border:'1px solid var(--b
 export const lbl = { fontSize:12.5, color:'var(--text-muted)', display:'block', marginBottom:5 }
 
 export function Page({ title, subtitle, action, children, fill }) {
+  const head = title || subtitle || action
   return (
     <div className={fill ? 'ha-page-fill' : undefined} style={{ padding:'clamp(16px,3vw,28px)', width:'100%', boxSizing:'border-box' }}>
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom: subtitle ? 12 : 20 }}>
-        <div>
-          <h1 style={{ fontSize:'1.7rem', color:'var(--heading)', margin:0 }}>{title}</h1>
-          {subtitle && <p style={{ margin:'4px 0 0', color:'var(--text-muted)', fontSize:13.5 }}>{subtitle}</p>}
+      {head && (
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom: subtitle ? 12 : 20 }}>
+          <div>
+            {title ? <h1 style={{ fontSize:'1.7rem', color:'var(--heading)', margin:0 }}>{title}</h1> : null}
+            {subtitle && <p style={{ margin:'4px 0 0', color:'var(--text-muted)', fontSize:13.5 }}>{subtitle}</p>}
+          </div>
+          {action}
         </div>
-        {action}
-      </div>
+      )}
       {children}
     </div>
   )

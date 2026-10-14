@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, F, Sel, Tabs, Pill, Empty, Loading, Flash, inp } from '@/components/ui'
+import { Page, Card, Btn, F, Sel, Pill, Empty, Loading, Flash, inp } from '@/components/ui'
 import { TYPES_LIEU, MODES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, cheminLieux, enfantsDe, resteLabel, nomTypeO2 } from './stock/stockSchema'
 import VueLots from './stock/VueLots'
 import { aggregerLots, fmtDlc } from './stock/lotsStock'
@@ -15,6 +15,16 @@ import OngletAlertes from './stock/OngletAlertes'
 import OngletTransferts from './stock/OngletTransferts'
 import { etiqLieu, etiqUnite, CarteQr, FormReception, FormTransfert, FormSortie } from './stock/formsStock'
 import { exporterStockExcel, lireInventaireExcel, resumeImport, exporterLieuxParSacExcel, telechargerCsvLieuxParSac } from './stock/excelStock'
+
+const LBL_RUBRIQUE = {
+  unites: 'Inventaire',
+  mouvements: 'Mouvements',
+  alertes: 'Alertes',
+  articles: 'Articles',
+  fournisseurs: 'Fournisseurs',
+  lieux: 'Lieux',
+  inventaire: 'Scan lieu',
+}
 
 export default function Stock() {
   const { peutGererStock } = useAuth()
@@ -161,14 +171,8 @@ export default function Stock() {
   }
 
   return (
-    <Page title="Stock" subtitle="Réception, transferts, inventaire par lot, alertes et commandes."
-      action={<div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-        <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
-        <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer inventaire</Btn>
-        <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFichierInventaire} style={{ display:'none' }} />
-        <Btn kind="soft" onClick={() => { setLieuCible(null); setScan('ranger'); setTab('transferts') }}>Ranger (scan)</Btn>
-        <Btn onClick={() => setScan('inventaire')}>Inventaire (scan lieu)</Btn>
-      </div>}>
+    <Page>
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={onFichierInventaire} style={{ display:'none' }} />
       {flash && <Flash>{flash}</Flash>}
       {err && <Flash kind="err">{err}</Flash>}
       {apercu && (
@@ -196,26 +200,32 @@ export default function Stock() {
       {recv && <FormReception cat={recv} lieux={lieux} unites={unites} onDone={() => { setRecv(null); load() }} onOk={ok} onErr={setErr} />}
       {xfer && <FormTransfert unite={xfer} lieux={lieux} onDone={() => { setXfer(null); load() }} onOk={ok} onErr={setErr} />}
       {sortie && <FormSortie unite={sortie} onDone={() => { setSortie(null); load() }} onOk={ok} onErr={setErr} />}
-      <Tabs items={[
-        { v:'transferts', l:'Transferts' },
-        { v:'unites', l:'Inventaire' },
-        { v:'mouvements', l:'Mouvements' },
-        { v:'alertes', l:'Alertes' },
-        { v:'articles', l:'Articles' },
-        { v:'fournisseurs', l:'Fournisseurs' },
-        { v:'lieux', l:'Lieux' },
-        ...(inv ? [{ v:'inventaire', l:'Scan lieu' }] : []),
-      ]} value={tab} onChange={setTab} />
+      {tab !== 'transferts' && (
+        <div className="ha-xfer-bar">
+          <button type="button" className="ha-xfer-bar-back" onClick={() => setTab('transferts')}>‹ Transferts</button>
+          <span className="ha-xfer-bar-titre">{LBL_RUBRIQUE[tab] || ''}</span>
+        </div>
+      )}
 
       {loading ? <Loading /> : (
         <>
           {tab === 'transferts' && (
             <OngletTransferts
-              cats={cats} lieux={lieux} unites={unites}
+              cats={cats} lieux={lieux} unites={unites} inv={inv}
               onChange={load} onOk={ok} onErr={setErr}
+              onAller={setTab}
               onRanger={lieu => { setLieuCible(lieu || null); setScan('ranger') }} />
           )}
-          {tab === 'unites' && <OngletUnites unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />}
+          {tab === 'unites' && (
+            <>
+              <div className="ha-stock-outils">
+                <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
+                <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer</Btn>
+                <Btn kind="soft" onClick={() => setScan('inventaire')}>Scan lieu</Btn>
+              </div>
+              <OngletUnites unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />
+            </>
+          )}
           {tab === 'mouvements' && <OngletMouvements cats={cats} />}
           {tab === 'alertes' && (
             <OngletAlertes cats={cats} fournisseurs={fournisseurs} lieux={lieux} unites={unites} dotations={dotations}
@@ -235,7 +245,14 @@ export default function Stock() {
           {tab === 'articles' && <OngletCatalogue cats={cats} lieux={lieux} unites={unites} fournisseurs={fournisseurs} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} onRecv={setRecv} />}
           {tab === 'fournisseurs' && <OngletFournisseurs fournisseurs={fournisseurs} cats={cats} onChange={load} onOk={ok} onErr={setErr} />}
           {tab === 'lieux' && <OngletLieux lieux={lieux} unites={unites} cats={cats} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} />}
-          {tab === 'inventaire' && inv && <OngletInventaire inv={inv} onChange={load} />}
+          {tab === 'inventaire' && inv && (
+            <>
+              <div className="ha-stock-outils">
+                <Btn kind="soft" onClick={() => setScan('inventaire')}>Autre lieu</Btn>
+              </div>
+              <OngletInventaire inv={inv} onChange={load} />
+            </>
+          )}
         </>
       )}
       {scan && (
