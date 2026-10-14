@@ -12,8 +12,20 @@ const SELECT = 'id,titre,date_debut,date_fin,html_page,html_vignette,vignette_pa
 
 function urlVignette(path) {
   if (!path) return ''
+  const p = String(path)
+  if (p.startsWith('/') || p.startsWith('http://') || p.startsWith('https://')) return p
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
   return data?.publicUrl || ''
+}
+
+function extraRepas(row) {
+  const x = row?.extra && typeof row.extra === 'object' ? row.extra : {}
+  const a = Number(x.adultes)
+  const e = Number(x.enfants)
+  return {
+    adultes: Number.isFinite(a) && a >= 0 ? Math.min(20, Math.floor(a)) : 1,
+    enfants: Number.isFinite(e) && e >= 0 ? Math.min(20, Math.floor(e)) : 0,
+  }
 }
 
 function fmtPlage(e) {
@@ -67,8 +79,14 @@ export default function EvenementsInternes() {
       if (voirInscrits) {
         let insRes = await supabase
           .from('evenements_internes_inscrits')
-          .select('id,evenement_id,user_id,created_at,profiles:user_id(prenom,nom)')
+          .select('id,evenement_id,user_id,created_at,extra,profiles:user_id(prenom,nom)')
           .order('created_at')
+        if (insRes.error) {
+          insRes = await supabase
+            .from('evenements_internes_inscrits')
+            .select('id,evenement_id,user_id,created_at,extra')
+            .order('created_at')
+        }
         if (insRes.error) {
           insRes = await supabase
             .from('evenements_internes_inscrits')
@@ -77,10 +95,17 @@ export default function EvenementsInternes() {
         }
         setInscrits(Array.isArray(insRes.data) ? insRes.data : [])
       } else if (profile?.id) {
-        const { data: ins } = await supabase
+        let mineRes = await supabase
           .from('evenements_internes_inscrits')
-          .select('id,evenement_id,user_id,created_at')
+          .select('id,evenement_id,user_id,created_at,extra')
           .eq('user_id', profile.id)
+        if (mineRes.error) {
+          mineRes = await supabase
+            .from('evenements_internes_inscrits')
+            .select('id,evenement_id,user_id,created_at')
+            .eq('user_id', profile.id)
+        }
+        const ins = mineRes.data
         setInscrits(Array.isArray(ins) ? ins : [])
       } else {
         setInscrits([])
@@ -121,7 +146,14 @@ export default function EvenementsInternes() {
   }
 
   const counts = {}
-  for (const i of listeInscrits) counts[i.evenement_id] = (counts[i.evenement_id] || 0) + 1
+  const repasA = {}
+  const repasE = {}
+  for (const i of listeInscrits) {
+    counts[i.evenement_id] = (counts[i.evenement_id] || 0) + 1
+    const r = extraRepas(i)
+    repasA[i.evenement_id] = (repasA[i.evenement_id] || 0) + r.adultes
+    repasE[i.evenement_id] = (repasE[i.evenement_id] || 0) + r.enfants
+  }
 
   return (
     <Page title="Événements internes" subtitle="Choisissez un événement pour lire la page et vous inscrire."
@@ -145,7 +177,12 @@ export default function EvenementsInternes() {
                   <div className="ha-evt-titre">{e.titre}</div>
                   {fmtPlage(e) && <div className="ha-evt-meta">{fmtPlage(e)}</div>}
                   {voirInscrits && (
-                    <div className="ha-evt-meta">{counts[e.id] || 0} inscrit{(counts[e.id] || 0) > 1 ? 's' : ''}</div>
+                    <div className="ha-evt-meta">
+                      {counts[e.id] || 0} inscrit{(counts[e.id] || 0) > 1 ? 's' : ''}
+                      {(repasA[e.id] || repasE[e.id])
+                        ? ` · ${repasA[e.id] || 0} ad. / ${repasE[e.id] || 0} enf.`
+                        : ''}
+                    </div>
                   )}
                 </div>
               </Card>
@@ -159,34 +196,88 @@ export default function EvenementsInternes() {
 function DetailEvenement({ ev, profile, gerer, voirInscrits, inscrits, onBack, onEdit, onReload }) {
   const [busy, setBusy] = useState(false)
   const mine = inscrits.find(i => i.user_id === profile?.id)
+  const init = extraRepas(mine)
+  const [adultes, setAdultes] = useState(init.adultes)
+  const [enfants, setEnfants] = useState(init.enfants)
+  useEffect(() => {
+    const r = extraRepas(mine)
+    setAdultes(r.adultes)
+    setEnfants(r.enfants)
+  }, [mine?.id, mine?.extra])
+
+  function repasPayload() {
+    const a = Math.max(0, Math.min(20, Number(adultes) || 0))
+    const e = Math.max(0, Math.min(20, Number(enfants) || 0))
+    return { adultes: a, enfants: e }
+  }
+
   async function toggle() {
     if (!profile?.id) return
+    const extra = repasPayload()
+    if (!mine && extra.adultes + extra.enfants < 1) {
+      alert('Indiquez au moins un repas (adulte ou enfant).')
+      return
+    }
     setBusy(true)
     const { error } = mine
       ? await supabase.from('evenements_internes_inscrits').delete().eq('id', mine.id)
-      : await supabase.from('evenements_internes_inscrits').insert({ evenement_id: ev.id, user_id: profile.id })
+      : await supabase.from('evenements_internes_inscrits').insert({
+        evenement_id: ev.id, user_id: profile.id, extra,
+      })
     setBusy(false)
     if (error) { alert(error.message); return }
     onReload()
   }
+
+  async function sauverRepas() {
+    if (!mine?.id) return
+    const extra = repasPayload()
+    if (extra.adultes + extra.enfants < 1) {
+      alert('Indiquez au moins un repas, ou désinscrivez-vous.')
+      return
+    }
+    setBusy(true)
+    const { error } = await supabase.from('evenements_internes_inscrits').update({ extra }).eq('id', mine.id)
+    setBusy(false)
+    if (error) { alert(error.message); return }
+    onReload()
+  }
+
   async function supprimer() {
     if (!confirm(`Supprimer « ${ev.titre} » ? Les inscriptions seront perdues.`)) return
-    if (ev.vignette_path) await supabase.storage.from(BUCKET).remove([ev.vignette_path]).catch(() => {})
+    const p = ev.vignette_path
+    if (p && !String(p).startsWith('/') && !String(p).startsWith('http')) {
+      await supabase.storage.from(BUCKET).remove([p]).catch(() => {})
+    }
     const { error } = await supabase.from('evenements_internes').delete().eq('id', ev.id)
     if (error) { alert(error.message); return }
     onBack()
   }
+
   const n = inscrits.length
+  const totA = inscrits.reduce((s, i) => s + extraRepas(i).adultes, 0)
+  const totE = inscrits.reduce((s, i) => s + extraRepas(i).enfants, 0)
+  const showHero = ev.vignette_path && !ev.html_page
+
   return (
     <Page title={ev.titre} subtitle={fmtPlage(ev) || 'Événement interne ASBL'}
       action={<Btn kind="soft" onClick={onBack}>Retour</Btn>}>
-      {ev.vignette_path && (
+      {showHero && (
         <div className="ha-evt-hero"><img src={urlVignette(ev.vignette_path)} alt="" /></div>
       )}
       <HtmlSafe html={ev.html_page} className="ha-evt-html ha-evt-page" />
       {!ev.html_page && <p style={{ color:'var(--text-muted)', fontSize:14 }}>La page d’inscription n’est pas encore rédigée.</p>}
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:16 }}>
+      <div className="ha-evt-repas">
+        <label>Repas adultes
+          <input type="number" min="0" max="20" value={adultes} onChange={e => setAdultes(e.target.value)} />
+        </label>
+        <label>Repas enfants
+          <input type="number" min="0" max="20" value={enfants} onChange={e => setEnfants(e.target.value)} />
+        </label>
+      </div>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
         <Btn onClick={toggle} disabled={busy}>{mine ? 'Se désinscrire' : 'S’inscrire'}</Btn>
+        {mine && <Btn kind="soft" onClick={sauverRepas} disabled={busy}>Mettre à jour les repas</Btn>}
         {gerer && <Btn kind="soft" onClick={onEdit}>Modifier le code</Btn>}
         {gerer && <Btn kind="danger" onClick={supprimer}>Supprimer</Btn>}
       </div>
@@ -194,14 +285,17 @@ function DetailEvenement({ ev, profile, gerer, voirInscrits, inscrits, onBack, o
         <Card style={{ marginTop:18 }}>
           <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:8 }}>
             {n} inscrit{n > 1 ? 's' : ''}
+            {n > 0 && ` · ${totA} repas adulte${totA > 1 ? 's' : ''} · ${totE} repas enfant${totE > 1 ? 's' : ''}`}
           </div>
           {n === 0
             ? <div style={{ fontSize:13, color:'var(--text-muted)' }}>Personne ne s’est encore inscrit.</div>
             : (
               <ul className="ha-evt-noms">
-                {inscrits.map(i => (
-                  <li key={i.id}>{i.profiles ? `${i.profiles.prenom} ${i.profiles.nom}` : 'Volontaire'}</li>
-                ))}
+                {inscrits.map(i => {
+                  const r = extraRepas(i)
+                  const nom = i.profiles ? `${i.profiles.prenom} ${i.profiles.nom}` : 'Volontaire'
+                  return <li key={i.id}>{nom} — {r.adultes} ad. / {r.enfants} enf.</li>
+                })}
               </ul>
             )}
         </Card>

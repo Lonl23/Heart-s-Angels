@@ -1058,4 +1058,33 @@ img, svg, video, table { max-width: 100%; }
   border-radius: 10px; border: 1px solid var(--border); margin-bottom: 8px;
 }
 .ha-evt-noms { margin: 0; padding-left: 1.2em; font-size: 14px; color: var(--text-2); line-height: 1.55; }
+.ha-evt-repas { display:flex; gap:14px; flex-wrap:wrap; margin: 12px 0 4px; }
+.ha-evt-repas label { font-size:12.5px; color:var(--text-muted); display:flex; flex-direction:column; gap:4px; }
+.ha-evt-repas input { width:76px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; font-size:14px; background:var(--surface); color:var(--text); font-family:inherit; }
+
+/* Page Relais pour la Vie (HTML d’événement, classes passées au sanitizer) */
+.ha-evt-html .ha-relais { background:#fff; color:#1a1220; border-radius:14px; overflow:hidden; border:1px solid #e4dcec; }
+.ha-evt-html .ha-relais-entete { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:14px 16px 8px; align-items:flex-start; }
+.ha-evt-html .ha-relais-org { font-weight:700; color:#4A1A7A; margin:0; letter-spacing:.02em; }
+.ha-evt-html .ha-relais-sub { margin:2px 0 0; font-size:12.5px; color:#6b5a7a; }
+.ha-evt-html .ha-relais-ha { margin:0; font-size:12.5px; color:#0E4A5A; font-weight:600; text-align:right; }
+.ha-evt-html .ha-relais-titre { font-family:'Cormorant Garamond', Georgia, serif; color:#4A1A7A; font-size:1.55rem; font-weight:600; font-style:italic; padding:0 16px; margin:0 0 10px; line-height:1.2; }
+.ha-evt-html .ha-relais-date { background:#4A1A7A; color:#fff; text-align:center; padding:10px 12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; font-size:13.5px; }
+.ha-evt-html .ha-relais img { width:100%; height:auto; display:block; border-radius:0; }
+.ha-evt-html .ha-relais-photo { background:#e8d4f0; }
+.ha-evt-html .ha-relais-corps { padding:16px; }
+.ha-evt-html .ha-relais-menu { text-align:center; font-weight:600; color:#2a1838; margin:10px 0; }
+.ha-evt-html .ha-relais-prix { display:flex; gap:18px; justify-content:center; margin:16px 0; flex-wrap:wrap; }
+.ha-evt-html .ha-relais-bulle { width:96px; height:96px; border-radius:50%; background:#4A1A7A; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+.ha-evt-html .ha-relais-bulle span { font-size:11px; letter-spacing:.06em; text-transform:uppercase; }
+.ha-evt-html .ha-relais-bulle strong { font-size:1.25rem; margin-top:2px; color:#fff; }
+.ha-evt-html .ha-relais-lieu { text-align:center; }
+.ha-evt-html .ha-relais-iban { background:#d4d4d4; color:#1a1a1a; padding:12px 14px; border-radius:8px; font-size:13.5px; }
+.ha-evt-html .ha-relais-iban p { margin:0 0 8px; }
+.ha-evt-html .ha-relais-iban p:last-child { margin:0; }
+[data-theme="dark"] .ha-evt-html .ha-relais { background:#21182a; color:#f2efec; border-color:#3d3148; }
+[data-theme="dark"] .ha-evt-html .ha-relais-org { color:#d7b8f0; }
+[data-theme="dark"] .ha-evt-html .ha-relais-titre { color:#e4c8f7; }
+[data-theme="dark"] .ha-evt-html .ha-relais-menu { color:#f2efec; }
+[data-theme="dark"] .ha-evt-html .ha-relais-iban { background:#2c2434; color:#f2efec; }
 
