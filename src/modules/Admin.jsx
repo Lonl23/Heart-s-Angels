@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, Pill, PillFictif } from '@/components/ui'
+import { Page, Card, Btn, Pill, PillFictif, Tabs } from '@/components/ui'
 import { ACCES, EQUIPES_ACCES } from '@/modules/acces/accesSchema'
 import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
 import { urlAccesPartenaire, copierTexte } from '@/lib/urls'
@@ -11,23 +11,21 @@ import Apparence from '@/modules/admin/Apparence'
 
 export default function Admin() {
   const { peutGererApp } = useAuth()
-  const [tab, setTab] = useState('partenaires')
+  const [tab, setTab] = useState('apparence')
   if (!peutGererApp()) return <Navigate to="/app" replace />
   return (
     <Page
       title="Administration"
-      subtitle="Partenaires, accès, et apparence (fonds d’écran). Les fiches volontaires sont dans l’onglet Volontaires."
-      action={
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[['partenaires', '🤝 Partenaires'], ['acces', '🔐 Accès'], ['apparence', '🖼 Apparence']].map(([v, l]) => (
-            <button key={v} onClick={() => setTab(v)} style={{ padding: '8px 14px', borderRadius: 9, border: '1px solid var(--border)', background: tab === v ? 'var(--accent)' : 'var(--card)', color: tab === v ? '#fff' : 'var(--text-2)', fontWeight: 600, fontSize: 13.5, cursor: 'pointer' }}>{l}</button>
-          ))}
-        </div>
-      }
+      subtitle="Partenaires, accès, et photos de fond. Les fiches volontaires sont dans l’onglet Volontaires."
     >
+      <Tabs value={tab} onChange={setTab} items={[
+        { v:'apparence', l:'Photos de fond' },
+        { v:'partenaires', l:'Partenaires' },
+        { v:'acces', l:'Accès' },
+      ]} />
+      {tab === 'apparence' && <Apparence />}
       {tab === 'partenaires' && <Partenaires />}
       {tab === 'acces' && <AccesMatrice />}
-      {tab === 'apparence' && <Apparence />}
     </Page>
   )
 }
