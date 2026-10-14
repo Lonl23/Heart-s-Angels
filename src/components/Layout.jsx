@@ -16,6 +16,7 @@ const NAV = [
   { to:'/app/missions',      label:'Mes missions',    icon:'🚑', key:'missions' },
   { to:'/app/defraiements',  label:'Défraiements',    icon:'🧾', key:'defraiements' },
   { to:'/app/disponibilites',label:'Disponibilités',  icon:'📅', key:'disponibilites' },
+  { to:'/app/evenements',    label:'Événements internes', icon:'📣', key:'evenements' },
   { to:'/app/stock',         label:'Stock',           icon:'📦', key:'stock' },
   { to:'/app/annuaire',      label:'Annuaire',        icon:'📇', key:'annuaire' },
 ]
@@ -25,6 +26,7 @@ const PAGE_TITLE = [
   ['/app/missions', 'Mes missions'],
   ['/app/defraiements', 'Défraiements'],
   ['/app/disponibilites', 'Disponibilités'],
+  ['/app/evenements', 'Événements internes'],
   ['/app/stock', 'Stock'],
   ['/app/annuaire', 'Annuaire'],
   ['/app/volontaires', 'Volontaires'],

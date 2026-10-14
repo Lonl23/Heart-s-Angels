@@ -447,6 +447,60 @@ export function equipeAsblOuverteParDefaut(roles) {
   return eq ? eq.v : null
 }
 
+/**
+ * Équipes dont les membres encodent uniquement LEUR propre disponibilité.
+ * Clés = EQUIPES_ASBL.v (informatique, logistique, transport, coordination
+ * bénévoles, récolteurs, présidence). Ne pas inventer d’autres sièges.
+ */
+export const EQUIPES_ASBL_DISPO_SOI = [
+  'informatique', 'logistique', 'transport', 'benevoles', 'recolte', 'presidence',
+]
+
+/** Sièges ASBL (hors liste ci-dessus) dont responsable / adjoint encode pour autrui. */
+export function rolesAsblEncoderDisposAutrui() {
+  const out = []
+  const seen = new Set()
+  for (const eq of EQUIPES_ASBL) {
+    if (EQUIPES_ASBL_DISPO_SOI.includes(eq.v)) continue
+    for (const r of eq.roles || []) {
+      const k = canonRoleAsbl(r)
+      if (!k || k === 'simple_volontaire' || seen.has(k)) continue
+      seen.add(k)
+      out.push(k)
+    }
+  }
+  return out
+}
+
+/**
+ * Encoder pour quelqu’un d’autre : sièges hors EQUIPES_ASBL_DISPO_SOI
+ * (coordination médicale, trésorerie, RP, administrateur ASBL, …)
+ * + compte admin / coordinateur. Présidence, IT, logistique, transport,
+ * bénévoles et récolteurs restent sur leur propre calendrier.
+ */
+export function peutEncoderDisposPourAutruiDepuisFiche(roleCompte, rolesAsblList) {
+  if (!roleCompte || roleCompte === 'partenaire') return false
+  if (roleCompte === 'admin' || roleCompte === 'coordinateur' || roleCompte === 'tresorier') return true
+  const spec = new Set(rolesAsblSpecifiques(rolesAsblList))
+  return rolesAsblEncoderDisposAutrui().some(r => spec.has(r))
+}
+
+const PASTELS = ['peach', 'lavender', 'sage', 'sand']
+
+export function teintePastel(id) {
+  const s = String(id || '')
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return PASTELS[h % PASTELS.length]
+}
+
+/** Médical : teinte métier. Autres : pastels stables par personne (tags du mois). */
+export function teinteCalendrier(role, fiche, userId) {
+  const t = teinteDispo(role, fiche)
+  if (t === 'nonmed' || t === 'autre') return teintePastel(userId)
+  return t
+}
+
 export const SPECIALISATIONS_INF = [
   { v:'siamu',            l:'SIAMU (soins intensifs / urgences)' },
   { v:'oncologie',        l:'Oncologie' },

@@ -39,6 +39,28 @@ export function todayISO() { return iso(new Date()) }
 export const JOURS = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.']
 export const JOURS_LONG = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
 
+/** Numéro de semaine ISO (lundi = début), pour la colonne gauche du mois. */
+export function isoWeekNum(d) {
+  const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const day = x.getUTCDay() || 7
+  x.setUTCDate(x.getUTCDate() + 4 - day)
+  const yearStart = new Date(Date.UTC(x.getUTCFullYear(), 0, 1))
+  return Math.ceil((((x - yearStart) / 86400000) + 1) / 7)
+}
+
+export function fmtJourLong(s) {
+  const d = typeof s === 'string' ? parseISO(s) : s
+  if (!d) return ''
+  const t = d.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
+export function couvreJour(row, dayIso) {
+  const a = String(row?.date_debut || '').slice(0, 10)
+  const b = String(row?.date_fin || row?.date_debut || '').slice(0, 10)
+  return !!(a && dayIso && a <= dayIso && dayIso <= b)
+}
+
 export function titreMois(d) {
   const t = d.toLocaleDateString('fr-BE', { month: 'long', year: 'numeric' })
   return t.charAt(0).toUpperCase() + t.slice(1)

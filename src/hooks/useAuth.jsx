@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { aRoleAsblParticulier, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
 
 const AuthContext = createContext(null)
 
@@ -106,7 +107,7 @@ export function AuthProvider({ children }) {
   function canAccess(feature) {
     if (!role || role === 'partenaire') return false
     if (ADMINS.includes(role) || accesTotal()) return true
-    const BASE = ['dashboard','missions','defraiements','disponibilites']
+    const BASE = ['dashboard','missions','defraiements','disponibilites','evenements']
     if (BASE.includes(feature)) return true
     if (feature === 'souhaits') return peutGererSouhaits() || matriceAutorise(feature)
     if (feature === 'stock' && peutGererStock()) return true
@@ -141,8 +142,12 @@ export function AuthProvider({ children }) {
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => ['coord_benevoles','coord_benevoles_adjoint'].includes(r))
   }
+  function peutEncoderDisposPourAutrui() {
+    return peutEncoderDisposPourAutruiDepuisFiche(role, rolesAsbl())
+  }
   function peutVoirToutesDispos() {
     if (!role || role === 'partenaire') return false
+    if (peutEncoderDisposPourAutrui()) return true
     if (accesTotal() || role === 'coordinateur') return true
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => [
@@ -152,15 +157,19 @@ export function AuthProvider({ children }) {
       'coord_benevoles','coord_benevoles_adjoint',
     ].includes(r))
   }
+  /** Alias : encoder le calendrier de quelqu’un d’autre (pas les équipes « soi »). */
   function peutGererDispos() {
+    return peutEncoderDisposPourAutrui()
+  }
+  /**
+   * Événements internes : création / édition = peutGererApp, peutGererFiches,
+   * ou tout siège ASBL (responsable / adjoint). Les volontaires sans office lisent
+   * et ouvrent le lien d’inscription.
+   */
+  function peutGererEvenementsInternes() {
     if (!role || role === 'partenaire') return false
-    if (accesTotal() || role === 'coordinateur') return true
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => [
-      'president','vice_president',
-      'coord_transport','coord_transport_adjoint',
-      'coord_benevoles','coord_benevoles_adjoint',
-    ].includes(r))
+    if (peutGererApp() || peutGererFiches()) return true
+    return aRoleAsblParticulier(rolesAsbl())
   }
   function peutGererStock() {
     if (!role || role === 'partenaire') return false
@@ -215,7 +224,7 @@ export function AuthProvider({ children }) {
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutGererEvenementsInternes, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

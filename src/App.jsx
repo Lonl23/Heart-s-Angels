@@ -17,6 +17,7 @@ const PartenairePortail = lazy(() => import('@/pages/PartenairePortail'))
 const Defraiements = lazy(() => import('@/modules/defraiements/Defraiements'))
 const Souhaits = lazy(() => import('@/modules/souhaits/Souhaits'))
 const Disponibilites = lazy(() => import('@/modules/Disponibilites'))
+const EvenementsInternes = lazy(() => import('@/modules/EvenementsInternes'))
 const Stock = lazy(() => import('@/modules/Stock'))
 const Volontaires = lazy(() => import('@/modules/volontaires/Volontaires'))
 const Admin = lazy(() => import('@/modules/Admin'))
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="missions" element={<MesMissions />} />
           <Route path="defraiements"   element={<Defraiements />} />
           <Route path="disponibilites" element={<Disponibilites />} />
+          <Route path="evenements"     element={<EvenementsInternes />} />
           <Route path="stock"          element={<Stock />} />
           <Route path="annuaire"       element={<Annuaire />} />
           <Route path="volontaires"    element={<Volontaires />} />

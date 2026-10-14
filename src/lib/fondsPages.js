@@ -6,6 +6,7 @@ export const BUCKET_FONDS = 'fonds-app'
 export const PAGES_FONDS = [
   { k: 'dashboard', l: 'Tableau de bord', hint: 'Accueil après connexion' },
   { k: 'disponibilites', l: 'Disponibilités', hint: 'Agenda' },
+  { k: 'evenements', l: 'Événements internes', hint: 'Réunions ASBL' },
   { k: 'defraiements', l: 'Défraiements', hint: 'Notes de frais' },
   { k: 'profil', l: 'Ma fiche', hint: 'Fiche du volontaire' },
   { k: 'volontaires', l: 'Volontaires', hint: 'Liste des membres' },
@@ -16,6 +17,7 @@ export function pageFondDepuisChemin(path) {
   const p = String(path || '')
   if (p === '/app' || p === '/app/') return 'dashboard'
   if (p.startsWith('/app/disponibilites')) return 'disponibilites'
+  if (p.startsWith('/app/evenements')) return 'evenements'
   if (p.startsWith('/app/defraiements')) return 'defraiements'
   if (p.startsWith('/app/profil')) return 'profil'
   if (p.startsWith('/app/volontaires')) return 'volontaires'

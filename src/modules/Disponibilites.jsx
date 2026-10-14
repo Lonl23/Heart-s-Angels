@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, F, Sel, Empty } from '@/components/ui'
-import { libelleQualsImplicites, teinteDispo, rolesRequisEffectifs, phraseIlManque, rolesManquantsMultiset } from '@/modules/fiche/ficheSchema'
+import { Page, Btn, F, Sel, Empty, Modal } from '@/components/ui'
+import { libelleQualsImplicites, teinteCalendrier, rolesRequisEffectifs, phraseIlManque, rolesManquantsMultiset } from '@/modules/fiche/ficheSchema'
 import { allouerCouverturesCalendrier, cleCouvertureCalendrier } from './disponibilites/couverture'
+import GrilleMois from './disponibilites/GrilleMois'
 import {
-  iso, addDays, todayISO, JOURS,
-  titreMois, titreSemaine, grilleMois, grilleSemaine, packLanes, hhmm,
-  estHoraire, plageCalendrier, packTimedDay, PX_HEURE,
+  iso, addDays, todayISO, JOURS, titreMois, titreSemaine, grilleMois, grilleSemaine, packLanes, hhmm,
+  estHoraire, plageCalendrier, packTimedDay, PX_HEURE, fmtJourLong, couvreJour,
 } from './disponibilites/dates'
+
+const DEMI = [
+  { v: 'journee_complete', l: 'Journée complète' },
+  { v: 'matin', l: 'Matin' },
+  { v: 'apres_midi', l: 'Après-midi' },
+]
+const MAX_PILLS = 4
 
 function libelleMission(it) {
   const m = it.ev
@@ -35,10 +42,15 @@ function manques(m) {
   return rolesManquantsMultiset(rolesRequisEffectifs(m.roles_requis), m.roles_couverts || [])
 }
 
+function prenomTag(p, mine) {
+  if (mine) return 'Moi'
+  return (p?.prenom || '').trim() || (p?.nom || '').trim() || '?'
+}
+
 export default function Disponibilites() {
-  const { profile, peutVoirToutesDispos, peutGererDispos, estVolontaireNonMedical } = useAuth()
+  const { profile, peutVoirToutesDispos, peutEncoderDisposPourAutrui, estVolontaireNonMedical } = useAuth()
   const voirTous = peutVoirToutesDispos()
-  const gerer = peutGererDispos()
+  const encoderAutrui = peutEncoderDisposPourAutrui()
   const nonMed = estVolontaireNonMedical()
   const [vue, setVue] = useState(() => sessionStorage.getItem('dispo-vue') || 'mois')
   const [anchor, setAnchor] = useState(() => new Date())
@@ -53,10 +65,10 @@ export default function Disponibilites() {
   useEffect(() => { sessionStorage.setItem('dispo-vue', vue) }, [vue])
   useEffect(() => { charger() }, [grille.debut, grille.fin, profile?.id, voirTous])
   useEffect(() => {
-    if (!gerer) { setEquipe([]); return }
+    if (!encoderAutrui) { setEquipe([]); return }
     supabase.from('profiles').select('id,prenom,nom,role,fiche').neq('role','partenaire').eq('actif',true).order('nom')
       .then(({ data }) => setEquipe(data || []))
-  }, [gerer])
+  }, [encoderAutrui])
 
   async function charger() {
     setErr(null)
@@ -72,7 +84,7 @@ export default function Disponibilites() {
       if (b && b > d1) d1 = b
     }
     let q = supabase.from('disponibilites')
-      .select('id,user_id,date_debut,date_fin,commentaire,profiles(prenom,nom,role,fiche)')
+      .select('id,user_id,date_debut,date_fin,demi_journee,commentaire,profiles(prenom,nom,role,fiche)')
       .lte('date_debut', d1).gte('date_fin', d0).order('date_debut')
     if (!voirTous) q = q.eq('user_id', profile?.id)
     const dispoRes = await q
@@ -106,36 +118,54 @@ export default function Disponibilites() {
   function aller(delta) {
     setAnchor(a => vue === 'semaine' ? addDays(a, delta * 7) : new Date(a.getFullYear(), a.getMonth() + delta, 1))
   }
+  function peutEditer(d) {
+    return d?.user_id === profile?.id || encoderAutrui
+  }
+  function nouveauForm(dayIso, extra = {}) {
+    return {
+      user_id: encoderAutrui ? '' : profile?.id,
+      date_debut: dayIso,
+      date_fin: dayIso,
+      demi_journee: 'journee_complete',
+      commentaire: '',
+      ...extra,
+    }
+  }
   function clicJour(day) {
-    setForm({
-      user_id: profile?.id,
-      date_debut: iso(day),
-      date_fin: iso(day),
-    })
+    const id = iso(day)
+    if (encoderAutrui) {
+      setForm(nouveauForm(id, { jour: id }))
+      return
+    }
+    const exist = dispos.find(d => d.user_id === profile?.id && couvreJour(d, id))
+    setForm(exist ? { ...exist, jour: id } : nouveauForm(id, { jour: id }))
   }
   function clicDispo(d) {
-    if (d.user_id === profile?.id || gerer) setForm({ ...d })
+    if (peutEditer(d)) setForm({ ...d, jour: d.date_debut })
   }
   async function supprimer(d) {
-    if (d.user_id !== profile?.id && !gerer) return
+    if (!peutEditer(d)) return
     if (!confirm('Supprimer cette disponibilité ?')) return
     await supabase.from('disponibilites').delete().eq('id', d.id)
     charger()
   }
 
-  const sousTitre = gerer
-    ? 'Deux souhaits le même jour, deux équipages. Un séjour de plusieurs jours demande le même équipage tous les jours — une dispo d’un jour ne suffit pas.'
+  const sousTitre = encoderAutrui
+    ? 'Cliquez un jour pour encoder la disponibilité d’un volontaire de terrain. Les équipes informatique, logistique, transport, bénévoles, récolte et présidence remplissent leur propre calendrier.'
     : voirTous
-      ? 'Une disponibilité = la journée entière. Un séjour de 3 jours demande le même équipage les 3 jours.'
+      ? 'Cliquez un jour pour indiquer vos disponibilités. Une disponibilité = la journée (ou le créneau) choisi.'
       : nonMed
         ? 'Vos jours. Seules les missions qui demandent un volontaire non médical apparaissent — avec ce qui manque, sans nom de patient.'
-        : 'Vos jours. Un séjour de plusieurs jours n’est complet que si le même équipage est dispo tous les jours.'
+        : 'Cliquez un jour pour indiquer vos disponibilités. Un séjour de plusieurs jours n’est complet que si le même équipage est dispo tous les jours.'
 
   const today = todayISO()
+  const jourForm = form?.jour || form?.date_debut
+  const disposDuJour = jourForm ? dispos.filter(d => couvreJour(d, jourForm)) : []
+  const missionsDuJour = jourForm ? missions.filter(m => couvreJour(m, jourForm)) : []
 
   return (
     <Page title="Disponibilités" subtitle={sousTitre}
-      action={<Btn onClick={() => clicJour(new Date())}>{gerer ? '+ Disponibilité' : '+ Me rendre disponible'}</Btn>}>
+      action={<Btn onClick={() => clicJour(new Date())}>{encoderAutrui ? '+ Disponibilité' : '+ Me rendre disponible'}</Btn>}>
 
       <div className="ha-cal-toolbar">
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
@@ -153,7 +183,10 @@ export default function Disponibilites() {
       {err && <div className="ha-flash ha-flash-err">{err}</div>}
 
       {form && (
-        <FormDispo form={form} setForm={setForm} profile={profile} equipe={equipe} gerer={gerer}
+        <FormDispo form={form} setForm={setForm} profile={profile} equipe={equipe}
+          encoderAutrui={encoderAutrui}
+          disposDuJour={disposDuJour} missionsDuJour={missionsDuJour}
+          onPickDispo={d => setForm({ ...d, jour: jourForm })}
           onDone={() => { setForm(null); charger() }} />
       )}
 
@@ -161,7 +194,7 @@ export default function Disponibilites() {
         <span><i className="ha-cal-dot ambu" /> Ambulancier</span>
         <span><i className="ha-cal-dot infi" /> Infirmier</span>
         <span><i className="ha-cal-dot dual" /> Infirmier et ambulancier</span>
-        <span><i className="ha-cal-dot nonmed" /> Non médical</span>
+        <span><i className="ha-cal-dot peach" /> Autres volontaires</span>
         <span><i className="ha-cal-dot miss-no" /> Mission incomplète</span>
         <span><i className="ha-cal-dot miss-ok" /> Mission complète</span>
       </div>
@@ -170,26 +203,58 @@ export default function Disponibilites() {
         {vue === 'semaine' ? (
           <SemaineHoraire weekStart={grille.weeks[0]} today={today}
             missions={missions} dispos={dispos} moi={profile?.id}
-            gerer={gerer}
+            encoderAutrui={encoderAutrui}
             onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
         ) : (
-          <div className="ha-cal">
-            <div className="ha-cal-headrow">
-              {JOURS.map((j, i) => <div key={j} className={'ha-cal-head' + (i >= 5 ? ' is-we' : '')}>{j}</div>)}
-            </div>
-            {grille.weeks.map(ws => (
-              <Semaine key={iso(ws)} weekStart={ws} anchor={anchor} vue={vue} today={today}
-                missions={missions} dispos={dispos} moi={profile?.id}
-                gerer={gerer}
-                onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
-            ))}
-          </div>
+          <GrilleMois weeks={grille.weeks} anchor={anchor} today={today} onJour={clicJour}
+            renderJour={(id) => {
+              const dJour = dispos.filter(d => couvreJour(d, id))
+              const mJour = missions.filter(m => couvreJour(m, id))
+              const pills = []
+              for (const d of dJour) {
+                const mine = d.user_id === profile?.id
+                const p = d.profiles
+                const teinte = teinteCalendrier(p?.role, p?.fiche, d.user_id)
+                pills.push({
+                  key: 'd' + d.id,
+                  cls: 'ha-mois-pill dispo-' + teinte,
+                  label: prenomTag(p, mine),
+                  title: libelleQualsImplicites(p?.role, p?.fiche) || prenomTag(p, mine),
+                  onClick: peutEditer(d) ? (e) => { e.stopPropagation(); clicDispo(d) } : undefined,
+                })
+              }
+              for (const m of mJour) {
+                const cov = couverture(m)
+                const txt = (m.lieu || m.activite || 'Mission').trim()
+                pills.push({
+                  key: 'm' + m.souhait_id + m.date_debut,
+                  cls: 'ha-mois-pill mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet'),
+                  label: txt,
+                  title: libelleMission({ ev: m, total: 1, j0: 1, j1: 1 }),
+                })
+              }
+              const shown = pills.slice(0, MAX_PILLS)
+              const more = pills.length - shown.length
+              return (
+                <>
+                  {shown.map(p => (
+                    <button key={p.key} type="button" className={p.cls} title={p.title}
+                      onClick={e => { e.stopPropagation(); p.onClick?.(e) }}>
+                      {p.label}
+                    </button>
+                  ))}
+                  {more > 0 && <span className="ha-mois-more">…</span>}
+                </>
+              )
+            }} />
         )}
       </div>
 
       {missions.length === 0 && dispos.length === 0 && !form && (
-        <Empty title="Rien sur cette période" hint="Ajoutez vos jours de disponibilité. Les missions (lieu ou activité, sans nom de patient) s’afficheront ici." />
+        <Empty title="Rien sur cette période" hint="Cliquez un jour pour encoder une disponibilité. Les missions (lieu ou activité, sans nom de patient) s’afficheront ici." />
       )}
+
+      <button type="button" className="ha-fab" onClick={() => clicJour(new Date())} aria-label="Ajouter une disponibilité">+</button>
     </Page>
   )
 }
@@ -205,14 +270,14 @@ function ChipMission({ it }) {
   )
 }
 
-function ChipDispo({ it, moi, gerer, onDispo, onSuppr }) {
+function ChipDispo({ it, moi, encoderAutrui, onDispo, onSuppr }) {
   const mine = it.ev.user_id === moi
-  const editable = mine || gerer
+  const editable = mine || encoderAutrui
   const p = it.ev.profiles
   const quals = libelleQualsImplicites(p?.role, p?.fiche)
-  const nom = mine ? 'Moi' : `${p?.prenom || ''} ${p?.nom || ''}`.trim()
+  const nom = prenomTag(p, mine)
   const label = quals ? `${nom} · ${quals}` : nom
-  const teinte = teinteDispo(p?.role, p?.fiche)
+  const teinte = teinteCalendrier(p?.role, p?.fiche, it.ev.user_id)
   return (
     <button type="button"
       className={'ha-cal-ev dispo-' + teinte}
@@ -225,7 +290,7 @@ function ChipDispo({ it, moi, gerer, onDispo, onSuppr }) {
   )
 }
 
-function SemaineHoraire({ weekStart, today, missions, dispos, moi, gerer, onJour, onDispo, onSuppr }) {
+function SemaineHoraire({ weekStart, today, missions, dispos, moi, encoderAutrui, onJour, onDispo, onSuppr }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60000)
@@ -279,7 +344,7 @@ function SemaineHoraire({ weekStart, today, missions, dispos, moi, gerer, onJour
           {dispoLanes.map((lane, li) => (
             <div key={'d'+li} className="ha-cal-lane">
               {lane.map(it => (
-                <ChipDispo key={it.ev.id} it={it} moi={moi} gerer={gerer} onDispo={onDispo} onSuppr={onSuppr} />
+                <ChipDispo key={it.ev.id} it={it} moi={moi} encoderAutrui={encoderAutrui} onDispo={onDispo} onSuppr={onSuppr} />
               ))}
             </div>
           ))}
@@ -350,52 +415,17 @@ function SemaineHoraire({ weekStart, today, missions, dispos, moi, gerer, onJour
   )
 }
 
-function Semaine({ weekStart, anchor, vue, today, missions, dispos, moi, gerer, onJour, onDispo, onSuppr }) {
-  const days = [0,1,2,3,4,5,6].map(i => addDays(weekStart, i))
-  const missLanes = packLanes(missions.map(m => ({ ...m, kind:'mission' })), weekStart)
-  const dispoLanes = packLanes(dispos.map(d => ({
-    ...d, kind:'dispo', date_debut: d.date_debut, date_fin: d.date_fin || d.date_debut,
-  })), weekStart)
-
-  return (
-    <div className="ha-cal-week">
-      {missLanes.map((lane, li) => (
-        <div key={'m'+li} className="ha-cal-lane">
-          {lane.map(it => <ChipMission key={`${it.ev.souhait_id}-${it.ev.date_debut}`} it={it} />)}
-        </div>
-      ))}
-      {dispoLanes.map((lane, li) => (
-        <div key={'d'+li} className="ha-cal-lane">
-          {lane.map(it => (
-            <ChipDispo key={it.ev.id} it={it} moi={moi} gerer={gerer} onDispo={onDispo} onSuppr={onSuppr} />
-          ))}
-        </div>
-      ))}
-      <div className="ha-cal-days">
-        {days.map(day => {
-          const we = day.getDay() === 0 || day.getDay() === 6
-          const out = vue === 'mois' && day.getMonth() !== anchor.getMonth()
-          const id = iso(day)
-          return (
-            <button key={id} type="button" className={'ha-cal-day' + (we ? ' is-we' : '') + (out ? ' is-out' : '') + (id===today ? ' is-today' : '')}
-              onClick={() => onJour(day)}>
-              <span className="ha-cal-num">{day.getDate()}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function FormDispo({ form, setForm, profile, equipe, gerer, onDone }) {
+function FormDispo({ form, setForm, profile, equipe, encoderAutrui, disposDuJour, missionsDuJour, onPickDispo, onDone }) {
   const set = (k, v) => setForm(s => ({ ...s, [k]: v }))
   const [saving, setSaving] = useState(false)
   const edit = !!form.id
-  const cible = (equipe || []).find(p => p.id === form.user_id) || (form.user_id === profile?.id ? profile : null)
+  const cible = (equipe || []).find(p => p.id === form.user_id)
+    || (form.user_id === profile?.id ? profile : null)
+    || form.profiles
   const quals = libelleQualsImplicites(cible?.role, cible?.fiche)
+  const jour = form.jour || form.date_debut
   async function save() {
-    const uid = gerer ? (form.user_id || profile?.id) : profile?.id
+    const uid = encoderAutrui ? (form.user_id || '') : profile?.id
     if (!uid) { alert('Choisissez un volontaire.'); return }
     if (!form.date_debut) { alert('Indiquez la date.'); return }
     const debut = form.date_debut
@@ -406,7 +436,7 @@ function FormDispo({ form, setForm, profile, equipe, gerer, onDone }) {
       date_debut: debut,
       date_fin: fin,
       qualification: '',
-      demi_journee: 'journee_complete',
+      demi_journee: DEMI.some(d => d.v === form.demi_journee) ? form.demi_journee : 'journee_complete',
       commentaire: form.commentaire || null,
     }
     const { error } = edit
@@ -421,27 +451,64 @@ function FormDispo({ form, setForm, profile, equipe, gerer, onDone }) {
     await supabase.from('disponibilites').delete().eq('id', form.id)
     onDone()
   }
+  const titre = edit ? 'Modifier la disponibilité' : (jour ? fmtJourLong(jour) : 'Nouvelle disponibilité')
   return (
-    <Card style={{ marginBottom:14 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:12, gap:8, flexWrap:'wrap' }}>
-        <div style={{ fontWeight:600, color:'var(--text)' }}>{edit ? 'Modifier la disponibilité' : 'Nouvelle disponibilité'}</div>
+    <Modal title={titre} onClose={onDone} footer={
+      <>
+        <Btn onClick={save} disabled={saving}>{saving ? '…' : 'Enregistrer'}</Btn>
+        {edit && <Btn kind="danger" onClick={supprimer}>Supprimer</Btn>}
         <Btn kind="soft" onClick={onDone}>Annuler</Btn>
-      </div>
-      <p style={{ margin:'0 0 10px', fontSize:13, color:'var(--text-muted)' }}>Journée entière, de minuit à minuit. Le rôle vient de la fiche (ambulancier, infirmier, chauffeur si permis et sélection médicale) — rien à choisir ici.</p>
-      {gerer && (
+      </>
+    }>
+      {!edit && (disposDuJour.length > 0 || missionsDuJour.length > 0) && (
+        <div style={{ marginBottom: 14 }}>
+          {disposDuJour.length > 0 && (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>Déjà encodé ce jour</div>
+              <div className="ha-mois-pills" style={{ marginBottom: 10 }}>
+                {disposDuJour.map(d => {
+                  const mine = d.user_id === profile?.id
+                  const p = d.profiles
+                  const teinte = teinteCalendrier(p?.role, p?.fiche, d.user_id)
+                  const editable = mine || encoderAutrui
+                  return (
+                    <button key={d.id} type="button" className={'ha-mois-pill dispo-' + teinte}
+                      style={{ width: 'auto', marginRight: 4, marginBottom: 4, cursor: editable ? 'pointer' : 'default' }}
+                      onClick={() => editable && onPickDispo(d)}>
+                      {prenomTag(p, mine)}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+          {missionsDuJour.map(m => (
+            <div key={m.souhait_id + m.date_debut} style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 4 }}>
+              Mission · {(m.lieu || m.activite || '').trim() || 'sans lieu'}
+            </div>
+          ))}
+        </div>
+      )}
+      <p style={{ margin:'0 0 10px', fontSize:13, color:'var(--text-muted)' }}>
+        {encoderAutrui
+          ? 'Choisissez la personne, puis les dates. Le rôle vient de la fiche — rien à choisir ici.'
+          : 'Vos jours, de date à date. Le rôle vient de la fiche (ambulancier, infirmier, chauffeur si permis et sélection médicale).'}
+      </p>
+      {encoderAutrui ? (
         <Sel label="Volontaire" value={form.user_id || ''} set={v => setForm(s => ({ ...s, user_id: v }))}
           options={[{ v:'', l:'— Choisir —' }, ...equipe.map(p => ({ v:p.id, l:`${p.prenom} ${p.nom}` }))]} />
+      ) : (
+        <div style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', margin:'0 0 10px' }}>
+          {profile?.prenom} {profile?.nom}
+        </div>
       )}
       {quals && <div style={{ fontSize:13, color:'var(--text-2)', margin:'0 0 10px' }}>Rôle pour les missions : <strong>{quals}</strong></div>}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <F label="Du" type="date" value={form.date_debut} set={v => set('date_debut', v)} required />
         <F label="Au" type="date" value={form.date_fin || form.date_debut} set={v => set('date_fin', v)} />
       </div>
+      <Sel label="Créneau" value={form.demi_journee || 'journee_complete'} set={v => set('demi_journee', v)} options={DEMI} />
       <F label="Commentaire (optionnel)" value={form.commentaire} set={v => set('commentaire', v)} />
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-        <Btn onClick={save} disabled={saving}>{saving ? '…' : 'Enregistrer'}</Btn>
-        {edit && <Btn kind="danger" onClick={supprimer}>Supprimer</Btn>}
-      </div>
-    </Card>
+    </Modal>
   )
 }
