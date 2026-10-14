@@ -605,8 +605,8 @@ img, svg, video, table { max-width: 100%; }
 .ha-cal-dot.peach { background: #F4D0B8; }
 .ha-cal-dot.miss-no { background: #C62828; }
 .ha-cal-dot.miss-ok { background: #D4FF00; border: 1px solid #9BB800; }
-.ha-cal-scroll { overflow-x: auto; width: 100%; max-width: 100%; margin: 0 0 16px; }
-.ha-cal { min-width: 0; width: 100%; }
+.ha-cal-scroll { overflow-x: hidden; width: 100%; max-width: 100%; margin: 0 0 16px; }
+.ha-cal { min-width: 0; width: 100%; max-width: 100%; }
 .ha-cal-headrow, .ha-cal-lane, .ha-cal-days {
   display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px;
 }
@@ -673,11 +673,12 @@ img, svg, video, table { max-width: 100%; }
 .ha-cal-day.is-today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .ha-cal-num { font-size: 12.5px; font-weight: 700; }
 
-.ha-cal-horaire { width: 100%; min-width: 0; }
+.ha-cal-horaire { width: 100%; max-width: 100%; min-width: 0; overflow-x: hidden; }
 .ha-cal-h-row {
   display: grid;
-  grid-template-columns: 48px repeat(7, minmax(0, 1fr));
+  grid-template-columns: 36px repeat(7, minmax(0, 1fr));
   width: 100%;
+  max-width: 100%;
 }
 .ha-cal-h-gutter { position: relative; }
 .ha-cal-h-label {
@@ -765,7 +766,7 @@ img, svg, video, table { max-width: 100%; }
 .ha-cal-h-ev.dispo-lavender { background: #D4C4F0; color: #3C2A6A; border: none; font-family: inherit; }
 .ha-cal-h-ev.dispo-sage { background: #C9E2C4; color: #24522A; border: none; font-family: inherit; }
 .ha-cal-h-ev.dispo-sand { background: #E8D9A8; color: #5A4720; border: none; font-family: inherit; }
-.ha-cal-horaire.is-jour .ha-cal-h-row { grid-template-columns: 48px minmax(0, 1fr); }
+.ha-cal-horaire.is-jour .ha-cal-h-row { grid-template-columns: 36px minmax(0, 1fr); }
 .ha-cal-horaire.is-jour .ha-cal-h-days { grid-template-columns: minmax(0, 1fr); }
 
 .ha-jour {
@@ -888,7 +889,16 @@ img, svg, video, table { max-width: 100%; }
   .ha-mois-num { width: 24px; height: 24px; font-size: 12px; }
   .ha-cal-vues { width: 100%; }
   .ha-cal-vues .ha-tab-like { flex: 1; text-align: center; }
-  .ha-cal-horaire:not(.is-jour) { min-width: 680px; }
+  .ha-cal-horaire:not(.is-jour) .ha-cal-h-row {
+    grid-template-columns: 28px repeat(7, minmax(0, 1fr));
+  }
+  .ha-cal-horaire:not(.is-jour) .ha-cal-h-head { padding: 6px 1px 8px; }
+  .ha-cal-horaire:not(.is-jour) .ha-cal-h-dow { font-size: 9px; letter-spacing: 0; }
+  .ha-cal-horaire:not(.is-jour) .ha-cal-h-date { font-size: 1.05rem; }
+  .ha-cal-horaire:not(.is-jour) .ha-cal-ev { font-size: 9.5px; padding: 2px 3px; }
+  .ha-cal-horaire:not(.is-jour) .ha-cal-h-tick { font-size: 9px; right: 1px; }
+  .ha-cal-horaire:not(.is-jour) .ha-cal-h-label { font-size: 8px; padding: 8px 1px 0 0; }
+  .ha-cal-horaire:not(.is-jour) .ha-cal-h-ev { font-size: 9.5px; padding: 2px 3px; }
   .ha-jour-hint { display: none; }
   .ha-jour-tags .ha-mois-pill { font-size: 13px; padding: 6px 10px; }
 }
