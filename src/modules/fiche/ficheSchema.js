@@ -439,6 +439,14 @@ export function rolesAsblPourEnregistrement(particulier, roles) {
   return rolesAsblSpecifiques(roles)
 }
 
+/** Première équipe déjà pourvue — pour ouvrir l’accordéon à l’édition. */
+export function equipeAsblOuverteParDefaut(roles) {
+  const spec = new Set(rolesAsblSpecifiques(roles))
+  if (!spec.size) return null
+  const eq = EQUIPES_ASBL.find(e => rangsDeLequipe(e).some(r => spec.has(r.v)))
+  return eq ? eq.v : null
+}
+
 export const SPECIALISATIONS_INF = [
   { v:'siamu',            l:'SIAMU (soins intensifs / urgences)' },
   { v:'oncologie',        l:'Oncologie' },

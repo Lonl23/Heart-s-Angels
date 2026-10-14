@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
-import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
+import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, equipeAsblOuverteParDefaut, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
 import { TYPES_NOTIF, prefsDepuisFiche } from '@/lib/notifications'
 import { FormPinFiche } from '@/components/PinArchive'
 
@@ -66,7 +66,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       notif_prefs: prefsDepuisFiche(data?.fiche),
     })
     setRoleParticulier(aRoleAsblParticulier((data?.fiche||{}).roles_asbl))
-    setEquipeOuverte(null)
+    setEquipeOuverte(equipeAsblOuverteParDefaut((data?.fiche||{}).roles_asbl))
     if (uid === user?.id) {
       const { data: pin } = await supabase.rpc('mon_pin_archive_defini')
       setAPin(!!pin)
@@ -95,6 +95,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       const spec = rolesAvantNon.current.length ? rolesAvantNon.current : rolesAsblSpecifiques(f.roles_asbl)
       setRoleParticulier(true)
       set('roles_asbl', spec)
+      setEquipeOuverte(equipeAsblOuverteParDefaut(spec))
       return
     }
     rolesAvantNon.current = rolesAsblSpecifiques(f.roles_asbl)
