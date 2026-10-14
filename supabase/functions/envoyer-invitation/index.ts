@@ -1,6 +1,7 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
-// Envoie les mails d’invitation et de bienvenue depuis laurent@heartsangels.be.
-// Chaque envoi met laurent@heartsangels.be en copie cachée.
+// Envoie via le compte Gmail laurent@heartsangels.be.
+// Expéditeur visible : no-reply-app@heartsangels.be
+// Réponses → laurent@heartsangels.be (Reply-To + copie cachée).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import nodemailer from 'npm:nodemailer@6.9.16'
 
@@ -25,6 +26,8 @@ const ROLES_FICHES = ['coord_benevoles', 'coord_benevoles_adjoint']
 const PUB = () => (Deno.env.get('APP_PUBLIC_URL') || 'https://heart-s-angels.web.app').replace(/\/$/, '')
 const ACCENT = '#1BB0CE'
 const CCI = 'laurent@heartsangels.be'
+const DEPUIS = `Heart's Angels <no-reply-app@heartsangels.be>`
+const REPONSE = 'laurent@heartsangels.be'
 
 function rolesAsbl(fiche: unknown): string[] {
   const r = (fiche as { roles_asbl?: unknown } | null)?.roles_asbl
@@ -191,22 +194,26 @@ Heart's Angels ASBL`
 }
 
 async function smtpAuth(admin: ReturnType<typeof createClient>) {
-  let user = (Deno.env.get('SMTP_USER') || 'laurent@heartsangels.be').trim()
+  let user = (Deno.env.get('SMTP_USER') || CCI).trim()
   let pass = (Deno.env.get('SMTP_PASS') || '').trim()
-  let from = (Deno.env.get('SMTP_FROM') || `Heart's Angels <${user}>`).trim()
+  let from = (Deno.env.get('SMTP_FROM') || '').trim()
+  let replyTo = (Deno.env.get('SMTP_REPLY_TO') || '').trim()
   if (!pass) {
     const { data: cfg } = await admin.rpc('smtp_mail_config')
     if (cfg?.ok && cfg.pass) {
       user = String(cfg.user || user).trim()
       pass = String(cfg.pass).trim()
-      from = String(cfg.from || from).trim()
+      if (!from) from = String(cfg.from || '').trim()
+      if (!replyTo) replyTo = String(cfg.reply_to || '').trim()
     }
   }
-  return { user, pass, from }
+  if (!from) from = DEPUIS
+  if (!replyTo) replyTo = REPONSE
+  return { user, pass, from, replyTo }
 }
 
 async function envoyer(opts: {
-  smtp: { user: string; pass: string; from: string }
+  smtp: { user: string; pass: string; from: string; replyTo: string }
   to: string
   sujet: string
   texte: string
@@ -219,9 +226,10 @@ async function envoyer(opts: {
     auth: { user: opts.smtp.user, pass: opts.smtp.pass },
   })
   const dest = String(opts.to || '').trim()
-  const bcc = dest.toLowerCase() === CCI ? undefined : CCI
+  const bcc = dest.toLowerCase() === CCI.toLowerCase() ? undefined : CCI
   await transporter.sendMail({
     from: opts.smtp.from,
+    replyTo: opts.smtp.replyTo,
     to: dest,
     bcc,
     subject: opts.sujet,

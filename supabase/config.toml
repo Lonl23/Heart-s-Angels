@@ -1,5 +1,7 @@
 # Projet distant Heart's Angels (vppmvjqbzdeftrhdoert).
-# Les secrets SMTP_USER / SMTP_PASS / SMTP_FROM se règlent dans le dashboard
+# Les secrets SMTP_USER / SMTP_PASS / SMTP_FROM / SMTP_REPLY_TO se règlent dans le dashboard
+# From par défaut : Heart's Angels <no-reply-app@heartsangels.be>
+# Reply-To par défaut : laurent@heartsangels.be (les réponses arrivent chez Laurent)
 # ou : npx supabase secrets set --project-ref vppmvjqbzdeftrhdoert
 
 [functions.envoyer-invitation]
