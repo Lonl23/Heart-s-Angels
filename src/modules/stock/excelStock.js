@@ -21,14 +21,14 @@ const LIRE_MOI = [
   ['Heart\'s Angels — Export stock'],
   [''],
   ['Comment faire l\'inventaire'],
-  ['1. Exportez ce fichier (bouton « Excel » dans Stock).'],
+  ['1. Exportez ce fichier (Inventaires → Excel).'],
   ['2. Ouvrez l\'onglet Inventaire.'],
   ['3. Comptez sur le terrain, puis remplissez UNIQUEMENT :'],
   ['    • qte_comptee — pour les boîtes et les pièces (nombre restant)'],
   ['    • pression_comptee — pour l\'oxygène (bar relevé)'],
   ['4. Laissez vide ce que vous n\'avez pas encore compté : ces lignes ne seront pas touchées.'],
   ['5. Ne modifiez pas la colonne id (ni le qr).'],
-  ['6. Enregistrez le fichier, puis dans Stock → Importer inventaire.'],
+  ['6. Enregistrez le fichier, puis Inventaires → Importer.'],
   [''],
   ['Les autres onglets (Articles, Lieux, Fournisseurs, Commandes, Mouvements) sont un export complet en lecture.'],
   ['Les corrections d\'inventaire sont tracées dans Mouvements (motif « inventaire Excel »).'],
@@ -116,8 +116,34 @@ export async function exporterStockExcel(data, lieux) {
 
 function csvCell(s) {
   const t = String(s || '')
-  if (/[",\n\r]/.test(t)) return `"${t.replace(/"/g, '""')}"`
+  if (/[";,\n\r]/.test(t)) return `"${t.replace(/"/g, '""')}"`
   return t
+}
+
+/** CSV du journal (rapport de sortie : emports / sorties). */
+export function exporterMouvementsCsv(items, nomFichier = `rapport-sortie-${slugDate()}.csv`) {
+  const header = ['Quand', 'Type', 'Article', 'Quantite', 'Lot', 'De', 'Vers', 'Motif', 'Par']
+  const lignes = [header.map(csvCell).join(';')]
+  for (const m of items || []) {
+    lignes.push([
+      fmtQuand(m.created_at || m.quand),
+      lblMouv(m.type),
+      m.article || m.lieu_nom || '',
+      m.quantite == null ? '' : Number(m.quantite),
+      m.lot || '',
+      m.lieu_origine_nom || m.lieu_origine || '',
+      m.lieu_nom || m.lieu || '',
+      m.motif || '',
+      m.par_nom || m.par || '',
+    ].map(csvCell).join(';'))
+  }
+  const blob = new Blob(['\ufeff', lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = nomFichier
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+  return nomFichier
 }
 
 function nomFeuille(s) {

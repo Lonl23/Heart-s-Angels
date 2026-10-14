@@ -12,24 +12,46 @@ import { PhotoArticle, PhotoArticleChamp } from './stock/photoStock'
 import OngletMouvements from './stock/OngletMouvements'
 import OngletFournisseurs from './stock/OngletFournisseurs'
 import OngletAlertes from './stock/OngletAlertes'
-import OngletTransferts from './stock/OngletTransferts'
+import OngletTransferts, { FormReceptionGuide, FormSortieGuide, FormO2 } from './stock/OngletTransferts'
 import { etiqLieu, etiqUnite, CarteQr, FormReception, FormTransfert, FormSortie } from './stock/formsStock'
 import { exporterStockExcel, lireInventaireExcel, resumeImport, exporterLieuxParSacExcel, telechargerCsvLieuxParSac } from './stock/excelStock'
 
+const ACCUEIL = [
+  { v: 'unites', l: 'Inventaires' },
+  { v: 'transferts', l: 'Transfert' },
+  { v: 'reception', l: 'Réception' },
+  { v: 'declasse', l: 'Déclassé' },
+  { v: 'rapport', l: 'Rapport de sortie' },
+]
+
+const PLUS = [
+  ['alertes', 'Alertes'],
+  ['articles', 'Articles'],
+  ['fournisseurs', 'Fournisseurs'],
+  ['lieux', 'Lieux'],
+]
+
 const LBL_RUBRIQUE = {
-  unites: 'Inventaire',
-  mouvements: 'Mouvements',
+  unites: 'Inventaires',
+  transferts: 'Transfert',
+  reception: 'Réception',
+  declasse: 'Déclassé',
+  rapport: 'Rapport de sortie',
   alertes: 'Alertes',
   articles: 'Articles',
   fournisseurs: 'Fournisseurs',
   lieux: 'Lieux',
   inventaire: 'Scan lieu',
+  o2: 'Relevé oxygène',
 }
+
+const RETOUR_INVENTAIRES = new Set(['inventaire', 'o2'])
 
 export default function Stock() {
   const { peutGererStock } = useAuth()
   const gerer = peutGererStock()
-  const [tab, setTab] = useState('transferts')
+  const [tab, setTab] = useState('accueil')
+  const [plus, setPlus] = useState(false)
   const [lieux, setLieux] = useState([])
   const [cats, setCats] = useState([])
   const [unites, setUnites] = useState([])
@@ -86,6 +108,11 @@ export default function Stock() {
     setLoading(false)
   }
   function ok(msg) { setFlash(msg); setErr(null); setTimeout(() => setFlash(null), 2500) }
+  function aller(v) {
+    setPlus(false)
+    if (v === 'accueil') { setScan(null); setLieuCible(null) }
+    setTab(v)
+  }
 
   async function exporterExcel() {
     setExcelBusy(true)
@@ -200,21 +227,62 @@ export default function Stock() {
       {recv && <FormReception cat={recv} lieux={lieux} unites={unites} onDone={() => { setRecv(null); load() }} onOk={ok} onErr={setErr} />}
       {xfer && <FormTransfert unite={xfer} lieux={lieux} onDone={() => { setXfer(null); load() }} onOk={ok} onErr={setErr} />}
       {sortie && <FormSortie unite={sortie} onDone={() => { setSortie(null); load() }} onOk={ok} onErr={setErr} />}
-      {tab !== 'transferts' && (
+      {tab !== 'accueil' && (
         <div className="ha-xfer-bar">
-          <button type="button" className="ha-xfer-bar-back" onClick={() => setTab('transferts')}>‹ Transferts</button>
+          <button type="button" className="ha-xfer-bar-back" onClick={() => aller(RETOUR_INVENTAIRES.has(tab) ? 'unites' : 'accueil')}>
+            {RETOUR_INVENTAIRES.has(tab) ? '‹ Inventaires' : '‹ Stock'}
+          </button>
           <span className="ha-xfer-bar-titre">{LBL_RUBRIQUE[tab] || ''}</span>
         </div>
       )}
 
       {loading ? <Loading /> : (
         <>
+          {tab === 'accueil' && (
+            <div>
+              <div className="ha-stock-home">
+                {ACCUEIL.map(o => (
+                  <button key={o.v} type="button" className="ha-xfer-opt" onClick={() => aller(o.v)}>
+                    <span className="ha-xfer-opt-l">{o.l}</span>
+                  </button>
+                ))}
+              </div>
+              <nav className="ha-xfer-pied" aria-label="Autres rubriques stock">
+                <button type="button" onClick={() => setPlus(p => !p)} aria-expanded={plus}>Plus</button>
+                {plus && (
+                  <div className="ha-xfer-plus">
+                    {PLUS.map(([v, l]) => (
+                      <button key={v} type="button" onClick={() => aller(v)}>{l}</button>
+                    ))}
+                  </div>
+                )}
+              </nav>
+            </div>
+          )}
           {tab === 'transferts' && (
             <OngletTransferts
-              cats={cats} lieux={lieux} unites={unites} inv={inv}
+              lieux={lieux} unites={unites}
               onChange={load} onOk={ok} onErr={setErr}
-              onAller={setTab}
               onRanger={lieu => { setLieuCible(lieu || null); setScan('ranger') }} />
+          )}
+          {tab === 'reception' && (
+            <FormReceptionGuide
+              cats={cats} lieux={lieux} unites={unites}
+              onOk={ok} onErr={setErr} onAller={setTab}
+              onDone={() => load()} />
+          )}
+          {tab === 'declasse' && (
+            <FormSortieGuide
+              unites={unites} lieux={lieux}
+              onOk={ok} onErr={setErr}
+              onDone={() => load()} />
+          )}
+          {tab === 'rapport' && (
+            <OngletMouvements
+              cats={cats}
+              typesAutorises={['emport', 'sortie']}
+              csv
+              hint="Emports mission et sorties (casse, don, destruction)." />
           )}
           {tab === 'unites' && (
             <>
@@ -222,11 +290,16 @@ export default function Stock() {
                 <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
                 <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer</Btn>
                 <Btn kind="soft" onClick={() => setScan('inventaire')}>Scan lieu</Btn>
+                {((cats || []).some(c => c.mode === 'oxygene') || (unites || []).some(u => u.mode === 'oxygene')) && (
+                  <Btn kind="soft" onClick={() => setTab('o2')}>Oxygène</Btn>
+                )}
               </div>
               <OngletUnites unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />
             </>
           )}
-          {tab === 'mouvements' && <OngletMouvements cats={cats} />}
+          {tab === 'o2' && (
+            <FormO2 unites={unites} lieux={lieux} onOk={ok} onErr={setErr} onDone={() => { setTab('unites'); load() }} />
+          )}
           {tab === 'alertes' && (
             <OngletAlertes cats={cats} fournisseurs={fournisseurs} lieux={lieux} unites={unites} dotations={dotations}
               onOk={ok} onErr={setErr}
@@ -239,7 +312,7 @@ export default function Stock() {
               }}
               onCommander={(cmd) => {
                 const cat = cats.find(c => c.id === cmd.catalogue_id)
-                if (cat) { setRecv(cat); setTab('articles') }
+                if (cat) setRecv(cat)
               }} />
           )}
           {tab === 'articles' && <OngletCatalogue cats={cats} lieux={lieux} unites={unites} fournisseurs={fournisseurs} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} onRecv={setRecv} />}

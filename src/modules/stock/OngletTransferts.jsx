@@ -14,14 +14,11 @@ const TYPES_VECTEUR = new Set(['sac', 'pochette', 'vehicule', 'armoire_vehicule'
 const TYPES_RETOUR = new Set(['reserve', 'armoire'])
 
 const OPTIONS = [
-  { v: 'reception', l: 'Réception', hint: 'Livraison, QR' },
   { v: 'ranger', l: 'Ranger', hint: 'Lieu, puis articles' },
-  { v: 'doter', l: 'Doter', hint: 'Sac, pochette, véhicule' },
+  { v: 'doter', l: 'Doter sac / vecteur', hint: 'Sac, pochette, véhicule' },
   { v: 'emporter', l: 'Emporter', hint: 'Mission, sans consommer' },
   { v: 'retour', l: 'Retour', hint: 'Vers la réserve' },
-  { v: 'interne', l: 'Transfert', hint: 'Autre emplacement' },
-  { v: 'sortie', l: 'Sortie', hint: 'Casse, don, destruction' },
-  { v: 'o2', l: 'Oxygène', hint: 'Pression (bar)', siO2: true },
+  { v: 'interne', l: 'Transfert interne', hint: 'Autre emplacement' },
 ]
 
 function unitesDispo(unites, { o2 = false } = {}) {
@@ -139,7 +136,7 @@ function EnteteEtape({ titre, hint, onBack }) {
         <div style={{ fontWeight:700, color:'var(--heading)', fontSize:'1.05rem' }}>{titre}</div>
         {hint && <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:3 }}>{hint}</div>}
       </div>
-      <Btn kind="soft" onClick={onBack}>Menu</Btn>
+      <Btn kind="soft" onClick={onBack}>Retour</Btn>
     </div>
   )
 }
@@ -272,7 +269,7 @@ function FormDeplacer({
   )
 }
 
-function FormSortieGuide({ unites, lieux, onOk, onErr, onDone }) {
+export function FormSortieGuide({ unites, lieux, onOk, onErr, onDone }) {
   const [q, setQ] = useState('')
   const [unite, setUnite] = useState(null)
   const [qte, setQte] = useState('')
@@ -302,12 +299,14 @@ function FormSortieGuide({ unites, lieux, onOk, onErr, onDone }) {
     setSaving(false)
     if (error || data?.ok === false) { onErr?.(error?.message || data?.error); return }
     onOk?.('Sortie enregistrée.')
-    onDone()
+    setUnite(null)
+    setMotif('')
+    setQte('')
+    onDone?.()
   }
 
   return (
     <div>
-      <EnteteEtape titre="Sortie / cession" hint="Retirer du stock : casse, don, destruction. Ce n’est pas un déplacement." onBack={onDone} />
       {!unite ? (
         <PickUnite unites={dispo} lieux={lieux} q={q} setQ={setQ} onPick={u => { setUnite(u); setQte(u.mode === 'boite' ? '' : '1') }} onScan={() => setScan(true)} />
       ) : (
@@ -326,7 +325,7 @@ function FormSortieGuide({ unites, lieux, onOk, onErr, onDone }) {
   )
 }
 
-function FormO2({ unites, lieux, onOk, onErr, onDone }) {
+export function FormO2({ unites, lieux, onOk, onErr, onDone }) {
   const [q, setQ] = useState('')
   const [unite, setUnite] = useState(null)
   const [bar, setBar] = useState('')
@@ -367,7 +366,6 @@ function FormO2({ unites, lieux, onOk, onErr, onDone }) {
 
   return (
     <div>
-      <EnteteEtape titre="Relevé oxygène" hint="Lisez le manomètre et enregistrez la pression. Alerte à 50 bar." onBack={onDone} />
       {!unite ? (
         <PickUnite unites={bouteilles} lieux={lieux} q={q} setQ={setQ} onPick={prendre} onScan={() => setScan(true)} placeholder="O2, lot, lieu…" />
       ) : (
@@ -392,7 +390,7 @@ function FormO2({ unites, lieux, onOk, onErr, onDone }) {
   )
 }
 
-function FormReceptionGuide({ cats, lieux, unites, onOk, onErr, onDone }) {
+export function FormReceptionGuide({ cats, lieux, unites, onOk, onErr, onDone, onAller }) {
   const [q, setQ] = useState('')
   const [cat, setCat] = useState(null)
   const vis = (cats || []).filter(c => correspondArticle(c, q)).slice(0, 12)
@@ -400,18 +398,20 @@ function FormReceptionGuide({ cats, lieux, unites, onOk, onErr, onDone }) {
     return (
       <div>
         <EnteteEtape titre="Réception fournisseur" hint="Lot, DLC, quantité, puis le lieu de rangement." onBack={() => setCat(null)} />
-        <FormReception cat={cat} lieux={lieux} unites={unites} onDone={onDone} onOk={onOk} onErr={onErr} />
+        <FormReception cat={cat} lieux={lieux} unites={unites} onDone={() => { setCat(null); onDone?.() }} onOk={onOk} onErr={onErr} />
       </div>
     )
   }
   return (
     <div>
-      <EnteteEtape titre="Réception fournisseur" hint="Quel type d’article arrive ?" onBack={onDone} />
       <label className="ha-stock-search-lab" htmlFor="xfer-recherche-cat">Type d’article</label>
       <input id="xfer-recherche-cat" className="ha-search" value={q} onChange={e=>setQ(e.target.value)}
         placeholder="Gants, compresses, O2…" autoComplete="off" style={{ width:'100%', marginBottom:8 }} />
       {vis.length === 0 ? (
-        <Empty title="Aucun type" hint="Créez-le d’abord dans l’onglet Articles." />
+        <Empty
+          title="Aucun type"
+          hint="Créez d’abord le type d’article."
+          action={onAller ? <Btn kind="soft" onClick={() => onAller('articles')}>Articles</Btn> : null} />
       ) : vis.map(c => (
         <button key={c.id} type="button" className="ha-pick-row" onClick={() => setCat(c)}>
           <div className="ha-stock-row">
@@ -481,38 +481,10 @@ function FormEmporter({ onDone, onOk, onErr, onChange }) {
   )
 }
 
-function PiedStock({ onAller, inv }) {
-  const [plus, setPlus] = useState(false)
-  return (
-    <nav className="ha-xfer-pied" aria-label="Autres rubriques stock">
-      <button type="button" onClick={() => onAller('unites')}>Inventaire</button>
-      <span className="ha-xfer-pied-sep" aria-hidden>·</span>
-      <button type="button" onClick={() => onAller('mouvements')}>Mouvements</button>
-      <span className="ha-xfer-pied-sep" aria-hidden>·</span>
-      <button type="button" onClick={() => setPlus(p => !p)} aria-expanded={plus}>Plus</button>
-      {plus && (
-        <div className="ha-xfer-plus">
-          {[
-            ['alertes', 'Alertes'],
-            ['articles', 'Articles'],
-            ['fournisseurs', 'Fournisseurs'],
-            ['lieux', 'Lieux'],
-            ...(inv ? [['inventaire', 'Scan lieu']] : []),
-          ].map(([v, l]) => (
-            <button key={v} type="button" onClick={() => onAller(v)}>{l}</button>
-          ))}
-        </div>
-      )}
-    </nav>
-  )
-}
-
 export default function OngletTransferts({
-  cats, lieux, unites, onChange, onOk, onErr, onRanger, onAller, inv,
+  lieux, unites, onChange, onOk, onErr, onRanger,
 }) {
   const [etape, setEtape] = useState(null)
-  const aO2 = (cats || []).some(c => c.mode === 'oxygene') || (unites || []).some(u => u.mode === 'oxygene')
-  const opts = OPTIONS.filter(o => !o.siO2 || aO2)
 
   function fermer(msg) {
     if (msg) onOk?.(msg)
@@ -520,9 +492,6 @@ export default function OngletTransferts({
     onChange?.()
   }
 
-  if (etape === 'reception') {
-    return <FormReceptionGuide cats={cats} lieux={lieux} unites={unites} onOk={onOk} onErr={onErr} onDone={() => fermer()} />
-  }
   if (etape === 'ranger') {
     return (
       <div>
@@ -573,27 +542,18 @@ export default function OngletTransferts({
         lotPossible />
     )
   }
-  if (etape === 'sortie') {
-    return <FormSortieGuide unites={unites} lieux={lieux} onOk={onOk} onErr={onErr} onDone={() => fermer()} />
-  }
-  if (etape === 'o2') {
-    return <FormO2 unites={unites} lieux={lieux} onOk={onOk} onErr={onErr} onDone={() => fermer()} />
-  }
   if (etape === 'emporter') {
     return <FormEmporter onDone={() => setEtape(null)} onOk={onOk} onErr={onErr} onChange={onChange} />
   }
 
   return (
-    <div>
-      <div className="ha-xfer-menu">
-        {opts.map(o => (
-          <button key={o.v} type="button" className="ha-xfer-opt" onClick={() => setEtape(o.v)}>
-            <span className="ha-xfer-opt-l">{o.l}</span>
-            <span className="ha-xfer-opt-h">{o.hint}</span>
-          </button>
-        ))}
-      </div>
-      {onAller && <PiedStock onAller={onAller} inv={inv} />}
+    <div className="ha-xfer-menu">
+      {OPTIONS.map(o => (
+        <button key={o.v} type="button" className="ha-xfer-opt" onClick={() => setEtape(o.v)}>
+          <span className="ha-xfer-opt-l">{o.l}</span>
+          <span className="ha-xfer-opt-h">{o.hint}</span>
+        </button>
+      ))}
     </div>
   )
 }
