@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useSwUpdate } from '@/hooks/useSwUpdate'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -8,6 +8,7 @@ import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
 import { syncNativeTheme } from '@/lib/native'
 import { useFondPage } from '@/hooks/useFondPage'
+import { SortieFondu } from '@/components/Fondu'
 
 const NAV = [
   { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
@@ -159,8 +160,8 @@ export default function Layout() {
         </header>
         <main
           className={fond.actif ? 'ha-main-fond' : undefined}
-          style={{ flex:1, minWidth:0, width:'100%', overflowX:'hidden', overflowY:'auto', minHeight:0, ...fond.style }}
-        ><Outlet /></main>
+          style={{ flex:1, minWidth:0, width:'100%', overflow:'hidden', minHeight:0, display:'flex', flexDirection:'column', ...fond.style }}
+        ><SortieFondu /></main>
       </div>
 
       <style>{`

@@ -1,9 +1,10 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 // Logiciel propriétaire. Voir LICENSE. Mention à ne pas retirer.
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Route, Navigate } from 'react-router-dom'
 import { RequireStaff, RequirePartenaire } from '@/components/Protected'
 import Layout from '@/components/Layout'
+import { RoutesAvecFondu } from '@/components/Fondu'
 
 const Login = lazy(() => import('@/pages/Login'))
 const MotDePasseOublie = lazy(() => import('@/pages/MotDePasseOublie'))
@@ -25,14 +26,14 @@ const Annuaire = lazy(() => import('@/modules/annuaire/Annuaire'))
 
 function EcranChargement() {
   return (
-    <div style={{ padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>Chargement…</div>
+    <div style={{ minHeight: '100%', background: 'var(--bg)' }} aria-hidden />
   )
 }
 
 export default function App() {
   return (
     <Suspense fallback={<EcranChargement />}>
-      <Routes>
+      <RoutesAvecFondu>
         <Route path="/login" element={<Login />} />
         <Route path="/login/partenaire" element={<Login />} />
         <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
@@ -62,7 +63,7 @@ export default function App() {
         <Route path="/partenaire" element={<RequirePartenaire><PartenairePortail /></RequirePartenaire>} />
 
         <Route path="*" element={<Navigate to="/app" replace />} />
-      </Routes>
+      </RoutesAvecFondu>
     </Suspense>
   )
 }

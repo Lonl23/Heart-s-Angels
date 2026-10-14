@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, Pill, Modal } from '@/components/ui'
+import { Page, Card, Btn, Pill, Modal, Empty, Loading } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
-import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
-import { CodeBox, FormInvit, Msg, genCode, tbl, th, td, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
+import { QUALIFS, ROLES_ASBL, personneEstMedicale } from '@/modules/fiche/ficheSchema'
+import { CodeBox, FormInvit, Msg, genCode, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
 
 const TYPES_INVIT = [
   { v: 'volontaire_medical', l: 'Volontaire médical' },
@@ -27,7 +27,16 @@ function compteAConfigurer(u) {
   return !!(u?.fiche?.compte_a_configurer) || !(u?.email || '').trim()
 }
 function roleInvitDepuisFiche(u) {
-  return u?.fiche?.type_benevole === 'medical' ? 'volontaire_medical' : 'volontaire_non_medical'
+  return estMedical(u) ? 'volontaire_medical' : 'volontaire_non_medical'
+}
+function estMedical(u) {
+  const t = u?.fiche?.type_benevole
+  if (t === 'medical') return true
+  if (t === 'non_medical') return false
+  return personneEstMedicale(u)
+}
+function nomPrenom(u) {
+  return `${u.prenom || ''} ${u.nom || ''}`.trim() || 'Sans nom'
 }
 
 export default function Volontaires() {
@@ -171,27 +180,150 @@ function Membres({ onOpenFiche }) {
         </Card>
       )}
 
-      {loading ? <p style={{ color: 'var(--text-muted)' }}>Chargement…</p> : (
-        <Card style={{ padding: 0, overflow: 'auto' }}>
-          <table style={tbl}><thead><tr style={{ background: 'var(--bg-alt)' }}>{['Nom', 'E-mail', 'Type', 'Rôle (ASBL)', 'Qualification', 'Statut', 'Action'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {membres.map(u => (
-                <tr key={u.id} style={{ borderTop: '1px solid var(--border)', opacity: u.actif ? 1 : .5 }}>
-                  <td style={td}>{u.prenom} {u.nom}</td>
-                  <td style={td}>{compteAConfigurer(u) ? <span style={{ color: 'var(--text-muted)' }}>Compte à configurer</span> : u.email}</td>
-                  <td style={td}>{typeBenevoleTxt(u)}</td><td style={td}>{rolesAsblTxt(u)}</td><td style={td}>{qualifsTxt(u)}</td>
-                  <td style={td}>{compteAConfigurer(u) ? <Pill color="#BA7517" bg="#FAEEDA">Sans accès</Pill> : u.actif ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill> : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}</td>
-                  <td style={{ ...td, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <Btn kind="soft" onClick={() => onOpenFiche(u.id)} style={{ padding: '5px 10px' }}>Fiche</Btn>
-                    {compteAConfigurer(u) && <Btn onClick={() => configurerCompte(u)} style={{ padding: '5px 10px' }}>Configurer le compte</Btn>}
-                    <Btn kind={u.actif ? 'danger' : 'ok'} onClick={() => toggle(u)} style={{ padding: '5px 10px' }}>{u.actif ? 'Désactiver' : 'Activer'}</Btn>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+      {loading ? <Loading /> : (
+        <GrillesVolontaires
+          membres={membres}
+          onOpenFiche={onOpenFiche}
+          onConfigurer={configurerCompte}
+          onToggle={toggle}
+        />
       )}
+    </div>
+  )
+}
+
+function GrillesVolontaires({ membres, onOpenFiche, onConfigurer, onToggle }) {
+  const [q, setQ] = useState('')
+  const needle = q.trim().toLowerCase()
+  const filtrés = needle
+    ? membres.filter(u => {
+        const hay = [u.prenom, u.nom, u.email, typeBenevoleTxt(u), rolesAsblTxt(u), qualifsTxt(u)].join(' ').toLowerCase()
+        return hay.includes(needle)
+      })
+    : membres
+  const medicaux = filtrés.filter(estMedical)
+  const nonMedicaux = filtrés.filter(u => !estMedical(u))
+
+  return (
+    <div>
+      {membres.length > 0 && (
+        <input
+          className="ha-search"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Rechercher un volontaire…"
+          style={{ width: '100%', maxWidth: 360, marginBottom: 18 }}
+        />
+      )}
+      {filtrés.length === 0 ? (
+        <Empty
+          title={needle ? 'Aucun volontaire pour cette recherche' : 'Aucun volontaire'}
+          hint={needle ? 'Essayez un autre nom, e-mail ou qualification.' : 'Ajoutez un volontaire pour commencer.'}
+        />
+      ) : (
+        <>
+          <GroupeTuiles
+            titre="Volontaires médicaux"
+            hint="Médecins, infirmiers, ambulanciers…"
+            items={medicaux}
+            onOpenFiche={onOpenFiche}
+            onConfigurer={onConfigurer}
+            onToggle={onToggle}
+          />
+          <GroupeTuiles
+            titre="Volontaires non médicaux"
+            hint="Secouristes, chauffeurs, accompagnement…"
+            items={nonMedicaux}
+            onOpenFiche={onOpenFiche}
+            onConfigurer={onConfigurer}
+            onToggle={onToggle}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+function GroupeTuiles({ titre, hint, items, onOpenFiche, onConfigurer, onToggle }) {
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--heading)' }}>{titre}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{items.length} · {hint}</div>
+      </div>
+      {items.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>Personne dans ce groupe.</p>
+      ) : (
+        <div className="ha-vol-grille">
+          {items.map(u => (
+            <TuileVolontaire
+              key={u.id}
+              u={u}
+              onOpenFiche={onOpenFiche}
+              onConfigurer={onConfigurer}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TuileVolontaire({ u, onOpenFiche, onConfigurer, onToggle }) {
+  const aConfigurer = compteAConfigurer(u)
+  const roles = (u.fiche?.roles_asbl || []).map(_lblRole)
+  const quals = (u.fiche?.qualifications || []).map(_lblQual)
+  return (
+    <Card
+      clickable
+      onClick={() => onOpenFiche(u.id)}
+      className="ha-vol-tuile"
+      style={{ opacity: u.actif ? 1 : .55, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <AvatarVolontaire url={u.fiche?.photo_url} prenom={u.prenom} nom={u.nom} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: 14.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {nomPrenom(u)}
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {aConfigurer ? 'Compte à configurer' : (u.email || '—')}
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {aConfigurer
+          ? <Pill color="#BA7517" bg="#FAEEDA">Sans accès</Pill>
+          : u.actif
+            ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill>
+            : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}
+        {roles.slice(0, 2).map(r => <Pill key={r}>{r}</Pill>)}
+        {quals.slice(0, 2).map(q => <Pill key={q} color="var(--accent-blue)" bg="var(--blue-light)">{q}</Pill>)}
+      </div>
+      <div
+        style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <Btn kind="soft" onClick={() => onOpenFiche(u.id)} style={{ padding: '5px 10px' }}>Fiche</Btn>
+        {aConfigurer && <Btn onClick={() => onConfigurer(u)} style={{ padding: '5px 10px' }}>Configurer le compte</Btn>}
+        <Btn kind={u.actif ? 'danger' : 'ok'} onClick={() => onToggle(u)} style={{ padding: '5px 10px' }}>{u.actif ? 'Désactiver' : 'Activer'}</Btn>
+      </div>
+    </Card>
+  )
+}
+
+function AvatarVolontaire({ url, prenom, nom }) {
+  const initiales = `${(prenom || '').charAt(0)}${(nom || '').charAt(0)}`.toUpperCase()
+  return (
+    <div style={{
+      width: 52, height: 52, borderRadius: 99, overflow: 'hidden', flexShrink: 0,
+      background: 'var(--accent)', color: '#fff', display: 'grid', placeItems: 'center',
+      fontSize: 16, fontWeight: 700, boxShadow: '0 0 0 3px var(--ring)',
+    }}>
+      {url
+        ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : (initiales || '?')}
     </div>
   )
 }

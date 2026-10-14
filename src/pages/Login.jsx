@@ -19,6 +19,19 @@ export default function Login() {
   const pendingPartenaire = useRef(false)
 
   useEffect(() => {
+    import('@/pages/MotDePasseOublie')
+    import('@/pages/ReinitialiserMotDePasse')
+    import('@/pages/Inscription')
+    import('@/pages/DemandePartenaire')
+    import('@/pages/DemandeSouhait')
+    if (partenaire) import('@/pages/PartenairePortail')
+    else {
+      import('@/pages/Dashboard')
+      import('@/modules/souhaits/Souhaits')
+    }
+  }, [partenaire])
+
+  useEffect(() => {
     if (loading || !session) return
     if (partenaire) {
       if (pendingPartenaire.current) return

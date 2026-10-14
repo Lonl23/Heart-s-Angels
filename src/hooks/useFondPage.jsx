@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { chargerFondsPages, fondPourPage, pageFondDepuisChemin, styleFond } from '@/lib/fondsPages'
 
-export function FondEcran({ page, children, style }) {
+export function FondEcran({ page, children, style, className }) {
   const { style: fond, actif } = useFondPage(page)
+  const cls = [actif ? 'ha-main-fond' : '', className].filter(Boolean).join(' ') || undefined
   return (
-    <div className={actif ? 'ha-main-fond' : undefined} style={{ backgroundColor: 'var(--bg)', ...fond, ...style }}>
+    <div className={cls} style={{ backgroundColor: 'var(--bg)', ...fond, ...style }}>
       {children}
     </div>
   )
