@@ -1,42 +1,75 @@
 import { Suspense, useLayoutEffect, useRef, useState } from 'react'
 import { useLocation, useOutlet, Routes } from 'react-router-dom'
-import { DUREE_FONDU_MS, motionReduite, mondeEcran } from '@/lib/transitionEcran'
+import { DUREE_FONDU_MS, motionReduite, mondeEcran, cleCouche } from '@/lib/transitionEcran'
 
 function FondVide() {
   return <div style={{ minHeight: '100%', flex: 1, background: 'var(--bg)' }} aria-hidden />
 }
 
-/** Garde l’écran précédent le temps du fondu sortant, puis affiche le nouveau. */
+function finFondu(onFin) {
+  return e => {
+    if (e.target !== e.currentTarget) return
+    if (e.animationName && e.animationName !== 'ha-fondu-in') return
+    onFin()
+  }
+}
+
+function liberer(setSortant, prevKey) {
+  setSortant(s => (s && s.key === prevKey ? null : s))
+}
+
+/**
+ * Fondu enchaîné login ↔ app (et tout changement hors menu interne).
+ * L’écran sortant reste monté en dessous ; le nouveau fond de 0 à 1 par-dessus.
+ * Pas de frame vide : on ne passe jamais par opacity 0 sans contenu dessous.
+ */
 export function RoutesAvecFondu({ children }) {
   const location = useLocation()
-  const hold = useRef(location)
-  const latest = useRef(location)
-  latest.current = location
-  const [, setTick] = useState(0)
-
-  const appInterne = mondeEcran(location.pathname) === 'app'
-    && mondeEcran(hold.current.pathname) === 'app'
-
-  if ((appInterne || motionReduite()) && hold.current.key !== location.key) {
-    hold.current = location
-  }
+  const live = useRef(location)
+  const [sortant, setSortant] = useState(null)
+  const [, bump] = useState(0)
 
   useLayoutEffect(() => {
-    if (location.key === hold.current.key) return
-    const t = setTimeout(() => {
-      hold.current = latest.current
-      setTick(n => n + 1)
-    }, DUREE_FONDU_MS)
-    setTick(n => n + 1)
+    if (location.key === live.current.key) return
+
+    const skip = motionReduite()
+      || (mondeEcran(location.pathname) === 'app' && mondeEcran(live.current.pathname) === 'app')
+
+    const prev = live.current
+    live.current = location
+
+    if (skip) {
+      setSortant(null)
+      bump(n => n + 1)
+      return
+    }
+
+    setSortant(prev)
+    bump(n => n + 1)
+    const t = setTimeout(() => liberer(setSortant, prev.key), DUREE_FONDU_MS + 80)
     return () => clearTimeout(t)
   }, [location.key])
 
-  const stale = hold.current.key !== location.key
+  const enCours = !!(sortant && sortant.key !== live.current.key)
+
   return (
-    <div className={'ha-fondu' + (stale ? ' is-out' : '')}>
-      <Suspense fallback={<FondVide />}>
-        <Routes location={hold.current}>{children}</Routes>
-      </Suspense>
+    <div className={'ha-fondu-pile' + (enCours ? ' is-cross' : '')}>
+      {enCours && (
+        <div key={cleCouche(sortant)} className="ha-fondu-calque is-under" aria-hidden>
+          <Suspense fallback={null}>
+            <Routes location={sortant}>{children}</Routes>
+          </Suspense>
+        </div>
+      )}
+      <div
+        key={cleCouche(live.current)}
+        className={'ha-fondu-calque' + (enCours ? ' is-in' : '')}
+        onAnimationEnd={enCours ? finFondu(() => liberer(setSortant, sortant.key)) : undefined}
+      >
+        <Suspense fallback={enCours ? null : <FondVide />}>
+          <Routes location={live.current}>{children}</Routes>
+        </Suspense>
+      </div>
     </div>
   )
 }
@@ -45,35 +78,50 @@ export function RoutesAvecFondu({ children }) {
 export function SortieFondu() {
   const location = useLocation()
   const outlet = useOutlet()
-  const hold = useRef({ key: location.key, node: outlet })
-  const latest = useRef({ key: location.key, node: outlet })
-  latest.current = { key: location.key, node: outlet }
-  const [, setTick] = useState(0)
+  const live = useRef({ key: location.key, node: outlet })
+  const [sortant, setSortant] = useState(null)
+  const [, bump] = useState(0)
+
+  if (live.current.key === location.key) {
+    live.current.node = outlet
+  }
 
   useLayoutEffect(() => {
-    if (location.key === hold.current.key) {
-      hold.current.node = outlet
-      return
-    }
-    if (motionReduite()) {
-      hold.current = { key: location.key, node: outlet }
-      setTick(n => n + 1)
-      return
-    }
-    const t = setTimeout(() => {
-      hold.current = { key: latest.current.key, node: latest.current.node }
-      setTick(n => n + 1)
-    }, DUREE_FONDU_MS)
-    setTick(n => n + 1)
-    return () => clearTimeout(t)
-  }, [location.key, outlet])
+    if (location.key === live.current.key) return
 
-  const stale = hold.current.key !== location.key
+    const prev = live.current
+    live.current = { key: location.key, node: outlet }
+
+    if (motionReduite()) {
+      setSortant(null)
+      bump(n => n + 1)
+      return
+    }
+
+    setSortant(prev)
+    bump(n => n + 1)
+    const t = setTimeout(() => liberer(setSortant, prev.key), DUREE_FONDU_MS + 80)
+    return () => clearTimeout(t)
+  }, [location.key])
+
+  const enCours = !!(sortant && sortant.key !== live.current.key)
+
   return (
-    <div className={'ha-fondu ha-fondu-page' + (stale ? ' is-out' : '')}>
-      <Suspense fallback={<FondVide />}>
-        {stale ? hold.current.node : outlet}
-      </Suspense>
+    <div className={'ha-fondu-pile ha-fondu-page' + (enCours ? ' is-cross' : '')}>
+      {enCours && (
+        <div key={sortant.key} className="ha-fondu-calque is-under" aria-hidden>
+          <Suspense fallback={null}>{sortant.node}</Suspense>
+        </div>
+      )}
+      <div
+        key={live.current.key}
+        className={'ha-fondu-calque' + (enCours ? ' is-in' : '')}
+        onAnimationEnd={enCours ? finFondu(() => liberer(setSortant, sortant.key)) : undefined}
+      >
+        <Suspense fallback={enCours ? null : <FondVide />}>
+          {live.current.node}
+        </Suspense>
+      </div>
     </div>
   )
 }

@@ -11,3 +11,10 @@ export function mondeEcran(path) {
   if (p.startsWith('/partenaire')) return 'partenaire'
   return 'public'
 }
+
+/** Clé stable dans l’espace interne (le menu ne doit pas se remonter). */
+export function cleCouche(loc) {
+  const m = mondeEcran(loc?.pathname)
+  if (m === 'app' || m === 'partenaire') return 'monde-' + m
+  return loc?.key || 'public'
+}
