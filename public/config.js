@@ -14,7 +14,7 @@ window.__APP_CONFIG__ = {
     accent:  "#1BB0CE",
     logoUrl: "/icons/ha-logo-512-v4.png",
   },
-  domaine: "https://heart-s-angels.web.app",
+  domaine: "https://appbetaapp.heartsangels.be",
   supabase: {
     url:     "https://vppmvjqbzdeftrhdoert.supabase.co",
     anonKey: "sb_publishable_A_Bu4P4-Fn-sy3xF58U4Cg_kJ_aLSIH",
