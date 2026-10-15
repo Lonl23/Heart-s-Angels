@@ -7,7 +7,7 @@ import {
   CHECKLISTS, itemsChecklistTous, lblStatutBase, estSurPlace,
 } from './missionSchema'
 import { COTES } from './TerrainPhotos'
-import { escHtml, htmlDocument } from './documentA4'
+import { escHtml, htmlDocumentA4 } from './documentA4'
 
 function dt(v) {
   if (!v) return ''
@@ -85,8 +85,8 @@ export const CSS_RAPPORT_A4 = `
   * { box-sizing:border-box; }
   html, body { margin:0; padding:0; background:#fff; }
   body { font-family:'Karla','Helvetica Neue',Arial,sans-serif; color:#243033; font-size:11.5px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  @page { size:A4; margin:12mm; }
-  .page { position:relative; background:#fff; padding:0; }
+  /* @page : voir cssPapierOfficiel */
+  .page { position:relative; background:#fff; padding:0; min-height:auto; }
   .content { position:relative; z-index:1; }
   .wm { position:absolute; inset:0; z-index:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
   .wm span { transform:rotate(-45deg); font-size:52px; font-weight:800; letter-spacing:8px; white-space:pre; text-align:center; line-height:1.35; color:rgba(14,74,90,0.07); }
@@ -141,7 +141,7 @@ export function cheminsPhotosMission(m) {
   return [...new Set(out)]
 }
 
-export function htmlRapportAsbl({ s, m, equipe, meds, conso, images, medical, notes }) {
+export async function htmlRapportAsbl({ s, m, equipe, meds, conso, images, medical, notes }) {
   const patient = `${s?.beneficiaire_prenom || ''} ${s?.beneficiaire_nom || ''}`.trim() || 'Bénéficiaire'
   const ddn = s?.beneficiaire_ddn ? new Date(s.beneficiaire_ddn).toLocaleDateString('fr-BE') : ''
   const pec = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
@@ -268,10 +268,10 @@ export function htmlRapportAsbl({ s, m, equipe, meds, conso, images, medical, no
   body += `<div class="pied">Heart's Angels ASBL — rapport interne généré le ${escHtml(dt(new Date().toISOString()))}. Ne pas diffuser hors de l'association.</div>`
   body += '</div></div>'
 
-  return { titre, html: htmlDocument(titre, body, CSS_RAPPORT_A4) }
+  return { titre, html: await htmlDocumentA4(titre, body, CSS_RAPPORT_A4) }
 }
 
-export function htmlRapportPartenaire({ s, images: _images, vecteursHoraires, deroulement, etat, observations }) {
+export async function htmlRapportPartenaire({ s, images: _images, vecteursHoraires, deroulement, etat, observations }) {
   const prenom = s?.beneficiaire_prenom || [s?.beneficiaire_prenom, s?.beneficiaire_nom].filter(Boolean).join(' ') || 'Bénéficiaire'
   const titre = `Rapport de mission — ${prenom}`
   const defs = defsHorairesPartenaire()
@@ -303,7 +303,7 @@ export function htmlRapportPartenaire({ s, images: _images, vecteursHoraires, de
   body += `<div class="pied">Heart's Angels ASBL — rapport à l'attention du partenaire. Généré le ${escHtml(dt(new Date().toISOString()))}.</div>`
   body += '</div></div>'
 
-  return { titre, html: htmlDocument(titre, body, CSS_RAPPORT_A4) }
+  return { titre, html: await htmlDocumentA4(titre, body, CSS_RAPPORT_A4) }
 }
 
 export function nomFichierRapport(s, kind) {

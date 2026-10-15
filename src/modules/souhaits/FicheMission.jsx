@@ -6,6 +6,7 @@ import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
 import { fmtDatesSouhait } from './datesSouhait'
+import { htmlDocumentA4, imprimerHtml, telechargerHtml, imprimerApercuIframe } from './documentA4'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
 const d = v => v ? new Date(v).toLocaleDateString('fr-BE') : ''
@@ -45,57 +46,24 @@ export default function FicheMission({ souhaitId, onClose }) {
   const titre = `Fiche de mission — ${[s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ')}`.trim()
   const nomFichier = 'Fiche-mission-' + ([s.beneficiaire_prenom, s.beneficiaire_nom].filter(Boolean).join(' ') || 'mission').replace(/[^\p{L}\p{N}]+/gu, '-') + '.html'
 
-  function htmlFiche() {
+  async function htmlFiche() {
     const inner = ficheRef.current ? ficheRef.current.innerHTML : ''
-    return '<!doctype html><html lang="fr"><head><meta charset="utf-8">'
-      + '<meta name="viewport" content="width=device-width, initial-scale=1">'
-      + '<title>' + escHtml(titre) + '</title>'
-      + '<style>' + printStyles + '</style></head><body>' + inner + '</body></html>'
+    return htmlDocumentA4(titre, inner, printStyles)
   }
 
-  function telechargerFiche() {
-    const blob = new Blob([htmlFiche()], { type: 'text/html;charset=utf-8' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = nomFichier
-    a.rel = 'noopener'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+  async function telechargerFiche() {
+    telechargerHtml(nomFichier, await htmlFiche())
   }
 
   function imprimerApercu() {
-    const w = apercuRef.current?.contentWindow
-    if (!w) return
-    try { w.focus(); w.print() } catch (e) { /* */ }
+    imprimerApercuIframe(apercuRef.current)
   }
 
   // Le document A4 isolé — jamais une capture de l’écran de l’app.
   // Sur ordinateur : nouvel onglet + dialogue d’impression.
   // Sur téléphone / PWA : aperçu plein écran de la fiche générée, puis imprimer ce document.
-  function imprimer() {
-    const doc = htmlFiche()
-    const telephone = !!(window.navigator.standalone
-      || window.matchMedia('(display-mode: standalone)').matches
-      || window.matchMedia('(pointer: coarse)').matches
-      || window.innerWidth < 720)
-    if (telephone) {
-      setApercu(doc)
-      return
-    }
-    let w = null
-    try { w = window.open('', '_blank') } catch (e) { w = null }
-    if (w && w !== window) {
-      w.document.open()
-      w.document.write(doc)
-      w.document.close()
-      const go = () => { try { w.focus(); w.print() } catch (e) { /* */ } }
-      if (w.document.readyState === 'complete') setTimeout(go, 350)
-      else w.addEventListener('load', () => setTimeout(go, 350))
-      return
-    }
-    setApercu(doc)
+  async function imprimer() {
+    imprimerHtml(await htmlFiche(), setApercu)
   }
 
   const fiches = vecteurs.length
@@ -448,8 +416,8 @@ const printStyles = `
   * { box-sizing:border-box; }
   html, body { margin:0; padding:0; background:#fff; }
   body { font-family:'Karla','Helvetica Neue',Arial,sans-serif; color:#243033; font-size:11.5px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  @page { size:A4; margin:12mm; }
-  .page { position:relative; background:#fff; min-height:271mm; padding:0; }
+  /* @page : voir cssPapierOfficiel */
+  .page { position:relative; background:#fff; min-height:auto; padding:0; }
   .page.recto { page-break-after:always; }
   .fiche-block.brk { page-break-before:always; }
   .content { position:relative; z-index:1; }

@@ -1,15 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, Card, Sel, Empty, Loading } from '@/components/ui'
 import { TYPES_MOUVEMENT, lblMouv, couleurMouv, fmtQuand } from './stockSchema'
 import { PhotoArticle } from './photoStock'
 import { exporterMouvementsCsv } from './excelStock'
+import { imprimerHtml, telechargerHtml, imprimerApercuIframe } from '@/modules/souhaits/documentA4'
+import { htmlRapportStock, nomFichierRapportStock } from './rapportStockHtml'
 
 export default function OngletMouvements({ cats, typesAutorises, hint, csv, sansSouhait }) {
   const [type, setType] = useState('')
   const [cat, setCat] = useState('')
   const [items, setItems] = useState(null)
   const [err, setErr] = useState(null)
+  const [busyPdf, setBusyPdf] = useState(false)
+  const [apercu, setApercu] = useState(null)
+  const apercuRef = useRef(null)
 
   const typesOk = typesAutorises?.length ? typesAutorises : null
 
@@ -44,6 +49,21 @@ export default function OngletMouvements({ cats, typesAutorises, hint, csv, sans
 
   useEffect(() => { load() }, [])
 
+  async function pdfDeclasse() {
+    setBusyPdf(true)
+    try {
+      const html = await htmlRapportStock({
+        titre: 'Rapport de déclassement',
+        sousTitre: 'Casse, don, destruction, cession — sorties hors mission.',
+        items: items || [],
+      })
+      imprimerHtml(html, setApercu)
+    } catch (e) {
+      alert('Impossible de préparer le PDF : ' + (e?.message || e))
+    }
+    setBusyPdf(false)
+  }
+
   const optsType = typesOk
     ? [{ v: '', l: typesOk.length === 1 ? (TYPES_MOUVEMENT.find(x => x.v === typesOk[0])?.l || 'Tous') : 'Emports et sorties' }, ...TYPES_MOUVEMENT.filter(x => x.v && typesOk.includes(x.v))]
     : TYPES_MOUVEMENT
@@ -54,12 +74,17 @@ export default function OngletMouvements({ cats, typesAutorises, hint, csv, sans
       {hint && (
         <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>{hint}</p>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: csv ? '1fr 1fr auto' : '1fr 1fr', gap: 10, marginBottom: 12, alignItems: 'end' }} className="ha-stock-recv-lot">
+      <div style={{ display: 'grid', gridTemplateColumns: csv ? '1fr 1fr auto auto' : '1fr 1fr', gap: 10, marginBottom: 12, alignItems: 'end' }} className="ha-stock-recv-lot">
         <Sel label="Type" value={type} set={v => { setType(v); load(v, cat) }} options={optsType} />
         <Sel label="Article" value={cat} set={v => { setCat(v); load(type, v) }} options={optsCat} />
         {csv && (
           <Btn kind="soft" onClick={() => exporterMouvementsCsv(items || [])} disabled={!items?.length} style={{ marginBottom: 10 }}>
             CSV
+          </Btn>
+        )}
+        {csv && (
+          <Btn kind="soft" onClick={pdfDeclasse} disabled={!items?.length || busyPdf} style={{ marginBottom: 10 }}>
+            {busyPdf ? 'PDF…' : 'PDF'}
           </Btn>
         )}
       </div>
@@ -92,6 +117,16 @@ export default function OngletMouvements({ cats, typesAutorises, hint, csv, sans
               </div>
             </Card>
           ))}
+        </div>
+      )}
+      {apercu && (
+        <div className="ha-fiche-apercu">
+          <div className="ha-fiche-apercu-bar no-print">
+            <Btn onClick={() => imprimerApercuIframe(apercuRef.current)}>🖨 Imprimer / PDF</Btn>
+            <Btn kind="soft" onClick={() => telechargerHtml(nomFichierRapportStock('declasse'), apercu)}>Télécharger</Btn>
+            <Btn kind="soft" onClick={() => setApercu(null)}>Fermer</Btn>
+          </div>
+          <iframe ref={apercuRef} title="Rapport de déclassement" srcDoc={apercu} />
         </div>
       )}
     </div>

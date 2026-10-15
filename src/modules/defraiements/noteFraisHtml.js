@@ -1,4 +1,4 @@
-import { escHtml, htmlDocument } from '@/modules/souhaits/documentA4'
+import { escHtml, htmlDocumentA4 } from '@/modules/souhaits/documentA4'
 import {
   ORG_FRAIS, FORFAIT_JUSQUA, TAUX_KM, MAX_KM,
   fmtEuro, fmtDateCourte, fmtDateHeure, titrePeriode, totalForfait, totalKm, nomCompletNote,
@@ -17,8 +17,8 @@ const CSS = `
     color: #000; font-size: 10pt;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
-  @page { size: A4; margin: 12mm 14mm 14mm; }
-  .page { width: 182mm; margin: 0 auto; }
+  /* @page : voir cssPapierOfficiel */
+  .page { width: 100%; margin: 0 auto; }
   .head { position: relative; min-height: 28mm; margin-bottom: 2mm; }
   .org {
     text-align: center; font-style: italic; font-size: 13.5pt;
@@ -104,7 +104,7 @@ export function nomFichierNote(note, profil) {
   return `Note-de-frais-${qui}-${note.periode_annee}-${m}.html`
 }
 
-export function htmlNoteFrais({ note, profil, logoDataUrl }) {
+export async function htmlNoteFrais({ note, profil, logoDataUrl }) {
   const nom = nomCompletNote(profil)
   const lignes = note.lignes_forfait || []
   const lignesKm = note.lignes_km || []
@@ -207,7 +207,7 @@ export function htmlNoteFrais({ note, profil, logoDataUrl }) {
     </table>
   </div>`
 
-  return htmlDocument(`Note de frais — ${nom} — ${periode}`, body, CSS)
+  return htmlDocumentA4(`Note de frais — ${nom} — ${periode}`, body, CSS)
 }
 
 let logoCache = null

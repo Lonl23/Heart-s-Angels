@@ -6,6 +6,7 @@ import { COPYRIGHT } from '@/copyright'
 import { Card, Btn, F, TA, Pill, PillFictif, Empty, Loading, Logo, PhoneF, AddressFields, Flash } from '@/components/ui'
 import { ApercuPartenaire } from '@/modules/souhaits/RapportPartenaire'
 import { GenrePicker } from '@/modules/annuaire/genre'
+import BadgeBeta from '@/components/BadgeBeta'
 
 const STATUT = {
   nouvelle:  { l:'Reçue',       c:'#BA7517', bg:'#FAEEDA' },
@@ -39,6 +40,7 @@ export default function PartenairePortail() {
           <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>
             {org?.nom ? org.nom : 'Espace institution'}
           </span>
+          <BadgeBeta />
           {fictif && <PillFictif />}
         </div>
         <Btn kind="soft" onClick={async()=>{ await signOut(); nav('/login/partenaire') }}>Déconnexion</Btn>

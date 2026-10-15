@@ -32,3 +32,22 @@ passe personnel, puis pourra créer les autres membres et les partenaires.
 
 ⚠️ La clé **service_role** ne sert QU'à l'installation. Ne la mettez jamais dans
 config.js ni dans l'application.
+
+## Publication — d’abord la bêta, ensuite la prod
+Toute mise à jour va d’abord sur la **bêta**. Laurent teste, puis on publie la prod.
+
+```
+npm run deploy:beta
+```
+Canal Firebase Hosting `beta` (la prod `heart-s-angels.web.app` n’est pas touchée). Une pastille **Bêta** s’affiche dans l’en-tête et à la connexion.
+
+URL actuelle : https://heart-s-angels--beta-ynfgwaur.web.app (expire au bout de 30 jours ; relancer `deploy:beta` pour renouveler).
+
+Après validation :
+
+```
+npm run deploy:prod
+```
+(à ne lancer que lorsque Laurent a validé la bêta.)
+
+Hébergement cPanel (`heartsangels.be`, EX2) : pas d’identifiants FTP/SSH dans le dépôt. Pour y coller plus tard un sous-domaine `beta.heartsangels.be` : hôte FTP, utilisateur, mot de passe (secrets Cursor, pas git), copie du dossier `dist/`, et réécriture SPA vers `index.html` (fichier `.htaccess` déjà dans `public/`).

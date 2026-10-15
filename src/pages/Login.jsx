@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { COPYRIGHT } from '@/copyright'
 import { lbl, inp, Logo } from '@/components/ui'
 import { FondEcran } from '@/hooks/useFondPage'
+import BadgeBeta from '@/components/BadgeBeta'
 
 export default function Login() {
   const { session, can, loading, profile } = useAuth()
@@ -85,8 +86,9 @@ export default function Login() {
     <FondEcran page="login" style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20 }}>
       <div style={{ width:'100%', maxWidth:380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
         <Logo size={140} style={{ margin:'0 auto 8px' }} />
-        <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, marginBottom:6 }}>
+        <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, marginBottom:6, display:'flex', justifyContent:'center', alignItems:'center', gap:8 }}>
           {partenaire ? 'Espace partenaires' : 'Espace de gestion'}
+          <BadgeBeta />
         </p>
         {partenaire && (
           <p style={{ textAlign:'center', color:'var(--text-2)', fontSize:12.5, margin:'0 0 18px', lineHeight:1.45 }}>

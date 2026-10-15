@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, Card, Empty, Loading } from '@/components/ui'
 import { lblMouv, couleurMouv, fmtQuand } from './stockSchema'
@@ -6,6 +6,8 @@ import { PhotoArticle } from './photoStock'
 import { exporterMouvementsCsv } from './excelStock'
 import { fmtDatesSouhait } from '@/modules/souhaits/datesSouhait'
 import OngletMouvements from './OngletMouvements'
+import { imprimerHtml, telechargerHtml, imprimerApercuIframe } from '@/modules/souhaits/documentA4'
+import { htmlRapportStock, nomFichierRapportStock } from './rapportStockHtml'
 
 export default function OngletRapportSortie({ cats }) {
   const [vue, setVue] = useState('declasse')
@@ -13,6 +15,9 @@ export default function OngletRapportSortie({ cats }) {
   const [err, setErr] = useState(null)
   const [ouvert, setOuvert] = useState(null)
   const [detail, setDetail] = useState(null)
+  const [busyPdf, setBusyPdf] = useState(false)
+  const [apercu, setApercu] = useState(null)
+  const apercuRef = useRef(null)
 
   async function loadMissions() {
     setErr(null)
@@ -31,6 +36,21 @@ export default function OngletRapportSortie({ cats }) {
     if (error || data?.ok === false) { setErr(error?.message || data?.error); setDetail({ items: [] }); return }
     if (data.vide) { setOuvert(null); setDetail(null); loadMissions(); return }
     setDetail(data)
+  }
+
+  async function pdfMission(m, items) {
+    setBusyPdf(true)
+    try {
+      const html = await htmlRapportStock({
+        titre: `Utilisation mission — ${m.titre || 'Mission'}`,
+        sousTitre: [fmtDatesSouhait(m), 'Emports et consommations scannés'].filter(Boolean).join(' · '),
+        items: items || [],
+      })
+      imprimerHtml(html, setApercu)
+    } catch (e) {
+      alert('Impossible de préparer le PDF : ' + (e?.message || e))
+    }
+    setBusyPdf(false)
   }
 
   return (
@@ -83,9 +103,12 @@ export default function OngletRapportSortie({ cats }) {
                       <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Chargement…</div>
                     ) : (
                       <>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
                           <Btn kind="soft" onClick={() => exporterMouvementsCsv(detail.items || [], `rapport-mission.csv`)} disabled={!detail.items?.length}>
                             CSV
+                          </Btn>
+                          <Btn kind="soft" onClick={() => pdfMission(m, detail.items || [])} disabled={!detail.items?.length || busyPdf}>
+                            {busyPdf ? 'PDF…' : 'PDF'}
                           </Btn>
                         </div>
                         {(detail.items || []).length === 0 ? (
@@ -117,6 +140,16 @@ export default function OngletRapportSortie({ cats }) {
               </Card>
             )
           })}
+        </div>
+      )}
+      {apercu && (
+        <div className="ha-fiche-apercu">
+          <div className="ha-fiche-apercu-bar no-print">
+            <Btn onClick={() => imprimerApercuIframe(apercuRef.current)}>🖨 Imprimer / PDF</Btn>
+            <Btn kind="soft" onClick={() => telechargerHtml(nomFichierRapportStock('mission'), apercu)}>Télécharger</Btn>
+            <Btn kind="soft" onClick={() => setApercu(null)}>Fermer</Btn>
+          </div>
+          <iframe ref={apercuRef} title="Rapport d’utilisation mission" srcDoc={apercu} />
         </div>
       )}
     </div>

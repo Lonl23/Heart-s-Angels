@@ -9,6 +9,7 @@ import { COPYRIGHT } from '@/copyright'
 import { syncNativeTheme } from '@/lib/native'
 import { useFondPage } from '@/hooks/useFondPage'
 import { SortieFondu } from '@/components/Fondu'
+import BadgeBeta from '@/components/BadgeBeta'
 
 const NAV = [
   { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
@@ -131,7 +132,10 @@ export default function Layout() {
         <header style={{ position:'sticky', top:0, zIndex:30, display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--surface)', borderBottom:'1px solid var(--border)' }}>
           <button onClick={()=>setMobileOpen(o=>!o)} className="ha-burger" aria-label="Menu" style={iconBtn}>☰</button>
           <Logo size={40} className="ha-header-logo" />
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{pageTitle(loc.pathname)}</div>
+          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, display:'flex', alignItems:'center', gap:8 }}>
+            {pageTitle(loc.pathname)}
+            <BadgeBeta />
+          </div>
           <div ref={clocheRef} style={{ position:'relative', marginLeft:'auto' }}>
             <button type="button" onClick={() => setCloche(o => !o)} aria-label="Alertes" title="Alertes" style={{ ...iconBtn, position:'relative' }}>
               🔔

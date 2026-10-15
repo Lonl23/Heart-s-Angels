@@ -156,7 +156,7 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
     return images
   }
 
-  function htmlCourant(images) {
+  async function htmlCourant(images) {
     if (vue === 'partenaire') {
       const publie = rows.find(r => r.publie) || rows[0]
       return htmlRapportPartenaire({
@@ -176,7 +176,7 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
     setBusyDoc(true)
     try {
       const images = await imagesPourDocument()
-      const { html } = htmlCourant(images)
+      const { html } = await htmlCourant(images)
       imprimerHtml(html, setApercu)
     } catch (e) {
       alert('Impossible de préparer le document : ' + (e?.message || e))
@@ -188,7 +188,7 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
     setBusyDoc(true)
     try {
       const images = await imagesPourDocument()
-      const { html } = htmlCourant(images)
+      const { html } = await htmlCourant(images)
       telechargerHtml(nomFichierRapport(s, vue === 'partenaire' ? 'partenaire' : 'ASBL'), html)
     } catch (e) {
       alert('Impossible de préparer le document : ' + (e?.message || e))
