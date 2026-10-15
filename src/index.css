@@ -1014,6 +1014,10 @@ img, svg, video, table { max-width: 100%; }
 }
 .ha-stock-table-wrap { overflow-x: auto; margin-bottom: 12px; }
 .ha-stock-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 720px; }
+.ha-stock-lots { margin-top: 10px; overflow-x: auto; }
+.ha-stock-table.is-lots { min-width: 0; font-size: 12.5px; }
+.ha-stock-lots .ha-stock-table th,
+.ha-stock-lots .ha-stock-table td { padding: 6px 8px; }
 .ha-stock-table th {
   text-align: left; font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
   text-transform: uppercase; color: var(--text-muted);

@@ -150,13 +150,14 @@ export default function OngletAlertes({ cats, fournisseurs, lieux, unites, dotat
         {(a.bas || []).length === 0 ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Rien.</div>
         ) : (a.bas || []).map((u, i) => (
-          <Card key={u.id || i} style={{ padding: '10px 14px', marginBottom: 6 }}>
+          <Card key={`${u.id || i}-${u.zone || 'reserve'}`} style={{ padding: '10px 14px', marginBottom: 6 }}>
             <div className="ha-stock-row">
               <PhotoArticle path={u.photo_path} size={44} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600 }}>{u.nom}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
                   Reste {u.reste} / mini {u.stock_minimal}
+                  {u.zone === 'sacs' ? ' · sacs' : ' · réserve'}
                   {u.fournisseur_nom ? ` · ${u.fournisseur_nom}` : ''}
                 </div>
               </div>

@@ -1,17 +1,16 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Pill, Empty, Loading, Flash, inp } from '@/components/ui'
 import { TYPES_LIEU, MODES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, cheminLieux, enfantsDe, resteLabel, nomTypeO2 } from './stock/stockSchema'
 import VueLots from './stock/VueLots'
-import { aggregerLots, fmtDlc } from './stock/lotsStock'
+import { aggregerLots, fmtDlc, dlcPassee, dlcProche, qteLotLabel, lotCorrespond } from './stock/lotsStock'
 import { telechargerWord, telechargerCsv } from './stock/QrImg'
 import { etatDotationLieu, correspondArticle, idsLieuxFiltres } from './stock/dotationStock'
 import Scanner from './stock/Scanner'
 import { PhotoArticle, PhotoArticleChamp } from './stock/photoStock'
 import OngletFournisseurs from './stock/OngletFournisseurs'
 import OngletAlertes from './stock/OngletAlertes'
-import OngletGestionArticles from './stock/OngletGestionArticles'
 import OngletRapportSortie from './stock/OngletRapportSortie'
 import OngletTransferts, { FormReceptionGuide, FormSortieGuide, FormO2 } from './stock/OngletTransferts'
 import { etiqLieu, etiqUnite, CarteQr, FormReception, FormTransfert, FormSortie } from './stock/formsStock'
@@ -28,7 +27,6 @@ const ACCUEIL = [
 const PLUS = [
   ['gestion', 'Gestion articles'],
   ['alertes', 'Alertes'],
-  ['articles', 'Types d’articles'],
   ['fournisseurs', 'Fournisseurs'],
   ['lieux', 'Lieux'],
 ]
@@ -41,7 +39,7 @@ const LBL_RUBRIQUE = {
   rapport: 'Rapport de sortie',
   gestion: 'Gestion articles',
   alertes: 'Alertes',
-  articles: 'Types d’articles',
+  articles: 'Gestion articles',
   fournisseurs: 'Fournisseurs',
   lieux: 'Lieux',
   inventaire: 'Scan lieu',
@@ -281,8 +279,8 @@ export default function Stock() {
               onDone={() => load()} />
           )}
           {tab === 'rapport' && <OngletRapportSortie cats={cats} />}
-          {tab === 'gestion' && (
-            <OngletGestionArticles cats={cats} unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} />
+          {(tab === 'gestion' || tab === 'articles') && (
+            <OngletCatalogue cats={cats} lieux={lieux} unites={unites} fournisseurs={fournisseurs} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} onRecv={setRecv} />
           )}
           {tab === 'unites' && (
             <>
@@ -315,7 +313,6 @@ export default function Stock() {
                 if (cat) setRecv(cat)
               }} />
           )}
-          {tab === 'articles' && <OngletCatalogue cats={cats} lieux={lieux} unites={unites} fournisseurs={fournisseurs} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} onRecv={setRecv} />}
           {tab === 'fournisseurs' && <OngletFournisseurs fournisseurs={fournisseurs} cats={cats} onChange={load} onOk={ok} onErr={setErr} />}
           {tab === 'lieux' && <OngletLieux lieux={lieux} unites={unites} cats={cats} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} />}
           {tab === 'inventaire' && inv && (
@@ -535,7 +532,19 @@ function FormLieu({ item, lieux, onDone }) {
 
 function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChange, onOk, onErr, onRecv }) {
   const [edit, setEdit] = useState(null)
+  const [lotEdit, setLotEdit] = useState(null)
   const [q, setQ] = useState('')
+  const [savingLot, setSavingLot] = useState(false)
+  const lots = useMemo(() => aggregerLots(unites, lieux), [unites, lieux])
+  const lotsParCat = useMemo(() => {
+    const map = new Map()
+    for (const l of lots) {
+      const k = l.catalogue_id
+      if (!map.has(k)) map.set(k, [])
+      map.get(k).push(l)
+    }
+    return map
+  }, [lots])
   async function supprimer(c) {
     const n = (unites || []).filter(u => u.catalogue_id === c.id).length
     if (!confirm(n
@@ -546,50 +555,134 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
     onOk?.('Type retiré.')
     onChange()
   }
+  async function saveLot() {
+    if (!lotEdit) return
+    setSavingLot(true)
+    const { data, error } = await supabase.rpc('stock_lot_mettre_a_jour', {
+      p_catalogue: lotEdit.catalogue_id,
+      p_lot: lotEdit.lot || null,
+      p_nouveau_lot: lotEdit.nouveauLot,
+      p_dlc: lotEdit.dlc || null,
+    })
+    setSavingLot(false)
+    if (error || data?.ok === false) { onErr?.(error?.message || data?.error); return }
+    onOk?.(data.nb ? `${data.nb} unité(s) mises à jour.` : 'Lot enregistré.')
+    setLotEdit(null)
+    onChange?.()
+  }
   const fourById = Object.fromEntries((fournisseurs || []).map(f => [f.id, f]))
-  const vis = (cats || []).filter(c => correspondArticle(c, q))
+  const vis = (cats || []).filter(c => {
+    if (correspondArticle(c, q)) return true
+    return (lotsParCat.get(c.id) || []).some(l => lotCorrespond(l, (q || '').trim().toLowerCase()))
+  })
   return (
     <div>
-      <Btn onClick={() => setEdit({ nom:'', mode:'piece', unite:'pièce', qte_defaut:'', stock_minimal:0, fournisseur_id:'', ref_fournisseur:'' })} style={{ marginBottom:12 }}>+ Type d’article</Btn>
-      <label className="ha-stock-search-lab" htmlFor="stock-recherche-article">Rechercher un type d’article</label>
+      <Btn onClick={() => setEdit({ nom:'', mode:'piece', unite:'pièce', qte_defaut:'', stock_minimal:0, stock_minimal_sacs:0, fournisseur_id:'', ref_fournisseur:'' })} style={{ marginBottom:12 }}>+ Type d’article</Btn>
+      <label className="ha-stock-search-lab" htmlFor="stock-recherche-article">Rechercher un article</label>
       <input id="stock-recherche-article" className="ha-search" value={q} onChange={e=>setQ(e.target.value)}
-        placeholder="Nom, catégorie, référence…" autoComplete="off" style={{ ...inp, marginBottom:12, width:'min(100%, 420px)' }} />
+        placeholder="Nom, lot, lieu, référence…" autoComplete="off" style={{ ...inp, marginBottom:12, width:'min(100%, 420px)' }} />
       {edit && <FormCatalogue item={edit} fournisseurs={fournisseurs} onDone={() => { setEdit(null); onChange() }} onOk={onOk} onErr={onErr} />}
+      {lotEdit && (
+        <Card style={{ marginBottom:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10, gap:8 }}>
+            <strong>Lot — {lotEdit.article}</strong>
+            <Btn kind="soft" onClick={() => setLotEdit(null)}>Annuler</Btn>
+          </div>
+          <F label="N° de lot" value={lotEdit.nouveauLot} set={v => setLotEdit(s => ({ ...s, nouveauLot: v }))} placeholder="tel qu’imprimé sur la boîte" />
+          <F label="Date de péremption" type="date" value={lotEdit.dlc || ''} set={v => setLotEdit(s => ({ ...s, dlc: v }))} />
+          <Btn onClick={saveLot} disabled={savingLot} style={{ width:'100%' }}>{savingLot ? '…' : 'Enregistrer'}</Btn>
+        </Card>
+      )}
       {cats.length === 0 ? <Empty title="Aucun type" hint="Ex. Gants nitrile M (boîte), Compresse, O2 B2L / B5L / B10L. Ajoutez une photo pour reconnaître l’article." />
-        : vis.length === 0 ? <Empty title="Aucun article pour cette recherche" hint="Essayez le nom, la catégorie ou la référence fournisseur." /> : (
+        : vis.length === 0 ? <Empty title="Aucun article pour cette recherche" hint="Essayez le nom, le n° de lot, le lieu ou la référence fournisseur." /> : (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {vis.map(c => (
-            <Card key={c.id} style={{ padding:'12px 14px' }}>
-              <div className="ha-stock-row" style={{ alignItems:'flex-start' }}>
-                <PhotoArticle path={c.photo_path} size={64} />
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
-                    <div>
-                      <div style={{ fontWeight:600 }}>{c.nom}</div>
-                      <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
-                        {c.categorie ? `${c.categorie} · ` : ''}
-                        {lblMode(c.mode)}{c.mode === 'boite' && c.qte_defaut ? ` · ${Number(c.qte_defaut)} ${c.unite} / boîte` : ''}
-                        {c.mode === 'oxygene' && c.volume_l ? ` · ${Number(c.volume_l)} L · ${PRESSION_PLEINE} bar à la livraison` : ''}
-                        {c.stock_minimal ? ` · seuil ${Number(c.stock_minimal)}` : ''}
-                        {c.fournisseur_id && fourById[c.fournisseur_id] ? ` · ${fourById[c.fournisseur_id].nom}` : ''}
-                        {c.ref_fournisseur ? ` · réf. ${c.ref_fournisseur}` : ''}
-                      </div>
-                      {(dotations || []).filter(d => d.catalogue_id === c.id).length > 0 && (
-                        <div style={{ fontSize:12.5, color:'var(--text-2)', marginTop:4 }}>
-                          {(dotations || []).filter(d => d.catalogue_id === c.id).map(d => cheminLieux(lieux, d.lieu_id)).filter(Boolean).join(' · ')}
+          {vis.map(c => {
+            const ls = lotsParCat.get(c.id) || []
+            return (
+              <Card key={c.id} style={{ padding:'12px 14px' }}>
+                <div className="ha-stock-row" style={{ alignItems:'flex-start' }}>
+                  <PhotoArticle path={c.photo_path} size={64} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
+                      <div>
+                        <div style={{ fontWeight:600 }}>{c.nom}</div>
+                        <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
+                          {c.categorie ? `${c.categorie} · ` : ''}
+                          {lblMode(c.mode)}{c.mode === 'boite' && c.qte_defaut ? ` · ${Number(c.qte_defaut)} ${c.unite} / boîte` : ''}
+                          {c.mode === 'oxygene' && c.volume_l ? ` · ${Number(c.volume_l)} L · ${PRESSION_PLEINE} bar à la livraison` : ''}
+                          {c.mode !== 'oxygene' && (Number(c.stock_minimal) || Number(c.stock_minimal_sacs))
+                            ? ` · mini réserve ${Number(c.stock_minimal) || 0} · mini sacs ${Number(c.stock_minimal_sacs) || 0}`
+                            : ''}
+                          {c.fournisseur_id && fourById[c.fournisseur_id] ? ` · ${fourById[c.fournisseur_id].nom}` : ''}
+                          {c.ref_fournisseur ? ` · réf. ${c.ref_fournisseur}` : ''}
                         </div>
-                      )}
+                        {(dotations || []).filter(d => d.catalogue_id === c.id).length > 0 && (
+                          <div style={{ fontSize:12.5, color:'var(--text-2)', marginTop:4 }}>
+                            {(dotations || []).filter(d => d.catalogue_id === c.id).map(d => cheminLieux(lieux, d.lieu_id)).filter(Boolean).join(' · ')}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                        <Btn onClick={() => onRecv?.(c)} style={{ padding:'5px 10px' }}>+ Réception</Btn>
+                        <Btn kind="soft" onClick={() => setEdit(c)} style={{ padding:'5px 10px' }}>Modifier</Btn>
+                        <Btn kind="danger" onClick={() => supprimer(c)} style={{ padding:'5px 10px' }}>Supprimer</Btn>
+                      </div>
                     </div>
-                    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                      <Btn onClick={() => onRecv?.(c)} style={{ padding:'5px 10px' }}>+ Réception</Btn>
-                      <Btn kind="soft" onClick={() => setEdit(c)} style={{ padding:'5px 10px' }}>Modifier</Btn>
-                      <Btn kind="danger" onClick={() => supprimer(c)} style={{ padding:'5px 10px' }}>Supprimer</Btn>
-                    </div>
+                    {ls.length === 0 ? (
+                      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:8 }}>Aucun lot commencé — faites une réception.</div>
+                    ) : (
+                      <div className="ha-stock-lots">
+                        <table className="ha-stock-table is-lots">
+                          <thead>
+                            <tr>
+                              <th>N° de lot</th>
+                              <th>Péremption</th>
+                              <th>Qté</th>
+                              <th>Lieu</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ls.map((lot, i) => {
+                              const perime = dlcPassee(lot.dlc)
+                              const j15 = dlcProche(lot.dlc, 15)
+                              const dlcColor = perime ? '#A32D2D' : j15 ? '#BA7517' : 'var(--text-muted)'
+                              return (
+                                <tr key={`${c.id}-${lot.lot || 'sans'}-${i}`} className={perime ? 'is-alerte' : ''}>
+                                  <td>
+                                    <button type="button" className="ha-stock-table-link" onClick={() => setLotEdit({
+                                      catalogue_id: c.id, article: c.nom, lot: lot.lot || '',
+                                      nouveauLot: lot.lot || '', dlc: lot.dlc || '',
+                                    })}>
+                                      {lot.lot || 'sans n°'}
+                                    </button>
+                                  </td>
+                                  <td style={{ color: dlcColor, fontWeight: perime || j15 ? 700 : 400 }}>
+                                    {fmtDlc(lot.dlc)}
+                                    {perime ? ' · périmé' : j15 ? ' · J-15' : ''}
+                                  </td>
+                                  <td style={{ fontVariantNumeric: 'tabular-nums' }}>{qteLotLabel(lot)}</td>
+                                  <td>
+                                    {(lot.lieux || []).length
+                                      ? (lot.lieux || []).map((x, j) => (
+                                        <div key={x.lieu_id || j}>
+                                          {x.chemin || x.nom || cheminLieux(lieux, x.lieu_id) || 'sans lieu'}
+                                          {x.qte != null ? ` · ${Number(x.qte)}` : ''}
+                                        </div>
+                                      ))
+                                      : '—'}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>
@@ -597,7 +690,7 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
 }
 
 function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
-  const [f, setF] = useState({ unite:'pièce', mode:'piece', stock_minimal:0, fournisseur_id:'', ref_fournisseur:'', ...item })
+  const [f, setF] = useState({ unite:'pièce', mode:'piece', stock_minimal:0, stock_minimal_sacs:0, fournisseur_id:'', ref_fournisseur:'', ...item })
   const [saving, setSaving] = useState(false)
   const [photoPath, setPhotoPath] = useState(item.photo_path || null)
   async function save() {
@@ -614,6 +707,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       qte_defaut: f.mode === 'boite' ? Number(f.qte_defaut) : null,
       volume_l: f.mode === 'oxygene' ? Number(f.volume_l) : null,
       stock_minimal: Number(f.stock_minimal) || 0,
+      stock_minimal_sacs: Number(f.stock_minimal_sacs) || 0,
       fournisseur_id: f.fournisseur_id || null,
       ref_fournisseur: f.ref_fournisseur?.trim() || null,
     }
@@ -644,10 +738,11 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       {f.mode === 'oxygene' && (
         <Sel label="Volume de la bouteille" value={String(f.volume_l || '5')} set={v=>setF(s=>({ ...s, volume_l:v, nom: s.nom || nomTypeO2(v) }))} options={VOLUMES_O2} />
       )}
+      {f.mode !== 'oxygene' && <F label="Unité" value={f.unite} set={v=>setF(s=>({ ...s, unite:v }))} />}
       {f.mode !== 'oxygene' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-          <F label="Unité" value={f.unite} set={v=>setF(s=>({ ...s, unite:v }))} />
-          <F label="Stock mini (alerte)" type="number" value={f.stock_minimal} set={v=>setF(s=>({ ...s, stock_minimal:v }))} />
+          <F label="Stock mini réserve" type="number" value={f.stock_minimal} set={v=>setF(s=>({ ...s, stock_minimal:v }))} />
+          <F label="Stock mini sacs" type="number" value={f.stock_minimal_sacs} set={v=>setF(s=>({ ...s, stock_minimal_sacs:v }))} />
         </div>
       )}
       {f.mode !== 'oxygene' && <F label="Catégorie" value={f.categorie} set={v=>setF(s=>({ ...s, categorie:v }))} placeholder="consommable, logistique…" />}

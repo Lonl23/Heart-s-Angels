@@ -7,7 +7,9 @@ export const TYPES_LIEU = [
   { v:'armoire_vehicule', l:'Armoire dans un véhicule' },
   { v:'autre', l:'Autre' },
 ]
+export const TYPES_LIEU_SACS = ['sac', 'pochette', 'vehicule', 'armoire_vehicule']
 export const lblLieu = v => TYPES_LIEU.find(t => t.v === v)?.l || v
+export const estLieuSac = type => TYPES_LIEU_SACS.includes(type)
 
 export const MODES = [
   { v:'piece', l:'Pièce (1 QR = 1 article)' },

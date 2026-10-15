@@ -64,6 +64,7 @@ export async function exporterStockExcel(data, lieux) {
     { h:'unite', w:10, v: r => r.unite },
     { h:'qte_defaut', w:12, v: r => r.qte_defaut },
     { h:'stock_minimal', w:14, v: r => r.stock_minimal },
+    { h:'stock_minimal_sacs', w:16, v: r => r.stock_minimal_sacs },
     { h:'volume_l', w:10, v: r => r.volume_l },
     { h:'fournisseur', w:22, v: r => r.fournisseur },
     { h:'ref_fournisseur', w:18, v: r => r.ref_fournisseur },

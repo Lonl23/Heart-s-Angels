@@ -411,7 +411,7 @@ export function FormReceptionGuide({ cats, lieux, unites, onOk, onErr, onDone, o
         <Empty
           title="Aucun type"
           hint="Créez d’abord le type d’article."
-          action={onAller ? <Btn kind="soft" onClick={() => onAller('articles')}>Articles</Btn> : null} />
+          action={onAller ? <Btn kind="soft" onClick={() => onAller('gestion')}>Gestion articles</Btn> : null} />
       ) : vis.map(c => (
         <button key={c.id} type="button" className="ha-pick-row" onClick={() => setCat(c)}>
           <div className="ha-stock-row">
