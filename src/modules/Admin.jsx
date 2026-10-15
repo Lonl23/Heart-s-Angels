@@ -16,16 +16,18 @@ export default function Admin() {
   return (
     <Page
       title="Administration"
-      subtitle="Partenaires, accès, et photos de fond. Les fiches volontaires sont dans l’onglet Volontaires."
+      subtitle="Partenaires, accès, sécurité (2FA) et photos de fond. Les fiches volontaires sont dans l’onglet Volontaires."
     >
       <Tabs value={tab} onChange={setTab} items={[
         { v:'apparence', l:'Photos de fond' },
         { v:'partenaires', l:'Partenaires' },
         { v:'acces', l:'Accès' },
+        { v:'securite', l:'Sécurité' },
       ]} />
       {tab === 'apparence' && <Apparence />}
       {tab === 'partenaires' && <Partenaires />}
       {tab === 'acces' && <AccesMatrice />}
+      {tab === 'securite' && <ReglagesSecurite />}
     </Page>
   )
 }
@@ -232,6 +234,57 @@ function Partenaires() {
             {comptes.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--text-muted)' }}>Aucun compte partenaire.</td></tr>}
           </tbody>
         </table>
+      </Card>
+    </div>
+  )
+}
+
+function ReglagesSecurite() {
+  const [obligatoire, setObligatoire] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    supabase.from('app_reglages').select('valeur').eq('cle', 'mfa').maybeSingle().then(({ data }) => {
+      setObligatoire(!!data?.valeur?.obligatoire)
+    })
+  }, [])
+
+  async function toggle() {
+    const nv = !obligatoire
+    setObligatoire(nv)
+    setBusy(true)
+    const { error } = await supabase.from('app_reglages').upsert({
+      cle: 'mfa',
+      valeur: { obligatoire: nv },
+      updated_at: new Date().toISOString(),
+    })
+    setBusy(false)
+    if (error) {
+      setObligatoire(!nv)
+      setMsg({ t: error.message, ok: false })
+      return
+    }
+    setMsg({ t: nv
+      ? 'La 2FA est désormais exigée pour tout le personnel interne à la prochaine connexion.'
+      : 'La 2FA redevient optionnelle. Chacun peut l’activer dans Ma fiche.', ok: true })
+    setTimeout(() => setMsg(null), 4000)
+  }
+
+  return (
+    <div>
+      {msg && <Msg msg={msg} />}
+      <Card>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 8 }}>Double authentification (2FA)</div>
+        <p style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.45, margin: '0 0 14px' }}>
+          Chaque volontaire peut activer un code d’application (Google Authenticator, Aegis) dans <b>Ma fiche</b>.
+          Cochez ci-dessous seulement si vous voulez l’imposer à tout le personnel interne (pas les partenaires).
+        </p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14 }}>
+          <input type="checkbox" checked={obligatoire} disabled={busy} onChange={toggle}
+            style={{ width: 18, height: 18, accentColor: 'var(--accent)' }} />
+          Exiger la double authentification pour tout le personnel interne
+        </label>
       </Card>
     </div>
   )

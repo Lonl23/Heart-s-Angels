@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
+import { estIdentiteGoogle, validerSessionGoogle } from '@/lib/authConnexion'
 
 const AuthContext = createContext(null)
 
@@ -27,6 +28,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [matrix, setMatrix] = useState({})
   const [matrixCount, setMatrixCount] = useState(0)
+  const [authErreur, setAuthErreur] = useState(null)
+  const [besoinMfa, setBesoinMfa] = useState(false)
+  const [mfaAEnroller, setMfaAEnroller] = useState(false)
   const pret = useRef(false)
   const uid = useRef(null)
   const profileRef = useRef(null)
@@ -42,7 +46,10 @@ export function AuthProvider({ children }) {
       // TOKEN_REFRESHED, SIGNED_IN, voire un SIGNED_OUT transitoire : ne jamais
       // démonter l'écran ni envoyer vers /login.
       if (event === 'TOKEN_REFRESHED') {
-        if (s) setSession(s)
+        if (s) {
+          setSession(s)
+          evaluerMfa(s)
+        }
         return
       }
       if (event === 'SIGNED_OUT') {
@@ -53,6 +60,8 @@ export function AuthProvider({ children }) {
         pret.current = true
         setMatrix({})
         setMatrixCount(0)
+        setBesoinMfa(false)
+        setMfaAEnroller(false)
         setLoading(false)
         return
       }
@@ -71,14 +80,68 @@ export function AuthProvider({ children }) {
     setMatrix(map); setMatrixCount((data||[]).length)
   }
 
+  async function evaluerMfa(sess) {
+    if (!sess) {
+      setBesoinMfa(false)
+      setMfaAEnroller(false)
+      return
+    }
+    try {
+      const [{ data: aal }, { data: factors }, { data: regl }] = await Promise.all([
+        supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+        supabase.auth.mfa.listFactors(),
+        supabase.from('app_reglages').select('valeur').eq('cle', 'mfa').maybeSingle(),
+      ])
+      const totp = (factors?.totp || []).filter(f => f.status === 'verified')
+      const obligatoire = !!regl?.valeur?.obligatoire
+      const role = profileRef.current?.role
+      if (role === 'partenaire') {
+        setBesoinMfa(false)
+        setMfaAEnroller(false)
+        return
+      }
+      const manqueCode = aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2'
+      const forceEnrol = obligatoire && totp.length === 0
+      setBesoinMfa(!!(manqueCode || forceEnrol))
+      setMfaAEnroller(!!forceEnrol)
+    } catch {
+      setBesoinMfa(false)
+      setMfaAEnroller(false)
+    }
+  }
+
   async function loadProfile(userId) {
     const silencieux = pret.current && uid.current === userId && !!profileRef.current
     if (!silencieux) setLoading(true)
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+    const { data: { user } } = await supabase.auth.getUser()
+    let { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+
+    if (estIdentiteGoogle(user) && !silencieux) {
+      const v = await validerSessionGoogle()
+      if (!v.ok) {
+        setAuthErreur(v.error)
+        setLoading(false)
+        await supabase.auth.signOut()
+        return
+      }
+      setAuthErreur(null)
+      if (!data) {
+        const again = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+        data = again.data
+      }
+      if (!data) {
+        setAuthErreur('Aucun compte Heart’s Angels pour cette adresse')
+        setLoading(false)
+        await supabase.auth.signOut()
+        return
+      }
+    }
+
     setProfile(data || null)
     profileRef.current = data || null
     uid.current = userId
     pret.current = true
+    await evaluerMfa((await supabase.auth.getSession()).data.session)
     setLoading(false)
     loadMatrix()
   }
@@ -221,11 +284,12 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
+    authErreur, besoinMfa, mfaAEnroller, rafraichirMfa: () => evaluerMfa(session),
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
     peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
-  }), [session, profile, role, loading, matrix, matrixCount])
+  }), [session, profile, role, loading, matrix, matrixCount, authErreur, besoinMfa, mfaAEnroller])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

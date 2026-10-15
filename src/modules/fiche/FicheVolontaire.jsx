@@ -5,6 +5,7 @@ import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
 import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, equipeAsblOuverteParDefaut, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
 import { TYPES_NOTIF, prefsDepuisFiche } from '@/lib/notifications'
 import { FormPinFiche } from '@/components/PinArchive'
+import SecuriteMfa from '@/components/SecuriteMfa'
 
 const vide = {
   date_naissance:'', telephone:'', iban:'', type_benevole:'',
@@ -197,6 +198,8 @@ export default function FicheVolontaire({ userId, onBack }) {
           E-mail (connexion) : {(prof.email || '').trim() || 'pas encore de compte'} — l’IBAN sert aux notes de frais forfaitaires.
         </div>
       </Card>
+
+      {maFiche && <SecuriteMfa />}
 
       <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
         <Sec>Rôle de compte</Sec>
