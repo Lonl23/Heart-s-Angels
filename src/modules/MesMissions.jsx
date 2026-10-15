@@ -13,7 +13,7 @@ const FILTRES = [
   { v:'terminees', l:'Terminées' },
 ]
 
-export default function MesMissions() {
+export default function MesMissions({ titre = 'Mes souhaits', sousTitre = 'Les souhaits auxquels vous êtes affecté. Sur le terrain : checklists, démarrer, terminer.', base = '/app/missions' }) {
   const { session } = useAuth()
   const nav = useNavigate()
   const { id } = useParams()
@@ -31,7 +31,7 @@ export default function MesMissions() {
     setLoading(false)
   }
 
-  if (id) return <MissionExecution souhaitId={id} onBack={() => nav('/app/missions')} />
+  if (id) return <MissionExecution souhaitId={id} onBack={() => nav(base)} />
 
   const visible = items.filter(m => {
     if (filtre === 'en_cours') return m.statut === 'en_cours'
@@ -41,7 +41,7 @@ export default function MesMissions() {
   const nbCours = items.filter(m => m.statut === 'en_cours').length
 
   return (
-    <Page title="Mes missions" subtitle="Sur le terrain, étape par étape : votre véhicule, puis la prise en charge, le retour, la base.">
+    <Page title={titre} subtitle={sousTitre}>
       {err && <div style={{ color:'#A32D2D', fontSize:13, marginBottom:10 }}>{err}</div>}
       <div className="ha-tabs" style={{ marginBottom:16 }}>
         {FILTRES.map(f => (
@@ -58,7 +58,7 @@ export default function MesMissions() {
             {visible.map(m => {
               const st = stInfo(m.statut)
               return (
-                <Card key={m.souhait_id} clickable onClick={()=>nav(`/app/missions/${m.souhait_id}`)} style={{ padding:'16px 16px' }}>
+                <Card key={m.souhait_id} clickable onClick={()=>nav(`${base}/${m.souhait_id}`)} style={{ padding:'16px 16px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'flex-start' }}>
                     <div style={{ minWidth:0 }}>
                       <div style={{ fontWeight:700, fontSize:16, color:'var(--text)' }}>

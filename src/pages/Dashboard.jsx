@@ -1,22 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Card, Empty, Loading } from '@/components/ui'
-
-const CARDS = [
-  { to:'/app/missions',      key:'missions',      icon:'🚑', label:'Mes missions',   desc:'Terrain : checklists, démarrer, terminer' },
-  { to:'/app/souhaits',      key:'souhaits',      icon:'⭐', label:'Souhaits',       desc:'Encoder et préparer les dossiers' },
-  { to:'/app/defraiements',  key:'defraiements',  icon:'🧾', label:'Défraiements',   desc:'Frais, validation, paiement' },
-  { to:'/app/disponibilites',key:'disponibilites',icon:'📅', label:'Disponibilités', desc:'Agenda : vos jours et les missions (sans nom de patient)' },
-  { to:'/app/stock',         key:'stock',         icon:'📦', label:'Stock',          desc:'Matériel et mouvements' },
-  { to:'/app/annuaire',      key:'annuaire',      icon:'📇', label:'Annuaire',       desc:'Contacts et institutions' },
-]
+import { DEPARTEMENTS, cheminDepartement, filtrerDepartements } from '@/navigation'
 
 export default function Dashboard() {
-  const { profile, canAccess, peutGererStock } = useAuth()
+  const { profile, peutOuvrir, canAccess } = useAuth()
   const [missions, setMissions] = useState(null)
-  const cartes = CARDS.filter(c => c.key === 'stock' ? canAccess(c.key) && peutGererStock() : canAccess(c.key))
+  const departements = useMemo(() => filtrerDepartements(DEPARTEMENTS, peutOuvrir), [peutOuvrir])
   const date = new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' })
 
   useEffect(() => {
@@ -56,20 +48,26 @@ export default function Dashboard() {
 
       {missions && missions.length === 0 && canAccess('missions') && (
         <div style={{ marginBottom:24 }}>
-          <Empty title="Aucune mission affectée" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici et dans Mes missions." />
+          <Empty title="Aucune mission affectée" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici et dans Mes souhaits." />
         </div>
       )}
 
-      <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Accès rapides</div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:14 }}>
-        {cartes.map(c => (
-          <Link key={c.to} to={c.to} className="ha-click" style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'18px 16px', textDecoration:'none', display:'block' }}>
-            <div style={{ fontSize:'1.8rem', marginBottom:8 }}>{c.icon}</div>
-            <div style={{ fontSize:14.5, fontWeight:600, color:'var(--text)' }}>{c.label}</div>
-            <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>{c.desc}</div>
-          </Link>
-        ))}
-      </div>
+      <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Que voulez-vous faire ?</div>
+      {departements.length === 0 ? (
+        <Empty title="Aucun département" hint="Aucun département ne vous est ouvert pour le moment." />
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:14 }}>
+          {departements.map(d => (
+            <Link key={d.id} to={cheminDepartement(d)} style={{ textDecoration:'none', color:'inherit' }}>
+              <Card clickable style={{ display:'flex', alignItems:'center', gap:12, minHeight:88 }}>
+                <span style={{ fontSize:'1.8rem', lineHeight:1 }} aria-hidden>{d.icon}</span>
+                <span style={{ flex:1, minWidth:0, fontFamily:"'Cormorant Garamond', Georgia, serif", fontSize:'1.35rem', color:'var(--heading)', lineHeight:1.15 }}>{d.label}</span>
+                <span style={{ color:'var(--accent)', fontWeight:600, fontSize:13, flexShrink:0 }}>Choisir ›</span>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
