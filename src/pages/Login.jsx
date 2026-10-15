@@ -6,8 +6,6 @@ import { COPYRIGHT } from '@/copyright'
 import { lbl, inp, Logo } from '@/components/ui'
 import { FondEcran } from '@/hooks/useFondPage'
 import BadgeBeta from '@/components/BadgeBeta'
-import BoutonGoogle from '@/components/BoutonGoogle'
-import { continuerAvecGoogle, erreurOAuthDepuisUrl } from '@/lib/authConnexion'
 
 export default function Login() {
   const { session, can, loading, profile, authErreur } = useAuth()
@@ -20,14 +18,6 @@ export default function Login() {
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const pendingPartenaire = useRef(false)
-
-  useEffect(() => {
-    const oauthErr = erreurOAuthDepuisUrl(loc.search, loc.hash)
-    if (oauthErr) {
-      setErr(oauthErr)
-      nav(loc.pathname, { replace: true, state: loc.state })
-    }
-  }, [])
 
   useEffect(() => {
     if (authErreur) setErr(authErreur)
@@ -96,12 +86,6 @@ export default function Login() {
     setBusy(false)
   }
 
-  async function google() {
-    setErr(null); setBusy(true)
-    const r = await continuerAvecGoogle()
-    if (!r.ok) { setBusy(false); setErr(r.error); return }
-  }
-
   return (
     <FondEcran page="login" style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20 }}>
       <div style={{ width:'100%', maxWidth:380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
@@ -147,17 +131,9 @@ export default function Login() {
           <button type="submit" disabled={busy} style={{ padding:12, background:'var(--accent)', color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:600 }}>{busy?'Connexion…':'Se connecter'}</button>
         </form>
         {!partenaire && (
-          <>
-            <div style={{ display:'flex', alignItems:'center', gap:10, margin:'16px 0 14px' }}>
-              <span style={{ flex:1, height:1, background:'var(--border)' }} />
-              <span style={{ fontSize:12, color:'var(--text-faint)' }}>ou</span>
-              <span style={{ flex:1, height:1, background:'var(--border)' }} />
-            </div>
-            <BoutonGoogle onClick={google} disabled={busy}>Continuer avec Google</BoutonGoogle>
-            <div style={{ textAlign:'center', marginTop:12 }}>
-              <Link to="/mot-de-passe-oublie" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>Mot de passe oublié ?</Link>
-            </div>
-          </>
+          <div style={{ textAlign:'center', marginTop:12 }}>
+            <Link to="/mot-de-passe-oublie" style={{ fontSize:13, color:'var(--accent)', fontWeight:600 }}>Mot de passe oublié ?</Link>
+          </div>
         )}
 
         {partenaire ? (

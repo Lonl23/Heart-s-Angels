@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
-import { estIdentiteGoogle, validerSessionGoogle } from '@/lib/authConnexion'
 
 const AuthContext = createContext(null)
 
@@ -113,29 +112,7 @@ export function AuthProvider({ children }) {
   async function loadProfile(userId) {
     const silencieux = pret.current && uid.current === userId && !!profileRef.current
     if (!silencieux) setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    let { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
-
-    if (estIdentiteGoogle(user) && !silencieux) {
-      const v = await validerSessionGoogle()
-      if (!v.ok) {
-        setAuthErreur(v.error)
-        setLoading(false)
-        await supabase.auth.signOut()
-        return
-      }
-      setAuthErreur(null)
-      if (!data) {
-        const again = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
-        data = again.data
-      }
-      if (!data) {
-        setAuthErreur('Aucun compte Heart’s Angels pour cette adresse')
-        setLoading(false)
-        await supabase.auth.signOut()
-        return
-      }
-    }
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
 
     setProfile(data || null)
     profileRef.current = data || null

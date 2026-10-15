@@ -21,48 +21,9 @@ Dans Supabase → **Authentication → Sign In / Providers → Email**, **désac
 « Confirm email »**. Sans cela, l'inscription par code d'invitation ne peut pas
 aboutir (pas de serveur d'e-mails). C'est le seul réglage à faire pour l'e-mail.
 
-### Connexion Google (à faire une fois par Laurent)
-L’app a déjà le bouton **« Continuer avec Google »**. Sans client OAuth Google,
-le bouton affiche une erreur : il faut coller l’identifiant dans Supabase.
-
-1. **Google Cloud** → APIs & Services → Identifiants → **Créer un identifiant**
-   → **ID client OAuth** → type **Application Web**.
-   - Nom : `Heart's Angels app`
-   - **Origines JavaScript autorisées** :
-     - `https://app.heartsangels.be`
-     - `https://appbetaapp.heartsangels.be`
-     - `https://heart-s-angels--beta-ynfgwaur.web.app`
-     - `https://heart-s-angels.web.app`
-     - `https://heart-s-angels.firebaseapp.com`
-     - `http://localhost:5173`
-   - **URI de redirection autorisés** (un seul, celui de Supabase) :
-     - `https://vppmvjqbzdeftrhdoert.supabase.co/auth/v1/callback`
-   - Créer, **copier l’ID client et le secret** (ne pas les coller dans l’app).
-
-2. **Supabase** → Authentication → Providers → **Google** → activer,
-   coller **Client ID** et **Client secret**, enregistrer.
-
-   ⚠️ Le Client ID ressemble à `123456789-xxxx.apps.googleusercontent.com`.
-   Ce n’est **pas** `gmail.com`, **pas** une adresse e-mail, **pas** le nom
-   du domaine. Si Google affiche « upstream unreachable », c’est que la
-   mauvaise valeur a été collée : remplacer par l’ID client OAuth ci-dessus.
-
-   Laissez le **rattachement automatique** des identités (même e-mail) activé :
-   un volontaire déjà inscrit par mot de passe pourra ensuite ouvrir Google
-   avec **la même adresse** (ex. `laurent@heartsangels.be` via Google Workspace).
-
-3. **Supabase** → Authentication → URL Configuration → **Redirect URLs**,
-   en plus de localhost :
-   - `https://app.heartsangels.be/**`
-   - `https://appbetaapp.heartsangels.be/**`
-   - `https://heart-s-angels--beta-ynfgwaur.web.app/**`
-   - `https://heart-s-angels.web.app/**`
-   - `https://heart-s-angels.firebaseapp.com/**`
-   - `http://localhost:5173/**`
-
-Un Gmail inconnu de l’ASBL est **refusé** (« Aucun compte Heart's Angels pour
-cette adresse ») : pas de fiche volontaire vide. L’e-mail Google doit être
-celui déjà encodé sur la fiche (souvent `@heartsangels.be`).
+La connexion se fait par **e-mail et mot de passe** (pas de Google : le compte
+Workspace ASBL n’est pas compatible avec ce flux). Dans Supabase →
+Authentication → Providers → **Google**, laisser le fournisseur **désactivé**.
 
 ### Double authentification (2FA)
 Déjà disponible, sans réglage dashboard. Dans **Ma fiche** → **Sécurité du
@@ -132,4 +93,4 @@ Dans Supabase → Authentication → URL Configuration, ajouter les redirections
 - `https://heart-s-angels.firebaseapp.com/**`
 - `http://localhost:5173/**`
 
-(garder aussi le canal Firebase tant qu’il sert de repli. Voir aussi Google ci-dessus.)
+(garder aussi le canal Firebase tant qu’il sert de repli.)

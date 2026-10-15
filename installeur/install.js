@@ -122,6 +122,7 @@ async function main() {
     await client.query(lireSQL('79_evenements_inscriptions.sql'))
     await client.query(lireSQL('80_evenements_relais_seraing.sql'))
     await client.query(lireSQL('85_auth_google_mfa.sql'))
+    await client.query(lireSQL('86_retrait_connexion_google.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()
