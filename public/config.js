@@ -14,6 +14,8 @@ window.__APP_CONFIG__ = {
     accent:  "#1BB0CE",
     logoUrl: "/icons/ha-logo-512-v4.png",
   },
+  // Prod : https://app.heartsangels.be — Bêta : https://appbetaapp.heartsangels.be
+  // Repli Firebase tant que les sous-domaines cPanel ne sont pas en ligne.
   domaine: "https://heart-s-angels.web.app",
   vapidPublicKey: "BItos40GJksoCJRK7W0cWt5VgloRmYkwwf9Q9rZ3hkCXR9xEruCiZhN-yboXw5ijt54bvIMo83wle2QoM5VTz_U",
   supabase: {

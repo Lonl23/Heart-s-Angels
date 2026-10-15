@@ -1,3 +1,5 @@
+# SPA Heart's Angels — à poser dans le dossier du sous-domaine seulement
+# (appbetaapp.heartsangels.be/ ou app.heartsangels.be/), jamais dans public_html du site public.
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /

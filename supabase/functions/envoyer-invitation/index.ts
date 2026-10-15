@@ -23,7 +23,29 @@ const ROLES_GERER_APP = [
   'resp_informatique', 'resp_informatique_adjoint',
 ]
 const ROLES_FICHES = ['coord_benevoles', 'coord_benevoles_adjoint']
-const PUB = () => (Deno.env.get('APP_PUBLIC_URL') || 'https://heart-s-angels.web.app').replace(/\/$/, '')
+const URL_APP_PROD = 'https://app.heartsangels.be'
+const URL_APP_BETA = 'https://appbetaapp.heartsangels.be'
+const URL_FIREBASE = 'https://heart-s-angels.web.app'
+
+function origineAutorisee(raw: unknown): string {
+  const s = String(raw || '').trim().replace(/\/$/, '')
+  if (!s) return ''
+  try {
+    const u = new URL(s)
+    const h = u.hostname.toLowerCase()
+    const local = h === 'localhost' || h === '127.0.0.1'
+    if (local && (u.protocol === 'http:' || u.protocol === 'https:')) return s
+    if (u.protocol !== 'https:') return ''
+    if (h === new URL(URL_APP_PROD).hostname || h === new URL(URL_APP_BETA).hostname) return `${u.protocol}//${h}`
+    if (h === 'heart-s-angels.web.app' || h === 'heart-s-angels.firebaseapp.com') return `${u.protocol}//${h}`
+    if (h.includes('heart-s-angels--beta') && h.endsWith('.web.app')) return `${u.protocol}//${h}`
+  } catch { /* ignore */ }
+  return ''
+}
+
+function pubDepuis(body: { origine?: unknown } | null | undefined): string {
+  return (origineAutorisee(body?.origine) || Deno.env.get('APP_PUBLIC_URL') || URL_FIREBASE).replace(/\/$/, '')
+}
 const ACCENT = '#1BB0CE'
 const CCI = 'laurent@heartsangels.be'
 const DEPUIS = `Heart's Angels <no-reply-app@heartsangels.be>`
@@ -50,16 +72,16 @@ function esc(s: string) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function urlInvitation(code: string, email: string, partenaire: boolean) {
+function urlInvitation(pub: string, code: string, email: string, partenaire: boolean) {
   const params = new URLSearchParams()
   if (code) params.set('code', code)
   if (email) params.set('email', email)
   const path = partenaire ? '/inscription/partenaire' : '/inscription'
-  return `${PUB()}${path}?${params.toString()}`
+  return `${pub}${path}?${params.toString()}`
 }
 
-function urlConnexion(partenaire: boolean) {
-  return partenaire ? `${PUB()}/login/partenaire` : `${PUB()}/login`
+function urlConnexion(pub: string, partenaire: boolean) {
+  return partenaire ? `${pub}/login/partenaire` : `${pub}/login`
 }
 
 function estMedical(typeBenevole: string | null, role: string) {
@@ -67,11 +89,11 @@ function estMedical(typeBenevole: string | null, role: string) {
   return t === 'medical' || t === 'volontaire_medical' || role === 'volontaire_medical'
 }
 
-function urlModeEmploi(typeBenevole: string | null, role: string) {
+function urlModeEmploi(pub: string, typeBenevole: string | null, role: string) {
   const nom = estMedical(typeBenevole, role)
     ? 'Mode-emploi-volontaire-medical.pdf'
     : 'Mode-emploi-volontaire-non-medical.pdf'
-  return `${PUB()}/guides/${nom}`
+  return `${pub}/guides/${nom}`
 }
 
 function boutonHtml(href: string, label: string) {
@@ -97,6 +119,7 @@ function mailInvitation(opts: {
   nomInstitution: string | null
   typeBenevole: string | null
   role: string
+  pub: string
 }) {
   if (opts.partenaire) {
     const inst = opts.nomInstitution ? ` « ${opts.nomInstitution} »` : ''
@@ -120,7 +143,7 @@ Heart's Angels ASBL`
     return { texte, html, sujet: `Heart’s Angels — activez l’accès${opts.nomInstitution ? ` ${opts.nomInstitution}` : ''}` }
   }
   const salut = opts.prenom ? `Bonjour ${opts.prenom}` : 'Bonjour'
-  const lienPdf = urlModeEmploi(opts.typeBenevole, opts.role)
+  const lienPdf = urlModeEmploi(opts.pub, opts.typeBenevole, opts.role)
   const texte = `${salut},
 
 Pour créer ton compte Heart's Angels, clique sur « Crée ton compte » (valable 7 jours). Il te suffit ensuite de choisir un mot de passe.
@@ -158,8 +181,8 @@ Heart's Angels ASBL`
   return { texte, html, sujet: 'Heart’s Angels — réinitialise ton mot de passe' }
 }
 
-function mailBienvenue(opts: { prenom: string | null; partenaire: boolean; nomInstitution: string | null }) {
-  const lien = urlConnexion(opts.partenaire)
+function mailBienvenue(opts: { prenom: string | null; partenaire: boolean; nomInstitution: string | null; pub: string }) {
+  const lien = urlConnexion(opts.pub, opts.partenaire)
   if (opts.partenaire) {
     const inst = opts.nomInstitution ? ` « ${opts.nomInstitution} »` : ''
     const prenom = opts.prenom ? ` ${opts.prenom}` : ''
@@ -245,7 +268,8 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const admin = createClient(url, serviceKey)
-    const body = await req.json().catch(() => ({}))
+    const body = await req.json().catch(() => ({})) as { action?: string; origine?: unknown; email?: string; code?: string }
+    const pub = pubDepuis(body)
     const action = String(body?.action || 'invitation').trim()
     const smtp = await smtpAuth(admin)
     if (!smtp.pass) {
@@ -277,7 +301,7 @@ Deno.serve(async (req) => {
             const msg = lienErr?.message || 'Lien de réinitialisation impossible.'
             return json({ error: msg }, 500)
           }
-          const lien = `${PUB()}/reinitialiser-mot-de-passe?token=${encodeURIComponent(hashed)}`
+          const lien = `${pub}/reinitialiser-mot-de-passe?token=${encodeURIComponent(hashed)}`
           const mail = mailReset({ prenom: prof.prenom, lien })
           await envoyer({ smtp, to: authUser.user.email, sujet: mail.sujet, texte: mail.texte, html: mail.html })
         }
@@ -304,7 +328,7 @@ Deno.serve(async (req) => {
         const { data: org } = await admin.from('partenaires').select('nom').eq('id', prof.partenaire_id).maybeSingle()
         nomInstitution = org?.nom || null
       }
-      const mail = mailBienvenue({ prenom: prof.prenom, partenaire, nomInstitution })
+      const mail = mailBienvenue({ prenom: prof.prenom, partenaire, nomInstitution, pub })
       await envoyer({
         smtp,
         to: user.email || prof.email,
@@ -339,7 +363,7 @@ Deno.serve(async (req) => {
       nomInstitution = org?.nom || null
     }
 
-    const lien = urlInvitation(inv.code, inv.email, partenaire)
+    const lien = urlInvitation(pub, inv.code, inv.email, partenaire)
     const mail = mailInvitation({
       prenom: inv.prenom,
       lien,
@@ -347,6 +371,7 @@ Deno.serve(async (req) => {
       nomInstitution,
       typeBenevole: inv.type_benevole,
       role: inv.role,
+      pub,
     })
 
     await envoyer({ smtp, to: inv.email, sujet: mail.sujet, texte: mail.texte, html: mail.html })

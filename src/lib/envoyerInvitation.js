@@ -1,5 +1,11 @@
 import { supabase } from '@/lib/supabase'
 import config from '@/app.config'
+import { origineAutorisee } from '@/lib/environnement'
+
+function origineCourante() {
+  if (typeof window === 'undefined') return ''
+  return origineAutorisee(window.location.origin)
+}
 
 async function jetonFrais() {
   const { data: refreshed } = await supabase.auth.refreshSession()
@@ -21,7 +27,7 @@ async function invokeEnvoyerInvitation(body) {
       apikey: config.supabase.anonKey,
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, origine: origineCourante() }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -66,7 +72,7 @@ export async function demanderResetMotDePasse(email) {
       apikey: config.supabase.anonKey,
       Authorization: `Bearer ${config.supabase.anonKey}`,
     },
-    body: JSON.stringify({ action: 'mot_de_passe_oublie', email: adresse }),
+    body: JSON.stringify({ action: 'mot_de_passe_oublie', email: adresse, origine: origineCourante() }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {

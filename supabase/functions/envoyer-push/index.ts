@@ -11,6 +11,7 @@ const CORS = {
 const json = (o: unknown, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
+/** Prod https://app.heartsangels.be — Bêta https://appbetaapp.heartsangels.be — repli Firebase tant que cPanel n’est pas en ligne. */
 const PUB = () => (Deno.env.get('APP_PUBLIC_URL') || 'https://heart-s-angels.web.app').replace(/\/$/, '')
 
 type Cfg = {

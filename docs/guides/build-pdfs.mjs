@@ -144,7 +144,7 @@ ${fig('commun_inscription', 'Écran après le lien', `
 const COMMUN_LOGIN = `
 <h2>2. Te connecter ensuite</h2>
 <p>Une fois le compte créé, tu reviens toujours ici :</p>
-<p class="url">https://heart-s-angels.web.app/login</p>
+<p class="url">https://app.heartsangels.be/login</p>
 ${fig('commun_login', 'Espace de gestion', `
 <p>Trois champs / boutons seulement :</p>
 <ul>

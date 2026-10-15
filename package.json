@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy:beta": "vite build && npx -y firebase-tools@latest hosting:channel:deploy beta --expires 30d --project heart-s-angels",
+    "deploy:beta": "echo \"Bêta : https://appbetaapp.heartsangels.be — repli Firebase jusqu’à cPanel. Prod : https://app.heartsangels.be (ne pas deploy:prod).\" && vite build && npx -y firebase-tools@latest hosting:channel:deploy beta --expires 30d --project heart-s-angels",
     "deploy:prod": "vite build && npx -y firebase-tools@latest deploy --only hosting --project heart-s-angels",
     "cap:sync": "vite build && cap sync",
     "cap:android": "vite build && cap sync android",
