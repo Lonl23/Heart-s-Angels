@@ -5,7 +5,7 @@ import Scanner from './Scanner'
 import { capaciteO2, PRESSION_ALERTE, lblLieu } from './stockSchema'
 import { libelleRequis, couvertureMateriel } from './materielRequis'
 
-export default function ScanEmport({ souhaitId, locked, onFlash, onErr, checksBase, onToggleLibre }) {
+export default function ScanEmport({ souhaitId, locked, onFlash, onErr, checksBase, onToggleLibre, optionnel=false }) {
   const [open, setOpen] = useState(false)
   const [data, setData] = useState({ sacs:[], unites:[], materiel_requis:[] })
   const [busy, setBusy] = useState(false)
@@ -87,7 +87,11 @@ export default function ScanEmport({ souhaitId, locked, onFlash, onErr, checksBa
       <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:10 }}>
         <div>
           <div style={{ fontWeight:600, color:'var(--heading)' }}>O₂ et sacs emportés</div>
-          <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Scannez chaque bouteille et chaque sac que vous prenez.</div>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
+            {optionnel
+              ? 'Sur un vrai souhait vous scannerez ici chaque O₂ et chaque sac. Ici ce n’est pas obligatoire — juste pour voir.'
+              : 'Scannez chaque bouteille et chaque sac que vous prenez.'}
+          </div>
         </div>
         {!locked && <Btn onClick={()=>setOpen(true)}>Scanner O₂ / sac</Btn>}
       </div>
@@ -135,10 +139,12 @@ export default function ScanEmport({ souhaitId, locked, onFlash, onErr, checksBa
                 <div style={{ fontSize:12, color:'var(--text-muted)' }}>
                   {r.ok
                     ? r.pris.map(p => p.nom + (p.pression_bar != null ? ` · ${Number(p.pression_bar)} bar` : '')).join(' · ')
-                    : `${r.pris.length}/${r.need} scanné${r.need > 1 ? 's' : ''} — scannez le QR`}
+                    : optionnel
+                      ? `${r.pris.length}/${r.need} — à scanner sur un vrai souhait`
+                      : `${r.pris.length}/${r.need} scanné${r.need > 1 ? 's' : ''} — scannez le QR`}
                 </div>
               </div>
-              <Pill color={r.ok ? '#3B6D11' : '#BA7517'} bg={r.ok ? '#EAF3DE' : '#FBF0DC'}>{r.ok ? 'OK' : 'À scanner'}</Pill>
+              <Pill color={r.ok ? '#3B6D11' : '#BA7517'} bg={r.ok ? '#EAF3DE' : '#FBF0DC'}>{r.ok ? 'OK' : (optionnel ? 'Exemple' : 'À scanner')}</Pill>
             </div>
           ))}
         </div>

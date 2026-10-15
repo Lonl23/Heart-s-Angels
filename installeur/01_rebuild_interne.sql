@@ -10,10 +10,13 @@ create extension if not exists pgcrypto;
 
 -- ════════════════════════════════ TYPES ÉNUMÉRÉS ═══════════════════════════════
 do $$ begin
+  -- Identité de compte / accès. Qualifications (infirmier, médecin, ambulancier)
+  -- : fiche.qualifications. Fonctions ASBL multiples : fiche.roles_asbl.
   create type role_utilisateur as enum (
-    'admin','president','coordinateur','ambulancier_bleu','ambulancier_gris',
-    'infirmier','medecin','volontaire_non_medical','tresorier','secretaire',
-    'partenaire'   -- NOUVEAU : accès partenaire
+    'admin','president','coordinateur',
+    'tresorier','secretaire',
+    'volontaire_medical','volontaire_non_medical',
+    'partenaire'
   );
 exception when duplicate_object then null; end $$;
 

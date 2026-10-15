@@ -14,7 +14,7 @@ const main = async () => {
   console.log('\n=== Réinitialisation de mot de passe ===\n')
   const URL   = await ask('URL du serveur Supabase (https://xxxx.supabase.co)')
   const KEY   = await ask('Clé service_role (secrète)')
-  const EMAIL = await ask('E-mail du compte', 'laurent.noulin.volontariat@gmail.com')
+  const EMAIL = await ask('E-mail du compte', 'laurent@heartsangels.be')
   const PWD   = await ask('Nouveau mot de passe temporaire', 'LNO2311')
   const FORCE = (await ask('Forcer le changement à la prochaine connexion ? (o/n)', 'o')).toLowerCase().startsWith('o')
   rl.close()

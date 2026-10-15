@@ -4,7 +4,7 @@ import { Btn, Flash, inp, F, Card } from '@/components/ui'
 import Scanner from './Scanner'
 import { resteLabel, capaciteO2, PRESSION_ALERTE } from './stockSchema'
 
-export default function ScanConso({ souhaitId, locked, onFlash, onErr }) {
+export default function ScanConso({ souhaitId, locked, onFlash, onErr, optionnel=false }) {
   const [open, setOpen] = useState(false)
   const [qte, setQte] = useState('1')
   const [last, setLast] = useState(null)
@@ -77,7 +77,14 @@ export default function ScanConso({ souhaitId, locked, onFlash, onErr }) {
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:10 }}>
-        <div style={{ fontWeight:600, color:'var(--heading)' }}>Matériel utilisé</div>
+        <div>
+          <div style={{ fontWeight:600, color:'var(--heading)' }}>Matériel utilisé</div>
+          {optionnel && (
+            <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
+              Sur un vrai souhait vous scannerez ici le matériel consommé. Ici ce n’est pas obligatoire.
+            </div>
+          )}
+        </div>
         {!locked && (
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <label style={{ fontSize:12.5, color:'var(--text-muted)' }}>Qté (boîte / pièce)</label>

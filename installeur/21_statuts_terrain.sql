@@ -386,6 +386,7 @@ begin
     'equipage_medical', public.vecteur_a_medical(p_souhait, vid),
     'equipage', crew,
     'photos', coalesce(m->'terrain_photos'->vid, '{}'::jsonb),
+    'checklist_extras', coalesce(m->'checklist_extras', '{}'::jsonb),
     'base', json_build_object(
       'nom', m->>'base_nom', 'adresse', m->'base_adresse',
       'rdv', m->>'rdv_base', 'depart', m->>'depart_base'

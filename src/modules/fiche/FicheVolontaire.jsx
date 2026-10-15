@@ -2,26 +2,40 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
-import { QUALIFS, ROLES_ASBL, SPECIALISATIONS_INF, qualifsPourType, qualificationsCompatibles } from './ficheSchema'
+import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, equipeAsblOuverteParDefaut, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
+import { TYPES_NOTIF, prefsDepuisFiche } from '@/lib/notifications'
+import { FormPinFiche } from '@/components/PinArchive'
+import SecuriteMfa from '@/components/SecuriteMfa'
 
 const vide = {
-  date_naissance:'', telephone:'', type_benevole:'',
+  date_naissance:'', telephone:'', iban:'', type_benevole:'',
   qualifications:[], roles_asbl:[],
   permis:{ B:false, C:false, E:false, selection_medicale:false, selection_validite:'' },
   ambulancier:{ visa_atnup:'', badge_112:'' },
   infirmier:{ visa:'', specialisations:[] },
   contacts_urgence:[],
+  notif_prefs: prefsDepuisFiche(null),
 }
 
 export default function FicheVolontaire({ userId, onBack }) {
-  const { user, reload, peutGererFiches, accesTotal } = useAuth()
+  const { user, role: monRole, reload, peutGererFiches, peutOuvrirArchives, peutReglerNotifications } = useAuth()
   const uid = userId || user?.id
   const gestionQualif = peutGererFiches()   // type + qualifications
-  const gestionRoles = accesTotal()         // rôles ASBL (admin/présidence/resp info)
+  const gestionRoles = peutGererFiches()    // rôles ASBL : accès total ou coord. bénévoles
+  const peutChangerRoleCompte = ['admin', 'president'].includes(monRole)
+  const maFiche = uid === user?.id
+  const pinEligible = maFiche && peutOuvrirArchives()
+  const prefsNotif = maFiche && peutReglerNotifications()
   const [prof, setProf] = useState(null)
   const [f, setF] = useState(vide)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [aPin, setAPin] = useState(false)
+  const [pinMsg, setPinMsg] = useState(null)
+  const [savingPin, setSavingPin] = useState(false)
+  const [roleParticulier, setRoleParticulier] = useState(false)
+  const [equipeOuverte, setEquipeOuverte] = useState(null)
+  const rolesAvantNon = useRef([])
   const fileRef = useRef()
 
   async function uploadPhoto(e) {
@@ -50,8 +64,15 @@ export default function FicheVolontaire({ userId, onBack }) {
       qualifications:(data?.fiche||{}).qualifications||[],
       roles_asbl:(data?.fiche||{}).roles_asbl||[],
       contacts_urgence:(data?.fiche||{}).contacts_urgence||[],
+      notif_prefs: prefsDepuisFiche(data?.fiche),
     })
-  })() }, [uid])
+    setRoleParticulier(aRoleAsblParticulier((data?.fiche||{}).roles_asbl))
+    setEquipeOuverte(equipeAsblOuverteParDefaut((data?.fiche||{}).roles_asbl))
+    if (uid === user?.id) {
+      const { data: pin } = await supabase.rpc('mon_pin_archive_defini')
+      setAPin(!!pin)
+    }
+  })() }, [uid, user?.id])
 
   const set = (k,v) => setF(s => ({ ...s, [k]:v }))
   const setTypeBenevole = (v) => setF(s => ({
@@ -59,20 +80,56 @@ export default function FicheVolontaire({ userId, onBack }) {
     type_benevole: v,
     qualifications: qualificationsCompatibles(v, s.qualifications),
   }))
+  function setRoleCompte(v) {
+    setProf(p => ({ ...p, role: v }))
+    if (v === 'volontaire_medical') setTypeBenevole('medical')
+    if (v === 'volontaire_non_medical') setTypeBenevole('non_medical')
+  }
   const setIn = (grp,k,v) => setF(s => ({ ...s, [grp]:{ ...s[grp], [k]:v } }))
   const toggleArr = (k,val) => setF(s => ({ ...s, [k]: s[k].includes(val) ? s[k].filter(x=>x!==val) : [...s[k], val] }))
   const toggleSpec = (val) => setF(s => ({ ...s, infirmier:{ ...s.infirmier, specialisations: s.infirmier.specialisations.includes(val) ? s.infirmier.specialisations.filter(x=>x!==val) : [...s.infirmier.specialisations, val] } }))
+  function togglePref(cle) {
+    setF(s => ({ ...s, notif_prefs: { ...prefsDepuisFiche(s), [cle]: !prefsDepuisFiche(s)[cle] } }))
+  }
+  function fixerRoleParticulier(oui) {
+    if (oui) {
+      const spec = rolesAvantNon.current.length ? rolesAvantNon.current : rolesAsblSpecifiques(f.roles_asbl)
+      setRoleParticulier(true)
+      set('roles_asbl', spec)
+      setEquipeOuverte(equipeAsblOuverteParDefaut(spec))
+      return
+    }
+    rolesAvantNon.current = rolesAsblSpecifiques(f.roles_asbl)
+    setRoleParticulier(false)
+    set('roles_asbl', ['simple_volontaire'])
+    setEquipeOuverte(null)
+  }
+  function toggleRangAsbl(role) {
+    const cur = rolesAsblSpecifiques(f.roles_asbl)
+    const next = cur.includes(role) ? cur.filter(x => x !== role) : [...cur, role]
+    set('roles_asbl', next)
+  }
 
   const estAmbu = f.qualifications.includes('ambulancier')
   const estInfi = f.qualifications.includes('infirmier')
 
   async function save() {
     if (!prof?.prenom || !prof?.nom) { setMsg({ t:'Prénom et nom requis.', ok:false }); return }
-    if (estAmbu && !f.ambulancier.visa_atnup.trim()) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier.', ok:false }); return }
+    if (estAmbu && !f.ambulancier.visa_atnup.trim() && !f.compte_a_configurer) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier.', ok:false }); return }
+    let rolesAsbl = f.roles_asbl
+    if (gestionRoles) {
+      rolesAsbl = rolesAsblPourEnregistrement(roleParticulier, f.roles_asbl)
+      if (roleParticulier && !rolesAsbl.length) {
+        setMsg({ t:'Choisissez un rang (responsable ou adjoint) dans une équipe, ou passez le curseur sur Non.', ok:false })
+        return
+      }
+    }
     setSaving(true)
-    const fiche = { ...f, qualifications: qualificationsCompatibles(f.type_benevole, f.qualifications) }
+    const fiche = { ...f, qualifications: qualificationsCompatibles(f.type_benevole, f.qualifications), roles_asbl: rolesAsbl }
+    const patch = { prenom:prof.prenom, nom:prof.nom, fiche }
+    if (peutChangerRoleCompte && prof.role && prof.role !== 'partenaire') patch.role = prof.role
     const { data, error } = await supabase.from('profiles')
-      .update({ prenom:prof.prenom, nom:prof.nom, fiche })
+      .update(patch)
       .eq('id', uid)
       .select('id,prenom,nom,email,role,fiche')
     setSaving(false)
@@ -86,9 +143,23 @@ export default function FicheVolontaire({ userId, onBack }) {
       qualifications:(data[0].fiche||{}).qualifications||[],
       roles_asbl:(data[0].fiche||{}).roles_asbl||[],
       contacts_urgence:(data[0].fiche||{}).contacts_urgence||[],
+      notif_prefs: prefsDepuisFiche(data[0].fiche),
     })
+    setRoleParticulier(aRoleAsblParticulier((data[0].fiche||{}).roles_asbl))
     setMsg({ t:'Fiche enregistrée.', ok:true }); setTimeout(()=>setMsg(null), 3000)
     if (!userId) reload()
+  }
+
+  async function sauverPin({ pin, ancien }) {
+    setSavingPin(true)
+    setPinMsg(null)
+    const { data, error } = await supabase.rpc('definir_pin_archive', { p_pin: pin, p_ancien: ancien || null })
+    setSavingPin(false)
+    if (error) { setPinMsg({ t: error.message, ok: false }); return false }
+    if (data?.ok === false) { setPinMsg({ t: data.error || 'Impossible d’enregistrer le code.', ok: false }); return false }
+    setAPin(true)
+    setPinMsg({ t: 'Code enregistré. Il n’est pas affiché ensuite, seul vous le connaissez.', ok: true })
+    return true
   }
 
   if (!prof) return <Page title="Fiche volontaire"><p style={{ color:'var(--text-muted)' }}>Chargement…</p></Page>
@@ -96,6 +167,11 @@ export default function FicheVolontaire({ userId, onBack }) {
   return (
     <Page title={userId ? `Fiche — ${prof.prenom} ${prof.nom}` : 'Ma fiche volontaire'} action={onBack && <Btn kind="soft" onClick={onBack}>← Retour</Btn>}>
       {msg && <Card style={{ marginBottom:12, padding:'10px 14px', background: msg.ok?'#F0FAF0':'#FEF2F2', border:`1px solid ${msg.ok?'#C3E6C3':'#FCD5D5'}`, color: msg.ok?'#1E5C1E':'#991B1B' }}>{msg.t}</Card>}
+      {(f.compte_a_configurer || !(prof.email || '').trim()) && (
+        <Card style={{ marginBottom:12, padding:'10px 14px', background:'#FAEEDA', border:'1px solid #E8C98A', color:'#7A4E0B' }}>
+          Cette personne est dans les volontaires mais n’a pas encore de compte. Dans Volontaires, utilisez « Configurer le compte » pour encoder son e-mail et lui envoyer le lien d’invitation.
+        </Card>
+      )}
 
       <div style={{ columns:'300px', columnGap:14 }}>
       {/* Identité */}
@@ -116,8 +192,27 @@ export default function FicheVolontaire({ userId, onBack }) {
           <F label="Nom" value={prof.nom||''} set={v=>setProf(p=>({...p,nom:v}))} required />
           <F label="Date de naissance" type="date" value={f.date_naissance} set={v=>set('date_naissance',v)} />
           <PhoneF label="Téléphone" value={f.telephone} set={v=>set('telephone',v)} />
+          <F label="IBAN (défraiements)" value={f.iban||''} set={v=>set('iban', v.toUpperCase())} placeholder="BE00 0000 0000 0000" />
         </div>
-        <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>E-mail (connexion) : {prof.email}</div>
+        <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>
+          E-mail (connexion) : {(prof.email || '').trim() || 'pas encore de compte'} — l’IBAN sert aux notes de frais forfaitaires.
+        </div>
+      </Card>
+
+      {maFiche && <SecuriteMfa />}
+
+      <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+        <Sec>Rôle de compte</Sec>
+        <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
+          Accès à l’application (administrateur, président, volontaire…). Infirmier, médecin, ambulancier se choisissent dans les qualifications, pas ici.
+        </div>
+        {peutChangerRoleCompte ? (
+          <div style={{ maxWidth:280 }}>
+            <Sel label="Rôle de compte" value={prof.role || ''} set={setRoleCompte} options={ROLES_COMPTE} />
+          </div>
+        ) : (
+          <div style={{ fontSize:13.5 }}>{lblRoleCompte(prof.role)}</div>
+        )}
       </Card>
 
       {/* Type + qualifications */}
@@ -163,18 +258,50 @@ export default function FicheVolontaire({ userId, onBack }) {
         </Card>
       )}
 
-      {/* Rôles ASBL */}
-      <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
-        <Sec>Rôles dans l'ASBL</Sec>
-        {gestionRoles ? (
-          <>
-            <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>Plusieurs rôles possibles.</div>
-            <Chips options={ROLES_ASBL} selected={f.roles_asbl} onToggle={v=>toggleArr('roles_asbl',v)} />
-          </>
-        ) : (
-          <ReadPills options={ROLES_ASBL} selected={f.roles_asbl} vide="Aucun rôle ASBL attribué." />
-        )}
-      </Card>
+      {/* Rôles ASBL : éditeur pour coord./accès total ; le simple volontaire ne voit rien. */}
+      {gestionRoles ? (
+        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+          <Sec>Rôle dans l'ASBL</Sec>
+          <EditeurRolesAsbl
+            particulier={roleParticulier}
+            onParticulier={fixerRoleParticulier}
+            roles={f.roles_asbl}
+            onToggleRang={toggleRangAsbl}
+            equipeOuverte={equipeOuverte}
+            setEquipeOuverte={setEquipeOuverte}
+          />
+        </Card>
+      ) : aRoleAsblParticulier(f.roles_asbl) ? (
+        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+          <RolesAsblLecture roles={f.roles_asbl} />
+        </Card>
+      ) : null}
+
+      {pinEligible && (
+        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+          <Sec>Code d’ouverture des dossiers verrouillés</Sec>
+          <FormPinFiche aPin={aPin} onSauver={sauverPin} saving={savingPin} msg={pinMsg} />
+        </Card>
+      )}
+
+      {prefsNotif && (
+        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+          <Sec>Notifications reçues</Sec>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
+            Président et responsable informatique : vous recevez toutes les alertes. Décochez celles que vous ne voulez plus.
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {TYPES_NOTIF.map(t => (
+              <Toggle
+                key={t.v}
+                label={`${t.icon} ${t.l}`}
+                on={!!(f.notif_prefs || {})[t.v]}
+                onClick={() => togglePref(t.v)}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Permis */}
       <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
@@ -215,6 +342,81 @@ export default function FicheVolontaire({ userId, onBack }) {
       </div>
       <Btn onClick={save} disabled={saving} style={{ width:'100%', marginTop:14 }}>{saving?'Enregistrement…':'✓ Enregistrer la fiche'}</Btn>
     </Page>
+  )
+}
+
+function RolesAsblLecture({ roles }) {
+  const labels = libellesRolesAsblPropres(roles)
+  if (!labels.length) return null
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+      {labels.map((l, i) => (
+        <span key={i} style={{ padding:'6px 12px', borderRadius:99, background:'var(--bg-alt)', border:'1px solid var(--border)', fontSize:13, color:'var(--text-2)' }}>{l}</span>
+      ))}
+    </div>
+  )
+}
+
+function CurseurOuiNon({ on, onChange }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+      <span style={{ fontSize:13, fontWeight: on ? 400 : 700, color: on ? 'var(--text-muted)' : 'var(--text)' }}>Non</span>
+      <button type="button" role="switch" aria-checked={on} aria-label={on ? 'Oui' : 'Non'} onClick={() => onChange(!on)}
+        style={{ width:42, height:24, borderRadius:99, border:'none', cursor:'pointer', background:on?'#3B6D11':'var(--border)', position:'relative' }}>
+        <span style={{ position:'absolute', top:2, left:on?20:2, width:20, height:20, borderRadius:99, background:'#fff', transition:'left .15s' }} />
+      </button>
+      <span style={{ fontSize:13, fontWeight: on ? 700 : 400, color: on ? 'var(--text)' : 'var(--text-muted)' }}>Oui</span>
+    </div>
+  )
+}
+
+function EditeurRolesAsbl({ particulier, onParticulier, roles, onToggleRang, equipeOuverte, setEquipeOuverte }) {
+  const selection = rolesAsblSpecifiques(roles)
+  return (
+    <>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom: particulier ? 14 : 0, flexWrap:'wrap' }}>
+        <div style={{ fontSize:13.5, color:'var(--text)', flex:1, minWidth:180 }}>
+          Est-ce que le volontaire a un rôle particulier dans l’ASBL ?
+        </div>
+        <CurseurOuiNon on={particulier} onChange={onParticulier} />
+      </div>
+      {particulier && (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          <div style={{ fontSize:12, color:'var(--text-muted)' }}>
+            Cliquez une équipe, puis le rang. Plusieurs équipes possibles.
+          </div>
+          {EQUIPES_ASBL.map(eq => {
+            const rangs = rangsDeLequipe(eq)
+            const choisis = rangs.filter(r => selection.includes(r.v))
+            const ouverte = equipeOuverte === eq.v
+            return (
+              <div key={eq.v} style={{ border:`1.5px solid ${choisis.length ? 'var(--accent)' : 'var(--border)'}`, borderRadius:10, overflow:'hidden', background:'var(--card)' }}>
+                <button type="button" onClick={() => setEquipeOuverte(ouverte ? null : eq.v)}
+                  style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'10px 12px', border:'none', background: choisis.length ? 'var(--bg-alt)' : 'transparent', cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>
+                  <span style={{ fontSize:13.5, fontWeight:700, color:'var(--heading)' }}>{eq.l}</span>
+                  <span style={{ fontSize:12, color: choisis.length ? 'var(--accent)' : 'var(--text-faint)', fontWeight:600 }}>
+                    {choisis.length ? '✓ ' + choisis.map(r => r.l).join(' · ') : (ouverte ? '▴' : '▾')}
+                  </span>
+                </button>
+                {ouverte && (
+                  <div style={{ padding:'10px 12px 12px', borderTop:'1px solid var(--border)', display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {rangs.map(r => {
+                      const on = selection.includes(r.v)
+                      return (
+                        <button key={r.v} type="button" onClick={() => onToggleRang(r.v)}
+                          style={{ padding:'7px 12px', borderRadius:99, border:`1.5px solid ${on?'var(--accent)':'var(--border)'}`, background:on?'var(--accent)':'var(--card)', color:on?'#fff':'var(--text-2)', fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                          {on ? '✓ ' : ''}{r.l}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 

@@ -31,6 +31,7 @@ export default defineConfig({
         manualChunks(id) {
           const p = id.replace(/\\/g, '/')
           if (!p.includes('/node_modules/')) return
+          if (p.includes('/xlsx/')) return 'vendor-xlsx'
           if (p.includes('/qrcode/')) return 'vendor-qrcode'
           if (p.includes('/@supabase/')) return 'vendor-supabase'
           if (p.includes('/react-dom/') || p.includes('/react-router') || p.includes('/react/')) return 'vendor-react'

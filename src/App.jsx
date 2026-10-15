@@ -1,19 +1,25 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 // Logiciel propriétaire. Voir LICENSE. Mention à ne pas retirer.
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Route, Navigate } from 'react-router-dom'
 import { RequireStaff, RequirePartenaire } from '@/components/Protected'
 import Layout from '@/components/Layout'
-import Login from '@/pages/Login'
+import { RoutesAvecFondu } from '@/components/Fondu'
 
+const Login = lazy(() => import('@/pages/Login'))
+const MotDePasseOublie = lazy(() => import('@/pages/MotDePasseOublie'))
+const ReinitialiserMotDePasse = lazy(() => import('@/pages/ReinitialiserMotDePasse'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const DemandeSouhait = lazy(() => import('@/pages/DemandeSouhait'))
 const Inscription = lazy(() => import('@/pages/Inscription'))
+const DemandePartenaire = lazy(() => import('@/pages/DemandePartenaire'))
 const PartenairePortail = lazy(() => import('@/pages/PartenairePortail'))
-const Stub = lazy(() => import('@/modules/Stub'))
+const Defraiements = lazy(() => import('@/modules/defraiements/Defraiements'))
 const Souhaits = lazy(() => import('@/modules/souhaits/Souhaits'))
 const Disponibilites = lazy(() => import('@/modules/Disponibilites'))
+const EvenementsInternes = lazy(() => import('@/modules/EvenementsInternes'))
 const Stock = lazy(() => import('@/modules/Stock'))
+const Volontaires = lazy(() => import('@/modules/volontaires/Volontaires'))
 const Admin = lazy(() => import('@/modules/Admin'))
 const FicheVolontaire = lazy(() => import('@/modules/fiche/FicheVolontaire'))
 const MesMissions = lazy(() => import('@/modules/MesMissions'))
@@ -21,17 +27,22 @@ const Annuaire = lazy(() => import('@/modules/annuaire/Annuaire'))
 
 function EcranChargement() {
   return (
-    <div style={{ padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>Chargement…</div>
+    <div style={{ minHeight: '100%', background: 'var(--bg)' }} aria-hidden />
   )
 }
 
 export default function App() {
   return (
     <Suspense fallback={<EcranChargement />}>
-      <Routes>
+      <RoutesAvecFondu>
         <Route path="/login" element={<Login />} />
+        <Route path="/login/partenaire" element={<Login />} />
+        <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
+        <Route path="/reinitialiser-mot-de-passe" element={<ReinitialiserMotDePasse />} />
+        <Route path="/login/partenaire/demande" element={<DemandePartenaire />} />
         <Route path="/demande" element={<DemandeSouhait />} />
         <Route path="/inscription" element={<Inscription />} />
+        <Route path="/inscription/partenaire" element={<Inscription />} />
 
         <Route path="/app" element={<RequireStaff><Layout /></RequireStaff>}>
           <Route index element={<Dashboard />} />
@@ -41,10 +52,15 @@ export default function App() {
           <Route path="souhaits" element={<Souhaits />} />
           <Route path="missions/:id" element={<MesMissions />} />
           <Route path="missions" element={<MesMissions />} />
-          <Route path="defraiements"   element={<Stub nom="Défraiements" />} />
+          <Route path="defraiements"   element={<Defraiements />} />
           <Route path="disponibilites" element={<Disponibilites />} />
+          <Route path="evenements/nouveau" element={<EvenementsInternes />} />
+          <Route path="evenements/:id/editer" element={<EvenementsInternes />} />
+          <Route path="evenements/:id" element={<EvenementsInternes />} />
+          <Route path="evenements"     element={<EvenementsInternes />} />
           <Route path="stock"          element={<Stock />} />
           <Route path="annuaire"       element={<Annuaire />} />
+          <Route path="volontaires"    element={<Volontaires />} />
           <Route path="admin"          element={<Admin />} />
           <Route path="profil"         element={<FicheVolontaire />} />
         </Route>
@@ -52,7 +68,7 @@ export default function App() {
         <Route path="/partenaire" element={<RequirePartenaire><PartenairePortail /></RequirePartenaire>} />
 
         <Route path="*" element={<Navigate to="/app" replace />} />
-      </Routes>
+      </RoutesAvecFondu>
     </Suspense>
   )
 }

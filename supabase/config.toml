@@ -1,0 +1,14 @@
+# Projet distant Heart's Angels (vppmvjqbzdeftrhdoert).
+# Origines SPA : https://app.heartsangels.be (prod) et https://appbetaapp.heartsangels.be (bêta).
+# Les secrets SMTP_USER / SMTP_PASS / SMTP_FROM / SMTP_REPLY_TO se règlent dans le dashboard
+# From par défaut : Heart's Angels <no-reply-app@heartsangels.be>
+# Reply-To par défaut : laurent@heartsangels.be (les réponses arrivent chez Laurent)
+# ou : npx supabase secrets set --project-ref vppmvjqbzdeftrhdoert
+
+[functions.envoyer-invitation]
+# L’oubli de mot de passe est public ; invitation et bienvenue vérifient le JWT dans le code.
+verify_jwt = false
+
+[functions.envoyer-push]
+# Secret partagé x-ha-push-secret (Vault ha_push_hook_secret), pas le JWT utilisateur.
+verify_jwt = false

@@ -30,19 +30,37 @@ export function qualificationsCompatibles(type, qs) {
 export const ROLES_MISSION = [
   ...QUALIFS,
   { v:'volontaire_non_medical', l:'Volontaire non médical' },
+  { v:'formation', l:'Formation' },
 ]
 
 export const lblRoleMission = v => ROLES_MISSION.find(r => r.v === v)?.l || v
 
-const ROLES_PROFIL_MEDICAUX = ['medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris']
-const QUALS_MEDICALES = ['ambulancier', 'infirmier', 'medecin']
+/** Identités de compte (profiles.role). Pas les qualifications. */
+export const ROLES_COMPTE = [
+  { v:'admin',                    l:'Administrateur' },
+  { v:'president',                l:'Président' },
+  { v:'coordinateur',             l:'Coordinateur' },
+  { v:'tresorier',                l:'Trésorier' },
+  { v:'secretaire',               l:'Secrétaire' },
+  { v:'volontaire_medical',       l:'Volontaire médical' },
+  { v:'volontaire_non_medical',   l:'Volontaire non médical' },
+]
+export const lblRoleCompte = v => ROLES_COMPTE.find(r => r.v === v)?.l || v
 
-/** Infirmier, médecin, ambulancier (y compris dual infi+ambu). Chauffeur / secouriste / VNM : non. */
+const ROLES_PROFIL_MEDICAUX = ['volontaire_medical', 'medecin', 'infirmier', 'ambulancier_bleu', 'ambulancier_gris']
+const QUALS_MEDICALES = ['ambulancier', 'infirmier', 'medecin']
+const ROLES_MISSION_NON_MED = [
+  'volontaire_non_medical', 'chauffeur', 'secouriste', 'kine', 'psychologue', 'autre',
+]
+
+/** Infirmier, médecin, ambulancier (y compris dual infi+ambu). Chauffeur / secouriste / VNM : non.
+ *  Le rôle sur CETTE mission prime : un VNM reste non médical même si sa fiche est médicale. */
 export function personneEstMedicale(p = {}) {
   const role = p.role || p.profiles?.role
   const fiche = p.fiche || p.profiles?.fiche
   const rm = p.role_mission
   if (fiche?.type_benevole === 'non_medical') return false
+  if (ROLES_MISSION_NON_MED.includes(rm)) return false
   if (QUALS_MEDICALES.includes(rm)) return true
   if (ROLES_PROFIL_MEDICAUX.includes(role)) return true
   if (fiche?.type_benevole === 'medical') return true
@@ -117,6 +135,18 @@ export function rolesManquantsMultiset(requis, couverts) {
   return out
 }
 
+export function countRole(roles, role) {
+  return (roles || []).filter(r => r === role).length
+}
+
+/** Remplace le nombre d’occurrences d’un rôle (ambulanciers : 0, 1 ou 2). */
+export function withRoleCount(roles, role, n) {
+  const rest = (roles || []).filter(r => r !== role)
+  const max = role === 'ambulancier' ? 2 : 1
+  const k = Math.max(0, Math.min(max, Number(n) || 0))
+  return [...rest, ...Array.from({ length: k }, () => role)]
+}
+
 function qualsDunePersonne(p) {
   if (!p) return []
   if (Array.isArray(p.quals) && p.quals.length) return p.quals
@@ -142,7 +172,7 @@ export function couvertureMission(mission, equipe = [], extras = []) {
     const membres = v.id ? equipe.filter(e => e.vecteur_id === v.id) : equipe
     for (const e of membres) if (e.user_id) used.add(e.user_id)
     const missing = rolesEncoreManquants(need, membres.map(e => ({ quals: qualsDunePersonne(e) })))
-    couvertsAll.push(...need.filter(r => !missing.includes(r)))
+    couvertsAll.push(...rolesManquantsMultiset(need, missing))
   }
 
   let remaining = rolesManquantsMultiset(requisAll, couvertsAll)
@@ -172,8 +202,9 @@ export function couvertureMission(mission, equipe = [], extras = []) {
     remaining.splice(remaining.indexOf(role), 1)
     couvertsAll.push(role)
     dejaGreedy.push(role)
+    if (p.user_id) used.add(p.user_id)
   }
-  return { requis: requisAll, couverts: couvertsAll }
+  return { requis: requisAll, couverts: couvertsAll, utilises: [...used] }
 }
 
 /** Rôle proposé à l’affectation : un infi+ambu va du côté le moins déjà pourvu. */
@@ -242,35 +273,25 @@ export function phraseIlManque(codes) {
 }
 
 /**
- * Rôles encore manquants après affectés ∪ personnes dispo plein sans conflit.
- * Un infi+ambu ne remplit qu’un côté (le plus rare). Chauffeur : via quals (permis + sélection médicale).
+ * Rôles encore manquants après affectés ∪ personnes dispo.
+ * Un infi+ambu ne remplit qu’un côté (le plus rare). Les doublons (2 ambulanciers) sont conservés.
  */
 export function rolesEncoreManquants(requis, personnes) {
   const need = rolesRequisEffectifs(requis)
-  const couverts = []
-  let nInfi = 0, nAmbu = 0, nDual = 0
+  let remaining = [...need]
+  const deja = []
   for (const p of personnes || []) {
-    const q = p.quals || []
-    const hasInfi = q.includes('infirmier')
-    const hasAmbu = q.includes('ambulancier')
-    if (hasInfi && hasAmbu) nDual++
-    else if (hasInfi) nInfi++
-    else if (hasAmbu) nAmbu++
-    for (const role of q) {
-      if (need.includes(role) && role !== 'infirmier' && role !== 'ambulancier' && !couverts.includes(role)) {
-        couverts.push(role)
-      }
+    if (!remaining.length) break
+    const quals = p.quals || []
+    let role = roleSuggere(quals, remaining, deja)
+    if (!role || !remaining.includes(role) || !quals.includes(role)) {
+      role = remaining.find(r => quals.includes(r)) || ''
     }
+    if (!role) continue
+    remaining = rolesManquantsMultiset(remaining, [role])
+    deja.push(role)
   }
-  for (let i = 0; i < nDual; i++) {
-    if (need.includes('infirmier') && need.includes('ambulancier')) {
-      if (nInfi <= nAmbu) nInfi++; else nAmbu++
-    } else if (need.includes('infirmier')) nInfi++
-    else if (need.includes('ambulancier')) nAmbu++
-  }
-  if (need.includes('infirmier') && nInfi > 0) couverts.push('infirmier')
-  if (need.includes('ambulancier') && nAmbu > 0) couverts.push('ambulancier')
-  return need.filter(r => !couverts.includes(r))
+  return remaining
 }
 
 export function libelleQualsImplicites(role, fiche) {
@@ -307,6 +328,212 @@ export const ROLES_ASBL = [
   { v:'resp_informatique_adjoint',   l:'Adjoint informatique' },
   { v:'administrateur_asbl',         l:"Administrateur de l'ASBL" },
 ]
+
+/** Alias historique : même siège que coord_medical. */
+const ALIAS_ROLE_ASBL = { coordinateur_medical: 'coord_medical' }
+
+const RANG_PAR_ROLE = {
+  president: 'Président',
+  vice_president: 'Vice-président',
+}
+
+/**
+ * Équipes ASBL (fiche.roles_asbl). Mêmes sièges que EQUIPES_ACCES, sans « simple volontaire ».
+ * Les rangs (responsable / adjoint, président / vice-président) ne s’affichent qu’après clic.
+ */
+export const EQUIPES_ASBL = [
+  { v:'presidence',    l:'Présidence',                 roles:['president','vice_president'] },
+  { v:'benevoles',     l:'Coordination',               roles:['coord_benevoles','coord_benevoles_adjoint'] },
+  { v:'logistique',    l:'Logistique',                 roles:['resp_logistique','resp_logistique_adjoint'] },
+  { v:'transport',     l:'Transport',                  roles:['coord_transport','coord_transport_adjoint'] },
+  { v:'medical',       l:'Coordination médicale',      roles:['coord_medical','coord_medical_adjoint','coordinateur_medical'] },
+  { v:'tresorerie',    l:'Trésorerie',                 roles:['tresorier','tresorier_adjoint'] },
+  { v:'informatique',  l:'Informatique',               roles:['resp_informatique','resp_informatique_adjoint'] },
+  { v:'rp',            l:'Relations publiques',        roles:['relations_publiques','relations_publiques_adjoint'] },
+  { v:'recolte',       l:'Récolteurs de souhait',      roles:['recolteur_souhait'] },
+  { v:'admin_asbl',    l:"Administrateur de l'ASBL",   roles:['administrateur_asbl'] },
+]
+
+export function canonRoleAsbl(role) {
+  return ALIAS_ROLE_ASBL[role] || role
+}
+
+export function lblRoleAsbl(v) {
+  const k = canonRoleAsbl(v)
+  return ROLES_ASBL.find(r => r.v === k)?.l || k
+}
+
+export function rangsDeLequipe(equipe) {
+  const seen = new Set()
+  const out = []
+  for (const r of equipe.roles || []) {
+    const k = canonRoleAsbl(r)
+    if (!k || k === 'simple_volontaire' || seen.has(k)) continue
+    seen.add(k)
+    out.push({ v: k, l: libelleRangAsbl(k, equipe) })
+  }
+  return out
+}
+
+export function libelleRangAsbl(role, equipe) {
+  const k = canonRoleAsbl(role)
+  if (RANG_PAR_ROLE[k]) return RANG_PAR_ROLE[k]
+  const n = rangsUniques(equipe).length
+  if (n <= 1) return lblRoleAsbl(k)
+  if (k.endsWith('_adjoint')) return 'Adjoint'
+  return 'Responsable'
+}
+
+function rangsUniques(equipe) {
+  const seen = new Set()
+  const out = []
+  for (const r of equipe.roles || []) {
+    const k = canonRoleAsbl(r)
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(k)
+  }
+  return out
+}
+
+export function equipeDuRoleAsbl(role) {
+  const k = canonRoleAsbl(role)
+  return EQUIPES_ASBL.find(e => (e.roles || []).some(r => canonRoleAsbl(r) === k))
+}
+
+/** Clés d’office spécifiques (pas simple_volontaire). */
+export function rolesAsblSpecifiques(roles) {
+  const seen = new Set()
+  const out = []
+  for (const r of Array.isArray(roles) ? roles : []) {
+    const k = canonRoleAsbl(r)
+    if (!k || k === 'simple_volontaire' || seen.has(k)) continue
+    seen.add(k)
+    out.push(k)
+  }
+  return out
+}
+
+export function aRoleAsblParticulier(roles) {
+  return rolesAsblSpecifiques(roles).length > 0
+}
+
+/** Libellé lu par le volontaire : « Coordination — adjoint », sans « simple volontaire ». */
+export function libelleRoleAsblPropre(role) {
+  const k = canonRoleAsbl(role)
+  const eq = equipeDuRoleAsbl(k)
+  if (!eq) return lblRoleAsbl(k)
+  const rangs = rangsDeLequipe(eq)
+  if (rangs.length <= 1) return eq.l
+  const rang = rangs.find(r => r.v === k)
+  return eq.l + ' — ' + String(rang?.l || lblRoleAsbl(k)).toLowerCase()
+}
+
+export function libellesRolesAsblPropres(roles) {
+  return rolesAsblSpecifiques(roles).map(libelleRoleAsblPropre)
+}
+
+/** Enregistrement : Non → simple_volontaire ; Oui → sièges choisis (jamais un rôle d’équipe sans rang). */
+export function rolesAsblPourEnregistrement(particulier, roles) {
+  if (!particulier) return ['simple_volontaire']
+  return rolesAsblSpecifiques(roles)
+}
+
+/** Première équipe déjà pourvue — pour ouvrir l’accordéon à l’édition. */
+export function equipeAsblOuverteParDefaut(roles) {
+  const spec = new Set(rolesAsblSpecifiques(roles))
+  if (!spec.size) return null
+  const eq = EQUIPES_ASBL.find(e => rangsDeLequipe(e).some(r => spec.has(r.v)))
+  return eq ? eq.v : null
+}
+
+/**
+ * Équipes dont les membres encodent uniquement LEUR propre disponibilité.
+ * Clés = EQUIPES_ASBL.v (informatique, logistique, transport, coordination
+ * bénévoles, récolteurs, présidence). Ne pas inventer d’autres sièges.
+ */
+export const EQUIPES_ASBL_DISPO_SOI = [
+  'informatique', 'logistique', 'transport', 'benevoles', 'recolte', 'presidence',
+]
+
+/** Sièges ASBL (hors liste ci-dessus) dont responsable / adjoint encode pour autrui. */
+export function rolesAsblEncoderDisposAutrui() {
+  const out = []
+  const seen = new Set()
+  for (const eq of EQUIPES_ASBL) {
+    if (EQUIPES_ASBL_DISPO_SOI.includes(eq.v)) continue
+    for (const r of eq.roles || []) {
+      const k = canonRoleAsbl(r)
+      if (!k || k === 'simple_volontaire' || seen.has(k)) continue
+      seen.add(k)
+      out.push(k)
+    }
+  }
+  return out
+}
+
+/**
+ * Encoder pour quelqu’un d’autre : sièges hors EQUIPES_ASBL_DISPO_SOI
+ * (coordination médicale, trésorerie, RP, administrateur ASBL, …)
+ * + compte admin / coordinateur. Présidence, IT, logistique, transport,
+ * bénévoles et récolteurs restent sur leur propre calendrier.
+ */
+export function peutEncoderDisposPourAutruiDepuisFiche(roleCompte, rolesAsblList) {
+  if (!roleCompte || roleCompte === 'partenaire') return false
+  if (roleCompte === 'admin' || roleCompte === 'coordinateur' || roleCompte === 'tresorier') return true
+  const spec = new Set(rolesAsblSpecifiques(rolesAsblList))
+  return rolesAsblEncoderDisposAutrui().some(r => spec.has(r))
+}
+
+/** Rang « responsable » de chaque équipe EQUIPES_ASBL (pas les adjoints / vice-président). */
+export function rolesAsblResponsables() {
+  const out = []
+  const seen = new Set()
+  for (const eq of EQUIPES_ASBL) {
+    const rangs = rangsDeLequipe(eq)
+    for (const r of rangs) {
+      if (rangs.length > 1 && (r.v.endsWith('_adjoint') || r.v === 'vice_president')) continue
+      if (seen.has(r.v)) continue
+      seen.add(r.v)
+      out.push(r.v)
+    }
+  }
+  return out
+}
+
+export function estResponsableAsblDepuisFiche(roleCompte, rolesAsblList) {
+  if (!roleCompte || roleCompte === 'partenaire') return false
+  if (roleCompte === 'admin' || roleCompte === 'president' || roleCompte === 'coordinateur' || roleCompte === 'tresorier') return true
+  const spec = new Set(rolesAsblSpecifiques(rolesAsblList))
+  return rolesAsblResponsables().some(r => spec.has(r))
+}
+
+/**
+ * Code HTML / vignette des événements internes : équipe informatique
+ * (responsable + adjoint) et admin / président — pas tous les managers.
+ */
+export function peutEditerEvenementsInternesDepuisFiche(roleCompte, rolesAsblList) {
+  if (!roleCompte || roleCompte === 'partenaire') return false
+  if (roleCompte === 'admin' || roleCompte === 'president') return true
+  const spec = new Set(rolesAsblSpecifiques(rolesAsblList))
+  return ['president', 'resp_informatique', 'resp_informatique_adjoint'].some(r => spec.has(r))
+}
+
+const PASTELS = ['peach', 'lavender', 'sage', 'sand']
+
+export function teintePastel(id) {
+  const s = String(id || '')
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return PASTELS[h % PASTELS.length]
+}
+
+/** Médical : teinte métier. Autres : pastels stables par personne (tags du mois). */
+export function teinteCalendrier(role, fiche, userId) {
+  const t = teinteDispo(role, fiche)
+  if (t === 'nonmed' || t === 'autre') return teintePastel(userId)
+  return t
+}
 
 export const SPECIALISATIONS_INF = [
   { v:'siamu',            l:'SIAMU (soins intensifs / urgences)' },

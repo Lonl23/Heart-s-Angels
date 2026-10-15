@@ -1,9 +1,15 @@
-import { useState, useEffect } from 'react'
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useSwUpdate } from '@/hooks/useSwUpdate'
+import { useNotifications } from '@/hooks/useNotifications'
+import { iconTypeNotif } from '@/lib/notifications'
 import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
+import { syncNativeTheme } from '@/lib/native'
+import { useFondPage } from '@/hooks/useFondPage'
+import { SortieFondu } from '@/components/Fondu'
+import BadgeBeta from '@/components/BadgeBeta'
 
 const NAV = [
   { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
@@ -11,6 +17,7 @@ const NAV = [
   { to:'/app/missions',      label:'Mes missions',    icon:'🚑', key:'missions' },
   { to:'/app/defraiements',  label:'Défraiements',    icon:'🧾', key:'defraiements' },
   { to:'/app/disponibilites',label:'Disponibilités',  icon:'📅', key:'disponibilites' },
+  { to:'/app/evenements',    label:'Événements internes', icon:'📣', key:'evenements' },
   { to:'/app/stock',         label:'Stock',           icon:'📦', key:'stock' },
   { to:'/app/annuaire',      label:'Annuaire',        icon:'📇', key:'annuaire' },
 ]
@@ -20,8 +27,10 @@ const PAGE_TITLE = [
   ['/app/missions', 'Mes missions'],
   ['/app/defraiements', 'Défraiements'],
   ['/app/disponibilites', 'Disponibilités'],
+  ['/app/evenements', 'Événements internes'],
   ['/app/stock', 'Stock'],
   ['/app/annuaire', 'Annuaire'],
+  ['/app/volontaires', 'Volontaires'],
   ['/app/admin', 'Administration'],
   ['/app/profil', 'Ma fiche'],
   ['/app', 'Tableau de bord'],
@@ -39,14 +48,18 @@ function toggleTheme() {
 }
 
 export default function Layout() {
-  const { profile, signOut, can, canAccess, peutGererStock } = useAuth()
+  const { profile, signOut, canAccess, peutGererFiches, peutGererApp } = useAuth()
   const { checkForUpdate, checking } = useSwUpdate()
   const nav = useNavigate()
   const loc = useLocation()
+  const fond = useFondPage(loc.pathname)
   const [collapsed, setCollapsed] = useState(localStorage.getItem('nav_collapsed') === '1')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width:900px)').matches)
   const [dark, setDark] = useState(() => (document.documentElement.getAttribute('data-theme') || 'light') === 'dark')
+  const { nonLues, nbNonLues, marquerLues } = useNotifications()
+  const [cloche, setCloche] = useState(false)
+  const clocheRef = useRef(null)
 
   useEffect(() => {
     const m = window.matchMedia('(min-width:900px)')
@@ -54,22 +67,29 @@ export default function Layout() {
     m.addEventListener('change', h)
     return () => m.removeEventListener('change', h)
   }, [])
-  useEffect(() => { setMobileOpen(false) }, [loc.pathname])
+  useEffect(() => { setMobileOpen(false); setCloche(false) }, [loc.pathname])
+  useEffect(() => {
+    function onDoc(e) {
+      if (clocheRef.current && !clocheRef.current.contains(e.target)) setCloche(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
 
   function toggleCollapse() { const v = !collapsed; setCollapsed(v); localStorage.setItem('nav_collapsed', v ? '1' : '0') }
-  function onTheme() { toggleTheme(); setDark(d => !d) }
+  function onTheme() { toggleTheme(); setDark(d => !d); syncNativeTheme() }
   async function handleLogout() { await signOut(); nav('/login') }
 
-  const items = [...NAV.filter(n => {
-    if (n.key === 'missions') return true
-    if (n.key === 'stock') return canAccess(n.key) && peutGererStock()
-    return canAccess(n.key)
-  }), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', icon:'⚙️' }] : [])]
+  const extra = [
+    ...(peutGererFiches() ? [{ to: '/app/volontaires', label: 'Volontaires', icon: '👥' }] : []),
+    ...(peutGererApp() ? [{ to: '/app/admin', label: 'Administration', icon: '⚙️' }] : []),
+  ]
+  const items = [...NAV.filter(n => canAccess(n.key)), ...extra]
   const collapsedEff = isDesktop && collapsed
   const W = collapsedEff ? 66 : 250
 
   return (
-    <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
+    <div className="ha-shell" style={{ display:'flex', overflow:'hidden', background:'var(--bg)' }}>
       <aside className="ha-sidebar" style={{
         width: W, flexShrink:0, zIndex:60, background:'var(--surface)',
         borderRight:'1px solid var(--border)', display:'flex', flexDirection:'column',
@@ -108,26 +128,59 @@ export default function Layout() {
 
       {mobileOpen && <div onClick={()=>setMobileOpen(false)} className="ha-scrim" style={{ position:'fixed', inset:0, background:'var(--overlay)', zIndex:55 }} />}
 
-      <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', height:'100vh', minHeight:0 }}>
+      <div className="ha-shell-main" style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', minHeight:0 }}>
         <header style={{ position:'sticky', top:0, zIndex:30, display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--surface)', borderBottom:'1px solid var(--border)' }}>
           <button onClick={()=>setMobileOpen(o=>!o)} className="ha-burger" aria-label="Menu" style={iconBtn}>☰</button>
           <Logo size={40} className="ha-header-logo" />
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pageTitle(loc.pathname)}</div>
+          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, display:'flex', alignItems:'center', gap:8 }}>
+            {pageTitle(loc.pathname)}
+            <BadgeBeta />
+          </div>
+          <div ref={clocheRef} style={{ position:'relative', marginLeft:'auto' }}>
+            <button type="button" onClick={() => setCloche(o => !o)} aria-label="Alertes" title="Alertes" style={{ ...iconBtn, position:'relative' }}>
+              🔔
+              {nbNonLues > 0 && <span className="ha-notif-badge">{nbNonLues > 9 ? '9+' : nbNonLues}</span>}
+            </button>
+            {cloche && (
+              <div className="ha-notif-panel">
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, marginBottom:8 }}>
+                  <strong style={{ fontSize:13, color:'var(--heading)' }}>Alertes</strong>
+                  {nbNonLues > 0 && (
+                    <button type="button" onClick={() => marquerLues()} style={{ background:'none', border:'none', color:'var(--accent)', fontSize:12, fontWeight:600, cursor:'pointer' }}>Tout lu</button>
+                  )}
+                </div>
+                {nonLues.length === 0 && <div style={{ fontSize:13, color:'var(--text-muted)' }}>Aucune alerte non lue.</div>}
+                {nonLues.slice(0, 8).map(n => (
+                  <Link key={n.id} to={n.lien || '/app'} onClick={() => { marquerLues([n.id]); setCloche(false) }} className="ha-notif-item">
+                    <span>{iconTypeNotif(n.type)}</span>
+                    <span>
+                      <span style={{ display:'block', fontWeight:600, color:'var(--text)' }}>{n.titre}</span>
+                      {n.message && <span style={{ display:'block', fontSize:12, color:'var(--text-muted)' }}>{String(n.message).split('\n')[0]}</span>}
+                    </span>
+                  </Link>
+                ))}
+                <Link to="/app" onClick={() => setCloche(false)} style={{ display:'block', textAlign:'center', fontSize:12.5, fontWeight:600, color:'var(--accent)', marginTop:8 }}>Tableau de bord ›</Link>
+              </div>
+            )}
+          </div>
         </header>
-        <main style={{ flex:1, minWidth:0, width:'100%', overflowX:'hidden', overflowY:'auto', minHeight:0 }}><Outlet /></main>
+        <main
+          className={fond.actif ? 'ha-main-fond' : undefined}
+          style={{ flex:1, minWidth:0, width:'100%', overflow:'hidden', minHeight:0, display:'flex', flexDirection:'column', ...fond.style }}
+        ><SortieFondu /></main>
       </div>
 
       <style>{`
         @media (max-width: 899px) {
           .ha-sidebar {
-            position: fixed; top:0; left:0; height:100vh; width: min(250px, 82vw) !important;
+            position: fixed; top:0; left:0; height:100%; width: min(250px, 82vw) !important;
             transform: translateX(-100%);
           }
           .ha-collapse-btn { display:none !important; }
           .ha-header-logo { display:block; }
         }
         @media (min-width: 900px) {
-          .ha-sidebar { position: relative; height:100vh; transform:none !important; }
+          .ha-sidebar { position: relative; height:100%; transform:none !important; }
           .ha-burger, .ha-scrim, .ha-header-logo { display:none !important; }
         }
       `}</style>
