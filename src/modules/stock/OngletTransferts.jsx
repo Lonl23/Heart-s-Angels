@@ -470,7 +470,7 @@ function FormEmporter({ onDone, onOk, onErr, onChange }) {
       ) : missions.length === 0 ? (
         <Empty
           title="Aucune mission à venir"
-          hint="L’emport se fait aussi au départ depuis Mes missions. Pour placer du matériel dans un sac ou un véhicule, utilisez « Doter »." />
+          hint="L’emport se fait aussi au départ depuis Mes souhaits. Pour placer du matériel dans un sac ou un véhicule, utilisez « Doter »." />
       ) : missions.map(s => (
         <button key={s.id} type="button" className="ha-pick-row" onClick={() => setChoix(s)}>
           <div style={{ fontWeight:600 }}>{`${s.beneficiaire_prenom || ''} ${s.beneficiaire_nom || ''}`.trim() || 'Mission'}</div>

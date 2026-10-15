@@ -104,7 +104,7 @@ export default function Souhaits() {
   )
 
   return (
-    <Page fill title="Souhaits" subtitle="Encodez les dossiers ici. Le terrain (checklists, MAR, démarrer / terminer) se fait dans Mes missions."
+    <Page fill title="Préparation souhait" subtitle="Encodez les dossiers ici. Le terrain (checklists, MAR, démarrer / terminer) se fait dans Mes souhaits."
       action={tab==='souhaits' && encoderPatient ? <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn> : null}>
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },

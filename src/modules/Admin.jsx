@@ -266,7 +266,7 @@ function AccesMatrice() {
     <div>
       {msg && <Msg msg={msg} />}
       <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-        <b>Mes missions</b>, <b>défraiements</b> et <b>disponibilités</b> sont ouverts à tout le personnel enregistré (pas les partenaires) : ils ne se règlent pas ici.
+        <b>Mes souhaits</b>, <b>défraiements</b> et <b>disponibilités</b> sont ouverts à tout le personnel enregistré (pas les partenaires) : ils ne se règlent pas ici.
         {' '}Les souhaits restent liés aux rôles de récolte et de programmation (transport, présidence, informatique).
         {' '}Cochez seulement le <b>stock</b> et l’<b>annuaire</b> (et éventuellement Souhaits en plus) par <b>équipe</b> : responsable et adjoint d’une même catégorie comptent ensemble. Un membre a l’accès dès qu’une de ses équipes est cochée. Les administrateurs du logiciel gardent l’accès total.
       </div>

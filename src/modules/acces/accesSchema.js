@@ -1,5 +1,5 @@
 // Accès que l’on peut encore autoriser ou non par la matrice.
-// Mes missions, défraiements et disponibilités sont ouverts à tout le personnel
+// Mes souhaits, défraiements et disponibilités sont ouverts à tout le personnel
 // (sauf partenaires) : ils n’apparaissent pas ici.
 export const ACCES = [
   { v:'souhaits', l:'Souhaits' },

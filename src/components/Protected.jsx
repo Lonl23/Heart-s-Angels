@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import ChangePassword from '@/pages/ChangePassword'
+import { moduleAutorise } from '@/navigation'
 
 function Splash({ text }) {
   return <div className="ha-shell" style={{ display:'grid', placeItems:'center', color:'var(--text-muted)', fontFamily:'DM Sans,sans-serif' }}>{text}</div>
@@ -18,6 +19,14 @@ export function RequireStaff({ children }) {
   if (loading || (session && !profile)) return <Splash text="Chargement…" />
   if (!session) return <Navigate to="/login" replace state={{ from: loc.pathname }} />
   if (!can('staff')) return <Navigate to="/partenaire" replace />
+  return children
+}
+
+// Module interne : masqué si le volontaire n'a pas le droit de l'ouvrir.
+export function RequireAcces({ feature, children }) {
+  const auth = useAuth()
+  if (auth.loading && !auth.profile) return <Splash text="Chargement…" />
+  if (!moduleAutorise(feature, auth)) return <Navigate to="/app" replace />
   return children
 }
 

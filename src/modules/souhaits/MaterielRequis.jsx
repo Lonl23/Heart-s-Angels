@@ -134,7 +134,7 @@ function ChecklistExtras({ m, setM, lecture }) {
     <Card style={{ marginTop:14 }}>
       <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:6 }}>À cocher sur le terrain</div>
       <p style={{ margin:'0 0 12px', fontSize:13.5, color:'var(--text-muted)' }}>
-        Ajoutez du matériel (ou un autre point) à une checklist. L’équipage le verra dans Mes missions, en plus des cases standard (GPS, VISA…).
+        Ajoutez du matériel (ou un autre point) à une checklist. L’équipage le verra dans Mes souhaits, en plus des cases standard (GPS, VISA…).
       </p>
       {!lecture && (
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, alignItems:'end' }}>

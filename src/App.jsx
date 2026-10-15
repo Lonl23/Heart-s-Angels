@@ -2,7 +2,7 @@
 // Logiciel propriétaire. Voir LICENSE. Mention à ne pas retirer.
 import { lazy, Suspense } from 'react'
 import { Route, Navigate } from 'react-router-dom'
-import { RequireStaff, RequirePartenaire } from '@/components/Protected'
+import { RequireStaff, RequirePartenaire, RequireAcces } from '@/components/Protected'
 import Layout from '@/components/Layout'
 import { RoutesAvecFondu } from '@/components/Fondu'
 
@@ -24,6 +24,9 @@ const Admin = lazy(() => import('@/modules/Admin'))
 const FicheVolontaire = lazy(() => import('@/modules/fiche/FicheVolontaire'))
 const MesMissions = lazy(() => import('@/modules/MesMissions'))
 const Annuaire = lazy(() => import('@/modules/annuaire/Annuaire'))
+const Departement = lazy(() => import('@/pages/Departement'))
+const Organigramme = lazy(() => import('@/modules/rh/Organigramme'))
+const Tresorerie = lazy(() => import('@/modules/Tresorerie'))
 
 function EcranChargement() {
   return (
@@ -46,22 +49,25 @@ export default function App() {
 
         <Route path="/app" element={<RequireStaff><Layout /></RequireStaff>}>
           <Route index element={<Dashboard />} />
-          <Route path="souhaits/nouveau" element={<Souhaits />} />
-          <Route path="souhaits/:id/preparer" element={<Souhaits />} />
-          <Route path="souhaits/:id" element={<Souhaits />} />
-          <Route path="souhaits" element={<Souhaits />} />
-          <Route path="missions/:id" element={<MesMissions />} />
-          <Route path="missions" element={<MesMissions />} />
-          <Route path="defraiements"   element={<Defraiements />} />
-          <Route path="disponibilites" element={<Disponibilites />} />
-          <Route path="evenements/nouveau" element={<EvenementsInternes />} />
-          <Route path="evenements/:id/editer" element={<EvenementsInternes />} />
-          <Route path="evenements/:id" element={<EvenementsInternes />} />
-          <Route path="evenements"     element={<EvenementsInternes />} />
-          <Route path="stock"          element={<Stock />} />
-          <Route path="annuaire"       element={<Annuaire />} />
-          <Route path="volontaires"    element={<Volontaires />} />
-          <Route path="admin"          element={<Admin />} />
+          <Route path="departement/:id" element={<Departement />} />
+          <Route path="souhaits/nouveau" element={<RequireAcces feature="souhaits"><Souhaits /></RequireAcces>} />
+          <Route path="souhaits/:id/preparer" element={<RequireAcces feature="souhaits"><Souhaits /></RequireAcces>} />
+          <Route path="souhaits/:id" element={<RequireAcces feature="souhaits"><Souhaits /></RequireAcces>} />
+          <Route path="souhaits" element={<RequireAcces feature="souhaits"><Souhaits /></RequireAcces>} />
+          <Route path="missions/:id" element={<RequireAcces feature="missions"><MesMissions /></RequireAcces>} />
+          <Route path="missions" element={<RequireAcces feature="missions"><MesMissions /></RequireAcces>} />
+          <Route path="defraiements"   element={<RequireAcces feature="defraiements"><Defraiements /></RequireAcces>} />
+          <Route path="disponibilites" element={<RequireAcces feature="disponibilites"><Disponibilites /></RequireAcces>} />
+          <Route path="evenements/nouveau" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="evenements/:id/editer" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="evenements/:id" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="evenements"     element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="stock"          element={<RequireAcces feature="stock"><Stock /></RequireAcces>} />
+          <Route path="annuaire"       element={<RequireAcces feature="annuaire"><Annuaire /></RequireAcces>} />
+          <Route path="volontaires"    element={<RequireAcces feature="fiches"><Volontaires /></RequireAcces>} />
+          <Route path="rh/organigramme" element={<RequireAcces feature="organigramme"><Organigramme /></RequireAcces>} />
+          <Route path="tresorerie"     element={<RequireAcces feature="tresorerie"><Tresorerie /></RequireAcces>} />
+          <Route path="admin"          element={<RequireAcces feature="admin"><Admin /></RequireAcces>} />
           <Route path="profil"         element={<FicheVolontaire />} />
         </Route>
 

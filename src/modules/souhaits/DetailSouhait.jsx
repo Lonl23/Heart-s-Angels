@@ -216,7 +216,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
               : 'Souhait réalisé — le statut ne peut plus être modifié, les heures de mission sont conservées.')
             : demo
               ? 'Souhait de formation — déplaçable dans n’importe quelle colonne à tout moment, y compris Réalisé et Non réalisé.'
-              : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes missions' : ''}`}
+              : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes souhaits' : ''}`}
         </div>
         <StatutFlow value={s.statut} info={stInfo} pipeline={pipelineStatut} extras={extras} onPick={majStatut} locked={statutFige(s.statut, s)} />
         {programmer && s.statut === 'pret' && pretHints.length > 0 && (
@@ -238,7 +238,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       {s.fictif && (
         <Flash kind="warn">
           {s.mission?.demo_cle
-            ? 'Souhait de formation fictif — dossier préencodé, déplaçable dans n’importe quelle colonne à tout moment. Ce n’est pas un vrai patient. Pas besoin d’affecter un équipage : tous les volontaires le voient dans Mes missions pour se faire la main. Une fois clôturé, il revient en Nouveau le lendemain (départ base 9h30) ; l’encodage (protocole, trajet, institutions) reste.'
+            ? 'Souhait de formation fictif — dossier préencodé, déplaçable dans n’importe quelle colonne à tout moment. Ce n’est pas un vrai patient. Pas besoin d’affecter un équipage : tous les volontaires le voient dans Mes souhaits pour se faire la main. Une fois clôturé, il revient en Nouveau le lendemain (départ base 9h30) ; l’encodage (protocole, trajet, institutions) reste.'
             : 'Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.'}
         </Flash>
       )}
@@ -264,7 +264,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           <Flash kind="warn">
             {programmer
-              ? 'Encodage du dossier — tout s\'enregistre tout seul. Les checklists et le MAR se feront dans Mes missions.'
+              ? 'Encodage du dossier — tout s\'enregistre tout seul. Les checklists et le MAR se feront dans Mes souhaits.'
               : 'Vous voyez tout le dossier pour informer le patient. Vous encodez la partie patient ; les équipages, horaires et ambulances sont saisis par la coordination transport, la présidence ou l’informatique.'}
           </Flash>
           {encoderPatient && (

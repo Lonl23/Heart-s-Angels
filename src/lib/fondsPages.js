@@ -4,7 +4,7 @@ import { compressImage } from '@/modules/souhaits/TerrainPhotos'
 export const BUCKET_FONDS = 'fonds-app'
 
 export const PAGES_FONDS = [
-  { k: 'dashboard', l: 'Tableau de bord', hint: 'Accueil après connexion' },
+  { k: 'dashboard', l: 'Accueil', hint: 'Choix du département après connexion' },
   { k: 'disponibilites', l: 'Disponibilités', hint: 'Agenda' },
   { k: 'evenements', l: 'Événements internes', hint: 'Réunions ASBL' },
   { k: 'defraiements', l: 'Défraiements', hint: 'Notes de frais' },

@@ -47,7 +47,7 @@ export default function MesMissions() {
   const nbCours = aRealiser.filter(m => m.statut === 'en_cours').length
 
   return (
-    <Page title="Mes missions" subtitle="Vos missions affectées, et le souhait de formation (fictif) pour vous faire la main — sans équipage à poser.">
+    <Page title="Mes souhaits" subtitle="Vos missions affectées, et le souhait de formation (fictif) pour vous faire la main — sans équipage à poser.">
       {err && <div style={{ color:'#A32D2D', fontSize:13, marginBottom:10 }}>{err}</div>}
       <div className="ha-tabs" style={{ marginBottom:16 }}>
         {FILTRES.map(f => (

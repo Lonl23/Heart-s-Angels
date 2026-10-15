@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useSwUpdate } from '@/hooks/useSwUpdate'
@@ -10,35 +10,7 @@ import { syncNativeTheme } from '@/lib/native'
 import { useFondPage } from '@/hooks/useFondPage'
 import { SortieFondu } from '@/components/Fondu'
 import BadgeBeta from '@/components/BadgeBeta'
-
-const NAV = [
-  { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
-  { to:'/app/souhaits',      label:'Souhaits',        icon:'⭐', key:'souhaits' },
-  { to:'/app/missions',      label:'Mes missions',    icon:'🚑', key:'missions' },
-  { to:'/app/defraiements',  label:'Défraiements',    icon:'🧾', key:'defraiements' },
-  { to:'/app/disponibilites',label:'Disponibilités',  icon:'📅', key:'disponibilites' },
-  { to:'/app/evenements',    label:'Événements internes', icon:'📣', key:'evenements' },
-  { to:'/app/stock',         label:'Stock',           icon:'📦', key:'stock' },
-  { to:'/app/annuaire',      label:'Annuaire',        icon:'📇', key:'annuaire' },
-]
-
-const PAGE_TITLE = [
-  ['/app/souhaits', 'Souhaits'],
-  ['/app/missions', 'Mes missions'],
-  ['/app/defraiements', 'Défraiements'],
-  ['/app/disponibilites', 'Disponibilités'],
-  ['/app/evenements', 'Événements internes'],
-  ['/app/stock', 'Stock'],
-  ['/app/annuaire', 'Annuaire'],
-  ['/app/volontaires', 'Volontaires'],
-  ['/app/admin', 'Administration'],
-  ['/app/profil', 'Ma fiche'],
-  ['/app', 'Tableau de bord'],
-]
-
-function pageTitle(path) {
-  return (PAGE_TITLE.find(([p]) => path === p || (p !== '/app' && path.startsWith(p))) || [])[1] || 'Espace interne'
-}
+import { DEPARTEMENTS, filtrerDepartements, moduleAutorise, cheminActif, cheminDepartement, departementActif, titrePage } from '@/navigation'
 
 function toggleTheme() {
   const cur = document.documentElement.getAttribute('data-theme') || 'light'
@@ -48,7 +20,8 @@ function toggleTheme() {
 }
 
 export default function Layout() {
-  const { profile, signOut, canAccess, peutGererFiches, peutGererApp } = useAuth()
+  const auth = useAuth()
+  const { profile, signOut } = auth
   const { checkForUpdate, checking } = useSwUpdate()
   const nav = useNavigate()
   const loc = useLocation()
@@ -57,6 +30,8 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width:900px)').matches)
   const [dark, setDark] = useState(() => (document.documentElement.getAttribute('data-theme') || 'light') === 'dark')
+  const departements = useMemo(() => filtrerDepartements(DEPARTEMENTS, key => moduleAutorise(key, auth)), [auth])
+  const courant = departementActif(loc.pathname, departements)
   const { nonLues, nbNonLues, marquerLues } = useNotifications()
   const [cloche, setCloche] = useState(false)
   const clocheRef = useRef(null)
@@ -80,13 +55,8 @@ export default function Layout() {
   function onTheme() { toggleTheme(); setDark(d => !d); syncNativeTheme() }
   async function handleLogout() { await signOut(); nav('/login') }
 
-  const extra = [
-    ...(peutGererFiches() ? [{ to: '/app/volontaires', label: 'Volontaires', icon: '👥' }] : []),
-    ...(peutGererApp() ? [{ to: '/app/admin', label: 'Administration', icon: '⚙️' }] : []),
-  ]
-  const items = [...NAV.filter(n => canAccess(n.key)), ...extra]
   const collapsedEff = isDesktop && collapsed
-  const W = collapsedEff ? 66 : 250
+  const W = collapsedEff ? 66 : 292
 
   return (
     <div className="ha-shell" style={{ display:'flex', overflow:'hidden', background:'var(--bg)' }}>
@@ -102,13 +72,37 @@ export default function Layout() {
         </div>
 
         <nav style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflowY:'auto', minHeight:0 }}>
-          {items.map(n => (
-            <NavLink key={n.to} to={n.to} end={n.end} onClick={()=>setMobileOpen(false)} title={n.label}
-              className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
-              style={({isActive}) => ({ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:10, textDecoration:'none', fontSize:14, fontWeight:isActive?600:500, color:isActive?'#fff':'var(--text-2)', background:isActive?'var(--accent)':'transparent', whiteSpace:'nowrap', justifyContent: collapsedEff?'center':'flex-start' })}>
-              <span style={{ fontSize:16 }}>{n.icon}</span>{!collapsedEff && n.label}
-            </NavLink>
-          ))}
+          <NavLink to="/app" end onClick={()=>setMobileOpen(false)} title="Accueil"
+            className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
+            style={({isActive}) => itemStyle(isActive, collapsedEff)}>
+            <span style={{ fontSize:16 }}>🏠</span>{!collapsedEff && <span className="ha-nav-label">Accueil</span>}
+          </NavLink>
+          {departements.map(d => {
+            const actif = courant?.id === d.id
+            const surLaPage = cheminActif(loc.pathname, cheminDepartement(d))
+            return (
+              <div key={d.id}>
+                <NavLink to={cheminDepartement(d)} end onClick={()=>setMobileOpen(false)} title={d.label}
+                  className={'ha-nav-dept' + (actif ? ' has-active' : '') + (surLaPage ? ' is-current' : '')}
+                  style={{ justifyContent: collapsedEff ? 'center' : 'flex-start' }}>
+                  <span style={{ fontSize:16 }}>{d.icon}</span>
+                  {!collapsedEff && <span className="ha-nav-label">{d.label}</span>}
+                </NavLink>
+                {actif && !collapsedEff && d.modules.length > 0 && (
+                  <div className="ha-nav-sub">
+                    {d.modules.map(m => (
+                      <NavLink key={m.key} to={m.to} onClick={()=>setMobileOpen(false)} title={m.label}
+                        className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
+                        style={({isActive}) => itemStyle(isActive, false)}>
+                        <span style={{ fontSize:15 }}>{m.icon}</span>
+                        <span className="ha-nav-label">{m.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </nav>
 
         <div style={{ borderTop:'1px solid var(--border)', paddingTop:10, marginTop:8 }}>
@@ -133,7 +127,7 @@ export default function Layout() {
           <button onClick={()=>setMobileOpen(o=>!o)} className="ha-burger" aria-label="Menu" style={iconBtn}>☰</button>
           <Logo size={40} className="ha-header-logo" />
           <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, display:'flex', alignItems:'center', gap:8 }}>
-            {pageTitle(loc.pathname)}
+            {titrePage(loc.pathname)}
             <BadgeBeta />
           </div>
           <div ref={clocheRef} style={{ position:'relative', marginLeft:'auto' }}>
@@ -159,7 +153,7 @@ export default function Layout() {
                     </span>
                   </Link>
                 ))}
-                <Link to="/app" onClick={() => setCloche(false)} style={{ display:'block', textAlign:'center', fontSize:12.5, fontWeight:600, color:'var(--accent)', marginTop:8 }}>Tableau de bord ›</Link>
+                <Link to="/app" onClick={() => setCloche(false)} style={{ display:'block', textAlign:'center', fontSize:12.5, fontWeight:600, color:'var(--accent)', marginTop:8 }}>Accueil ›</Link>
               </div>
             )}
           </div>
@@ -173,7 +167,7 @@ export default function Layout() {
       <style>{`
         @media (max-width: 899px) {
           .ha-sidebar {
-            position: fixed; top:0; left:0; height:100%; width: min(250px, 82vw) !important;
+            position: fixed; top:0; left:0; height:100%; width: min(300px, 88vw) !important;
             transform: translateX(-100%);
           }
           .ha-collapse-btn { display:none !important; }
@@ -197,5 +191,10 @@ function Avatar({ url, prenom, nom }) {
   )
 }
 
+const itemStyle = (isActive, collapsed) => ({
+  display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, textDecoration:'none',
+  fontSize:14, fontWeight:isActive?600:500, color:isActive?'#fff':'var(--text-2)',
+  background:isActive?'var(--accent)':'transparent', justifyContent: collapsed?'center':'flex-start', minWidth:0,
+})
 const iconBtn = { background:'var(--bg-alt)', border:'1px solid var(--border)', borderRadius:8, padding:'6px 10px', fontSize:15, color:'var(--text-2)', cursor:'pointer', lineHeight:1 }
 const rowBtn = (collapsed) => ({ width:'100%', textAlign: collapsed?'center':'left', padding:'9px 10px', background:'transparent', border:'none', borderRadius:8, fontSize:13.5, color:'var(--text-2)', cursor:'pointer' })

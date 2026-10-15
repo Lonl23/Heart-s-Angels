@@ -504,7 +504,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   return (
     <div className="ha-terrain" style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px 110px' }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:4 }}>
-        <Btn kind="soft" onClick={onBack}>← Mes missions</Btn>
+        <Btn kind="soft" onClick={onBack}>← Mes souhaits</Btn>
         <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : ''}</span>
       </div>
       {userMedical && <BandeauMedecin tel={medTel} nom={medNom} />}

@@ -193,7 +193,7 @@ export default function Stock() {
   if (!gerer) {
     return (
       <Page title="Stock" subtitle="Réservé à la logistique.">
-        <Empty title="Inventaire et recharge" hint="Le volontaire scanne le matériel utilisé depuis Mes missions. Les responsables suivent ici photos, mouvements, péremption et commandes." />
+        <Empty title="Inventaire et recharge" hint="Le volontaire scanne le matériel utilisé depuis Mes souhaits. Les responsables suivent ici photos, mouvements, péremption et commandes." />
       </Page>
     )
   }

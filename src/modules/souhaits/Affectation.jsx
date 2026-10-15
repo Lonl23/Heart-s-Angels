@@ -24,7 +24,7 @@ export default function Affectation({ souhaitId }) {
 
   return (
     <div>
-      <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10 }}>Les volontaires affectés retrouvent la mission dans « Mes missions » (vue restreinte : prénom, lieu, destination, heures, check véhicule).</div>
+      <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10 }}>Les volontaires affectés retrouvent la mission dans « Mes souhaits » (vue restreinte : prénom, lieu, destination, heures, check véhicule).</div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, alignItems:'end', marginBottom:12 }}>
         <div><label style={lbl}>Volontaire</label><select value={uid} onChange={e=>setUid(e.target.value)} style={inp}><option value="">— Choisir —</option>{profils.map(p=><option key={p.id} value={p.id}>{p.prenom} {p.nom} ({lblRoleCompte(p.role)})</option>)}</select></div>
         <F label="Rôle dans la mission" value={role} set={setRole} placeholder="chauffeur, brancardier…" />

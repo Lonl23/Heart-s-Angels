@@ -110,7 +110,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
     <div>
       <Flash>
         {programme
-          ? 'Ici on encode et on prépare. Dans Matériel, vous pouvez ajouter des points aux checklists ; l’équipage les coche dans Mes missions.'
+          ? 'Ici on encode et on prépare. Dans Matériel, vous pouvez ajouter des points aux checklists ; l’équipage les coche dans Mes souhaits.'
           : 'Vous voyez tout le dossier pour informer le patient. Vous encodez la partie patient (identité, souhait, médical). Les équipages, horaires et ambulances sont saisis par la coordination transport, la présidence ou l’informatique.'}
       </Flash>
       {lecture && (
@@ -128,12 +128,12 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
       {cur.id === 'materiel' && <MaterielRequis m={m} setM={setMSi} lecture={lecture} />}
       {cur.id === 'traitements' && (
         <div>
-          {!lecturePatient && <Flash>Encodez les traitements prévus. Les administrations se cochent dans Mes missions, le jour J.</Flash>}
+          {!lecturePatient && <Flash>Encodez les traitements prévus. Les administrations se cochent dans Mes souhaits, le jour J.</Flash>}
           <Traitements souhaitId={souhaitId} readOnly={lecturePatient} />
         </div>
       )}
       {cur.id === 'medical' && (
-        <Flash>Ces infos sont lues par l'équipage médical sur le terrain. Le rapport de mission se rédige dans Mes missions.</Flash>
+        <Flash>Ces infos sont lues par l'équipage médical sur le terrain. Le rapport de mission se rédige dans Mes souhaits.</Flash>
       )}
       {cur.id === 'suivi' && <Suivi souhaitId={souhaitId} />}
 

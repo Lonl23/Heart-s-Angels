@@ -224,7 +224,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
 
       {m.demo_cle && (
         <Flash>
-          Souhait de formation : pas besoin d’affecter un équipage. Tous les volontaires le voient dans Mes missions pour se faire la main.
+          Souhait de formation : pas besoin d’affecter un équipage. Tous les volontaires le voient dans Mes souhaits pour se faire la main.
         </Flash>
       )}
 
@@ -232,7 +232,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
         <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
           {m.demo_cle
             ? 'Le vecteur (véhicule et rôles) reste dans le dossier pour le parcours terrain. L’affectation de personnes n’est pas nécessaire.'
-            : 'Un vecteur = un véhicule et son équipage. Cochez les qualifications sur chaque véhicule — vous pouvez demander 1 ou 2 ambulanciers. Les personnes affectées voient la mission dans Mes missions. Le rôle (infi / ambulancier) se pose tout seul selon le besoin de ce vecteur.'}
+            : 'Un vecteur = un véhicule et son équipage. Cochez les qualifications sur chaque véhicule — vous pouvez demander 1 ou 2 ambulanciers. Les personnes affectées voient la mission dans Mes souhaits. Le rôle (infi / ambulancier) se pose tout seul selon le besoin de ce vecteur.'}
         </div>
         {!lecture && <Btn onClick={ajouterVecteur}>+ Vecteur</Btn>}
       </div>

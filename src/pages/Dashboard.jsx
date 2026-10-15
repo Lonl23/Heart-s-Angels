@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -7,16 +7,7 @@ import { Card, Empty, Loading, Btn, PillFictif } from '@/components/ui'
 import { lblEtapeTerrain } from '@/modules/souhaits/missionSchema'
 import { fmtDatesSouhait } from '@/modules/souhaits/datesSouhait'
 import { iconTypeNotif } from '@/lib/notifications'
-
-const CARDS = [
-  { to:'/app/missions',      key:'missions',      icon:'🚑', label:'Mes missions',   desc:'Terrain : checklists, démarrer, terminer' },
-  { to:'/app/souhaits',      key:'souhaits',      icon:'⭐', label:'Souhaits',       desc:'Encoder et préparer les dossiers' },
-  { to:'/app/defraiements',  key:'defraiements',  icon:'🧾', label:'Défraiements',   desc:'Note de frais : forfait et km (récolte / hors base)' },
-  { to:'/app/disponibilites',key:'disponibilites',icon:'📅', label:'Disponibilités', desc:'Agenda : vos jours et les missions (sans nom de patient)' },
-  { to:'/app/evenements',    key:'evenements',    icon:'📣', label:'Événements internes', desc:'Vignettes ASBL : page d’inscription dans l’app' },
-  { to:'/app/stock',         key:'stock',         icon:'📦', label:'Stock',          desc:'Matériel et mouvements' },
-  { to:'/app/annuaire',      key:'annuaire',      icon:'📇', label:'Annuaire',       desc:'Bénéficiaires, contacts rattachés, institutions' },
-]
+import { DEPARTEMENTS, cheminDepartement, filtrerDepartements, moduleAutorise } from '@/navigation'
 
 function ilYA(iso) {
   if (!iso) return ''
@@ -31,14 +22,14 @@ function ilYA(iso) {
 }
 
 export default function Dashboard() {
-  const { profile, canAccess, peutGererFiches, peutGererApp, peutReglerNotifications } = useAuth()
+  const auth = useAuth()
+  const { profile, canAccess, peutReglerNotifications } = auth
   const { items, nonLues, marquerLues, pushEtat, demanderPush } = useNotifications()
   const [missions, setMissions] = useState(null)
-  const cartes = [
-    ...CARDS.filter(c => canAccess(c.key)),
-    ...(peutGererFiches() ? [{ to:'/app/volontaires', icon:'👥', label:'Volontaires', desc:'Invitations, membres et fiches' }] : []),
-    ...(peutGererApp() ? [{ to:'/app/admin', icon:'⚙️', label:'Administration', desc:'Photos de fond, partenaires et accès' }] : []),
-  ]
+  const departements = useMemo(
+    () => filtrerDepartements(DEPARTEMENTS, key => moduleAutorise(key, auth)),
+    [auth],
+  )
   const date = new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' })
   const alertes = (nonLues.length ? nonLues : items.filter(n => !n.lu)).slice(0, 8)
   const montrerPush = pushEtat === 'default' || pushEtat === 'denied' || pushEtat === 'absent'
@@ -142,17 +133,20 @@ export default function Dashboard() {
 
       {missions && missions.length === 0 && canAccess('missions') && (
         <div style={{ marginBottom:24 }}>
-          <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici et dans Mes missions. Le souhait de formation fictif y est aussi, sans équipage à poser." />
+          <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici et dans Mes souhaits. Le souhait de formation fictif y est aussi, sans équipage à poser." />
         </div>
       )}
 
-      <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Accès rapides</div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:14 }}>
-        {cartes.map(c => (
-          <Link key={c.to} to={c.to} className="ha-click" style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'18px 16px', textDecoration:'none', display:'block' }}>
-            <div style={{ fontSize:'1.8rem', marginBottom:8 }}>{c.icon}</div>
-            <div style={{ fontSize:14.5, fontWeight:600, color:'var(--text)' }}>{c.label}</div>
-            <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>{c.desc}</div>
+      <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Que voulez-vous faire ?</div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:14 }}>
+        {departements.map(d => (
+          <Link key={d.id} to={cheminDepartement(d)} className="ha-click" style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'18px 16px', textDecoration:'none', display:'flex', flexDirection:'column', minHeight:132 }}>
+            <div style={{ fontSize:'1.8rem', marginBottom:8 }}>{d.icon}</div>
+            <div style={{ fontSize:15, fontWeight:650, color:'var(--text)' }}>{d.label}</div>
+            <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:4, flex:1 }}>
+              {d.modules.length ? 'Choisir un module' : 'Aucun module pour le moment'}
+            </div>
+            <div style={{ marginTop:10, color:'var(--accent)', fontWeight:650, fontSize:13 }}>Choisir ›</div>
           </Link>
         ))}
       </div>
