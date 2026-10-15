@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Card, Empty, Loading } from '@/components/ui'
-import { DEPARTEMENTS, filtrerDepartements } from '@/navigation'
+import { DEPARTEMENTS, cheminDepartement, filtrerDepartements } from '@/navigation'
 
 export default function Dashboard() {
   const { profile, peutOuvrir, canAccess } = useAuth()
@@ -52,29 +52,19 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Départements</div>
+      <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Que voulez-vous faire ?</div>
       {departements.length === 0 ? (
-        <Empty title="Aucun département" hint="Aucun module ne vous est ouvert pour le moment." />
+        <Empty title="Aucun département" hint="Aucun département ne vous est ouvert pour le moment." />
       ) : (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:14 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:14 }}>
           {departements.map(d => (
-            <section key={d.id} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'16px 14px 10px' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, padding:'0 4px' }}>
-                <span style={{ fontSize:'1.5rem' }}>{d.icon}</span>
-                <h2 style={{ margin:0, fontSize:'1.25rem', color:'var(--heading)' }}>{d.label}</h2>
-              </div>
-              <div style={{ display:'flex', flexDirection:'column' }}>
-                {d.modules.map(m => (
-                  <Link key={m.key} to={m.to} className="ha-dept-link">
-                    <span aria-hidden>{m.icon}</span>
-                    <span>
-                      <span style={{ display:'block', fontWeight:600, fontSize:14, color:'var(--text)' }}>{m.label}</span>
-                      <span style={{ display:'block', fontSize:12.5, color:'var(--text-muted)', marginTop:1 }}>{m.desc}</span>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </section>
+            <Link key={d.id} to={cheminDepartement(d)} style={{ textDecoration:'none', color:'inherit' }}>
+              <Card clickable style={{ display:'flex', alignItems:'center', gap:12, minHeight:88 }}>
+                <span style={{ fontSize:'1.8rem', lineHeight:1 }} aria-hidden>{d.icon}</span>
+                <span style={{ flex:1, minWidth:0, fontFamily:"'Cormorant Garamond', Georgia, serif", fontSize:'1.35rem', color:'var(--heading)', lineHeight:1.15 }}>{d.label}</span>
+                <span style={{ color:'var(--accent)', fontWeight:600, fontSize:13, flexShrink:0 }}>Choisir ›</span>
+              </Card>
+            </Link>
           ))}
         </div>
       )}

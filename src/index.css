@@ -75,9 +75,11 @@ input:focus, select:focus, textarea:focus {
   display: flex; align-items: center; gap: 10px; width: 100%;
   padding: 10px 12px; border: none; border-radius: 10px; background: transparent;
   color: var(--text-2); font-size: 14px; font-weight: 650; text-align: left; min-width: 0;
+  text-decoration: none; box-sizing: border-box;
 }
 .ha-nav-dept:hover, .ha-nav-dept.is-open { background: var(--bg-alt); }
 .ha-nav-dept.has-active { color: var(--heading); }
+.ha-nav-dept.is-current, .ha-nav-dept.is-current:hover { background: var(--accent); color: #fff; }
 .ha-nav-chevron { margin-left: auto; font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
 .ha-nav-sub {
   display: flex; flex-direction: column; gap: 2px;

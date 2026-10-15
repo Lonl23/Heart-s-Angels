@@ -1,5 +1,6 @@
 // Droits d'ouverture des modules. Pur : même résultat dans le menu, les routes
-// et les tests. Un département n'apparaît que si au moins un module renvoie vrai.
+// et les tests. La page d'un département ne liste que les modules autorisés.
+// Un département vide est masqué, sauf le département secours (navigation.js).
 
 const STAFF = ['admin','president','coordinateur','ambulancier_bleu','ambulancier_gris',
                'infirmier','medecin','volontaire_non_medical','tresorier','secretaire']

@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useSwUpdate } from '@/hooks/useSwUpdate'
 import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
-import { DEPARTEMENTS, filtrerDepartements, cheminActif, departementActif, titrePage } from '@/navigation'
+import { DEPARTEMENTS, filtrerDepartements, cheminActif, cheminDepartement, departementActif, titrePage } from '@/navigation'
 
 function toggleTheme() {
   const cur = document.documentElement.getAttribute('data-theme') || 'light'
@@ -22,8 +22,8 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width:900px)').matches)
   const [dark, setDark] = useState(() => (document.documentElement.getAttribute('data-theme') || 'light') === 'dark')
-  const [ouverts, setOuverts] = useState(() => Object.fromEntries(DEPARTEMENTS.map(d => [d.id, true])))
   const departements = useMemo(() => filtrerDepartements(DEPARTEMENTS, peutOuvrir), [peutOuvrir])
+  const courant = departementActif(loc.pathname, departements)
 
   useEffect(() => {
     const m = window.matchMedia('(min-width:900px)')
@@ -32,18 +32,6 @@ export default function Layout() {
     return () => m.removeEventListener('change', h)
   }, [])
   useEffect(() => { setMobileOpen(false) }, [loc.pathname])
-  useEffect(() => {
-    setOuverts(o => {
-      const next = { ...o }
-      let changed = false
-      for (const d of departements) {
-        if (!(d.id in next)) { next[d.id] = true; changed = true }
-      }
-      const id = departementActif(loc.pathname, departements)?.id
-      if (id && !next[id]) { next[id] = true; changed = true }
-      return changed ? next : o
-    })
-  }, [loc.pathname, departements])
 
   function toggleCollapse() { const v = !collapsed; setCollapsed(v); localStorage.setItem('nav_collapsed', v ? '1' : '0') }
   function onTheme() { toggleTheme(); setDark(d => !d) }
@@ -51,15 +39,6 @@ export default function Layout() {
 
   const collapsedEff = isDesktop && collapsed
   const W = collapsedEff ? 66 : 318
-  function ouvrirDept(id) {
-    if (collapsedEff) {
-      setCollapsed(false)
-      localStorage.setItem('nav_collapsed', '0')
-      setOuverts(o => ({ ...o, [id]: true }))
-      return
-    }
-    setOuverts(o => ({ ...o, [id]: !o[id] }))
-  }
 
   return (
     <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
@@ -75,24 +54,23 @@ export default function Layout() {
         </div>
 
         <nav style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflowY:'auto', minHeight:0 }}>
-          <NavLink to="/app" end onClick={()=>setMobileOpen(false)} title="Tableau de bord"
+          <NavLink to="/app" end onClick={()=>setMobileOpen(false)} title="Accueil"
             className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
             style={({isActive}) => itemStyle(isActive, collapsedEff)}>
-            <span style={{ fontSize:16 }}>🏠</span>{!collapsedEff && <span className="ha-nav-label">Tableau de bord</span>}
+            <span style={{ fontSize:16 }}>🏠</span>{!collapsedEff && <span className="ha-nav-label">Accueil</span>}
           </NavLink>
           {departements.map(d => {
-            const actif = d.modules.some(m => cheminActif(loc.pathname, m.to))
-            const ouvert = !!ouverts[d.id]
+            const actif = courant?.id === d.id
+            const surLaPage = cheminActif(loc.pathname, cheminDepartement(d))
             return (
               <div key={d.id} className="ha-nav-group">
-                <button type="button" className={'ha-nav-dept' + (actif ? ' has-active' : '') + (ouvert ? ' is-open' : '')}
-                  aria-expanded={!collapsedEff && ouvert} title={d.label} onClick={() => ouvrirDept(d.id)}
+                <NavLink to={cheminDepartement(d)} end onClick={()=>setMobileOpen(false)} title={d.label}
+                  className={'ha-nav-dept' + (actif ? ' has-active' : '') + (surLaPage ? ' is-current' : '')}
                   style={{ justifyContent: collapsedEff ? 'center' : 'flex-start' }}>
                   <span style={{ fontSize:16 }}>{d.icon}</span>
                   {!collapsedEff && <span className="ha-nav-label">{d.label}</span>}
-                  {!collapsedEff && <span className="ha-nav-chevron" aria-hidden>{ouvert ? '▾' : '▸'}</span>}
-                </button>
-                {ouvert && !collapsedEff && (
+                </NavLink>
+                {actif && !collapsedEff && d.modules.length > 0 && (
                   <div className="ha-nav-sub">
                     {d.modules.map(m => (
                       <NavLink key={m.key} to={m.to} onClick={()=>setMobileOpen(false)} title={m.label}

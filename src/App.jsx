@@ -7,6 +7,7 @@ import Layout from '@/components/Layout'
 import Login from '@/pages/Login'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const Departement = lazy(() => import('@/pages/Departement'))
 const DemandeSouhait = lazy(() => import('@/pages/DemandeSouhait'))
 const Inscription = lazy(() => import('@/pages/Inscription'))
 const PartenairePortail = lazy(() => import('@/pages/PartenairePortail'))
@@ -38,14 +39,15 @@ export default function App() {
 
         <Route path="/app" element={<RequireStaff><Layout /></RequireStaff>}>
           <Route index element={<Dashboard />} />
+          <Route path="departement/:id" element={<Departement />} />
           <Route path="souhaits/nouveau" element={<RequireAccess feature="souhaits"><Souhaits /></RequireAccess>} />
           <Route path="souhaits/:id/preparer" element={<RequireAccess feature="souhaits"><Souhaits /></RequireAccess>} />
           <Route path="souhaits/:id" element={<RequireAccess feature="souhaits"><Souhaits /></RequireAccess>} />
           <Route path="souhaits" element={<RequireAccess feature="souhaits"><Souhaits /></RequireAccess>} />
           <Route path="missions/:id" element={<RequireAccess feature="missions"><MesMissions /></RequireAccess>} />
           <Route path="missions" element={<RequireAccess feature="missions"><MesMissions /></RequireAccess>} />
-          <Route path="secours/:id" element={<RequireAccess feature="secours"><MesMissions titre="Interventions" sousTitre="Sur le terrain, étape par étape : votre véhicule, puis la prise en charge, le retour, la base." base="/app/secours" /></RequireAccess>} />
-          <Route path="secours" element={<RequireAccess feature="secours"><MesMissions titre="Interventions" sousTitre="Sur le terrain, étape par étape : votre véhicule, puis la prise en charge, le retour, la base." base="/app/secours" /></RequireAccess>} />
+          <Route path="secours" element={<Navigate to="/app/departement/secours" replace />} />
+          <Route path="secours/:id" element={<Navigate to="/app/departement/secours" replace />} />
           <Route path="rh/fiches" element={<RequireAccess feature="fiches"><FichesVolontaires /></RequireAccess>} />
           <Route path="rh/organigramme" element={<RequireAccess feature="organigramme"><Organigramme /></RequireAccess>} />
           <Route path="defraiements"   element={<RequireAccess feature="defraiements"><Stub nom="Défraiements" /></RequireAccess>} />
