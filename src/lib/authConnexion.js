@@ -9,10 +9,25 @@ export function urlRedirectOAuth() {
   return `${String(base).replace(/\/$/, '')}/login`
 }
 
+export const MSG_GOOGLE_MAL_CONFIGURE =
+  'La connexion Google n’est pas configurée. Dans Supabase → Authentication → Providers → Google, le Client ID doit ressembler à « ….apps.googleusercontent.com » (ce n’est pas gmail.com ni une adresse e-mail). Créez-le dans Google Cloud → Identifiants → ID client OAuth → Application Web, puis collez l’ID et le secret dans Supabase.'
+
+export function clientIdGoogleValide(urlOuId) {
+  const s = String(urlOuId || '')
+  let id = s
+  try {
+    if (s.includes('://')) id = new URL(s).searchParams.get('client_id') || ''
+  } catch { /* pas une URL */ }
+  return /\.apps\.googleusercontent\.com$/i.test(id.trim())
+}
+
 export function traduireErreurAuth(brut) {
   const t = String(brut || '')
   const low = t.toLowerCase()
   if (!t) return null
+  if (/upstream unreachable|invalid_client|unauthorized_client|invalid client/i.test(low)) {
+    return MSG_GOOGLE_MAL_CONFIGURE
+  }
   if (/provider is not enabled|unsupported provider|validation failed/i.test(t)) {
     return 'La connexion Google n’est pas encore activée. L’administrateur doit la configurer (Google Cloud + Supabase).'
   }
@@ -51,11 +66,16 @@ export async function continuerAvecGoogle() {
     provider: 'google',
     options: {
       redirectTo: urlRedirectOAuth(),
+      skipBrowserRedirect: true,
       queryParams: { access_type: 'offline', prompt: 'select_account' },
     },
   })
   if (error) return { ok: false, error: traduireErreurAuth(error.message) || error.message }
-  return { ok: true, url: data?.url }
+  const url = data?.url
+  if (!url) return { ok: false, error: MSG_GOOGLE_MAL_CONFIGURE }
+  if (!clientIdGoogleValide(url)) return { ok: false, error: MSG_GOOGLE_MAL_CONFIGURE }
+  if (typeof window !== 'undefined') window.location.assign(url)
+  return { ok: true, url }
 }
 
 export async function validerSessionGoogle() {

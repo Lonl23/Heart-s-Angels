@@ -41,6 +41,12 @@ le bouton affiche une erreur : il faut coller l’identifiant dans Supabase.
 
 2. **Supabase** → Authentication → Providers → **Google** → activer,
    coller **Client ID** et **Client secret**, enregistrer.
+
+   ⚠️ Le Client ID ressemble à `123456789-xxxx.apps.googleusercontent.com`.
+   Ce n’est **pas** `gmail.com`, **pas** une adresse e-mail, **pas** le nom
+   du domaine. Si Google affiche « upstream unreachable », c’est que la
+   mauvaise valeur a été collée : remplacer par l’ID client OAuth ci-dessus.
+
    Laissez le **rattachement automatique** des identités (même e-mail) activé :
    un volontaire déjà inscrit par mot de passe pourra ensuite ouvrir Google
    avec **la même adresse** (ex. `laurent@heartsangels.be` via Google Workspace).
