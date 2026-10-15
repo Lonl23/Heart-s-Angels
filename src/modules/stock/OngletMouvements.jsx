@@ -5,7 +5,7 @@ import { TYPES_MOUVEMENT, lblMouv, couleurMouv, fmtQuand } from './stockSchema'
 import { PhotoArticle } from './photoStock'
 import { exporterMouvementsCsv } from './excelStock'
 
-export default function OngletMouvements({ cats, typesAutorises, hint, csv }) {
+export default function OngletMouvements({ cats, typesAutorises, hint, csv, sansSouhait }) {
   const [type, setType] = useState('')
   const [cat, setCat] = useState('')
   const [items, setItems] = useState(null)
@@ -26,6 +26,7 @@ export default function OngletMouvements({ cats, typesAutorises, hint, csv }) {
         return
       }
       const merged = results.flatMap(r => r.data?.items || [])
+        .filter(m => sansSouhait ? !m.souhait_id : true)
       merged.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
       setItems(merged)
       return
@@ -37,13 +38,14 @@ export default function OngletMouvements({ cats, typesAutorises, hint, csv }) {
     })
     if (error || data?.ok === false) { setErr(error?.message || data?.error); setItems([]); return }
     const list = data.items || []
-    setItems(typesOk ? list.filter(m => typesOk.includes(m.type)) : list)
+    setItems((typesOk ? list.filter(m => typesOk.includes(m.type)) : list)
+      .filter(m => sansSouhait ? !m.souhait_id : true))
   }
 
   useEffect(() => { load() }, [])
 
   const optsType = typesOk
-    ? [{ v: '', l: 'Emports et sorties' }, ...TYPES_MOUVEMENT.filter(x => x.v && typesOk.includes(x.v))]
+    ? [{ v: '', l: typesOk.length === 1 ? (TYPES_MOUVEMENT.find(x => x.v === typesOk[0])?.l || 'Tous') : 'Emports et sorties' }, ...TYPES_MOUVEMENT.filter(x => x.v && typesOk.includes(x.v))]
     : TYPES_MOUVEMENT
   const optsCat = [{ v: '', l: 'Tous les articles' }, ...(cats || []).map(c => ({ v: c.id, l: c.nom }))]
 
@@ -63,7 +65,7 @@ export default function OngletMouvements({ cats, typesAutorises, hint, csv }) {
       </div>
       {err && <div style={{ color: '#A32D2D', fontSize: 13.5, marginBottom: 10 }}>{err}</div>}
       {items == null ? <Loading /> : items.length === 0 ? (
-        <Empty title="Aucun mouvement" hint={typesOk ? 'Les emports mission et les sorties (casse, don, destruction) apparaissent ici.' : 'Les réceptions, scans mission et transferts apparaissent ici.'} />
+        <Empty title="Aucun mouvement" hint={sansSouhait ? 'Les sorties hors mission (casse, don, destruction) apparaissent ici.' : typesOk ? 'Les emports mission et les sorties apparaissent ici.' : 'Les réceptions, scans mission et transferts apparaissent ici.'} />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {items.map(m => (
@@ -80,6 +82,7 @@ export default function OngletMouvements({ cats, typesAutorises, hint, csv }) {
                     {m.lot ? ` · lot ${m.lot}` : ''}
                     {m.lieu_origine_nom || m.lieu_nom ? ` · ${m.lieu_origine_nom ? `${m.lieu_origine_nom} → ${m.lieu_nom || '—'}` : m.lieu_nom}` : ''}
                     {m.fournisseur_nom ? ` · ${m.fournisseur_nom}` : ''}
+                    {m.souhait_titre ? ` · ${m.souhait_titre}` : ''}
                   </div>
                   {m.motif && <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginTop: 2 }}>{m.motif}</div>}
                   <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 4 }}>

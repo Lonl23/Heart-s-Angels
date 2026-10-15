@@ -4,6 +4,7 @@ export const TYPES_NOTIF = [
   { v: 'demande_souhait', l: 'Nouvelle demande de souhait', icon: '⭐' },
   { v: 'rapport_materiel', l: 'Rapport d’utilisation de matériel', icon: '📦' },
   { v: 'peremption_stock', l: 'Alertes de péremption', icon: '⏰' },
+  { v: 'stock_bas', l: 'Stock sous le seuil', icon: '📉' },
 ]
 
 export const PREFS_VIDES = Object.fromEntries(TYPES_NOTIF.map(t => [t.v, true]))

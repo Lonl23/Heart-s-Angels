@@ -9,9 +9,10 @@ import { telechargerWord, telechargerCsv } from './stock/QrImg'
 import { etatDotationLieu, correspondArticle, idsLieuxFiltres } from './stock/dotationStock'
 import Scanner from './stock/Scanner'
 import { PhotoArticle, PhotoArticleChamp } from './stock/photoStock'
-import OngletMouvements from './stock/OngletMouvements'
 import OngletFournisseurs from './stock/OngletFournisseurs'
 import OngletAlertes from './stock/OngletAlertes'
+import OngletGestionArticles from './stock/OngletGestionArticles'
+import OngletRapportSortie from './stock/OngletRapportSortie'
 import OngletTransferts, { FormReceptionGuide, FormSortieGuide, FormO2 } from './stock/OngletTransferts'
 import { etiqLieu, etiqUnite, CarteQr, FormReception, FormTransfert, FormSortie } from './stock/formsStock'
 import { exporterStockExcel, lireInventaireExcel, resumeImport, exporterLieuxParSacExcel, telechargerCsvLieuxParSac } from './stock/excelStock'
@@ -25,8 +26,9 @@ const ACCUEIL = [
 ]
 
 const PLUS = [
+  ['gestion', 'Gestion articles'],
   ['alertes', 'Alertes'],
-  ['articles', 'Articles'],
+  ['articles', 'Types d’articles'],
   ['fournisseurs', 'Fournisseurs'],
   ['lieux', 'Lieux'],
 ]
@@ -37,8 +39,9 @@ const LBL_RUBRIQUE = {
   reception: 'Réception',
   declasse: 'Déclassé',
   rapport: 'Rapport de sortie',
+  gestion: 'Gestion articles',
   alertes: 'Alertes',
-  articles: 'Articles',
+  articles: 'Types d’articles',
   fournisseurs: 'Fournisseurs',
   lieux: 'Lieux',
   inventaire: 'Scan lieu',
@@ -277,12 +280,9 @@ export default function Stock() {
               onOk={ok} onErr={setErr}
               onDone={() => load()} />
           )}
-          {tab === 'rapport' && (
-            <OngletMouvements
-              cats={cats}
-              typesAutorises={['emport', 'sortie']}
-              csv
-              hint="Emports mission et sorties (casse, don, destruction)." />
+          {tab === 'rapport' && <OngletRapportSortie cats={cats} />}
+          {tab === 'gestion' && (
+            <OngletGestionArticles cats={cats} unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} />
           )}
           {tab === 'unites' && (
             <>
@@ -647,7 +647,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       {f.mode !== 'oxygene' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <F label="Unité" value={f.unite} set={v=>setF(s=>({ ...s, unite:v }))} />
-          <F label="Seuil d’alerte (total)" type="number" value={f.stock_minimal} set={v=>setF(s=>({ ...s, stock_minimal:v }))} />
+          <F label="Stock mini (alerte)" type="number" value={f.stock_minimal} set={v=>setF(s=>({ ...s, stock_minimal:v }))} />
         </div>
       )}
       {f.mode !== 'oxygene' && <F label="Catégorie" value={f.categorie} set={v=>setF(s=>({ ...s, categorie:v }))} placeholder="consommable, logistique…" />}
