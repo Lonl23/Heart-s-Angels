@@ -1,7 +1,8 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 // Envoie via le compte Gmail laurent@heartsangels.be.
-// Expéditeur visible : no-reply-app@heartsangels.be
-// Réponses → laurent@heartsangels.be (Reply-To + copie cachée).
+// Expéditeur visible : app@heartsangels.be (alias).
+// Réponses → app@heartsangels.be. Copie cachée vers laurent@heartsangels.be.
+// Les liens ouvrent https://app.heartsangels.be.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import nodemailer from 'npm:nodemailer@6.9.16'
 
@@ -24,32 +25,14 @@ const ROLES_GERER_APP = [
 ]
 const ROLES_FICHES = ['coord_benevoles', 'coord_benevoles_adjoint']
 const URL_APP_PROD = 'https://app.heartsangels.be'
-const URL_APP_BETA = 'https://appbetaapp.heartsangels.be'
-const URL_FIREBASE = 'https://heart-s-angels.web.app'
 
-function origineAutorisee(raw: unknown): string {
-  const s = String(raw || '').trim().replace(/\/$/, '')
-  if (!s) return ''
-  try {
-    const u = new URL(s)
-    const h = u.hostname.toLowerCase()
-    const local = h === 'localhost' || h === '127.0.0.1'
-    if (local && (u.protocol === 'http:' || u.protocol === 'https:')) return s
-    if (u.protocol !== 'https:') return ''
-    if (h === new URL(URL_APP_PROD).hostname || h === new URL(URL_APP_BETA).hostname) return `${u.protocol}//${h}`
-    if (h === 'heart-s-angels.web.app' || h === 'heart-s-angels.firebaseapp.com') return `${u.protocol}//${h}`
-    if (h.includes('heart-s-angels--beta') && h.endsWith('.web.app')) return `${u.protocol}//${h}`
-  } catch { /* ignore */ }
-  return ''
-}
-
-function pubDepuis(body: { origine?: unknown } | null | undefined): string {
-  return (origineAutorisee(body?.origine) || Deno.env.get('APP_PUBLIC_URL') || URL_FIREBASE).replace(/\/$/, '')
+function urlPublique(): string {
+  return URL_APP_PROD
 }
 const ACCENT = '#1BB0CE'
 const CCI = 'laurent@heartsangels.be'
-const DEPUIS = `Heart's Angels <no-reply-app@heartsangels.be>`
-const REPONSE = 'laurent@heartsangels.be'
+const DEPUIS = `Heart's Angels <app@heartsangels.be>`
+const REPONSE = 'app@heartsangels.be'
 
 function rolesAsbl(fiche: unknown): string[] {
   const r = (fiche as { roles_asbl?: unknown } | null)?.roles_asbl
@@ -219,20 +202,14 @@ Heart's Angels ASBL`
 async function smtpAuth(admin: ReturnType<typeof createClient>) {
   let user = (Deno.env.get('SMTP_USER') || CCI).trim()
   let pass = (Deno.env.get('SMTP_PASS') || '').trim()
-  let from = (Deno.env.get('SMTP_FROM') || '').trim()
-  let replyTo = (Deno.env.get('SMTP_REPLY_TO') || '').trim()
   if (!pass) {
     const { data: cfg } = await admin.rpc('smtp_mail_config')
     if (cfg?.ok && cfg.pass) {
       user = String(cfg.user || user).trim()
       pass = String(cfg.pass).trim()
-      if (!from) from = String(cfg.from || '').trim()
-      if (!replyTo) replyTo = String(cfg.reply_to || '').trim()
     }
   }
-  if (!from) from = DEPUIS
-  if (!replyTo) replyTo = REPONSE
-  return { user, pass, from, replyTo }
+  return { user, pass, from: DEPUIS, replyTo: REPONSE }
 }
 
 async function envoyer(opts: {
@@ -269,7 +246,7 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const admin = createClient(url, serviceKey)
     const body = await req.json().catch(() => ({})) as { action?: string; origine?: unknown; email?: string; code?: string }
-    const pub = pubDepuis(body)
+    const pub = urlPublique()
     const action = String(body?.action || 'invitation').trim()
     const smtp = await smtpAuth(admin)
     if (!smtp.pass) {

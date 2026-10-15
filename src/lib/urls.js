@@ -8,6 +8,11 @@ import {
   origineAutorisee,
 } from '@/lib/environnement'
 
+/** Liens envoyés ou copiés : toujours la prod, quel que soit l’écran d’où on part. */
+function urlLiens() {
+  return URL_APP_PROD
+}
+
 /** Origine publique : la fenêtre si elle est autorisée (bêta / prod / Firebase), sinon la config. Pas capacitor://. */
 export function urlBasePublique() {
   const fromWindow = typeof window !== 'undefined' ? origineAutorisee(window.location.origin) : ''
@@ -21,7 +26,7 @@ export function urlBasePublique() {
 
 /** Adresse publique de l’espace partenaire, à coller sur le site ou à envoyer. */
 export function urlAccesPartenaire() {
-  return `${urlBasePublique()}/login/partenaire`
+  return `${urlLiens()}/login/partenaire`
 }
 
 /** Lien d’inscription : le destinataire n’a plus qu’à choisir son mot de passe. */
@@ -33,12 +38,12 @@ export function urlInvitation(code, email, { partenaire = false } = {}) {
   if (e) params.set('email', e)
   const path = partenaire ? '/inscription/partenaire' : '/inscription'
   const q = params.toString()
-  return q ? `${urlBasePublique()}${path}?${q}` : `${urlBasePublique()}${path}`
+  return q ? `${urlLiens()}${path}?${q}` : `${urlLiens()}${path}`
 }
 
 /** Écran de connexion public (volontaire ou partenaire). */
 export function urlConnexion({ partenaire = false } = {}) {
-  return partenaire ? `${urlBasePublique()}/login/partenaire` : `${urlBasePublique()}/login`
+  return partenaire ? `${urlLiens()}/login/partenaire` : `${urlLiens()}/login`
 }
 
 export function urlModeEmploi(typeBenevole) {
@@ -47,7 +52,7 @@ export function urlModeEmploi(typeBenevole) {
   const fichier = medical
     ? 'Mode-emploi-volontaire-medical.pdf'
     : 'Mode-emploi-volontaire-non-medical.pdf'
-  return `${urlBasePublique()}/guides/${fichier}`
+  return `${urlLiens()}/guides/${fichier}`
 }
 
 function libellePdfVolontaire(typeBenevole) {

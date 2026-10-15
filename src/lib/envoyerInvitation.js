@@ -44,7 +44,7 @@ async function lireErreur(data, error) {
   return msg
 }
 
-/** Envoie l’invitation (From no-reply-app@, réponses vers laurent@heartsangels.be). */
+/** Envoie l’invitation (From app@heartsangels.be, lien vers app.heartsangels.be). */
 export async function envoyerInvitationEmail(code) {
   const c = String(code || '').trim()
   if (!c) return { ok: false, error: 'Code d’invitation manquant.' }
