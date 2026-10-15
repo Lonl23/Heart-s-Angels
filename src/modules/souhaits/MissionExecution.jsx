@@ -427,6 +427,16 @@ export default function MissionExecution({ souhaitId, onBack }) {
     await avancer('realise', 'base_rentre')
   }
 
+  async function recommencerFormation() {
+    setErr(null)
+    const { data, error } = await supabase.rpc('recommencer_mission_demo', { p_souhait: souhaitId })
+    if (error || data?.ok === false) {
+      setErr(error?.message || data?.error || 'Impossible de recommencer la formation.')
+      return
+    }
+    await load()
+  }
+
   if (loading) return <div style={{ padding:24 }}><Loading /></div>
   if (err && !sh) return <div style={{ padding:24 }}><Flash kind="err">{err}</Flash><Btn kind="soft" onClick={onBack}>← Retour</Btn></div>
 
@@ -764,14 +774,26 @@ export default function MissionExecution({ souhaitId, onBack }) {
           )}
         </div>
       )}
-      {vecteurStatut === 'realise' && statut !== 'realise' && (
+      {jouette && locked && (
+        <div className="ha-terrain-bar">
+          <div style={{ fontSize:13, color:'var(--text-2)', textAlign:'center', marginBottom:8, lineHeight:1.45 }}>
+            Mission de formation — chaque volontaire peut la rejouer autant de fois qu’il veut. Le vecteur déjà rentré n’est pas pris en compte.
+          </div>
+          <div className="ha-wizard-actions">
+            <button type="button" className="ha-terrain-cta start" onClick={recommencerFormation}>
+              Recommencer la formation
+            </button>
+          </div>
+        </div>
+      )}
+      {!jouette && vecteurStatut === 'realise' && statut !== 'realise' && (
         <div className="ha-terrain-bar">
           <div style={{ fontWeight:700, color:'#3B6D11', textAlign:'center', padding:'10px' }}>
             Ce véhicule est rentré — d’autres équipages sont encore en mission.
           </div>
         </div>
       )}
-      {statut === 'realise' && <div className="ha-terrain-bar"><div style={{ fontWeight:700, color:'#3B6D11', textAlign:'center', padding:'10px' }}>Mission clôturée</div></div>}
+      {!jouette && statut === 'realise' && <div className="ha-terrain-bar"><div style={{ fontWeight:700, color:'#3B6D11', textAlign:'center', padding:'10px' }}>Mission clôturée</div></div>}
 
       {annot && <PhotoAnnotator meta={annot.meta} onSave={saveAnnot} onClose={()=>setAnnot(null)} />}
       {detresse && showDetresse && (

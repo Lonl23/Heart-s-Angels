@@ -15,6 +15,7 @@ const FILTRES = [
 ]
 
 function missionTerminee(m) {
+  if (m.fictif) return m.statut === 'non_realise' || m.statut === 'annule' || m.statut === 'demande_info_externe'
   return m.statut === 'realise' || m.statut === 'non_realise' || m.statut === 'annule' || m.statut === 'demande_info_externe'
 }
 
@@ -56,7 +57,7 @@ export default function MesMissions() {
         ))}
       </div>
       {loading ? <Loading />
-        : aRealiser.length === 0 ? <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici. Le souhait de formation fictif y est aussi, sans équipage à poser. Une fois la mission faite, elle disparaît." />
+        : aRealiser.length === 0 ? <Empty title="Aucune mission à réaliser" hint="Quand la coordination vous affectera à un souhait, il apparaîtra ici. Le souhait de formation fictif y est aussi, sans équipage à poser : chacun peut le rejouer autant de fois qu’il veut." />
         : visible.length === 0 ? <Empty title="Rien dans cet onglet" hint={filtre === 'en_cours' ? 'Aucune mission en cours. Celles à faire sont dans l’autre onglet.' : 'Les missions en cours sont dans l’onglet En cours.'} />
         : (
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
@@ -104,7 +105,7 @@ export default function MesMissions() {
                     </div>
                   </div>
                   <div style={{ marginTop:10, fontSize:13.5, fontWeight:600, color:'var(--accent)' }}>
-                    {m.statut === 'en_cours' ? 'Continuer ›' : 'Ouvrir ›'}
+                    {m.fictif && m.statut === 'realise' ? 'Rejouer ›' : m.statut === 'en_cours' ? 'Continuer ›' : 'Ouvrir ›'}
                   </div>
                 </Card>
               )
