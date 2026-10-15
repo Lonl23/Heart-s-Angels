@@ -1,35 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useSwUpdate } from '@/hooks/useSwUpdate'
 import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
-
-const NAV = [
-  { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
-  { to:'/app/souhaits',      label:'Souhaits',        icon:'⭐', key:'souhaits' },
-  { to:'/app/missions',      label:'Mes missions',    icon:'🚑', key:'missions' },
-  { to:'/app/defraiements',  label:'Défraiements',    icon:'🧾', key:'defraiements' },
-  { to:'/app/disponibilites',label:'Disponibilités',  icon:'📅', key:'disponibilites' },
-  { to:'/app/stock',         label:'Stock',           icon:'📦', key:'stock' },
-  { to:'/app/annuaire',      label:'Annuaire',        icon:'📇', key:'annuaire' },
-]
-
-const PAGE_TITLE = [
-  ['/app/souhaits', 'Souhaits'],
-  ['/app/missions', 'Mes missions'],
-  ['/app/defraiements', 'Défraiements'],
-  ['/app/disponibilites', 'Disponibilités'],
-  ['/app/stock', 'Stock'],
-  ['/app/annuaire', 'Annuaire'],
-  ['/app/admin', 'Administration'],
-  ['/app/profil', 'Ma fiche'],
-  ['/app', 'Tableau de bord'],
-]
-
-function pageTitle(path) {
-  return (PAGE_TITLE.find(([p]) => path === p || (p !== '/app' && path.startsWith(p))) || [])[1] || 'Espace interne'
-}
+import { DEPARTEMENTS, filtrerDepartements, cheminActif, departementActif, titrePage } from '@/navigation'
 
 function toggleTheme() {
   const cur = document.documentElement.getAttribute('data-theme') || 'light'
@@ -39,7 +14,7 @@ function toggleTheme() {
 }
 
 export default function Layout() {
-  const { profile, signOut, can, canAccess, peutGererStock } = useAuth()
+  const { profile, signOut, peutOuvrir } = useAuth()
   const { checkForUpdate, checking } = useSwUpdate()
   const nav = useNavigate()
   const loc = useLocation()
@@ -47,6 +22,8 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width:900px)').matches)
   const [dark, setDark] = useState(() => (document.documentElement.getAttribute('data-theme') || 'light') === 'dark')
+  const [ouverts, setOuverts] = useState(() => Object.fromEntries(DEPARTEMENTS.map(d => [d.id, true])))
+  const departements = useMemo(() => filtrerDepartements(DEPARTEMENTS, peutOuvrir), [peutOuvrir])
 
   useEffect(() => {
     const m = window.matchMedia('(min-width:900px)')
@@ -55,18 +32,34 @@ export default function Layout() {
     return () => m.removeEventListener('change', h)
   }, [])
   useEffect(() => { setMobileOpen(false) }, [loc.pathname])
+  useEffect(() => {
+    setOuverts(o => {
+      const next = { ...o }
+      let changed = false
+      for (const d of departements) {
+        if (!(d.id in next)) { next[d.id] = true; changed = true }
+      }
+      const id = departementActif(loc.pathname, departements)?.id
+      if (id && !next[id]) { next[id] = true; changed = true }
+      return changed ? next : o
+    })
+  }, [loc.pathname, departements])
 
   function toggleCollapse() { const v = !collapsed; setCollapsed(v); localStorage.setItem('nav_collapsed', v ? '1' : '0') }
   function onTheme() { toggleTheme(); setDark(d => !d) }
   async function handleLogout() { await signOut(); nav('/login') }
 
-  const items = [...NAV.filter(n => {
-    if (n.key === 'missions') return true
-    if (n.key === 'stock') return canAccess(n.key) && peutGererStock()
-    return canAccess(n.key)
-  }), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', icon:'⚙️' }] : [])]
   const collapsedEff = isDesktop && collapsed
-  const W = collapsedEff ? 66 : 250
+  const W = collapsedEff ? 66 : 318
+  function ouvrirDept(id) {
+    if (collapsedEff) {
+      setCollapsed(false)
+      localStorage.setItem('nav_collapsed', '0')
+      setOuverts(o => ({ ...o, [id]: true }))
+      return
+    }
+    setOuverts(o => ({ ...o, [id]: !o[id] }))
+  }
 
   return (
     <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
@@ -82,13 +75,38 @@ export default function Layout() {
         </div>
 
         <nav style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflowY:'auto', minHeight:0 }}>
-          {items.map(n => (
-            <NavLink key={n.to} to={n.to} end={n.end} onClick={()=>setMobileOpen(false)} title={n.label}
-              className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
-              style={({isActive}) => ({ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:10, textDecoration:'none', fontSize:14, fontWeight:isActive?600:500, color:isActive?'#fff':'var(--text-2)', background:isActive?'var(--accent)':'transparent', whiteSpace:'nowrap', justifyContent: collapsedEff?'center':'flex-start' })}>
-              <span style={{ fontSize:16 }}>{n.icon}</span>{!collapsedEff && n.label}
-            </NavLink>
-          ))}
+          <NavLink to="/app" end onClick={()=>setMobileOpen(false)} title="Tableau de bord"
+            className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
+            style={({isActive}) => itemStyle(isActive, collapsedEff)}>
+            <span style={{ fontSize:16 }}>🏠</span>{!collapsedEff && <span className="ha-nav-label">Tableau de bord</span>}
+          </NavLink>
+          {departements.map(d => {
+            const actif = d.modules.some(m => cheminActif(loc.pathname, m.to))
+            const ouvert = !!ouverts[d.id]
+            return (
+              <div key={d.id} className="ha-nav-group">
+                <button type="button" className={'ha-nav-dept' + (actif ? ' has-active' : '') + (ouvert ? ' is-open' : '')}
+                  aria-expanded={!collapsedEff && ouvert} title={d.label} onClick={() => ouvrirDept(d.id)}
+                  style={{ justifyContent: collapsedEff ? 'center' : 'flex-start' }}>
+                  <span style={{ fontSize:16 }}>{d.icon}</span>
+                  {!collapsedEff && <span className="ha-nav-label">{d.label}</span>}
+                  {!collapsedEff && <span className="ha-nav-chevron" aria-hidden>{ouvert ? '▾' : '▸'}</span>}
+                </button>
+                {ouvert && !collapsedEff && (
+                  <div className="ha-nav-sub">
+                    {d.modules.map(m => (
+                      <NavLink key={m.key} to={m.to} onClick={()=>setMobileOpen(false)} title={m.label}
+                        className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
+                        style={({isActive}) => itemStyle(isActive, false)}>
+                        <span style={{ fontSize:15 }}>{m.icon}</span>
+                        <span className="ha-nav-label">{m.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </nav>
 
         <div style={{ borderTop:'1px solid var(--border)', paddingTop:10, marginTop:8 }}>
@@ -112,7 +130,7 @@ export default function Layout() {
         <header style={{ position:'sticky', top:0, zIndex:30, display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--surface)', borderBottom:'1px solid var(--border)' }}>
           <button onClick={()=>setMobileOpen(o=>!o)} className="ha-burger" aria-label="Menu" style={iconBtn}>☰</button>
           <Logo size={40} className="ha-header-logo" />
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pageTitle(loc.pathname)}</div>
+          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{titrePage(loc.pathname)}</div>
         </header>
         <main style={{ flex:1, minWidth:0, width:'100%', overflowX:'hidden', overflowY:'auto', minHeight:0 }}><Outlet /></main>
       </div>
@@ -120,7 +138,7 @@ export default function Layout() {
       <style>{`
         @media (max-width: 899px) {
           .ha-sidebar {
-            position: fixed; top:0; left:0; height:100vh; width: min(250px, 82vw) !important;
+            position: fixed; top:0; left:0; height:100vh; width: min(318px, 88vw) !important;
             transform: translateX(-100%);
           }
           .ha-collapse-btn { display:none !important; }
@@ -144,5 +162,10 @@ function Avatar({ url, prenom, nom }) {
   )
 }
 
+const itemStyle = (isActive, collapsed) => ({
+  display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, textDecoration:'none',
+  fontSize:14, fontWeight:isActive?600:500, color:isActive?'#fff':'var(--text-2)',
+  background:isActive?'var(--accent)':'transparent', justifyContent: collapsed?'center':'flex-start', minWidth:0,
+})
 const iconBtn = { background:'var(--bg-alt)', border:'1px solid var(--border)', borderRadius:8, padding:'6px 10px', fontSize:15, color:'var(--text-2)', cursor:'pointer', lineHeight:1 }
 const rowBtn = (collapsed) => ({ width:'100%', textAlign: collapsed?'center':'left', padding:'9px 10px', background:'transparent', border:'none', borderRadius:8, fontSize:13.5, color:'var(--text-2)', cursor:'pointer' })

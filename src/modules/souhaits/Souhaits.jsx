@@ -66,7 +66,7 @@ export default function Souhaits() {
   )
 
   return (
-    <Page title="Souhaits" subtitle="Encodez les dossiers ici. Le terrain (checklists, MAR, démarrer / terminer) se fait dans Mes missions."
+    <Page title="Préparation souhait" subtitle="Encodez les dossiers ici. Le terrain (checklists, MAR, démarrer / terminer) se fait dans Mes souhaits ou Interventions."
       action={tab==='souhaits' ? <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn> : null}>
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },

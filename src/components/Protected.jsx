@@ -21,6 +21,18 @@ export function RequireStaff({ children }) {
   return children
 }
 
+// Réservé à un module précis (le menu du département suit la même règle)
+export function RequireAccess({ feature, children }) {
+  const { session, loading, profile, peutOuvrir } = useAuth()
+  const loc = useLocation()
+  if (profile && session) {
+    if (!peutOuvrir(feature)) return <Navigate to="/app" replace state={{ from: loc.pathname }} />
+    return children
+  }
+  if (loading || (session && !profile)) return <Splash text="Chargement…" />
+  return <Navigate to="/login" replace state={{ from: loc.pathname }} />
+}
+
 // Réservé aux partenaires
 export function RequirePartenaire({ children }) {
   const { session, loading, can, profile } = useAuth()
