@@ -87,6 +87,10 @@ function libelles(roles) {
   return ordre.map(r => LIBELLES[r] || lblRoleAsbl(r))
 }
 
+function texte(v) {
+  return String(v || '').trim()
+}
+
 function personneVue(p) {
   const roles = rolesDe(p)
   return {
@@ -94,6 +98,8 @@ function personneVue(p) {
     prenom: p.prenom || '',
     nom: p.nom || '',
     photo: p.fiche?.photo_url || '',
+    email: texte(p.email),
+    telephone: texte(p.fiche?.telephone) || texte(p.telephone),
     siege: siegeDe(roles),
     labels: libelles(roles),
   }
@@ -105,7 +111,9 @@ function comparer(a, b) {
 
 /**
  * Arbre : président en haut, puis les responsables, puis leur équipe.
+ * La personne juste au-dessus est le N+1, celle encore au-dessus le N+2.
  * Chaque personne n’apparaît qu’une fois, avec tous ses rôles.
+ * Un simple volontaire, ou une fiche sans rôle ASBL, n’a pas de siège : il est omis.
  */
 export function construireArbre(gens) {
   const parSiege = new Map()
