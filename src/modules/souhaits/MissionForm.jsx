@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, LiensGps, Btn, AdresseAffichee } from '@/components/ui'
+import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, TA, LiensGps, LiensTrajet, Btn, AdresseAffichee } from '@/components/ui'
 import config from '@/app.config'
 import { GROUPES, AUTORISATION_PHOTOS, normaliserAutorisationPhotos, lblAutorisationPhotos, equipePluri, nomsRecolteurs } from './missionSchema'
 import Traitements from './Traitements'
@@ -15,6 +15,11 @@ import { useAuth } from '@/hooks/useAuth'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { formaterNiss, fmtTelephones, libelleGenre } from '@/modules/annuaire/annuaireSchema'
 import { ficheVersBeneficiaire } from '@/modules/annuaire/annuaireApi'
+import DocumentsRencontre from './DocumentsRencontre'
+import JournalDossier from './JournalDossier'
+import { journaliser, clesModifiees } from './journal'
+import { ChoixMultiple } from './ChoixPopup'
+import { CHAMPS_CLINIQUES, PATHOLOGIES, ACTIVITES_SOUHAIT } from './listesCliniques'
 
 const grp = id => GROUPES.find(g => g.id === id)
 const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'priorite_elevee', 'date_demande', 'date_rencontre', 'consignes_equipage']
@@ -27,11 +32,12 @@ const TABS = [
   { id:'materiel',      label:'Matériel & checklists', zone:'programme' },
   { id:'medical',       label:'Médical', groupes:['medical'], zone:'patient' },
   { id:'traitements',   label:'Traitements', zone:'patient' },
+  { id:'timing',        label:'Timing', zone:'programme' },
   { id:'suivi',         label:'Suivi interne', zone:'commun' },
 ]
 
-export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
-  const { peutProgrammerSouhait, peutEncoderPatientSouhait } = useAuth()
+export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait }) {
+  const { peutProgrammerSouhait, peutEncoderPatientSouhait, profile } = useAuth()
   const programme = peutProgrammerSouhait()
   const patient = peutEncoderPatientSouhait()
   const tabs = TABS
@@ -42,6 +48,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
   const [status, setStatus] = useState('')
   const chargee = useRef(false)
   const timer = useRef()
+  const precedent = useRef(null)
 
   useEffect(() => {
     if (tabs.length && !tabs.some(t => t.id === tab)) setTab(tabs[0].id)
@@ -57,6 +64,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
     next = prefillDepuisBeneficiaire(next, data)
     setSouhait(data || null)
     setM(next)
+    precedent.current = next
     setInstDemandeuse(await chargerInstitutionDemandeuse(data))
     if (JSON.stringify(next) !== JSON.stringify(orig)) {
       await supabase.from('souhaits').update({ mission: next }).eq('id', souhaitId)
@@ -88,11 +96,27 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
     setStatus('saving')
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
+      const avant = precedent.current
       await supabase.from('souhaits').update({ mission: m }).eq('id', souhaitId)
+      const cles = clesModifiees(avant, m)
+      if (cles.length) journaliser(souhaitId, 'modification', { cles }, profile)
+      precedent.current = m
       setStatus('saved'); setTimeout(() => setStatus(s => s === 'saved' ? '' : s), 1500)
     }, 600)
     return () => clearTimeout(timer.current)
   }, [m])
+
+  useEffect(() => {
+    if (!profile?.id) return
+    const debut = new Date().toISOString()
+    journaliser(souhaitId, 'entree', { a: debut }, profile)
+    const sortie = () => journaliser(souhaitId, 'sortie', { de: debut, a: new Date().toISOString() }, profile)
+    window.addEventListener('pagehide', sortie)
+    return () => {
+      window.removeEventListener('pagehide', sortie)
+      sortie()
+    }
+  }, [souhaitId, profile?.id])
 
   const cur = tabs.find(t => t.id === tab) || tabs[0]
   const lecture = cur?.zone === 'programme' && !programme
@@ -108,14 +132,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
 
   return (
     <div>
-      <Flash>
-        {programme
-          ? 'Ici on encode et on prépare. Dans Matériel, vous pouvez ajouter des points aux checklists ; l’équipage les coche dans Mes souhaits.'
-          : 'Vous voyez tout le dossier pour informer le patient. Vous encodez la partie patient (identité, souhait, médical). Les équipages, horaires et ambulances sont saisis par la coordination transport, la présidence ou l’informatique.'}
-      </Flash>
-      {lecture && (
-        <Flash kind="warn">Lecture seule sur cet onglet — horaires, équipages et ambulances à transmettre au patient. L’encodage se fait par la coordination transport.</Flash>
-      )}
+      {lecture && <Flash kind="warn">Lecture seule</Flash>}
       <Tabs
         value={cur.id}
         onChange={setTab}
@@ -124,17 +141,16 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
       />
 
       {cur.id === 'sejour' && <DocumentsSejour souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} />}
-      {cur.id === 'vecteurs' && <Vecteurs souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} />}
+      {cur.id === 'vecteurs' && (
+        <Vecteurs souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} onJourRetenu={(periode, mission) => {
+          const patch = { date_souhaitee: periode.debut, date_fin: periode.fin, dates_possibles: [periode], mission }
+          setSouhait(s => ({ ...(s || {}), ...patch }))
+          onSouhait?.(patch)
+        }} />
+      )}
       {cur.id === 'materiel' && <MaterielRequis m={m} setM={setMSi} lecture={lecture} />}
-      {cur.id === 'traitements' && (
-        <div>
-          {!lecturePatient && <Flash>Encodez les traitements prévus. Les administrations se cochent dans Mes souhaits, le jour J.</Flash>}
-          <Traitements souhaitId={souhaitId} readOnly={lecturePatient} />
-        </div>
-      )}
-      {cur.id === 'medical' && (
-        <Flash>Ces infos sont lues par l'équipage médical sur le terrain. Le rapport de mission se rédige dans Mes souhaits.</Flash>
-      )}
+      {cur.id === 'traitements' && <Traitements souhaitId={souhaitId} readOnly={lecturePatient} />}
+      {cur.id === 'timing' && <OngletTiming m={m} set={set} lecture={lecture} souhait={souhait} />}
       {cur.id === 'suivi' && <Suivi souhaitId={souhaitId} />}
 
       {cur?.groupes && (
@@ -142,13 +158,22 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
           {cur.groupes.map(gid => {
             if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} lecture={lectureOnglet} instDemandeuse={instDemandeuse} />
             if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} />
+            if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} />
             if (gid === 'administratif') return <BlocAdministratif key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhait={souhait} />
             const g = grp(gid); if (!g) return null
             return (
               <Card key={gid}>
                 <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-                  {g.fields.map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lectureOnglet} />)}
+                  {g.fields.filter(f => f.k !== 'allergies' && !CHAMPS_CLINIQUES.some(c => c.k === f.k)).map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lectureOnglet} />)}
+                  {gid === 'medical' && (
+                    <>
+                      <AllergiesChamp val={m.allergies} set={v => set('allergies', v)} lecture={lectureOnglet} />
+                      {CHAMPS_CLINIQUES.map(c => (
+                        <ChoixMultiple key={c.k} label={c.l} options={c.options} value={m[c.k]} onChange={v => set(c.k, v)} lecture={lectureOnglet} />
+                      ))}
+                    </>
+                  )}
                 </div>
               </Card>
             )
@@ -166,8 +191,8 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp }) {
             <LignesPluri rows={equipePluri(m)} />
           </Card>
         ))}
-      {cur.id === 'medical' && <ProtocoleDetresseForm m={m} setM={lecturePatient ? (() => {}) : setM} />}
-
+      {cur.id === 'medical' && <ProtocoleDetresseForm souhaitId={souhaitId} m={m} setM={lecturePatient ? (() => {}) : setM} />}
+      <JournalDossier souhaitId={souhaitId} />
     </div>
   )
 }
@@ -192,26 +217,10 @@ function prefillDepuisBeneficiaire(mission, s) {
 }
 
 function prefillBase(m) {
+  if (m.base_autre || m.base_nom || fmtAdresse(m.base_adresse)) return m
   const b = (config.bases || [])[0]
   if (!b) return m
-  if (m.base_nom || fmtAdresse(m.base_adresse)) {
-    if (estSolumob(m.base_nom) && (!fmtAdresse(m.base_adresse) || localiteIncomplete(m.base_adresse))) {
-      return { ...m, base_nom: b.nom, base_adresse: { ...b.adresse } }
-    }
-    return m
-  }
   return { ...m, base_nom: b.nom, base_adresse: { ...b.adresse } }
-}
-
-function estSolumob(nom) {
-  const n = String(nom || '').toLowerCase()
-  return n.includes('solumob') || n.includes('jemeppe')
-}
-
-function localiteIncomplete(a) {
-  if (!a || typeof a !== 'object') return true
-  const loc = String(a.localite || '').toLowerCase()
-  return loc.includes('jemeppe') && !loc.includes('seraing')
 }
 
 async function chargerInstitutionDemandeuse(s) {
@@ -312,23 +321,48 @@ function BlocAdministratif({ m, set, setM, lecture, souhait }) {
       )}
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        {g.fields.filter(f => ADMIN_MISSION.includes(f.k)).map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lecture} />)}
+        {g.fields.filter(f => ADMIN_MISSION.includes(f.k) && f.k !== 'consentement' && f.k !== 'autorisation_photos').map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lecture} />)}
       </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
+        <ChoixMultiple label="Pathologies" options={PATHOLOGIES} value={m.categories?.pathologies} onChange={v => setM(o => ({ ...o, categories: { ...(o.categories || {}), pathologies: v } }))} lecture={lecture} />
+        <ChoixMultiple label="Activités" options={ACTIVITES_SOUHAIT} value={m.categories?.activites} onChange={v => setM(o => ({ ...o, categories: { ...(o.categories || {}), activites: v } }))} lecture={lecture} />
+      </div>
+      <DocumentsRencontre m={m} setM={setM} lecture={lecture} souhait={souhait} />
     </Card>
   )
 }
 
 function BlocBase({ m, set, lecture }) {
-  const bases = config.bases || []
+  const [bases, setBases] = useState([])
+  useEffect(() => {
+    supabase.from('bases_depart').select('*').eq('actif', true).order('ordre').then(({ data }) => {
+      const rows = (data || []).map(b => ({
+        nom: b.nom,
+        protocole: b.protocole || '',
+        adresse: { rue: b.rue || '', numero: b.numero || '', cp: b.cp || '', localite: b.localite || '', pays: b.pays || 'Belgique' },
+      }))
+      setBases(rows.length ? rows : (config.bases || []).map(b => ({ nom: b.nom, adresse: b.adresse || {}, protocole: '' })))
+    })
+  }, [])
   const nomMatch = bases.find(b => b.nom === m.base_nom)
-  const valeurSel = nomMatch ? nomMatch.nom : (m.base_nom ? '__autre__' : (bases[0]?.nom || ''))
+  const valeurSel = m.base_autre ? '__autre__' : (nomMatch ? nomMatch.nom : (m.base_nom ? '__autre__' : ''))
   function choisir(v) {
     if (lecture) return
-    if (v === '__autre__') { set('base_nom', m.base_nom && !nomMatch ? m.base_nom : ''); return }
+    if (v === '__autre__') {
+      set('base_autre', true)
+      if (nomMatch) {
+        set('base_nom', '')
+        set('base_adresse', { rue: '', numero: '', cp: '', localite: '', pays: 'Belgique' })
+        set('base_protocole', '')
+      }
+      return
+    }
     const b = bases.find(x => x.nom === v)
     if (!b) return
+    set('base_autre', false)
     set('base_nom', b.nom)
     set('base_adresse', { ...b.adresse })
+    set('base_protocole', b.protocole || '')
   }
   return (
     <Card>
@@ -339,23 +373,144 @@ function BlocBase({ m, set, lecture }) {
         set={choisir}
         disabled={lecture}
         options={[
+          { v: '', l: '—' },
           ...bases.map(b => ({ v: b.nom, l: b.nom })),
-          { v: '__autre__', l: 'Autre (saisir l’adresse)' },
+          { v: '__autre__', l: 'Autre' },
         ]}
       />
-      {valeurSel === '__autre__' && (
+      {(valeurSel === '__autre__' || (m.base_autre && !nomMatch)) && (
         <F label="Nom de la base" value={m.base_nom || ''} set={v => set('base_nom', v)} readOnly={lecture} />
       )}
       <div style={{ marginTop: 8 }}>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
         <AddressFields value={m.base_adresse} set={v => { if (!lecture) set('base_adresse', v) }} />
       </div>
+      {(nomMatch?.protocole || m.base_protocole) && !m.base_autre && (
+        <TA label="Protocole de mission" value={nomMatch?.protocole || m.base_protocole || ''} set={() => {}} rows={4} />
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: '0 24px' }}>
         <Champ f={grp('base').fields.find(f => f.k === 'rdv_base')} val={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} />
         <Champ f={grp('base').fields.find(f => f.k === 'depart_base')} val={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} />
       </div>
     </Card>
   )
+}
+
+function OngletTiming({ m, set, lecture, souhait }) {
+  const jour = (souhait?.date_souhaitee || m.jour_retenu || '').slice(0, 10)
+  const lib = jour
+    ? new Date(jour + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : '—'
+  return (
+    <Card>
+      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12 }}>Timing</div>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Jour du souhait</div>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>{lib}</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '0 16px' }}>
+        <Champ f={{ k:'rdv_base', l:'Rendez-vous base', t:'datetime' }} val={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} />
+        <Champ f={{ k:'depart_base', l:'Départ base', t:'datetime' }} val={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} />
+        <Champ f={{ k:'arrivee_pec', l:'Prise en charge', t:'datetime' }} val={m.arrivee_pec} set={v => set('arrivee_pec', v)} lecture={lecture} />
+        <Champ f={{ k:'arrivee_destination', l:'Sur place', t:'datetime' }} val={m.arrivee_destination} set={v => set('arrivee_destination', v)} lecture={lecture} />
+        <Champ f={{ k:'retour_heure', l:'Retour', t:'datetime' }} val={m.retour_heure} set={v => set('retour_heure', v)} lecture={lecture} />
+      </div>
+    </Card>
+  )
+}
+
+function etapesTrajet(m) {
+  const pec = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
+  const extras = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
+  return [
+    { label: 'Base', adresse: m.base_adresse },
+    { label: 'Prise en charge', adresse: pec },
+    { label: 'Destination', adresse: m.dest_adresse },
+    ...extras.map((a, i) => ({ label: a.nom || `Activité ${i + 1}`, adresse: a.adresse })),
+  ]
+}
+
+function BlocDestinations({ m, set, setM, lecture }) {
+  const activites = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
+  const [connues, setConnues] = useState([])
+  useEffect(() => {
+    supabase.from('destinations_frequentes').select('*').eq('actif', true).order('nom').then(({ data }) => setConnues(data || []))
+  }, [])
+  function majAct(id, patch) {
+    setM(o => ({
+      ...o,
+      activites_sur_place: (o.activites_sur_place || []).map(a => a.id === id ? { ...a, ...patch } : a),
+    }))
+  }
+  function ajouter(src) {
+    const id = crypto.randomUUID ? crypto.randomUUID() : 'a' + Date.now()
+    const row = {
+      id,
+      nom: src?.nom || '',
+      heure: '',
+      notes: src?.notes || '',
+      telephone: src?.telephone || '',
+      adresse: src ? { rue: src.rue || '', numero: src.numero || '', cp: src.cp || '', localite: src.localite || '', pays: src.pays || 'Belgique' } : { pays: 'Belgique' },
+    }
+    setM(o => ({ ...o, activites_sur_place: [...(o.activites_sur_place || []), row] }))
+  }
+  async function memoriser(a) {
+    if (!a?.nom) return
+    await supabase.from('destinations_frequentes').insert({
+      nom: a.nom,
+      rue: a.adresse?.rue || '',
+      numero: a.adresse?.numero || '',
+      cp: a.adresse?.cp || '',
+      localite: a.adresse?.localite || '',
+      pays: a.adresse?.pays || 'Belgique',
+      telephone: a.telephone || '',
+      notes: a.notes || '',
+    })
+  }
+  return (
+    <Card>
+      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Destination</div>
+      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
+      <AddressFields value={m.dest_adresse} set={v => { if (!lecture) set('dest_adresse', v) }} />
+      <TA label="Précisions" value={m.dest_precisions || ''} set={v => set('dest_precisions', v)} rows={2} />
+      <F label="Heure souhaitée sur place" type="datetime-local" value={m.arrivee_destination || ''} set={v => set('arrivee_destination', v)} readOnly={lecture} />
+      <LiensTrajet etapes={etapesTrajet(m)} />
+      <div style={{ fontWeight: 700, margin: '8px 0' }}>Sur place</div>
+      {activites.map(a => (
+        <div key={a.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
+          <F label="Lieu / activité" value={a.nom || ''} set={v => majAct(a.id, { nom: v })} readOnly={lecture} />
+          <F label="Heure attendue" type="time" value={(a.heure || '').slice(0, 5)} set={v => majAct(a.id, { heure: v })} readOnly={lecture} />
+          <F label="Téléphone" value={a.telephone || ''} set={v => majAct(a.id, { telephone: v })} readOnly={lecture} />
+          <TA label="Notes" value={a.notes || ''} set={v => majAct(a.id, { notes: v })} rows={2} />
+          <AddressFields value={a.adresse} set={v => { if (!lecture) majAct(a.id, { adresse: v }) }} />
+          {!lecture && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Btn kind="soft" onClick={() => memoriser(a)}>Réutiliser plus tard</Btn>
+              <Btn kind="danger" onClick={() => setM(o => ({ ...o, activites_sur_place: (o.activites_sur_place || []).filter(x => x.id !== a.id) }))}>Retirer</Btn>
+            </div>
+          )}
+        </div>
+      ))}
+      {!lecture && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <Btn kind="soft" onClick={() => ajouter(null)}>+ Activité</Btn>
+          {connues.length > 0 && (
+            <Sel label="Destination connue" value="" set={id => { const d = connues.find(x => x.id === id); if (d) ajouter(d) }} options={[{ v: '', l: '—' }, ...connues.map(d => ({ v: d.id, l: d.nom }))]} />
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function AllergiesChamp({ val, set, lecture }) {
+  const [opts, setOpts] = useState([])
+  useEffect(() => {
+    supabase.from('allergies_referentiel').select('libelle').eq('actif', true).order('ordre').then(({ data }) => {
+      setOpts((data || []).map(r => r.libelle))
+    })
+  }, [])
+  return <ChoixMultiple label="Allergies" options={opts} value={val} onChange={set} lecture={lecture} />
 }
 
 function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
@@ -420,13 +575,6 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
               onClick={choisirAutre}
             >Autre institution</button>
           </div>
-          {!source && (
-            <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:8 }}>
-              {instDemandeuse
-                ? 'Indiquez s’il s’agit de l’institution qui a demandé le souhait, ou d’un autre établissement.'
-                : 'Recherchez l’établissement de prise en charge (annuaire ou internet).'}
-            </div>
-          )}
           {aDemandeuse && (
             <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
               <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse de l’institution demandeuse</div>
@@ -448,6 +596,9 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
             </div>
           )}
           {(source === 'demandeuse' || source === 'autre') && (
+            <ServicesInstitution m={m} set={set} lecture={lecture} />
+          )}
+          {(source === 'demandeuse' || source === 'autre') && (
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
               <Champ f={champ('pec_service')} val={m.pec_service} set={v=>set('pec_service', v)} lecture={lecture} />
               <Champ f={champ('pec_etage')} val={m.pec_etage} set={v=>set('pec_etage', v)} lecture={lecture} />
@@ -463,6 +614,32 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
       </div>
       <Champ f={champ('pec_precisions')} val={m.pec_precisions} set={v=>set('pec_precisions', v)} lecture={lecture} />
     </Card>
+  )
+}
+
+function ServicesInstitution({ m, set, lecture }) {
+  const [svcs, setSvcs] = useState([])
+  useEffect(() => {
+    const nom = (m.pec_institution || '').trim()
+    if (nom.length < 2) { setSvcs([]); return }
+    let stop = false
+    supabase.from('referentiel_institutions').select('id,nom').ilike('nom', nom).limit(1).then(async ({ data }) => {
+      const inst = data?.[0]
+      if (!inst || stop) { if (!stop) setSvcs([]); return }
+      const { data: rows } = await supabase.from('referentiel_services').select('nom,telephone').eq('institution_id', inst.id).eq('actif', true).order('ordre')
+      if (!stop) setSvcs(rows || [])
+    })
+    return () => { stop = true }
+  }, [m.pec_institution])
+  if (!svcs.length) return null
+  return (
+    <Sel
+      label="Service de l’institution"
+      value={svcs.some(s => s.nom === m.pec_service) ? m.pec_service : ''}
+      set={v => { if (v) set('pec_service', v) }}
+      disabled={lecture}
+      options={[{ v: '', l: '—' }, ...svcs.map(s => ({ v: s.nom, l: s.telephone ? `${s.nom} · ${s.telephone}` : s.nom }))]}
+    />
   )
 }
 
@@ -486,6 +663,20 @@ function RechercheInstitution({ lecture, onPick }) {
         .in('categorie', ['institution', 'externe_souhait'])
         .ilike('nom', `%${needle}%`)
         .limit(8)
+      const { data: refs } = await supabase.from('referentiel_institutions')
+        .select('id,nom,telephone,rue,numero,cp,localite,pays')
+        .ilike('nom', `%${needle}%`)
+        .eq('actif', true)
+        .limit(8)
+      for (const r of refs || []) {
+        locaux.push({
+          id: r.id,
+          nom: r.nom,
+          adresse: { rue: r.rue || '', numero: r.numero || '', cp: r.cp || '', localite: r.localite || '', pays: r.pays || 'Belgique' },
+          tel: r.telephone || '',
+          via: 'Référentiel',
+        })
+      }
       for (const r of data || []) {
         locaux.push({
           id: r.id,

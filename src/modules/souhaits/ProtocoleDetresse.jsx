@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, Btn, F, Sel, TA, Modal } from '@/components/ui'
 import {
-  VOIES_DETRESSE, lblVoieDetresse, protocoleDetresse, injectionsDetresse, maintenantIso,
+  VOIES_DETRESSE, lblVoieDetresse, protocoleDetresse, dosesLigne, injectionsDetresse, maintenantIso,
 } from './missionSchema'
+import { uploadDocSejour, signedDocSejour } from './sejour'
 
 function nid() {
   return (crypto.randomUUID && crypto.randomUUID()) || ('d-' + Math.random().toString(36).slice(2, 10))
@@ -11,26 +12,31 @@ function nid() {
 const optsVoie = [{ v: '', l: '—' }, ...VOIES_DETRESSE]
 
 function ligneVide() {
-  return { id: nid(), medicament: '', dosage: '', voie: '' }
+  return { id: nid(), medicament: '', contexte: '', dosage: '', dosage_max: '', voie: '', doses: [{ ordre: 1, dosage: '' }] }
 }
 
-export function ProtocoleDetresseForm({ m, setM }) {
+export function ProtocoleDetresseForm({ souhaitId, m, setM }) {
   const proto = protocoleDetresse(m)
   const lignes = proto.lignes.length ? proto.lignes : [ligneVide()]
 
   function poser(next) {
-    setM(o => ({ ...o, protocole_detresse: next }))
+    setM(o => ({ ...o, protocole_detresse: { document: proto.document, ...next } }))
   }
   function majLigne(i, patch) {
     const rows = lignes.map((r, j) => (j === i ? { ...r, ...patch } : r))
-    poser({ lignes: rows, notes: proto.notes })
+    poser({ lignes: rows, notes: proto.notes, document: proto.document })
   }
   function ajouter() {
-    poser({ lignes: [...lignes, ligneVide()], notes: proto.notes })
+    poser({ lignes: [...lignes, ligneVide()], notes: proto.notes, document: proto.document })
   }
   function retirer(i) {
     const rows = lignes.filter((_, j) => j !== i)
-    poser({ lignes: rows.length ? rows : [ligneVide()], notes: proto.notes })
+    poser({ lignes: rows.length ? rows : [ligneVide()], notes: proto.notes, document: proto.document })
+  }
+  async function joindre(file) {
+    if (!file || !souhaitId) return
+    const doc = await uploadDocSejour(souhaitId, 'protocole-detresse', file)
+    poser({ lignes, notes: proto.notes, document: doc })
   }
 
   return (
@@ -38,20 +44,17 @@ export function ProtocoleDetresseForm({ m, setM }) {
       <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--heading)', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
         Protocole de détresse
       </div>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 12px' }}>
-        Dosages et voies prévus en cas de détresse. L’équipage médical les verra sur le bouton rouge en mission, avant d’injecter.
-      </p>
-      {lignes.map((r, i) => (
-        <div key={r.id || i} className="ha-detresse-row">
-          <F label="Médicament" value={r.medicament} set={v => majLigne(i, { medicament: v })} placeholder="ex. Adrénaline" />
-          <F label="Dosage" value={r.dosage} set={v => majLigne(i, { dosage: v })} placeholder="ex. 1 mg" />
-          <Sel label="Voie" value={r.voie || ''} set={v => majLigne(i, { voie: v })} options={optsVoie} />
-          {lignes.length > 1 && (
-            <Btn kind="danger" onClick={() => retirer(i)} style={{ padding: '8px 10px', alignSelf: 'end', marginBottom: 10 }}>Retirer</Btn>
-          )}
+      <div style={{ marginBottom: 12 }}>
+        <label style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Document</label>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="file" accept="application/pdf,image/*" onChange={e => joindre(e.target.files?.[0])} />
+          {proto.document?.nom && <DocLien doc={proto.document} />}
         </div>
+      </div>
+      {lignes.map((r, i) => (
+        <LigneEdition key={r.id || i} r={r} onChange={patch => majLigne(i, patch)} onRetirer={lignes.length > 1 ? () => retirer(i) : null} />
       ))}
-      <Btn kind="soft" onClick={ajouter}>+ Une ligne</Btn>
+      <Btn kind="soft" onClick={ajouter}>+ Un médicament</Btn>
       <div style={{ marginTop: 12 }}>
         <TA label="Notes (facultatif)" value={proto.notes} set={v => poser({ lignes, notes: v })} rows={2} placeholder="Particularités, dilution, ordre d’administration…" />
       </div>
@@ -59,14 +62,53 @@ export function ProtocoleDetresseForm({ m, setM }) {
   )
 }
 
+function LigneEdition({ r, onChange, onRetirer }) {
+  const doses = dosesLigne(r)
+  function majDose(i, dosage) {
+    const next = doses.map((d, j) => j === i ? { ...d, dosage } : d)
+    onChange({ doses: next, dosage: next[0]?.dosage || '' })
+  }
+  return (
+    <div className="ha-detresse-row" style={{ display: 'block', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 8 }}>
+        <F label="Médicament" value={r.medicament || ''} set={v => onChange({ medicament: v })} />
+        <F label="Si" value={r.contexte || ''} set={v => onChange({ contexte: v })} placeholder="douleur, dyspnée…" />
+        <Sel label="Voie" value={r.voie || ''} set={v => onChange({ voie: v })} options={optsVoie} />
+        <F label="Dosage maximum" value={r.dosage_max || ''} set={v => onChange({ dosage_max: v })} />
+      </div>
+      {doses.map((d, i) => (
+        <F key={i} label={`${i + 1}${i === 0 ? 're' : 'e'} dose`} value={d.dosage || ''} set={v => majDose(i, v)} />
+      ))}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn kind="soft" onClick={() => onChange({ doses: [...doses, { ordre: doses.length + 1, dosage: '' }] })}>+ Dose</Btn>
+        {onRetirer && <Btn kind="danger" onClick={onRetirer}>Retirer</Btn>}
+      </div>
+    </div>
+  )
+}
+
+function DocLien({ doc }) {
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    let stop = false
+    signedDocSejour(doc.path).then(u => { if (!stop) setUrl(u || '') }).catch(() => {})
+    return () => { stop = true }
+  }, [doc.path])
+  if (!url) return <span>{doc.nom}</span>
+  return <a href={url} target="_blank" rel="noopener noreferrer">{doc.nom}</a>
+}
+
 function LignePrevue({ r }) {
-  const bits = [r.medicament, r.dosage, lblVoieDetresse(r.voie)].filter(Boolean)
-  if (!bits.length) return null
+  const doses = dosesLigne(r).filter(d => (d.dosage || '').trim())
+  if (!(r.medicament || '').trim() && !doses.length) return null
   return (
     <div className="ha-detresse-prevue">
       <div style={{ fontWeight: 700 }}>{r.medicament || '—'}</div>
+      {r.contexte ? <div style={{ fontSize: 13 }}>{r.contexte}</div> : null}
       <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
-        {[r.dosage && `Dosage : ${r.dosage}`, r.voie && `Voie : ${lblVoieDetresse(r.voie)}`].filter(Boolean).join(' · ')}
+        {doses.map((d, i) => `${i + 1}${i === 0 ? 're' : 'e'} : ${d.dosage}`).join(' · ')}
+        {r.voie ? ` · ${lblVoieDetresse(r.voie)}` : ''}
+        {r.dosage_max ? ` · max ${r.dosage_max}` : ''}
       </div>
     </div>
   )

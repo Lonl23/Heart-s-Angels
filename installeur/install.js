@@ -125,6 +125,7 @@ async function main() {
     await client.query(lireSQL('86_organigramme.sql'))
     await client.query(lireSQL('87_organigramme_volontaires.sql'))
     await client.query(lireSQL('88_organigramme_n1_volontaires.sql'))
+    await client.query(lireSQL('89_souhaits_module.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

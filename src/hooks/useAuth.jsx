@@ -14,6 +14,7 @@ const ROLES_PROGRAMME_SOUHAIT = [
   'president', 'vice_president',
   'resp_informatique', 'resp_informatique_adjoint',
   'coord_transport', 'coord_transport_adjoint',
+  'resp_logistique', 'resp_logistique_adjoint',
 ]
 /** Partie patient (récolte) : récolteur et coordination médicale. */
 const ROLES_PATIENT_SOUHAIT = [

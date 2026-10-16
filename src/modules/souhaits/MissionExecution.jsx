@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Btn, inp, fmtAdresse, Loading, Flash, AdresseAffichee } from '@/components/ui'
+import { Btn, F, Sel, inp, fmtAdresse, Loading, Flash, AdresseAffichee, LiensTrajet } from '@/components/ui'
 import {
   STATUT_SUR_PLACE, estSurPlace, itemsChecklistVisibles, itemsChecklistManquants,
   normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
   estALaBase, NB_ECRANS_TERRAIN, numEcranTerrain,
   marquerHeureEtape, marquerHeurePersonnel, injectionsDetresse,
-  medecinPluri, nomPluri, etapeProtocoleDetresse, etapeDuVecteur,
+  medecinPluri, nomPluri, telPluri, etapeProtocoleDetresse, etapeDuVecteur,
   lieuxAnnexes, prochainsTransports, documentsSejourVisibles, lblTypeLieu,
 } from './missionSchema'
 import { signedDocSejour } from './sejour'
@@ -498,7 +498,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const showDetresse = userMedical && complet && vecteur && etapeProtocoleDetresse(etape) && !locked
   const photosDepartOk = aDesPhotosCotes(photos?.coins)
   const med = medecinPluri(complet ? m : null)
-  const medTel = (med?.tel || '').trim() || rpc?.medecin_tel || appel?.medecin_tel || ''
+  const medTel = telPluri(med) || rpc?.medecin_tel || appel?.medecin_tel || ''
   const medNom = nomPluri(med) || rpc?.medecin_nom || appel?.medecin_nom || ''
 
   return (
@@ -507,7 +507,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
         <Btn kind="soft" onClick={onBack}>← Mes souhaits</Btn>
         <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : ''}</span>
       </div>
-      {userMedical && <BandeauMedecin tel={medTel} nom={medNom} />}
+      {userMedical && <BandeauMedecin tel={medTel} nom={medNom} garde={med?.type_medecin === 'garde'} />}
 
       {vecteur && (
         <>
@@ -593,6 +593,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <div style={{ fontSize:14, color:'var(--text)', marginBottom:10 }}>
                   {[vecteur.nom, vecteur.type_transport, vecteur.plaque].filter(Boolean).join(' · ') || 'Véhicule de votre équipage'}
                 </div>
+                <PlaqueTerrain souhaitId={souhaitId} vecteurId={vecteurId} plaque={vecteur.plaque || ''} locked={locked} onErr={setErr} onOk={plaque => {
+                  setRpc(x => x?.vecteur ? { ...x, vecteur: { ...x.vecteur, plaque } } : x)
+                  if (complet) setM(prev => ({ ...(prev || {}), vecteurs: (prev?.vecteurs || []).map(v => v.id === vecteurId ? { ...v, plaque } : v) }))
+                }} />
                 <Itineraire d={itin} only="base" />
               </Section>
               <Section titre="Photos des 4 côtés">
@@ -809,6 +813,40 @@ export default function MissionExecution({ souhaitId, onBack }) {
   )
 }
 
+function PlaqueTerrain({ souhaitId, vecteurId, plaque, locked, onErr, onOk }) {
+  const [plaques, setPlaques] = useState([])
+  const [saisie, setSaisie] = useState(plaque || '')
+  useEffect(() => { setSaisie(plaque || '') }, [plaque])
+  useEffect(() => {
+    supabase.from('plaques_vehicules').select('plaque,libelle').eq('actif', true).order('plaque')
+      .then(({ data }) => setPlaques(data || []))
+  }, [])
+  async function appliquer(valeur) {
+    const next = (valeur ?? saisie).trim()
+    const { data, error } = await supabase.rpc('maj_plaque_vecteur', { p_souhait: souhaitId, p_vecteur: vecteurId, p_plaque: next })
+    if (error || data?.ok === false) { onErr?.(error?.message || data?.error || 'Plaque non enregistrée'); return }
+    onOk?.(next)
+  }
+  const connue = plaques.some(p => p.plaque === saisie)
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <Sel
+        label="Plaque"
+        value={connue ? saisie : (saisie ? '__nouvelle__' : '')}
+        set={v => { if (v && v !== '__nouvelle__') { setSaisie(v); appliquer(v) } else setSaisie('') }}
+        disabled={locked}
+        options={[{ v: '', l: '—' }, ...plaques.map(p => ({ v: p.plaque, l: p.libelle ? `${p.plaque} · ${p.libelle}` : p.plaque })), { v: '__nouvelle__', l: 'Nouvelle' }]}
+      />
+      {!connue && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}><F label="Nouvelle plaque" value={saisie} set={setSaisie} readOnly={locked} /></div>
+          {!locked && <Btn kind="soft" onClick={() => appliquer(saisie)} style={{ marginBottom: 10 }}>Enregistrer</Btn>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function itineraryFromMission(m) {
   if (!m) return {}
   const pecAdr = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
@@ -816,6 +854,7 @@ function itineraryFromMission(m) {
     base: { nom: m.base_nom, adresse: m.base_adresse, rdv: m.rdv_base, depart: m.depart_base },
     pec: { type: m.pec_type, institution: m.pec_institution, adresse: pecAdr, service: m.pec_service, etage: m.pec_etage, aile: m.pec_aile, chambre: m.pec_chambre, heure: m.arrivee_pec, depart: m.depart_pec, precisions: m.pec_precisions },
     destination: { adresse: m.dest_adresse, precisions: m.dest_precisions, heure: m.arrivee_destination },
+    activites: Array.isArray(m.activites_sur_place) ? m.activites_sur_place : [],
     retour: { type: m.retour_type, heure: m.retour_heure, precisions: m.retour_precisions },
     consignes_equipage: m.consignes_equipage,
   }
@@ -847,6 +886,18 @@ function Itineraire({ d, compact, only }) {
         {fmtAdresse(d.destination?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.destination.adresse} />} /> : null}
         {d.destination?.precisions && <Ligne k="Précisions" v={d.destination.precisions} />}
         <Ligne k="Heure souhaitée" v={fmtDt(d.destination?.heure)} />
+        {(d.activites || []).map(a => (
+          <div key={a.id} style={{ marginTop: 8 }}>
+            <Ligne k={a.nom || 'Activité'} v={[a.heure, a.telephone, a.notes].filter(Boolean).join(' · ')} />
+            {fmtAdresse(a.adresse) ? <AdresseAffichee value={a.adresse} compact /> : null}
+          </div>
+        ))}
+        <LiensTrajet etapes={[
+          { label: 'Base', adresse: d.base?.adresse },
+          { label: 'Prise en charge', adresse: d.pec?.adresse },
+          { label: 'Destination', adresse: d.destination?.adresse },
+          ...(d.activites || []).map(a => ({ label: a.nom || 'Activité', adresse: a.adresse })),
+        ]} />
       </Bloc>}
       {show('retour') && <Bloc titre="Retour">
         <Ligne k="Type" v={d.retour?.type} />

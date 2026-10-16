@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Card, Btn, F, TA, Sel, PhoneF, AddressFields, Modal, phoneValide, LiensGps } from '@/components/ui'
@@ -18,7 +18,8 @@ function etatVide() {
   return {
     beneficiaire_prenom: '', beneficiaire_nom: '', beneficiaire_ddn: '', beneficiaire_contact: '',
     beneficiaire_niss: '', beneficiaire_genre: '', beneficiaire_tel_gsm: '', beneficiaire_tel_fixe: '',
-    beneficiaire_adresse: null, beneficiaire_annuaire_id: null,
+    beneficiaire_adresse: null, beneficiaire_adresse_residence: null, beneficiaire_email: '', beneficiaire_annuaire_id: null,
+    contacts: [],
     contact_prenom: '', contact_nom: '', contact_lien: '', contact_ddn: '',
     contact_niss: '', contact_tel_gsm: '', contact_tel_fixe: '', contact_adresse: null,
     contact_annuaire_id: null,
@@ -45,6 +46,9 @@ function depuisSouhait(s) {
     beneficiaire_tel_gsm: s.beneficiaire_tel_gsm || '',
     beneficiaire_tel_fixe: s.beneficiaire_tel_fixe || '',
     beneficiaire_adresse: s.beneficiaire_adresse || null,
+    beneficiaire_adresse_residence: s.beneficiaire_adresse_residence || null,
+    beneficiaire_email: s.beneficiaire_email || '',
+    contacts: contactsDepuis(s),
     date_souhaitee: sliceDate(s.date_souhaitee),
     date_fin: sliceDate(s.date_fin),
     dates_possibles: periodesDepuisSouhait(s),
@@ -55,23 +59,60 @@ function nomComplet(prenom, nom) {
   return [prenom, nom].filter(Boolean).join(' ').trim()
 }
 
+function rattacherIds(s, { annuaireId, contactId, contactsMaj }) {
+  let changed = !!(annuaireId && annuaireId !== s.beneficiaire_annuaire_id)
+    || !!(contactId && contactId !== s.contact_annuaire_id)
+  const contacts = (s.contacts || []).map(c => {
+    const maj = (contactsMaj || []).find(x => x.id && x.id === c.id)
+    if (maj?.annuaire_id && maj.annuaire_id !== c.annuaire_id) {
+      changed = true
+      return { ...c, annuaire_id: maj.annuaire_id }
+    }
+    return c
+  })
+  if (!changed) return s
+  return {
+    ...s,
+    beneficiaire_annuaire_id: annuaireId || s.beneficiaire_annuaire_id,
+    contact_annuaire_id: contactId || s.contact_annuaire_id,
+    contacts,
+  }
+}
+
+function contactsDepuis(s) {
+  if (Array.isArray(s?.contacts) && s.contacts.length) return s.contacts
+  if (s?.contact_prenom || s?.contact_nom || s?.contact_email) {
+    return [{
+      id: s.contact_annuaire_id || 'legacy',
+      type: 'famille',
+      annuaire_id: s.contact_annuaire_id || null,
+      prenom: s.contact_prenom || '',
+      nom: s.contact_nom || '',
+      lien: s.contact_lien || '',
+      email: s.contact_email || '',
+      tel_gsm: s.contact_tel_gsm || '',
+      tel_fixe: s.contact_tel_fixe || '',
+      adresse: s.contact_adresse || null,
+    }]
+  }
+  return []
+}
+
 function DatesPossibles({ value, set }) {
   const rows = value?.length ? value : [{ debut: '', fin: '' }]
   function maj(i, patch) {
     set(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   }
-  function ajouter() { set([...rows, { debut: '', fin: '' }]) }
+  function ajouter() { set([...rows, { debut: '', fin: '', priorite: rows.length + 1 }]) }
   function retirer(i) {
     const next = rows.filter((_, j) => j !== i)
     set(next.length ? next : [{ debut: '', fin: '' }])
   }
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>
-        Dates possibles — chaque ligne est une option (un jour, ou plusieurs jours d’affilée). Les jours entre deux options restent libres au calendrier.
-      </div>
       {rows.map((r, i) => (
         <div key={i} className="ha-date-periode">
+          <Sel label="Priorité" value={String(r.priorite || i + 1)} set={v => maj(i, { priorite: Number(v) })} options={[1, 2, 3, 4, 5].map(n => ({ v: String(n), l: String(n) }))} />
           <F label="Du" type="date" value={r.debut} set={v => maj(i, { debut: v, fin: (!r.fin || r.fin < v) ? v : r.fin })} />
           <F label="Au" type="date" value={r.fin || r.debut} set={v => maj(i, { fin: (r.debut && v && v < r.debut) ? r.debut : v })} />
           {rows.length > 1 && (
@@ -79,17 +120,22 @@ function DatesPossibles({ value, set }) {
           )}
         </div>
       ))}
-      <Btn kind="soft" onClick={ajouter}>+ Ajouter une date ou une période</Btn>
+      <Btn kind="soft" onClick={ajouter}>+ Date</Btn>
     </div>
   )
 }
 
-export default function FormSouhait({ initial, onDone, inline = false }) {
+export default function FormSouhait({ initial, onDone, onPatch, inline = false }) {
   const { profile } = useAuth()
   const [f, setF] = useState(() => depuisSouhait(initial))
   const set = (k, v) => setF(s => ({ ...s, [k]: v }))
   const [saving, setSaving] = useState(false)
   const [popup, setPopup] = useState(null)
+  const [contactEdit, setContactEdit] = useState(null)
+  const pret = useRef(false)
+  const saveRef = useRef(null)
+  const chaine = useRef(Promise.resolve())
+  const dernierDates = useRef('')
 
   useEffect(() => {
     const ext = initial?.annuaire_externe_id
@@ -130,6 +176,8 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
       beneficiaire_tel_gsm: b.tel_gsm || '',
       beneficiaire_tel_fixe: b.tel_fixe || '',
       beneficiaire_adresse: b.adresse || null,
+      beneficiaire_adresse_residence: b.adresse_residence || null,
+      beneficiaire_email: b.email || '',
     }))
   }
 
@@ -149,22 +197,26 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
     }))
   }
 
-  function checkPhones() {
-    const champs = [f.beneficiaire_tel_gsm, f.beneficiaire_tel_fixe, f.contact_tel_gsm, f.contact_tel_fixe]
+  function checkPhones(silencieux) {
+    const champs = [
+      f.beneficiaire_tel_gsm, f.beneficiaire_tel_fixe,
+      ...(f.contacts || []).flatMap(c => [c.tel_gsm, c.tel_fixe]),
+    ]
     if (champs.some(x => x && !phoneValide(x))) {
-      alert('Les numéros de téléphone doivent être au format +32 xxx.xx.xx.xx (GSM) ou +32 xx.xx.xx.xx (fixe).')
+      if (!silencieux) alert('Les numéros de téléphone doivent être au format +32 xxx.xx.xx.xx (GSM) ou +32 xx.xx.xx.xx (fixe).')
       return false
     }
     return true
   }
 
-  async function save() {
-    if (!f.beneficiaire_nom || !f.description) { alert('Nom du bénéficiaire et description requis.'); return }
-    if (f.origine === 'institution' && !f.annuaire_externe_id && !f.partenaire_id) {
+  async function save({ silencieux } = {}) {
+    if (!f.beneficiaire_nom || !f.beneficiaire_prenom) return
+    if (!silencieux && !f.description) { alert('Nom du bénéficiaire et description requis.'); return }
+    if (!silencieux && f.origine === 'institution' && !f.annuaire_externe_id && !f.partenaire_id) {
       alert('Choisissez l’institution qui demande ce souhait.')
       return
     }
-    if (!checkPhones()) return
+    if (!checkPhones(silencieux)) return
     const statut = inline
       ? undefined
       : (f.statut === 'non_realise' && initial?.id && !peutPasserNonRealise(initial.statut, initial))
@@ -174,6 +226,7 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
     let annuaireId = f.beneficiaire_annuaire_id || null
     let contactId = f.contact_annuaire_id || null
     let partenaireId = f.partenaire_id || null
+    let contactsMaj = []
     try {
       annuaireId = await upsertBeneficiaire({
         id: f.beneficiaire_annuaire_id || undefined,
@@ -185,19 +238,25 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
         tel_fixe: f.beneficiaire_tel_fixe,
         genre: f.beneficiaire_genre,
         adresse: f.beneficiaire_adresse,
+        adresse_residence: f.beneficiaire_adresse_residence,
+        email: f.beneficiaire_email,
       }, { created_by: profile?.id }) || annuaireId
-      if (annuaireId && (f.contact_prenom || f.contact_nom)) {
-        contactId = await upsertContactRattache(annuaireId, {
-          id: f.contact_annuaire_id || undefined,
-          prenom: f.contact_prenom,
-          nom: f.contact_nom,
-          lien: f.contact_lien,
-          date_naissance: f.contact_ddn,
-          niss: f.contact_niss,
-          tel_gsm: f.contact_tel_gsm,
-          tel_fixe: f.contact_tel_fixe,
-          adresse: f.contact_adresse,
-        }, { created_by: profile?.id }) || contactId
+      for (const c of f.contacts || []) {
+        if (!(c.prenom || c.nom)) { contactsMaj.push(c); continue }
+        const cid = annuaireId
+          ? await upsertContactRattache(annuaireId, {
+            id: c.annuaire_id || undefined,
+            prenom: c.prenom, nom: c.nom, lien: c.lien, email: c.email,
+            date_naissance: c.date_naissance, niss: c.niss,
+            tel_gsm: c.tel_gsm, tel_fixe: c.tel_fixe,
+            adresse: c.adresse, adresse_residence: c.adresse_residence,
+          }, { created_by: profile?.id })
+          : c.annuaire_id
+        contactsMaj.push({ ...c, annuaire_id: cid || c.annuaire_id || null })
+      }
+      if (contactsMaj.length) {
+        const fam = contactsMaj.find(c => c.type === 'famille') || contactsMaj[0]
+        contactId = fam?.annuaire_id || null
       }
       if (f.origine === 'institution' && f.annuaire_externe_id && !partenaireId) {
         const { data: fiche } = await supabase.from('annuaire').select('*').eq('id', f.annuaire_externe_id).maybeSingle()
@@ -208,8 +267,11 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
       alert('Annuaire : ' + (e.message || e))
       return
     }
-    const contactLib = nomComplet(f.contact_prenom, f.contact_nom)
+    const contactsEnreg = contactsMaj.length ? contactsMaj : (f.contacts || [])
+    const fam = contactsEnreg.find(c => c.type === 'famille') || contactsEnreg[0] || {}
+    const contactLib = nomComplet(fam.prenom, fam.nom)
     const periodes = normaliserPeriodes(f.dates_possibles)
+    dernierDates.current = JSON.stringify(periodes)
     const plage = plageGlobale(periodes)
     const payload = {
       beneficiaire_prenom: f.beneficiaire_prenom,
@@ -218,15 +280,19 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
       beneficiaire_contact: contactLib || f.beneficiaire_contact || null,
       beneficiaire_annuaire_id: annuaireId,
       contact_annuaire_id: contactId,
+      contacts: contactsEnreg,
+      contact_email: fam.email || null,
       beneficiaire_niss: normaliserNiss(f.beneficiaire_niss) || null,
       beneficiaire_genre: f.beneficiaire_genre || null,
       beneficiaire_tel_gsm: f.beneficiaire_tel_gsm || null,
       beneficiaire_tel_fixe: f.beneficiaire_tel_fixe || null,
+      beneficiaire_email: f.beneficiaire_email || null,
       beneficiaire_adresse: f.beneficiaire_adresse || null,
+      beneficiaire_adresse_residence: f.beneficiaire_adresse_residence || null,
       origine: f.origine === 'institution' ? 'institution' : 'prive',
       partenaire_id: f.origine === 'institution' ? (partenaireId || null) : null,
       annuaire_externe_id: f.origine === 'institution' ? (f.annuaire_externe_id || null) : null,
-      description: f.description,
+      description: f.description || 'Souhait',
       localisation: f.localisation || null,
       notes_medicales: f.notes_medicales || null,
       besoins_specifiques: f.besoins_specifiques || null,
@@ -242,15 +308,48 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
     if (f.id) {
       const { error } = await supabase.from('souhaits').update(payload).eq('id', f.id)
       setSaving(false)
-      if (error) { alert('Erreur : ' + error.message); return }
-      onDone(f.id)
+      if (error) { if (!silencieux) alert('Erreur : ' + error.message); return }
+      setF(s => rattacherIds(s, { annuaireId, contactId, contactsMaj }))
+      onPatch?.({ ...payload, id: f.id })
+      if (!silencieux) onDone?.(f.id)
       return
     }
     const { data, error } = await supabase.from('souhaits').insert({ ...payload, created_by: profile?.id }).select('id').single()
     setSaving(false)
-    if (error) { alert('Erreur : ' + error.message); return }
-    onDone(data?.id)
+    if (error) { if (!silencieux) alert('Erreur : ' + error.message); return }
+    if (data?.id) {
+      setF(s => ({ ...rattacherIds(s, { annuaireId, contactId, contactsMaj }), id: data.id }))
+      onPatch?.({ ...payload, id: data.id })
+      onDone?.(data.id)
+    }
   }
+  saveRef.current = save
+
+  useEffect(() => {
+    if (!pret.current) { pret.current = true; return }
+    const t = setTimeout(() => {
+      chaine.current = chaine.current
+        .then(() => saveRef.current?.({ silencieux: true }))
+        .catch(() => {})
+    }, 900)
+    return () => clearTimeout(t)
+  }, [f])
+
+  const datesCle = JSON.stringify(initial?.dates_possibles || [])
+  useEffect(() => {
+    if (!initial?.id) return
+    const incoming = JSON.stringify(periodesDepuisSouhait(initial))
+    setF(s => {
+      const local = JSON.stringify(normaliserPeriodes(s.dates_possibles))
+      if (dernierDates.current && incoming === dernierDates.current && local !== incoming) return s
+      return {
+        ...s,
+        dates_possibles: periodesDepuisSouhait(initial),
+        date_souhaitee: sliceDate(initial.date_souhaitee),
+        date_fin: sliceDate(initial.date_fin),
+      }
+    })
+  }, [datesCle])
 
   const benNom = nomComplet(f.beneficiaire_prenom, f.beneficiaire_nom)
   const ctcNom = nomComplet(f.contact_prenom, f.contact_nom)
@@ -262,7 +361,6 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', color: 'var(--heading)', margin: 0 }}>{f.id ? 'Modifier le souhait' : 'Nouveau souhait'}</h1>
-            {!f.id && <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>Le dossier commencera en « Nouveau ». Le bénéficiaire sera repris dans l’Annuaire.</p>}
           </div>
           <Btn kind="soft" onClick={() => onDone(false)}>← Retour</Btn>
         </div>
@@ -289,13 +387,10 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
         </div>
         {f.origine === 'institution' && (
           <>
-            {f.partenaire_nom || f.annuaire_externe_id ? (
+            {(f.partenaire_nom || f.annuaire_externe_id) && (
               <div className="ha-chip-sum" style={{ marginBottom: 10 }}>
                 <div style={{ fontWeight: 600 }}>{f.partenaire_nom || 'Institution liée'}</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>Le n° général de l’institution sera affiché aux missions.</div>
               </div>
-            ) : (
-              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>Reliez le souhait à l’institution (annuaire ou partenaire déjà encodé).</p>
             )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Btn kind="soft" onClick={() => setPopup('pick-inst')}>Choisir une institution</Btn>
@@ -314,9 +409,7 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
               {[f.beneficiaire_ddn && new Date(f.beneficiaire_ddn).toLocaleDateString('fr-BE'), f.beneficiaire_tel_gsm || f.beneficiaire_tel_fixe].filter(Boolean).join(' · ') || 'Fiche enregistrée dans l’annuaire'}
             </div>
           </div>
-        ) : (
-          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>Reprenez une fiche existante ou encodez un nouveau bénéficiaire — les détails s’ouvrent dans une fenêtre.</p>
-        )}
+        ) : null}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Btn kind="soft" onClick={() => setPopup('pick-ben')}>Reprendre un bénéficiaire connu</Btn>
           <Btn onClick={() => setPopup('new-ben')}>{benNom ? 'Compléter la fiche' : 'Ajouter un nouveau bénéficiaire'}</Btn>
@@ -324,18 +417,22 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
       </Card>
 
       <Card style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 4 }}>Contact rattaché</div>
-        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>Famille ou proche. Pour une demande privée, son numéro (s’il est enregistré) sera affiché aux missions.</p>
-        {ctcNom ? (
-          <div className="ha-chip-sum" style={{ marginBottom: 10 }}>
-            <div style={{ fontWeight: 700 }}>{ctcNom}{f.contact_lien ? ` — ${f.contact_lien}` : ''}</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>{f.contact_tel_gsm || f.contact_tel_fixe || 'Pas de numéro enregistré'}</div>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 8 }}>Contacts</div>
+        {(f.contacts || []).map(c => (
+          <div key={c.id} className="ha-chip-sum" style={{ marginBottom: 8 }}>
+            <div style={{ fontWeight: 700 }}>{nomComplet(c.prenom, c.nom) || 'Contact'} · {c.type === 'demandeur' ? 'Demandeur' : c.type === 'reference' ? 'Référence' : 'Famille'}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{[c.lien, c.tel_gsm || c.tel_fixe, c.email].filter(Boolean).join(' · ')}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <Btn kind="soft" onClick={() => { setContactEdit(c); setPopup('new-ctc') }} style={{ padding: '4px 8px' }}>Modifier</Btn>
+              <Btn kind="danger" onClick={() => set('contacts', (f.contacts || []).filter(x => x.id !== c.id))} style={{ padding: '4px 8px' }}>Retirer</Btn>
+            </div>
           </div>
-        ) : null}
+        ))}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Btn kind="soft" onClick={() => setPopup('pick-ctc')} disabled={!f.beneficiaire_annuaire_id && !benNom}>Reprendre un contact connu</Btn>
-          <Btn kind="soft" onClick={() => setPopup('new-ctc')}>{ctcNom ? 'Compléter le contact' : 'Ajouter un nouveau contact'}</Btn>
-          {ctcNom && <Btn kind="danger" onClick={() => appliquerContact({}, true)}>Retirer</Btn>}
+          <Btn kind="soft" onClick={() => { setContactEdit({ id: crypto.randomUUID(), type: 'famille' }); setPopup('new-ctc') }}>Famille</Btn>
+          <Btn kind="soft" onClick={() => { setContactEdit({ id: crypto.randomUUID(), type: 'demandeur' }); setPopup('new-ctc') }}>Demandeur</Btn>
+          <Btn kind="soft" onClick={() => { setContactEdit({ id: crypto.randomUUID(), type: 'reference' }); setPopup('new-ctc') }}>Référence</Btn>
+          <Btn kind="soft" onClick={() => setPopup('pick-ctc')} disabled={!f.beneficiaire_annuaire_id && !benNom}>Connu</Btn>
         </div>
       </Card>
 
@@ -370,7 +467,7 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
         <TA label="Besoins spécifiques (matériel, logistique…)" value={f.besoins_specifiques} set={v => set('besoins_specifiques', v)} rows={2} />
       </Card>
 
-      <Btn onClick={save} disabled={saving} style={{ width: '100%' }}>{saving ? 'Enregistrement…' : 'Enregistrer'}</Btn>
+      <div style={{ fontSize: 12, color: saving ? 'var(--text-muted)' : '#3B6D11' }}>{saving ? 'Enregistrement…' : 'Enregistrement automatique'}</div>
 
       {popup === 'pick-ben' && (
         <PickerList
@@ -387,7 +484,8 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
           initial={{
             id: f.beneficiaire_annuaire_id, prenom: f.beneficiaire_prenom, nom: f.beneficiaire_nom,
             date_naissance: f.beneficiaire_ddn, niss: f.beneficiaire_niss, genre: f.beneficiaire_genre,
-            tel_gsm: f.beneficiaire_tel_gsm, tel_fixe: f.beneficiaire_tel_fixe, adresse: f.beneficiaire_adresse,
+            tel_gsm: f.beneficiaire_tel_gsm, tel_fixe: f.beneficiaire_tel_fixe, email: f.beneficiaire_email,
+            adresse: f.beneficiaire_adresse, adresse_residence: f.beneficiaire_adresse_residence,
           }}
           onClose={() => setPopup(null)}
           onSave={b => { appliquerBeneficiaire(b); setPopup(null) }}
@@ -400,19 +498,27 @@ export default function FormSouhait({ initial, onDone, inline = false }) {
           empty="Aucun contact rattaché à ce bénéficiaire pour l’instant."
           label={r => nomComplet(r.prenom, r.nom) || '(sans nom)'}
           hint={r => [r.lien || r.data?.lien, r.tel_gsm || r.tel_fixe || r.telephone].filter(Boolean).join(' · ')}
-          onPick={r => { appliquerContact(ficheVersContact(r)); setPopup(null) }}
+          onPick={r => {
+            const c = ficheVersContact(r)
+            const row = { id: c.id || crypto.randomUUID(), type: 'famille', annuaire_id: c.id, ...c }
+            set('contacts', [...(f.contacts || []).filter(x => x.annuaire_id !== c.id), row])
+            setPopup(null)
+          }}
           onClose={() => setPopup(null)}
         />
       )}
       {popup === 'new-ctc' && (
         <PopupContact
-          initial={{
-            id: f.contact_annuaire_id, prenom: f.contact_prenom, nom: f.contact_nom, lien: f.contact_lien,
-            date_naissance: f.contact_ddn, niss: f.contact_niss, tel_gsm: f.contact_tel_gsm,
-            tel_fixe: f.contact_tel_fixe, adresse: f.contact_adresse,
+          initial={contactEdit || {}}
+          onClose={() => { setPopup(null); setContactEdit(null) }}
+          onSave={c => {
+            const id = c.id || contactEdit?.id || crypto.randomUUID()
+            const row = { type: contactEdit?.type || 'famille', ...c, id }
+            const list = f.contacts || []
+            set('contacts', list.some(x => x.id === id) ? list.map(x => x.id === id ? row : x) : [...list, row])
+            setPopup(null)
+            setContactEdit(null)
           }}
-          onClose={() => setPopup(null)}
-          onSave={c => { appliquerContact(c); setPopup(null) }}
         />
       )}
       {popup === 'pick-inst' && (
@@ -478,7 +584,7 @@ function PickerList({ title, load, label, hint, onPick, onClose, empty }) {
 }
 
 function PopupBeneficiaire({ initial, onSave, onClose }) {
-  const [g, setG] = useState({ prenom: '', nom: '', date_naissance: '', niss: '', genre: '', tel_gsm: '', tel_fixe: '', adresse: null, ...initial })
+  const [g, setG] = useState({ prenom: '', nom: '', date_naissance: '', niss: '', genre: '', tel_gsm: '', tel_fixe: '', email: '', adresse: null, adresse_residence: null, ...initial })
   const set = (k, v) => setG(s => ({ ...s, [k]: v }))
   function go() {
     if (!g.nom) { alert('Nom requis.'); return }
@@ -502,14 +608,17 @@ function PopupBeneficiaire({ initial, onSave, onClose }) {
         <PhoneF label="GSM" value={g.tel_gsm} set={v => set('tel_gsm', v)} />
         <PhoneF label="Fixe" value={g.tel_fixe} set={v => set('tel_fixe', v)} />
       </div>
+      <F label="E-mail" value={g.email || ''} set={v => set('email', v)} />
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse légale</div>
       <AddressFields value={g.adresse} set={v => set('adresse', v)} />
+      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
+      <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
     </Modal>
   )
 }
 
 function PopupContact({ initial, onSave, onClose }) {
-  const [g, setG] = useState({ prenom: '', nom: '', lien: '', date_naissance: '', niss: '', tel_gsm: '', tel_fixe: '', adresse: null, ...initial })
+  const [g, setG] = useState({ prenom: '', nom: '', lien: '', type: 'famille', date_naissance: '', niss: '', tel_gsm: '', tel_fixe: '', email: '', adresse: null, adresse_residence: null, ...initial })
   const set = (k, v) => setG(s => ({ ...s, [k]: v }))
   function go() {
     if (!g.nom && !g.prenom) { alert('Nom ou prénom requis.'); return }
@@ -533,8 +642,14 @@ function PopupContact({ initial, onSave, onClose }) {
         <PhoneF label="GSM" value={g.tel_gsm} set={v => set('tel_gsm', v)} />
         <PhoneF label="Fixe" value={g.tel_fixe} set={v => set('tel_fixe', v)} />
       </div>
+      <F label="E-mail" value={g.email || ''} set={v => set('email', v)} />
+      <Sel label="Rôle" value={g.type || 'famille'} set={v => set('type', v)} options={[
+        { v: 'famille', l: 'Famille' }, { v: 'demandeur', l: 'Demandeur' }, { v: 'reference', l: 'Personne de référence' },
+      ]} />
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse légale</div>
       <AddressFields value={g.adresse} set={v => set('adresse', v)} />
+      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
+      <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
     </Modal>
   )
 }

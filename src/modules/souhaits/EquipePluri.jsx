@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Card, Btn, F, Sel, PhoneF, TA, Modal, digitsPhoneBE, phoneValide } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
 import {
-  ROLES_PLURI, lblRolePluri, equipePluri, personnePluriRemplie, nomPluri,
+  ROLES_PLURI, lblRolePluri, equipePluri, personnePluriRemplie, nomPluri, telephonesPluri,
 } from './missionSchema'
+import { TYPES_MEDECIN, libelleMedecin } from './listesCliniques'
 import {
   chercherContactsPluri, ficheVersPluri, upsertContactMedical,
   correspondancePluriForte, telFicheAnnuaire,
@@ -14,7 +15,11 @@ function nid() {
 }
 
 function vide(role) {
-  return { id: nid(), role: role || 'medecin', prenom: '', nom: '', tel: '', organisme: '', notes: '', annuaire_id: null }
+  return {
+    id: nid(), role: role || 'medecin', prenom: '', nom: '', tel: '', tel2: '', tel3: '',
+    tel_priorite: 1, tel2_priorite: 2, tel3_priorite: 3,
+    type_medecin: '', specialite: '', organisme: '', notes: '', annuaire_id: null,
+  }
 }
 
 function nomNorm(prenom, nom) {
@@ -39,7 +44,7 @@ function dejaDansEquipe(rows, cand, exceptId) {
 export default function EquipePluriForm({ m, setM }) {
   const { profile } = useAuth()
   const lignes = equipePluri(m).filter(r => personnePluriRemplie(r) || (r.notes || '').trim())
-  const medSansTel = lignes.some(r => r.role === 'medecin' && personnePluriRemplie(r) && !(r.tel || '').trim())
+  const medSansTel = lignes.some(r => r.role === 'medecin' && personnePluriRemplie(r) && !telephonesPluri(r).length)
   const [popup, setPopup] = useState(null)
   const [edit, setEdit] = useState(null)
   const [err, setErr] = useState('')
@@ -77,7 +82,8 @@ export default function EquipePluriForm({ m, setM }) {
       setErr('Nom, prénom ou téléphone requis.')
       return
     }
-    if (g.tel && !phoneValide(g.tel)) {
+    const tels = [g.tel, g.tel2, g.tel3].filter(Boolean)
+    if (tels.some(t => !phoneValide(t))) {
       setErr('Formats téléphone : +32 xxx.xx.xx.xx ou +32 xx.xx.xx.xx')
       return
     }
@@ -109,6 +115,13 @@ export default function EquipePluriForm({ m, setM }) {
         prenom: g.prenom || '',
         nom: g.nom || '',
         tel: g.tel || '',
+        tel2: g.tel2 || '',
+        tel3: g.tel3 || '',
+        tel_priorite: Number(g.tel_priorite) || 1,
+        tel2_priorite: Number(g.tel2_priorite) || 2,
+        tel3_priorite: Number(g.tel3_priorite) || 3,
+        type_medecin: g.role === 'medecin' ? (g.type_medecin || '') : '',
+        specialite: g.specialite || '',
         organisme: g.organisme || '',
         notes: g.notes || '',
       }
@@ -137,9 +150,6 @@ export default function EquipePluriForm({ m, setM }) {
       <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--heading)', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
         Équipe pluridisciplinaire
       </div>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 14px' }}>
-        Médecin, infirmier, aide-soignant, psychologue, kiné autour du patient. Chaque personne est enregistrée dans l’annuaire (contacts médicaux). Le n° du médecin reste affiché pendant la mission.
-      </p>
       {err && !popup && <div className="ha-pluri-warn" style={{ marginBottom: 10 }}>{err}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {lignes.length === 0 && (
@@ -157,7 +167,7 @@ export default function EquipePluriForm({ m, setM }) {
             <div className="ha-chip-sum" style={{ marginBottom: 8 }}>
               <div style={{ fontWeight: 700 }}>{nomPluri(r) || 'Sans nom'}</div>
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                {[r.tel, r.organisme].filter(Boolean).join(' · ') || 'Pas de numéro'}
+                {[telephonesPluri(r).map(t => t.n).join(' · '), libelleMedecin(r.type_medecin), r.specialite, r.organisme].filter(Boolean).join(' · ') || 'Pas de numéro'}
                 {r.annuaire_id ? ' · Annuaire' : ''}
               </div>
             </div>
@@ -306,11 +316,17 @@ function PopupPersonnePluri({ initial, lignes, err, setErr, onClose, onSave }) {
       </>
     }>
       <Sel label="Rôle" value={g.role || 'medecin'} set={v => set('role', v)} options={ROLES_PLURI} />
+      {g.role === 'medecin' && (
+        <>
+          <Sel label="Médecin" value={g.type_medecin || ''} set={v => set('type_medecin', v)} options={[{ v: '', l: '—' }, ...TYPES_MEDECIN]} />
+          {g.type_medecin === 'specialiste' && <F label="Spécialité" value={g.specialite || ''} set={v => set('specialite', v)} />}
+        </>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
         <F label="Prénom" value={g.prenom} set={v => set('prenom', v)} />
         <F label="Nom" value={g.nom} set={v => set('nom', v)} />
       </div>
-      <PhoneF label="Téléphone" value={g.tel} set={v => set('tel', v)} />
+      <TelephonePriorite g={g} set={set} />
       <F label="Service / organisme" value={g.organisme} set={v => set('organisme', v)} placeholder="ex. maison de repos, cabinet…" />
       <TA label="Notes (cette mission)" value={g.notes || ''} set={v => set('notes', v)} rows={3} placeholder="Consignes, horaires, particularités…" />
       {hits.length > 0 && (
@@ -340,11 +356,25 @@ function PopupPersonnePluri({ initial, lignes, err, setErr, onClose, onSave }) {
   )
 }
 
-export function BandeauMedecin({ tel, nom }) {
+function TelephonePriorite({ g, set }) {
+  const lignes = [
+    ['tel', 'tel_priorite', 'Téléphone 1'],
+    ['tel2', 'tel2_priorite', 'Téléphone 2'],
+    ['tel3', 'tel3_priorite', 'Téléphone 3'],
+  ]
+  return lignes.map(([k, pk, label]) => (
+    <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8 }}>
+      <PhoneF label={label} value={g[k] || ''} set={v => set(k, v)} />
+      <Sel label="Priorité" value={String(g[pk] || (k === 'tel' ? 1 : k === 'tel2' ? 2 : 3))} set={v => set(pk, Number(v))} options={[1, 2, 3].map(n => ({ v: String(n), l: String(n) }))} />
+    </div>
+  ))
+}
+
+export function BandeauMedecin({ tel, nom, garde }) {
   if (!tel) return null
   return (
     <div className="ha-medecin-sticky">
-      <div className="ha-medecin-k">Médecin</div>
+      <div className="ha-medecin-k">{garde ? 'Médecin de garde' : 'Médecin'}</div>
       <a href={`tel:${String(tel).replace(/\s/g, '')}`} className="ha-medecin-tel">📞 {tel}</a>
       {nom ? <span className="ha-medecin-nom">{nom}</span> : null}
     </div>
@@ -361,7 +391,7 @@ export function LignesPluri({ rows }) {
           <div style={{ fontWeight: 600 }}>{lblRolePluri(r.role)}</div>
           <div>{[r.prenom, r.nom].filter(Boolean).join(' ') || '—'}</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-            {[r.tel, r.organisme].filter(Boolean).join(' · ') || 'Pas de numéro'}
+            {[telephonesPluri(r).map(t => t.n).join(' · '), libelleMedecin(r.type_medecin), r.specialite, r.organisme].filter(Boolean).join(' · ') || 'Pas de numéro'}
           </div>
           {r.notes ? <div style={{ fontSize: 12.5, marginTop: 4, whiteSpace: 'pre-wrap' }}>{r.notes}</div> : null}
         </div>

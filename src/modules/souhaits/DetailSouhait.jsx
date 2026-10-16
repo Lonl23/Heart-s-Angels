@@ -262,18 +262,13 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
       {mode === 'edit' && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-          <Flash kind="warn">
-            {programmer
-              ? 'Encodage du dossier — tout s\'enregistre tout seul. Les checklists et le MAR se feront dans Mes souhaits.'
-              : 'Vous voyez tout le dossier pour informer le patient. Vous encodez la partie patient ; les équipages, horaires et ambulances sont saisis par la coordination transport, la présidence ou l’informatique.'}
-          </Flash>
           {encoderPatient && (
             <Card>
               <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Souhait & bénéficiaire</div>
-              <FormSouhait initial={s} inline onDone={()=>{ load(); flash('Souhait enregistré.') }} />
+              <FormSouhait initial={s} inline onPatch={patch => setS(x => ({ ...x, ...patch }))} />
             </Card>
           )}
-          {(encoderPatient || programmer) && <MissionForm souhaitId={id} souhait={s} />}
+          {(encoderPatient || programmer) && <MissionForm souhaitId={id} souhait={s} onSouhait={patch => setS(x => ({ ...x, ...patch }))} />}
         </div>
       )}
 

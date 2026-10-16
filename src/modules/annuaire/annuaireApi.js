@@ -55,6 +55,7 @@ export async function upsertBeneficiaire(f, { created_by } = {}) {
   const ident = identite(f)
   const dataExtra = {
     adresse: adresseOuNull(f.adresse),
+    adresse_residence: adresseOuNull(f.adresse_residence),
     email: f.email || '',
     notes: f.notes || '',
     telephone: ident.telephone || '',
@@ -102,6 +103,7 @@ export async function upsertContactRattache(beneficiaireId, f, { created_by } = 
   const ident = identite(f)
   const dataExtra = {
     adresse: adresseOuNull(f.adresse),
+    adresse_residence: adresseOuNull(f.adresse_residence),
     email: f.email || '',
     lien: ident.lien || '',
     telephone: ident.telephone || '',
@@ -159,7 +161,8 @@ export function ficheVersBeneficiaire(r) {
     tel_fixe: r.tel_fixe || d.tel_fixe || '',
     genre: r.genre || d.genre || '',
     adresse: d.adresse || null,
-    email: d.email || '',
+    adresse_residence: d.adresse_residence || null,
+    email: d.email || r.email || '',
     data: d,
   }
 }
@@ -177,6 +180,7 @@ export function ficheVersContact(r) {
     tel_gsm: r.tel_gsm || d.tel_gsm || '',
     tel_fixe: r.tel_fixe || d.tel_fixe || '',
     adresse: d.adresse || null,
+    adresse_residence: d.adresse_residence || null,
     email: d.email || '',
     telephone: r.telephone || d.telephone || '',
   }

@@ -62,6 +62,7 @@ export const DEPARTEMENTS = [
     modules: [
       { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Photos de fond, partenaires et accès' },
       { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
+      { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
     ],
   },
 ]
@@ -69,7 +70,7 @@ export const DEPARTEMENTS = [
 export function moduleAutorise(key, auth) {
   if (!auth?.can?.('staff')) return false
   if (key === 'fiches') return auth.peutGererFiches()
-  if (key === 'admin' || key === 'organigramme_edition') return auth.peutGererApp()
+  if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits') return auth.peutGererApp()
   if (key === 'organigramme') return true
   if (key === 'tresorerie') return auth.peutGererDefraiements()
   return auth.canAccess(key)

@@ -14,7 +14,7 @@ import {
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'v' + Date.now() + Math.random().toString(16).slice(2))
 const TYPES = ['', 'Ambulance', 'VSL', 'Voiture', 'Autre']
 
-export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
+export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRetenu }) {
   const vecteurs = m.vecteurs || []
   const [equipe, setEquipe] = useState([])
   const [pool, setPool] = useState([])
@@ -41,7 +41,22 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
     })
     setEquipe(eq || [])
     let pers = normaliserPool(rpc.data)
-    if (!pers.length) pers = await poolDepuisProfils(jours, plage.date_souhaitee, plage.date_fin)
+    const depuisFiches = await poolDepuisProfils(jours, plage.date_souhaitee, plage.date_fin)
+    if (!pers.length) pers = depuisFiches
+    else {
+      const parId = new Map(depuisFiches.map(p => [p.user_id, p]))
+      const vus = new Set(pers.map(p => p.user_id))
+      pers = pers.map(p => {
+        const fiche = parId.get(p.user_id)
+        return {
+          ...p,
+          prenom: p.prenom || fiche?.prenom,
+          nom: p.nom || fiche?.nom,
+          quals: normaliserQuals([...(asQuals(p.quals)), ...(fiche?.quals || [])]),
+        }
+      })
+      for (const p of depuisFiches) if (!vus.has(p.user_id)) pers.push(p)
+    }
     const joursByUser = {}
     if (plage.date_souhaitee) {
       const { data: dispos } = await supabase.from('disponibilites')
@@ -64,7 +79,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
       }
       return {
         ...p,
-        quals: asQuals(p.quals),
+        quals: normaliserQuals(asQuals(p.quals)),
         jours_dispo: joursDispo,
         jours_conflit: joursConflit,
         conflitPrecis,
@@ -136,7 +151,38 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
         role_mission: role || null,
       }, { onConflict: 'souhait_id,user_id' })
     if (error) { alert("Impossible d'ajouter cet équipier : " + error.message); return }
+    await retenirJour()
     await charger()
+  }
+  async function retenirJour() {
+    if (!periodeSel?.debut) return
+    const periode = {
+      debut: periodeSel.debut,
+      fin: periodeSel.fin || periodeSel.debut,
+      priorite: periodeSel.priorite || 1,
+      retenue: true,
+    }
+    const mission = {
+      ...m,
+      attente: { ...(m.attente || {}), equipage: false },
+      jour_retenu: periode.debut,
+    }
+    await supabase.from('souhaits').update({
+      date_souhaitee: periode.debut,
+      date_fin: periode.fin,
+      dates_possibles: [periode],
+      mission,
+    }).eq('id', souhaitId)
+    setM(() => mission)
+    onJourRetenu?.(periode, mission)
+  }
+  function ajouterExterne(vid, personne) {
+    const id = uid()
+    setM(o => ({
+      ...o,
+      vecteurs: (o.vecteurs || []).map(v => v.id === vid ? { ...v, externes: [...(v.externes || []), { ...personne, id }] } : v),
+    }))
+    retenirJour()
   }
   async function retirerMembre(id) {
     await supabase.from('souhait_personnel').delete().eq('id', id)
@@ -181,9 +227,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
       )}
       {dates.d0 && alternatives && (
         <div style={{ marginBottom:14 }}>
-          <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:8 }}>
-            Dates possibles — <strong>l’une ou l’autre</strong>, pas les deux. Choisissez le jour où vous bouclez l’équipage.
-          </div>
+          <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:8 }}>Dates possibles</div>
           <div className="ha-date-opts">
             {dates.periodes.map(p => {
               const on = clePeriode(p) === clePeriode(periodeSel)
@@ -229,11 +273,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
       )}
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:10, flexWrap:'wrap' }}>
-        <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
-          {m.demo_cle
-            ? 'Le vecteur (véhicule et rôles) reste dans le dossier pour le parcours terrain. L’affectation de personnes n’est pas nécessaire.'
-            : 'Un vecteur = un véhicule et son équipage. Cochez les qualifications sur chaque véhicule — vous pouvez demander 1 ou 2 ambulanciers. Les personnes affectées voient la mission dans Mes souhaits. Le rôle (infi / ambulancier) se pose tout seul selon le besoin de ce vecteur.'}
-        </div>
+        <div />
         {!lecture && <Btn onClick={ajouterVecteur}>+ Vecteur</Btn>}
       </div>
 
@@ -260,7 +300,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'0 14px' }}>
                 <F label="Nom / identifiant" value={v.nom} set={val=>majVecteur(v.id,{nom:val})} placeholder="Ambulance 1" readOnly={lecture} />
                 <Sel label="Type de transport" value={v.type_transport} set={val=>majVecteur(v.id,{type_transport:val})} options={TYPES.map(t=>({v:t,l:t||'—'}))} disabled={lecture} />
-                <F label="Plaque" value={v.plaque} set={val=>majVecteur(v.id,{plaque:val})} readOnly={lecture} />
+                <ChampPlaque value={v.plaque} set={val=>majVecteur(v.id,{plaque:val})} lecture={lecture} />
               </div>
 
               <CardRoles roles={rolesAffiches} onToggle={role => toggleRoleVecteur(v.id, role)} onCount={(role, n) => setRoleCountVecteur(v.id, role, n)} compact lecture={lecture} />
@@ -270,6 +310,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
                 {!lecture && <AjoutMembre pool={pool} dejaIds={dejaIds} requis={requisEffectifsV} remaining={remaining} rolesDeja={rolesDejaV}
                   phraseManque={phraseManque} onAdd={u => affecter(v.id, u)}
                   periodeSel={periodeSel} alternatives={alternatives} />}
+                {!lecture && <AjoutExterne onAdd={p => ajouterExterne(v.id, p)} />}
                 <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:8 }}>
                   {membres.filter(e => e.user_id && (e.profiles?.prenom || e.profiles?.nom)).map(e => {
                     const info = pool.find(p => p.user_id === e.user_id)
@@ -292,7 +333,13 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false }) {
                       </div>
                     )
                   })}
-                  {membres.filter(e => e.user_id && (e.profiles?.prenom || e.profiles?.nom)).length === 0 && (
+                  {(v.externes || []).map(e => (
+                    <div key={e.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, fontSize:13.5, background:'var(--bg-alt)', borderRadius:8, padding:'6px 10px' }}>
+                      <span>{e.prenom} {e.nom}{e.role ? ` — ${lblRoleMission(e.role)}` : ''}{e.tel ? ` · ${e.tel}` : ''} <span style={{ color:'var(--text-muted)' }}>hors association</span></span>
+                      {!lecture && <button type="button" onClick={() => setM(o => ({ ...o, vecteurs: (o.vecteurs||[]).map(x => x.id===v.id ? { ...x, externes: (x.externes||[]).filter(y => y.id !== e.id) } : x) }))} style={{ background:'none', border:'none', color:'#C8435A', cursor:'pointer' }}>✕</button>}
+                    </div>
+                  ))}
+                  {membres.filter(e => e.user_id && (e.profiles?.prenom || e.profiles?.nom)).length === 0 && !(v.externes || []).length && (
                     phraseManque
                       ? <div style={{ fontSize:12.5, color:'#C62828' }}>{phraseManque}</div>
                       : <div style={{ fontSize:12.5, color:'var(--text-faint)' }}>Aucun équipier.</div>
@@ -350,7 +397,7 @@ function nomsDispoPeriode(pool, periode, requis) {
   const need = rolesRequisEffectifs(requis)
   const out = []
   for (const p of pool || []) {
-    if (statutSur(p, periode) !== 'plein') continue
+    if (!disponibleCeJour(p, periode)) continue
     if (need.length && !(p.quals || []).some(q => need.includes(q))) continue
     const role = roleSuggere(p.quals || [], need, [])
     const tag = conflitSur(p, periode) ? ' (autre mission)' : ''
@@ -460,35 +507,56 @@ async function poolDepuisProfils(jours, d0, d1) {
   }))
 }
 
-function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque, onAdd, periodeSel, alternatives }) {
+const RANG_QUAL = ['medecin', 'infirmier', 'ambulancier', 'chauffeur', 'secouriste', 'volontaire_non_medical']
+
+function rangQual(p) {
+  const qs = p.quals || []
+  const i = RANG_QUAL.findIndex(r => qs.includes(r))
+  return i < 0 ? RANG_QUAL.length : i
+}
+
+function triPrenom(a, b) {
+  return String(a.prenom || '').localeCompare(String(b.prenom || ''), 'fr', { sensitivity: 'base' })
+    || String(a.nom || '').localeCompare(String(b.nom || ''), 'fr', { sensitivity: 'base' })
+}
+
+function disponibleCeJour(p, periode) {
+  if (!p) return false
+  if (statutSur(p, periode) === 'plein' || statutSur(p, periode) === 'partiel') return true
+  if (periode?.debut && (p.jours_dispo || []).includes(String(periode.debut).slice(0, 10))) return true
+  return false
+}
+
+function normaliserQuals(list) {
+  const out = new Set()
+  for (const raw of list || []) {
+    const s = String(raw || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    if (!s) continue
+    if (s.includes('ambulanc')) out.add('ambulancier')
+    else if (s.includes('infirm')) out.add('infirmier')
+    else if (s.includes('medecin') || s === 'docteur') out.add('medecin')
+    else if (s.includes('chauffeur')) out.add('chauffeur')
+    else if (s.includes('secour')) out.add('secouriste')
+    else out.add(String(raw))
+  }
+  return [...out]
+}
+
+function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque, onAdd, periodeSel }) {
   const [u, setU] = useState('')
-  const needAll = rolesRequisEffectifs(requis)
-  const needNow = (remaining && remaining.length) ? remaining : needAll
-  const matchNeed = p => (p.quals || []).some(q => needAll.includes(q))
-  const candidats = pool.filter(p => !dejaIds.has(p.user_id) && matchNeed(p))
-  const autres = pool.filter(p => !dejaIds.has(p.user_id) && !matchNeed(p))
-  const st = p => statutSur(p, periodeSel)
-  const conf = p => conflitSur(p, periodeSel)
-  const libellePlein = alternatives && periodeSel
-    ? `Disponibles le ${fmtPeriode(periodeSel)}`
-    : 'Disponibles sur toute la période'
-  const groupes = [
-    { k:'plein', l: libellePlein, items: candidats.filter(p => st(p) === 'plein' && !conf(p)) },
-    { k:'autre-jour', l:'Disponibles un autre jour', items: alternatives ? candidats.filter(p => st(p) !== 'plein' && p.dispo === 'plein' && !conf(p)) : [] },
-    { k:'partiel', l:'Disponibilité partielle', items: candidats.filter(p => st(p) === 'partiel' && !conf(p)) },
-    { k:'conflit', l: alternatives && periodeSel ? `Déjà sur une autre mission le ${fmtPeriode(periodeSel)}` : 'Déjà sur une autre mission', items: candidats.filter(p => conf(p)) },
-    { k:'non', l:'Pas de disponibilité indiquée', items: candidats.filter(p => st(p) === 'non' && !conf(p) && p.dispo !== 'plein') },
-    { k:'inconnu', l:'Autres volontaires', items: candidats.filter(p => st(p) === 'inconnu' && !conf(p)) },
-  ]
-  const places = new Set(groupes.flatMap(g => g.items.map(p => p.user_id)))
-  const rest = candidats.filter(p => !places.has(p.user_id))
-  if (rest.length) groupes.push({ k:'autre', l:'Autres volontaires', items: rest })
-  if (autres.length) groupes.push({ k:'hors-qual', l:'Autres (qualification différente)', items: autres })
-  const groupesVisibles = groupes.filter(g => g.items.length > 0)
-  const rapides = (groupes.find(g => g.k === 'plein')?.items || []).filter(p => {
-    const q = p.quals || []
-    return needNow.some(r => q.includes(r))
-  })
+  const needNow = (remaining && remaining.length) ? remaining : rolesRequisEffectifs(requis)
+  const tous = pool.filter(p => !dejaIds.has(p.user_id))
+  const groupes = RANG_QUAL.map((q, i) => ({
+    k: q,
+    l: lblRoleMission(q),
+    items: tous.filter(p => rangQual(p) === i).sort(triPrenom),
+  })).filter(g => g.items.length)
+  const reste = tous.filter(p => rangQual(p) === RANG_QUAL.length).sort(triPrenom)
+  if (reste.length) groupes.push({ k: 'autre', l: 'Autres', items: reste })
+  const groupesVisibles = groupes
+  const rapides = tous
+    .filter(p => disponibleCeJour(p, periodeSel) && (p.quals || []).some(q => needNow.includes(q)) && !conflitSur(p, periodeSel))
+    .sort((a, b) => rangQual(a) - rangQual(b) || triPrenom(a, b))
 
   return (
     <div>
@@ -517,7 +585,7 @@ function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque
               <optgroup key={g.k} label={g.l}>
                 {g.items.map(p => (
                   <option key={p.user_id} value={p.user_id}>
-                    {p.prenom} {p.nom}{(p.quals||[]).length ? ` · ${(p.quals).map(lblRoleMission).join(', ')}` : ''}
+                    {p.prenom} {p.nom}{disponibleCeJour(p, periodeSel) ? '' : ' · indisponible'}
                   </option>
                 ))}
               </optgroup>
@@ -526,6 +594,51 @@ function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque
         </div>
         <Btn kind="soft" onClick={()=>{ if (u) { onAdd(u); setU('') } }}>+ Ajouter</Btn>
       </div>
+    </div>
+  )
+}
+
+function ChampPlaque({ value, set, lecture }) {
+  const [plaques, setPlaques] = useState([])
+  useEffect(() => {
+    supabase.from('plaques_vehicules').select('plaque,libelle').eq('actif', true).order('plaque')
+      .then(({ data }) => setPlaques(data || []))
+  }, [])
+  const connue = plaques.some(p => p.plaque === value)
+  return (
+    <div>
+      <Sel
+        label="Plaque"
+        value={connue ? value : (value ? '__nouvelle__' : '')}
+        set={v => {
+          if (v === '__nouvelle__') { if (connue) set(''); return }
+          set(v)
+        }}
+        disabled={lecture}
+        options={[
+          { v: '', l: '—' },
+          ...plaques.map(p => ({ v: p.plaque, l: p.libelle ? `${p.plaque} · ${p.libelle}` : p.plaque })),
+          { v: '__nouvelle__', l: 'Nouvelle plaque' },
+        ]}
+      />
+      {(!value || !connue) && (
+        <F label="Plaque" value={value || ''} set={set} readOnly={lecture} />
+      )}
+    </div>
+  )
+}
+
+function AjoutExterne({ onAdd }) {
+  const [ouvert, setOuvert] = useState(false)
+  const [g, setG] = useState({ prenom: '', nom: '', role: 'ambulancier', tel: '' })
+  if (!ouvert) return <Btn kind="soft" onClick={() => setOuvert(true)} style={{ marginTop: 8 }}>Personne hors association</Btn>
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8, marginTop: 8 }}>
+      <F label="Prénom" value={g.prenom} set={v => setG(s => ({ ...s, prenom: v }))} />
+      <F label="Nom" value={g.nom} set={v => setG(s => ({ ...s, nom: v }))} />
+      <Sel label="Rôle" value={g.role} set={v => setG(s => ({ ...s, role: v }))} options={ROLES_MISSION.map(r => ({ v: r.v, l: r.l }))} />
+      <F label="Téléphone" value={g.tel} set={v => setG(s => ({ ...s, tel: v }))} />
+      <Btn onClick={() => { if (g.prenom || g.nom) { onAdd(g); setG({ prenom: '', nom: '', role: 'ambulancier', tel: '' }); setOuvert(false) } }} style={{ alignSelf: 'end', marginBottom: 10 }}>Ajouter</Btn>
     </div>
   )
 }
@@ -541,12 +654,7 @@ function CardRoles({ roles, onToggle, onCount, compact, lecture }) {
       marginTop: compact ? 12 : 0,
       marginBottom: compact ? 0 : 16,
     }}>
-      <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:6, fontSize: compact ? 13 : undefined }}>Équipage requis</div>
-      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
-        {compact
-          ? 'Cochez les qualifications de ce véhicule. Pour les ambulanciers, choisissez 1 ou 2. Rien de coché = un ambulancier et un infirmier. Un infi+ambu n’occupe qu’un côté (celui où il manque le plus de monde).'
-          : 'Cochez les qualifications nécessaires. Pour les ambulanciers, choisissez 1 ou 2. Rien de coché = un ambulancier et un infirmier. Si seul chauffeur est coché, on ne rajoute pas le défaut. Un infi+ambu n’occupe qu’un côté (celui où il manque le plus de monde).'}
-      </div>
+      <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:10, fontSize: compact ? 13 : undefined }}>Équipage requis</div>
       <div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center' }}>
         {ROLES_MISSION.map(o => {
           if (o.v === 'ambulancier') {
@@ -576,16 +684,6 @@ function CardRoles({ roles, onToggle, onCount, compact, lecture }) {
           )
         })}
       </div>
-      {roles.length === 0 && (
-        <div style={{ fontSize:12.5, color:'var(--text-2)', marginTop:10 }}>
-          Rien n’est coché : l’équipage par défaut est un ambulancier et un infirmier.
-        </div>
-      )}
-      {nAmbu === 2 && (
-        <div style={{ fontSize:12.5, color:'var(--text-2)', marginTop:10 }}>
-          Deux ambulanciers demandés{roles.includes('infirmier') ? ' (plus un infirmier).' : '.'}
-        </div>
-      )}
     </div>
   )
 }

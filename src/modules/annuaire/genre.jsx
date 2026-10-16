@@ -87,7 +87,6 @@ export function NissF({ label = 'Numéro national', value, set }) {
         onBlur={() => { const f = formaterNiss(v); setV(f); set(f) }}
         style={inp}
       />
-      <div style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 3 }}>Confidentiel — personnel Heart’s Angels uniquement.</div>
     </div>
   )
 }

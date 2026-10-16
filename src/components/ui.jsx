@@ -219,6 +219,43 @@ export function urlWaze(a) {
   return `https://waze.com/ul?q=${encodeURIComponent(q)}&navigate=yes`
 }
 
+export function urlItineraireMaps(etapes) {
+  const pts = (etapes || []).map(texteGps).filter(Boolean)
+  if (pts.length < 2) return ''
+  const origin = encodeURIComponent(pts[0])
+  const destination = encodeURIComponent(pts[pts.length - 1])
+  const mid = pts.slice(1, -1).map(encodeURIComponent).join('|')
+  const waypoints = mid ? `&waypoints=${mid}` : ''
+  return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving${waypoints}`
+}
+
+export const URL_WAZE_TRAFIC = 'https://www.waze.com/fr/live-map'
+
+export function LiensTrajet({ etapes }) {
+  const pts = (etapes || []).map(e => ({ label: e.label, q: texteGps(e.adresse || e.texte) })).filter(e => e.q)
+  if (pts.length < 2) return null
+  const maps = urlItineraireMaps(pts.map(p => p.q))
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '8px 0 12px' }}>
+      {pts.slice(0, -1).map((p, i) => {
+        const dest = pts[i + 1]
+        const leg = urlItineraireMaps([p.q, dest.q])
+        return (
+          <div key={`${p.label}-${dest.label}-${i}`} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, color: 'var(--text)' }}>{p.label} → {dest.label}</span>
+            {leg && <a className="ha-gps-btn" href={leg} target="_blank" rel="noopener noreferrer">Google Maps</a>}
+            <a className="ha-gps-btn is-waze" href={urlWaze(dest.q)} target="_blank" rel="noopener noreferrer">Waze</a>
+          </div>
+        )
+      })}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {maps && <a className="ha-gps-btn" href={maps} target="_blank" rel="noopener noreferrer">Itinéraire complet</a>}
+        <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
+      </div>
+    </div>
+  )
+}
+
 export function LiensGps({ adresse, texte, onClick }) {
   const q = texte || texteGps(adresse)
   if (!q) return null

@@ -11,6 +11,7 @@ export const CATEGORIES = [
     { k:'tel_fixe', l:'Fixe', t:'phone' },
     { k:'email', l:'E-mail', t:'text' },
     { k:'adresse', l:'Adresse légale', t:'address' },
+    { k:'adresse_residence', l:'Adresse de résidence', t:'address' },
     { k:'notes', l:'Notes', t:'textarea' },
   ]},
   { v:'medical', l:'Contacts médicaux', icon:'⚕️', titre:'Contact médical', fields:[
@@ -70,13 +71,14 @@ export const ACCOMPAGNANT_FIELDS = [
   { k:'niss', l:'Numéro national', t:'niss' },
   { k:'tel_gsm', l:'GSM', t:'phone' },
   { k:'tel_fixe', l:'Fixe', t:'phone' },
+  { k:'email', l:'E-mail', t:'text' },
   { k:'adresse', l:'Adresse légale', t:'address' },
+  { k:'adresse_residence', l:'Adresse de résidence', t:'address' },
 ]
 
 export const GENRES = [
   { v:'femme', l:'Femme', color:'#E6007E', bg:'#FDE8F3' },
   { v:'homme', l:'Homme', color:'#185FA5', bg:'#E6F1FB' },
-  { v:'autre',  l:'Autre',  color:'#6B4E9B', bg:'#F0EAF8' },
 ]
 
 export const catInfo = v => CATEGORIES.find(c => c.v === v)

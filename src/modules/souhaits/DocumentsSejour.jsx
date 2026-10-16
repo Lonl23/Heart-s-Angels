@@ -69,9 +69,6 @@ export default function DocumentsSejour({ souhaitId, m, setM, lecture = false })
 
   return (
     <div>
-      <Flash>
-        Réservations d’hôtel, de parking, restaurant… Joignez les documents ici. Sur un séjour de plusieurs jours, l’équipage choisit ensuite le prochain transport (hôtel, destination, restaurant, retour patient) une fois sur place.
-      </Flash>
       {err && <Flash kind="err">{err}</Flash>}
       {!lecture && (
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', margin:'12px 0 16px' }}>

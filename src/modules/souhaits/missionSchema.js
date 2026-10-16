@@ -488,11 +488,21 @@ export const lblVoieDetresse = v => VOIES_DETRESSE.find(x => x.v === v)?.l || v 
 
 export function protocoleDetresse(mission) {
   const raw = mission?.protocole_detresse
-  if (Array.isArray(raw)) return { lignes: raw, notes: '' }
+  if (Array.isArray(raw)) return { lignes: raw, notes: '', document: null }
   if (raw && typeof raw === 'object') {
-    return { lignes: Array.isArray(raw.lignes) ? raw.lignes : [], notes: raw.notes || '' }
+    return {
+      lignes: Array.isArray(raw.lignes) ? raw.lignes : [],
+      notes: raw.notes || '',
+      document: raw.document || null,
+    }
   }
-  return { lignes: [], notes: '' }
+  return { lignes: [], notes: '', document: null }
+}
+
+export function dosesLigne(r) {
+  if (Array.isArray(r?.doses) && r.doses.length) return r.doses
+  if (r?.dosage) return [{ ordre: 1, dosage: r.dosage }]
+  return [{ ordre: 1, dosage: '' }]
 }
 
 export function injectionsDetresse(mission) {
@@ -543,8 +553,23 @@ export function personnePluriRemplie(r) {
   return !!(nomPluri(r) || (r.tel || '').trim() || (r.organisme || '').trim() || r.annuaire_id)
 }
 
-/** Premier médecin avec un n° (sinon le premier médecin nommé). */
+export function telephonesPluri(r) {
+  if (!r) return []
+  return [
+    { n: r.tel, p: Number(r.tel_priorite) || 1 },
+    { n: r.tel2, p: Number(r.tel2_priorite) || 2 },
+    { n: r.tel3, p: Number(r.tel3_priorite) || 3 },
+  ].filter(x => String(x.n || '').trim()).sort((a, b) => a.p - b.p)
+}
+
+export function telPluri(r) {
+  return telephonesPluri(r)[0]?.n || ''
+}
+
+/** Médecin de garde en priorité, sinon le premier médecin joignable. */
 export function medecinPluri(mission) {
   const rows = equipePluri(mission).filter(r => r.role === 'medecin' && personnePluriRemplie(r))
-  return rows.find(r => (r.tel || '').trim()) || rows[0] || null
+  const garde = rows.find(r => r.type_medecin === 'garde' && telPluri(r))
+  if (garde) return garde
+  return rows.find(r => telPluri(r)) || rows[0] || null
 }

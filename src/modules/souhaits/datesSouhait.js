@@ -27,6 +27,8 @@ export function periodesDepuisSouhait(s) {
   const fromJson = raw.map(p => ({
     debut: slice(p?.debut || p?.date_debut),
     fin: slice(p?.fin || p?.date_fin || p?.debut || p?.date_debut),
+    priorite: Number(p?.priorite) || null,
+    retenue: !!p?.retenue,
   })).filter(p => p.debut)
   if (fromJson.length) return fromJson
   if (s?.date_souhaitee) {
@@ -43,7 +45,8 @@ export function normaliserPeriodes(periodes) {
       if (!debut) return null
       let fin = slice(p?.fin) || debut
       if (fin < debut) fin = debut
-      return { debut, fin }
+      const priorite = Number(p?.priorite) || null
+      return { debut, fin, ...(priorite ? { priorite } : {}), ...(p?.retenue ? { retenue: true } : {}) }
     })
     .filter(Boolean)
     .sort((a, b) => a.debut.localeCompare(b.debut) || a.fin.localeCompare(b.fin))
