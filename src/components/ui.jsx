@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import config from '@/app.config'
+import { mesurerEtapes, fmtMesure, totalMesures } from '@/lib/itineraire'
 // Briques d'interface partagées (thème + mobile)
 export const inp = { width:'100%', padding:'9px 12px', border:'1px solid var(--border)', borderRadius:9, fontSize:13.5, background:'var(--surface)', color:'var(--text)', boxSizing:'border-box', fontFamily:'inherit' }
 export const lbl = { fontSize:12.5, color:'var(--text-muted)', display:'block', marginBottom:5 }
@@ -233,21 +234,49 @@ export const URL_WAZE_TRAFIC = 'https://www.waze.com/fr/live-map'
 
 export function LiensTrajet({ etapes }) {
   const pts = (etapes || []).map(e => ({ label: e.label, q: texteGps(e.adresse || e.texte) })).filter(e => e.q)
+  const cle = pts.map(p => p.q).join('\n')
+  const [legs, setLegs] = useState(null)
+  const [attente, setAttente] = useState(false)
+  useEffect(() => {
+    const textes = cle.split('\n').filter(Boolean)
+    if (textes.length < 2) return undefined
+    let stop = false
+    setLegs(null)
+    setAttente(false)
+    const t = setTimeout(() => {
+      if (!stop) setAttente(true)
+      mesurerEtapes(textes).then(rows => {
+        if (!stop) { setLegs(rows); setAttente(false) }
+      }).catch(() => { if (!stop) setAttente(false) })
+    }, 600)
+    return () => { stop = true; clearTimeout(t) }
+  }, [cle])
   if (pts.length < 2) return null
   const maps = urlItineraireMaps(pts.map(p => p.q))
+  const total = Array.isArray(legs) ? totalMesures(legs) : null
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '8px 0 12px' }}>
       {pts.slice(0, -1).map((p, i) => {
         const dest = pts[i + 1]
         const leg = urlItineraireMaps([p.q, dest.q])
+        const mesure = Array.isArray(legs) ? fmtMesure(legs[i]) : ''
         return (
           <div key={`${p.label}-${dest.label}-${i}`} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ fontSize: 13, color: 'var(--text)' }}>{p.label} → {dest.label}</span>
+            {mesure && (
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>
+                {mesure}{pts.length === 2 ? ' · conditions normales' : ''}
+              </span>
+            )}
+            {attente && !mesure && <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>…</span>}
             {leg && <a className="ha-gps-btn" href={leg} target="_blank" rel="noopener noreferrer">Google Maps</a>}
             <a className="ha-gps-btn is-waze" href={urlWaze(dest.q)} target="_blank" rel="noopener noreferrer">Waze</a>
           </div>
         )
       })}
+      {total && pts.length > 2 && (
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>Total {fmtMesure(total)} · conditions normales</div>
+      )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {maps && <a className="ha-gps-btn" href={maps} target="_blank" rel="noopener noreferrer">Itinéraire complet</a>}
         <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
