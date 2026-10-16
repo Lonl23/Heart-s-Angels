@@ -100,7 +100,7 @@ export default function FicheVolontaire({ userId, onBack }) {
     }
     rolesAvantNon.current = rolesAsblSpecifiques(f.roles_asbl)
     setRoleParticulier(false)
-    set('roles_asbl', ['simple_volontaire'])
+    set('roles_asbl', [])
     setEquipeOuverte(null)
   }
   function toggleRangAsbl(role) {
@@ -119,7 +119,7 @@ export default function FicheVolontaire({ userId, onBack }) {
     if (gestionRoles) {
       rolesAsbl = rolesAsblPourEnregistrement(roleParticulier, f.roles_asbl)
       if (roleParticulier && !rolesAsbl.length) {
-        setMsg({ t:'Choisissez un rang (responsable ou adjoint) dans une équipe, ou passez le curseur sur Non.', ok:false })
+        setMsg({ t:'Choisissez un rôle dans une équipe, ou passez le curseur sur Non.', ok:false })
         return
       }
     }
@@ -285,7 +285,7 @@ export default function FicheVolontaire({ userId, onBack }) {
         <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
           <Sec>Notifications reçues</Sec>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
-            Président et responsable informatique : vous recevez toutes les alertes. Décochez celles que vous ne voulez plus.
+            Président et coordinateur informatique : vous recevez toutes les alertes. Décochez celles que vous ne voulez plus.
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {TYPES_NOTIF.map(t => (
@@ -373,7 +373,7 @@ function EditeurRolesAsbl({ particulier, onParticulier, roles, onToggleRang, equ
     <>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, marginBottom: particulier ? 14 : 0, flexWrap:'wrap' }}>
         <div style={{ fontSize:13.5, color:'var(--text)', flex:1, minWidth:180 }}>
-          Est-ce que le volontaire a un rôle particulier dans l’ASBL ?
+          Est-ce que le volontaire a un rôle dans l’ASBL ?
         </div>
         <CurseurOuiNon on={particulier} onChange={onParticulier} />
       </div>

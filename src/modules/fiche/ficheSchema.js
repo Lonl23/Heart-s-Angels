@@ -307,7 +307,6 @@ export function libelleQualsImplicites(role, fiche) {
 }
 
 export const ROLES_ASBL = [
-  { v:'simple_volontaire',            l:'Simple volontaire' },
   { v:'president',                    l:'Président' },
   { v:'vice_president',               l:'Vice-président' },
   { v:'tresorier',                    l:'Trésorier' },
@@ -324,8 +323,8 @@ export const ROLES_ASBL = [
   { v:'coord_benevoles_adjoint',     l:'Adjoint coordinateur bénévoles' },
   { v:'relations_publiques',         l:'Relations publiques' },
   { v:'relations_publiques_adjoint', l:'Adjoint relations publiques' },
-  { v:'resp_informatique',           l:'Responsable informatique' },
-  { v:'resp_informatique_adjoint',   l:'Adjoint informatique' },
+  { v:'resp_informatique',           l:'Coordinateur informatique' },
+  { v:'resp_informatique_adjoint',   l:'Coordinateur informatique adjoint' },
   { v:'administrateur_asbl',         l:"Administrateur de l'ASBL" },
 ]
 
@@ -335,6 +334,7 @@ const ALIAS_ROLE_ASBL = { coordinateur_medical: 'coord_medical' }
 const RANG_PAR_ROLE = {
   president: 'Président',
   vice_president: 'Vice-président',
+  resp_informatique: 'Coordinateur',
 }
 
 /**
@@ -433,9 +433,9 @@ export function libellesRolesAsblPropres(roles) {
   return rolesAsblSpecifiques(roles).map(libelleRoleAsblPropre)
 }
 
-/** Enregistrement : Non → simple_volontaire ; Oui → sièges choisis (jamais un rôle d’équipe sans rang). */
+/** Enregistrement : Non → volontaire, sans rôle ASBL ; Oui → sièges choisis. */
 export function rolesAsblPourEnregistrement(particulier, roles) {
-  if (!particulier) return ['simple_volontaire']
+  if (!particulier) return []
   return rolesAsblSpecifiques(roles)
 }
 

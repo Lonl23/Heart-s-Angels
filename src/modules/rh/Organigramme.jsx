@@ -15,7 +15,7 @@ export default function Organigramme() {
   useEffect(() => {
     Promise.all([
       supabase.from('profiles').select('id,prenom,nom,email,telephone,fiche,actif').neq('role', 'partenaire').eq('actif', true),
-      supabase.from('organigramme').select('profile_id,n1_id,ordre'),
+      supabase.from('organigramme').select('profile_id,n1_id,ordre,n1_volontaires'),
     ]).then(([profils, places]) => {
       if (profils.error) setErr(profils.error.message)
       else if (places.error) setErr(places.error.message)
@@ -31,7 +31,7 @@ export default function Organigramme() {
   return (
     <Page
       title="Organigramme"
-      subtitle="La personne juste au-dessus est le N+1, celle encore au-dessus le N+2. Le téléphone et l’e-mail servent à la joindre."
+      subtitle="Le volontaire est le N. La personne juste au-dessus de lui est le N+1, celle encore au-dessus le N+2. Le téléphone et l’e-mail servent à les joindre."
     >
       {err && <div style={{ color: '#A32D2D', fontSize: 13, marginBottom: 10 }}>{err}</div>}
       {arbre.length === 0 ? (

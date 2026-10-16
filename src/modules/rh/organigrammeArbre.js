@@ -33,6 +33,8 @@ const LIBELLES = {
   coord_benevoles_adjoint: 'Adjoint coordinateur des bénévoles',
   tresorier_adjoint: 'Adjoint comptabilité',
   recolteur_souhait: 'Récolteur de souhaits',
+  resp_informatique: 'Coordinateur informatique',
+  resp_informatique_adjoint: 'Coordinateur informatique adjoint',
 }
 
 export function rolesDe(personne) {
@@ -77,8 +79,9 @@ function comparer(a, b) {
 
 /**
  * Arbre composé dans IT. liens = { profile_id, n1_id, ordre }.
- * Une personne sans rôle, ou absente des liens, n’est pas dessinée.
- * Le N+1 est n1_id ; le N+2 est le N+1 de cette personne.
+ * Une personne sans rôle ASBL n’est pas dessinée : c’est un volontaire, le N.
+ * Le niveau se compte depuis lui : la personne juste au-dessus est N+1,
+ * celle encore au-dessus est N+2.
  */
 export function arbrePlace(personnes, liens) {
   const vues = (personnes || []).map(vuePersonne).filter(v => v.aUnRole && v.actif)
@@ -90,6 +93,7 @@ export function arbrePlace(personnes, liens) {
       profile_id: l.profile_id,
       n1_id: l.n1_id || null,
       ordre: Number(l.ordre) || 0,
+      n1Volontaires: !!l.n1_volontaires,
     })
   }
   for (const l of places.values()) {
@@ -107,10 +111,26 @@ export function arbrePlace(personnes, liens) {
     const suivant = new Set(vus)
     suivant.add(lien.profile_id)
     const enfants = enfantsDe(lien.profile_id).map(e => noeud(e, suivant)).filter(Boolean)
-    return { key: lien.profile_id, gens: [parId.get(lien.profile_id)], enfants }
+    const personne = { ...parId.get(lien.profile_id), n1Volontaires: lien.n1Volontaires }
+    return { key: lien.profile_id, gens: [personne], enfants }
   }
 
-  return enfantsDe(null).map(l => noeud(l, new Set())).filter(Boolean)
+  return annoterDepuisVolontaire(enfantsDe(null).map(l => noeud(l, new Set())).filter(Boolean))
+}
+
+/**
+ * Le volontaire est le N. Les personnes cochées « N+1 des volontaires » sont
+ * le cran juste au-dessus de lui. Chaque personne au-dessus d’elles monte d’un cran.
+ */
+function annoterDepuisVolontaire(noeuds) {
+  function walk(n) {
+    const enfants = n.enfants.map(walk)
+    const p = n.gens[0]
+    const sous = enfants.map(e => e.gens[0].niveau).filter(v => v > 0)
+    const niveau = p.n1Volontaires ? 1 : (sous.length ? Math.max(...sous) + 1 : 0)
+    return { ...n, enfants, gens: [{ ...p, niveau }] }
+  }
+  return noeuds.map(walk)
 }
 
 /** Liste plate, dans l’ordre de l’arbre, pour l’écran IT. */

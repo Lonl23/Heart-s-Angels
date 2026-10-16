@@ -16,7 +16,7 @@ export default function OrganigrammeEdition() {
   async function charger() {
     const [gens, places] = await Promise.all([
       supabase.from('profiles').select('id,prenom,nom,email,telephone,fiche,actif,role').neq('role', 'partenaire').order('nom'),
-      supabase.from('organigramme').select('profile_id,n1_id,ordre'),
+      supabase.from('organigramme').select('profile_id,n1_id,ordre,n1_volontaires'),
     ])
     if (gens.error) setErr(gens.error.message)
     else if (places.error) setErr(places.error.message)
@@ -100,6 +100,13 @@ export default function OrganigrammeEdition() {
     })
   }
 
+  function basculerRelais(id, on) {
+    return agir(id, async () => {
+      const { error } = await supabase.from('organigramme').update({ n1_volontaires: on }).eq('profile_id', id)
+      if (error) throw error
+    })
+  }
+
   function retirer(id, nom) {
     if (!window.confirm(`Retirer ${nom} de l’organigramme ? Les personnes en dessous remontent d’un niveau.`)) return
     return agir(id, async () => {
@@ -113,13 +120,13 @@ export default function OrganigrammeEdition() {
   return (
     <Page
       title="Organigramme"
-      subtitle="Les rôles viennent des fiches. Vous choisissez qui figure ici et qui est son N+1. Le N+2 est la personne au-dessus de ce N+1."
+      subtitle="Le volontaire est le N et n’apparaît pas. Vous placez son N+1, puis le N+2 au-dessus. Les rôles viennent des fiches."
     >
       {err && <div className="ha-flash ha-flash-err">{err}</div>}
 
       <Card style={{ marginBottom: 16 }}>
         <h2 style={titre}>Personnes avec un rôle</h2>
-        <p style={aide}>Un simple volontaire, ou une fiche sans rôle, ne peut pas être placé.</p>
+        <p style={aide}>Un volontaire sans rôle dans l’ASBL n’est pas placé : c’est le N.</p>
         <input
           className="ha-search"
           placeholder="Nom ou rôle"
@@ -140,7 +147,7 @@ export default function OrganigrammeEdition() {
                     <div className="ha-org-edit-roles">{vue.labels.join(' · ')}</div>
                   </div>
                   <label className="ha-org-edit-n1">
-                    N+1
+                    Au-dessus
                     <select value={sous[p.id] || ''} disabled={!!busy} onChange={e => setSous(s => ({ ...s, [p.id]: e.target.value }))}>
                       <option value="">En haut de l’arbre</option>
                       {lignes.map(l => <option key={l.personne.id} value={l.personne.id}>{nomPersonne(l.personne)}</option>)}
@@ -156,9 +163,9 @@ export default function OrganigrammeEdition() {
 
       <Card style={{ marginBottom: 16 }}>
         <h2 style={titre}>Qui est au-dessus de qui</h2>
-        <p style={aide}>Le N+1 est la personne juste au-dessus. Le N+2 suit automatiquement. À gauche et à droite changent l’ordre sur la même ligne.</p>
+        <p style={aide}>Cochez les N+1 des volontaires. La personne au-dessus d’eux devient le N+2. À gauche et à droite changent l’ordre sur la même ligne.</p>
         {lignes.length === 0 ? (
-          <Empty title="Personne sur l’organigramme" hint="Placez d’abord quelqu’un, puis indiquez son N+1." />
+          <Empty title="Personne sur l’organigramme" hint="Placez d’abord la personne du haut, puis celles qui sont en dessous." />
         ) : (
           <div>
             {lignes.map(ligne => {
@@ -169,7 +176,6 @@ export default function OrganigrammeEdition() {
               const options = lignes
                 .filter(l => !exclus.has(l.personne.id))
                 .map(l => ({ v: l.personne.id, l: nomPersonne(l.personne) }))
-              const n2 = ligne.chaine[1] || ''
               const n1Actuel = lien?.n1_id || ''
               const n1Connu = !n1Actuel || options.some(o => o.v === n1Actuel)
               return (
@@ -177,10 +183,23 @@ export default function OrganigrammeEdition() {
                   <div>
                     <strong>{nomPersonne(ligne.personne)}</strong>
                     <div className="ha-org-edit-roles">{ligne.personne.labels.join(' · ')}</div>
-                    <div className="ha-org-edit-n2">{n2 ? `N+2 · ${n2}` : 'N+2 · —'}</div>
+                    <div className="ha-org-edit-n2">
+                      {ligne.personne.niveau > 0
+                        ? `Pour les volontaires : N+${ligne.personne.niveau}`
+                        : 'Pas dans la chaîne des volontaires'}
+                    </div>
+                    <label className="ha-org-edit-n2">
+                      <input
+                        type="checkbox"
+                        checked={!!lien?.n1_volontaires}
+                        disabled={!!busy}
+                        onChange={e => basculerRelais(id, e.target.checked)}
+                      />
+                      {' '}N+1 des volontaires
+                    </label>
                   </div>
                   <label className="ha-org-edit-n1">
-                    N+1
+                    Au-dessus
                     <select
                       value={n1Actuel}
                       disabled={!!busy}

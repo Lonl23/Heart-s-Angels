@@ -19,5 +19,4 @@ export const EQUIPES_ACCES = [
   { v:'rp',            l:'Équipe relations publiques', roles:['relations_publiques','relations_publiques_adjoint'] },
   { v:'informatique',  l:'Équipe informatique',        roles:['resp_informatique','resp_informatique_adjoint'] },
   { v:'admin_asbl',    l:"Administrateur de l'ASBL",   roles:['administrateur_asbl'] },
-  { v:'volontaire',    l:'Simple volontaire',          roles:['simple_volontaire'] },
 ]
