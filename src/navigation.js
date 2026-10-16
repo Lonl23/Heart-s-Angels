@@ -13,7 +13,7 @@ export const DEPARTEMENTS = [
       { key: 'fiches', to: '/app/volontaires', label: 'Fiches volontaires', icon: '🗂️', desc: 'Invitations, membres et fiches' },
       { key: 'defraiements', to: '/app/defraiements', label: 'Défraiements', icon: '🧾', desc: 'Note de frais : forfait et km' },
       { key: 'annuaire', to: '/app/annuaire', label: 'Annuaire', icon: '📇', desc: 'Bénéficiaires, contacts rattachés, institutions' },
-      { key: 'organigramme', to: '/app/rh/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Rôles et responsabilités dans l’ASBL' },
+      { key: 'organigramme', to: '/app/rh/organigramme', label: 'Organigramme', icon: '🌳', desc: 'N+1, téléphone et e-mail des responsables' },
       { key: 'evenements', to: '/app/evenements', label: 'Événements internes', icon: '📣', desc: 'Vignettes ASBL : page d’inscription dans l’app' },
     ],
   },
@@ -61,6 +61,7 @@ export const DEPARTEMENTS = [
     to: '/app/departement/it',
     modules: [
       { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Photos de fond, partenaires et accès' },
+      { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
     ],
   },
 ]
@@ -68,7 +69,7 @@ export const DEPARTEMENTS = [
 export function moduleAutorise(key, auth) {
   if (!auth?.can?.('staff')) return false
   if (key === 'fiches') return auth.peutGererFiches()
-  if (key === 'admin') return auth.peutGererApp()
+  if (key === 'admin' || key === 'organigramme_edition') return auth.peutGererApp()
   if (key === 'organigramme') return true
   if (key === 'tresorerie') return auth.peutGererDefraiements()
   return auth.canAccess(key)

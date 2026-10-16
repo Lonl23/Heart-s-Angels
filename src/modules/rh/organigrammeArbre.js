@@ -1,40 +1,5 @@
 import { canonRoleAsbl, lblRoleAsbl } from '@/modules/fiche/ficheSchema'
 
-/** Siège retenu pour placer la personne une seule fois. Le premier gagne. */
-const PRIORITE = [
-  'president',
-  'vice_president',
-  'resp_logistique',
-  'coord_transport',
-  'coord_medical',
-  'resp_informatique',
-  'coord_medical_adjoint',
-  'resp_logistique_adjoint',
-  'coord_transport_adjoint',
-  'coord_benevoles',
-  'tresorier',
-  'relations_publiques',
-  'recolteur_souhait',
-  'administrateur_asbl',
-  'coord_benevoles_adjoint',
-  'tresorier_adjoint',
-  'relations_publiques_adjoint',
-  'resp_informatique_adjoint',
-]
-
-/** Enfants d’un siège. Un siège vide laisse remonter ses enfants. */
-const ENFANTS = {
-  president: ['vice_president', 'resp_logistique', 'coord_medical', 'coord_transport', 'resp_informatique'],
-  vice_president: ['relations_publiques', 'administrateur_asbl', 'coord_benevoles', 'tresorier', 'recolteur_souhait'],
-  resp_logistique: ['resp_logistique_adjoint'],
-  coord_transport: ['coord_transport_adjoint'],
-  coord_medical: ['coord_medical_adjoint'],
-  coord_benevoles: ['coord_benevoles_adjoint'],
-  tresorier: ['tresorier_adjoint'],
-  relations_publiques: ['relations_publiques_adjoint'],
-  resp_informatique: ['resp_informatique_adjoint'],
-}
-
 const ORDRE_LIBELLES = [
   'administrateur_asbl',
   'president',
@@ -74,10 +39,6 @@ export function rolesDe(personne) {
   return [...new Set((personne?.fiche?.roles_asbl || []).map(canonRoleAsbl).filter(r => r && r !== 'simple_volontaire'))]
 }
 
-function siegeDe(roles) {
-  return PRIORITE.find(r => roles.includes(r)) || null
-}
-
 function libelles(roles) {
   const restants = new Set(roles)
   const ordre = [
@@ -91,7 +52,11 @@ function texte(v) {
   return String(v || '').trim()
 }
 
-function personneVue(p) {
+export function nomPersonne(p) {
+  return `${p?.prenom || ''} ${p?.nom || ''}`.trim()
+}
+
+export function vuePersonne(p) {
   const roles = rolesDe(p)
   return {
     id: p.id,
@@ -100,44 +65,65 @@ function personneVue(p) {
     photo: p.fiche?.photo_url || '',
     email: texte(p.email),
     telephone: texte(p.fiche?.telephone) || texte(p.telephone),
-    siege: siegeDe(roles),
+    actif: p.actif !== false,
     labels: libelles(roles),
+    aUnRole: roles.length > 0,
   }
 }
 
 function comparer(a, b) {
-  return `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr')
+  return nomPersonne(a).localeCompare(nomPersonne(b), 'fr')
 }
 
 /**
- * Arbre : président en haut, puis les responsables, puis leur équipe.
- * La personne juste au-dessus est le N+1, celle encore au-dessus le N+2.
- * Chaque personne n’apparaît qu’une fois, avec tous ses rôles.
- * Un simple volontaire, ou une fiche sans rôle ASBL, n’a pas de siège : il est omis.
+ * Arbre composé dans IT. liens = { profile_id, n1_id, ordre }.
+ * Une personne sans rôle, ou absente des liens, n’est pas dessinée.
+ * Le N+1 est n1_id ; le N+2 est le N+1 de cette personne.
  */
-export function construireArbre(gens) {
-  const parSiege = new Map()
-  for (const p of gens || []) {
-    const vue = personneVue(p)
-    if (!vue.siege) continue
-    const liste = parSiege.get(vue.siege) || []
-    liste.push(vue)
-    parSiege.set(vue.siege, liste)
+export function arbrePlace(personnes, liens) {
+  const vues = (personnes || []).map(vuePersonne).filter(v => v.aUnRole && v.actif)
+  const parId = new Map(vues.map(v => [v.id, v]))
+  const places = new Map()
+  for (const l of liens || []) {
+    if (!parId.has(l.profile_id)) continue
+    places.set(l.profile_id, {
+      profile_id: l.profile_id,
+      n1_id: l.n1_id || null,
+      ordre: Number(l.ordre) || 0,
+    })
   }
-  for (const liste of parSiege.values()) liste.sort(comparer)
-
-  function branches(siege) {
-    const occupants = parSiege.get(siege) || []
-    const sous = (ENFANTS[siege] || []).flatMap(branches)
-    if (!occupants.length) return sous
-    if (!sous.length) {
-      return occupants.map(p => ({ key: p.id, gens: [p], enfants: [] }))
-    }
-    return [
-      { key: siege, gens: [occupants[0]], enfants: sous },
-      ...occupants.slice(1).map(p => ({ key: p.id, gens: [p], enfants: [] })),
-    ]
+  for (const l of places.values()) {
+    if (!l.n1_id || !places.has(l.n1_id)) l.n1_id = null
   }
 
-  return branches('president')
+  function enfantsDe(id) {
+    return [...places.values()]
+      .filter(l => l.n1_id === id)
+      .sort((a, b) => a.ordre - b.ordre || comparer(parId.get(a.profile_id), parId.get(b.profile_id)))
+  }
+
+  function noeud(lien, vus) {
+    if (vus.has(lien.profile_id)) return null
+    const suivant = new Set(vus)
+    suivant.add(lien.profile_id)
+    const enfants = enfantsDe(lien.profile_id).map(e => noeud(e, suivant)).filter(Boolean)
+    return { key: lien.profile_id, gens: [parId.get(lien.profile_id)], enfants }
+  }
+
+  return enfantsDe(null).map(l => noeud(l, new Set())).filter(Boolean)
+}
+
+/** Liste plate, dans l’ordre de l’arbre, pour l’écran IT. */
+export function listePlacee(personnes, liens) {
+  const lignes = []
+  function walk(noeuds, chaine) {
+    const ids = noeuds.map(n => n.gens[0].id)
+    noeuds.forEach((n, index) => {
+      const p = n.gens[0]
+      lignes.push({ personne: p, chaine, index, siblingIds: ids })
+      walk(n.enfants, [nomPersonne(p), ...chaine])
+    })
+  }
+  walk(arbrePlace(personnes, liens), [])
+  return lignes
 }

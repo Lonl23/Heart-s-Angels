@@ -26,6 +26,7 @@ const MesMissions = lazy(() => import('@/modules/MesMissions'))
 const Annuaire = lazy(() => import('@/modules/annuaire/Annuaire'))
 const Departement = lazy(() => import('@/pages/Departement'))
 const Organigramme = lazy(() => import('@/modules/rh/Organigramme'))
+const OrganigrammeEdition = lazy(() => import('@/modules/it/OrganigrammeEdition'))
 const Tresorerie = lazy(() => import('@/modules/Tresorerie'))
 
 function EcranChargement() {
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="annuaire"       element={<RequireAcces feature="annuaire"><Annuaire /></RequireAcces>} />
           <Route path="volontaires"    element={<RequireAcces feature="fiches"><Volontaires /></RequireAcces>} />
           <Route path="rh/organigramme" element={<RequireAcces feature="organigramme"><Organigramme /></RequireAcces>} />
+          <Route path="it/organigramme" element={<RequireAcces feature="organigramme_edition"><OrganigrammeEdition /></RequireAcces>} />
           <Route path="tresorerie"     element={<RequireAcces feature="tresorerie"><Tresorerie /></RequireAcces>} />
           <Route path="admin"          element={<RequireAcces feature="admin"><Admin /></RequireAcces>} />
           <Route path="profil"         element={<FicheVolontaire />} />

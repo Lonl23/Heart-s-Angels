@@ -122,6 +122,7 @@ async function main() {
     await client.query(lireSQL('79_evenements_inscriptions.sql'))
     await client.query(lireSQL('80_evenements_relais_seraing.sql'))
     await client.query(lireSQL('85_smtp_from_app.sql'))
+    await client.query(lireSQL('86_organigramme.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()
