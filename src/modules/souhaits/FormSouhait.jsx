@@ -98,29 +98,95 @@ function contactsDepuis(s) {
   return []
 }
 
+function avecOrdre(rows) {
+  return rows.map((r, i) => ({ ...r, priorite: i + 1, _k: r._k || (crypto.randomUUID ? crypto.randomUUID() : `d${i}-${r.debut}`) }))
+}
+
 function DatesPossibles({ value, set }) {
   const rows = value?.length ? value : [{ debut: '', fin: '' }]
+  const rowsRef = useRef(rows)
+  rowsRef.current = rows
+  const drag = useRef(null)
+  const [plusieurs, setPlusieurs] = useState(() => rows.some(r => r.fin && r.debut && r.fin > r.debut))
+  useEffect(() => {
+    if ((value || []).some(r => r.fin && r.debut && r.fin > r.debut)) setPlusieurs(true)
+  }, [value])
+
+  function poser(next) {
+    const ordered = avecOrdre(next.length ? next : [{ debut: '', fin: '' }])
+    rowsRef.current = ordered
+    set(ordered)
+  }
   function maj(i, patch) {
-    set(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+    poser(rowsRef.current.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   }
-  function ajouter() { set([...rows, { debut: '', fin: '', priorite: rows.length + 1 }]) }
+  function deplacer(from, to) {
+    const cur = rowsRef.current
+    if (from === to || from == null || to == null || from < 0 || to < 0 || from >= cur.length || to >= cur.length) return
+    const next = [...cur]
+    const [item] = next.splice(from, 1)
+    next.splice(to, 0, item)
+    drag.current = to
+    poser(next)
+  }
   function retirer(i) {
-    const next = rows.filter((_, j) => j !== i)
-    set(next.length ? next : [{ debut: '', fin: '' }])
+    poser(rowsRef.current.filter((_, j) => j !== i))
   }
+  function basculerPlusieurs(on) {
+    setPlusieurs(on)
+    if (!on) poser(rowsRef.current.map(r => ({ ...r, fin: r.debut || '' })))
+  }
+  function pointerDown(e, i) {
+    if (e.button != null && e.button !== 0) return
+    drag.current = i
+    const move = ev => {
+      if (drag.current == null) return
+      const el = document.elementFromPoint(ev.clientX, ev.clientY)
+      const row = el?.closest?.('[data-date-idx]')
+      if (!row) return
+      deplacer(drag.current, Number(row.dataset.dateIdx))
+    }
+    const up = () => {
+      drag.current = null
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
   return (
     <div style={{ marginBottom: 12 }}>
+      <label className="ha-check" style={{ marginBottom: 8 }}>
+        <input type="checkbox" checked={plusieurs} onChange={e => basculerPlusieurs(e.target.checked)} />
+        <span>Plusieurs jours</span>
+      </label>
       {rows.map((r, i) => (
-        <div key={i} className="ha-date-periode">
-          <Sel label="Priorité" value={String(r.priorite || i + 1)} set={v => maj(i, { priorite: Number(v) })} options={[1, 2, 3, 4, 5].map(n => ({ v: String(n), l: String(n) }))} />
-          <F label="Du" type="date" value={r.debut} set={v => maj(i, { debut: v, fin: (!r.fin || r.fin < v) ? v : r.fin })} />
-          <F label="Au" type="date" value={r.fin || r.debut} set={v => maj(i, { fin: (r.debut && v && v < r.debut) ? r.debut : v })} />
+        <div key={r._k || i} className="ha-date-periode" data-date-idx={i}>
+          {rows.length > 1 && (
+            <button
+              type="button"
+              className="ha-date-handle"
+              aria-label={`Déplacer la date ${i + 1}`}
+              onPointerDown={e => pointerDown(e, i)}
+            >⋮⋮</button>
+          )}
+          {plusieurs ? (
+            <>
+              <div className="ha-date-champ"><F label="Du" type="date" value={r.debut} set={v => maj(i, { debut: v, fin: (!r.fin || r.fin < v) ? v : r.fin })} /></div>
+              <div className="ha-date-champ"><F label="Au" type="date" value={r.fin || r.debut} set={v => maj(i, { fin: (r.debut && v && v < r.debut) ? r.debut : v })} /></div>
+            </>
+          ) : (
+            <div className="ha-date-champ"><F label="Date" type="date" value={r.debut} set={v => maj(i, { debut: v, fin: v })} /></div>
+          )}
           {rows.length > 1 && (
             <button type="button" className="ha-date-periode-del" onClick={() => retirer(i)}>Retirer</button>
           )}
         </div>
       ))}
-      <Btn kind="soft" onClick={ajouter}>+ Date</Btn>
+      <Btn kind="soft" onClick={() => poser([...rowsRef.current, { debut: '', fin: '' }])}>+ Date</Btn>
     </div>
   )
 }

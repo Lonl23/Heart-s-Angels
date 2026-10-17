@@ -30,6 +30,7 @@ export function periodesDepuisSouhait(s) {
     priorite: Number(p?.priorite) || null,
     retenue: !!p?.retenue,
   })).filter(p => p.debut)
+    .sort((a, b) => (a.priorite || 99) - (b.priorite || 99) || a.debut.localeCompare(b.debut))
   if (fromJson.length) return fromJson
   if (s?.date_souhaitee) {
     const debut = slice(s.date_souhaitee)
@@ -49,14 +50,13 @@ export function normaliserPeriodes(periodes) {
       return { debut, fin, ...(priorite ? { priorite } : {}), ...(p?.retenue ? { retenue: true } : {}) }
     })
     .filter(Boolean)
-    .sort((a, b) => a.debut.localeCompare(b.debut) || a.fin.localeCompare(b.fin))
 }
 
 export function plageGlobale(periodes) {
   const n = normaliserPeriodes(periodes)
   if (!n.length) return { date_souhaitee: null, date_fin: null }
   return {
-    date_souhaitee: n[0].debut,
+    date_souhaitee: n.reduce((acc, p) => (p.debut < acc ? p.debut : acc), n[0].debut),
     date_fin: n.reduce((acc, p) => (p.fin > acc ? p.fin : acc), n[0].fin),
   }
 }
