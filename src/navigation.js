@@ -65,6 +65,7 @@ export const DEPARTEMENTS = [
       { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
       { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
       { key: 'actualites_edition', to: '/app/actualites', label: 'Actualités', icon: '📰', desc: 'HTML, collage Word, ou blocs' },
+      { key: 'statistiques', to: '/app/it/statistiques', label: 'Statistiques', icon: '📊', desc: 'Souhaits, et plus tard le département secours' },
     ],
   },
 ]
@@ -72,7 +73,7 @@ export const DEPARTEMENTS = [
 export function moduleAutorise(key, auth) {
   if (!auth?.can?.('staff')) return false
   if (key === 'fiches') return auth.peutGererFiches()
-  if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits') return auth.peutGererApp()
+  if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
   if (key === 'actualites') return true
   if (key === 'actualites_edition') return auth.peutPublierActualites()
   if (key === 'organigramme') return true

@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { COPYRIGHT } from '@/copyright'
 import { Card, Btn, F, TA, Pill, PillFictif, Empty, Loading, Logo, PhoneF, AddressFields, Flash } from '@/components/ui'
 import { ApercuPartenaire } from '@/modules/souhaits/RapportPartenaire'
+import DossierDar from '@/modules/souhaits/DossierDar'
 import { GenrePicker } from '@/modules/annuaire/genre'
 import BadgeBeta from '@/components/BadgeBeta'
 import { ReglageDeuxFacteurs } from '@/components/DeuxFacteurs'
@@ -343,6 +344,19 @@ function DetailDemande({ id, onBack }) {
           <div style={{ fontSize:13, color:'var(--text-muted)' }}>Le rapport sera disponible ici une fois le souhait réalisé et publié par l'équipe.</div>
         )}
       </Card>
+      {d.souhait_id && (
+        <DossierDar
+          souhaitId={d.souhait_id}
+          peutEcrire={false}
+          peutNoter
+          peutExporter={false}
+          souhait={{
+            beneficiaire_prenom: d.patient_prenom,
+            beneficiaire_nom: d.patient_nom,
+            description: d.souhait_description,
+          }}
+        />
+      )}
     </div>
   )
 }

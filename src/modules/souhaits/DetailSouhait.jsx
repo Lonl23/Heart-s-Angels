@@ -15,9 +15,13 @@ import RapportJournee from './RapportJournee'
 import Suivi from './Suivi'
 import { FormPinOuverture } from '@/components/PinArchive'
 import { Link } from 'react-router-dom'
+import DossierDar from './DossierDar'
 
 export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer=false }) {
-  const { peutEncoderPatientSouhait, peutProgrammerSouhait, peutOuvrirArchives } = useAuth()
+  const { peutEncoderPatientSouhait, peutProgrammerSouhait, peutOuvrirArchives, profile } = useAuth()
+  const coordinationMedicale = (profile?.fiche?.roles_asbl || []).some(r =>
+    ['coord_medical', 'coord_medical_adjoint', 'coordinateur_medical'].includes(r)
+  )
   const encoderPatient = peutEncoderPatientSouhait()
   const programmer = peutProgrammerSouhait()
   const [s, setS] = useState(null)
@@ -32,6 +36,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
   const [manque, setManque] = useState(false)
   const [pinMsg, setPinMsg] = useState(null)
   const [pinSaving, setPinSaving] = useState(false)
+  const [dossier, setDossier] = useState(false)
 
   useEffect(() => { load() }, [id])
   useEffect(() => {
@@ -172,7 +177,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
   const extras = demo
     ? KANBAN_COLONNES.filter(k => !PIPELINE.includes(k))
     : [
-        ...(['en_cours','realise'].includes(s.statut) ? [s.statut] : []),
+        ...(['en_cours','terminee_terrain','realise'].includes(s.statut) ? [s.statut] : []),
         ...statutsDisponibles(s.statut, s).filter(k => !PIPELINE.includes(k)),
       ]
   const pipelineStatut = demo ? PIPELINE : PIPELINE_ENCODE
@@ -198,6 +203,9 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
         </div>
         <div className="ha-souhait-actions">
           <Btn kind="soft" onClick={()=>setFiche(true)}>Imprimer la fiche</Btn>
+          {coordinationMedicale && (
+            <Btn kind="soft" onClick={() => setDossier(v => !v)}>{dossier ? 'Fermer le rapport médical' : 'Rapport médical'}</Btn>
+          )}
           {statutFige(s.statut, s)
             ? null
             : (
@@ -208,13 +216,26 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
         </div>
       </div>
 
+      {dossier && coordinationMedicale && (
+        <DossierDar
+          souhaitId={id}
+          individuel={!!(s.fictif && s.mission?.demo_cle)}
+          peutEcrire
+          peutNoter
+          peutExporter={!(s.fictif && s.mission?.demo_cle)}
+          souhait={s}
+        />
+      )}
+
       <Card style={{ marginBottom:12, padding:'12px 16px' }}>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
           {statutFige(s.statut, s)
             ? (s.statut === 'non_realise'
               ? 'Souhait non réalisé — verrouillé, plus rien à préparer.'
               : 'Souhait réalisé — le statut ne peut plus être modifié, les heures de mission sont conservées.')
-            : demo
+            : s.statut === 'terminee_terrain'
+              ? 'Terminée terrain — l’équipage est rentré. La mission n’est pas clôturée : le staff la passe en Réalisé ici.'
+              : demo
               ? 'Souhait de formation — déplaçable dans n’importe quelle colonne à tout moment, y compris Réalisé et Non réalisé.'
               : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes souhaits' : ''}`}
         </div>

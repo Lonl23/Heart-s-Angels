@@ -67,6 +67,22 @@ export async function envoyerMailBienvenue() {
   return { ok: false, error: await lireErreur(data, error) }
 }
 
+/** Rapport médical uniquement. L’objet est imposé côté serveur, sans copie cachée. */
+export async function envoyerRapportMedical({ souhaitId, email, html, texte }) {
+  const adresse = String(email || '').trim()
+  if (!souhaitId) return { ok: false, error: 'Souhait manquant.' }
+  if (!adresse.includes('@')) return { ok: false, error: 'Adresse e-mail manquante.' }
+  const { data, error } = await invokeEnvoyerInvitation({
+    action: 'rapport_medical',
+    souhait_id: souhaitId,
+    email: adresse,
+    html,
+    texte,
+  })
+  if (data?.ok) return { ok: true }
+  return { ok: false, error: await lireErreur(data, error) }
+}
+
 /** Demande un lien de réinitialisation (sans session). Toujours le même message côté écran. */
 export async function demanderResetMotDePasse(email) {
   const adresse = String(email || '').trim()

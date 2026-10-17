@@ -319,7 +319,18 @@ export function documentsSejourVisibles(etape, mission) {
   ]
 }
 
+export const ETAPE_DEPART_PLEIN = {
+  id: 'depart_plein',
+  l: 'Départ pour aller faire le plein',
+  chip: 'Plein',
+  lieu: 'plein',
+  itin: 'base',
+  checklist: null,
+  patient: false,
+}
+
 export function normaliserEtape(etape) {
+  if (etape === 'depart_plein') return 'depart_plein'
   if (!etape || etape === 'vehicule' || etape === 'base_sur_place' || etape === 'a_la_base') return 'a_la_base'
   if (ETAPE_LEGACY[etape]) return ETAPE_LEGACY[etape]
   if (parseEtapeLieu(etape)) return etape
@@ -335,6 +346,7 @@ export function etapeParId(etape, mission) {
   const extra = defEtapeLieu(etape, mission)
   if (extra) return extra
   const id = normaliserEtape(etape)
+  if (id === 'depart_plein') return ETAPE_DEPART_PLEIN
   if (id === 'a_la_base') return ETAPE_A_LA_BASE
   return PARCOURS_TERRAIN.find(e => e.id === id) || ETAPE_A_LA_BASE
 }
@@ -348,6 +360,7 @@ export function idxEtape(etape) {
 }
 
 export function etapeSuivante(etape, mission) {
+  if (normaliserEtape(etape) === 'depart_plein') return etapeParId('depart_pec', mission)
   const extra = parseEtapeLieu(etape)
   if (extra?.phase === 'depart') return etapeParId(idEtapeLieu('sur_place', extra.type, extra.lieuId), mission)
   if (besoinChoixTransport(etape, mission)) return null
@@ -355,6 +368,7 @@ export function etapeSuivante(etape, mission) {
 }
 
 export function etapePrecedente(etape, mission) {
+  if (normaliserEtape(etape) === 'depart_plein') return ETAPE_A_LA_BASE
   const extra = parseEtapeLieu(etape)
   if (extra?.phase === 'sur_place') return etapeParId(idEtapeLieu('depart', extra.type, extra.lieuId), mission)
   if (extra?.phase === 'depart') return etapeParId('dest_sur_place', mission)
@@ -371,13 +385,14 @@ export function etapeProtocoleDetresse(etape) {
 }
 
 export function lblEtapeTerrain(etape, vecteurStatut, mission) {
+  if (vecteurStatut === 'terminee_terrain') return 'Terminée terrain'
   if (vecteurStatut === 'realise') return 'Rentré base'
   return etapeParId(etape, mission).l
 }
 
 /** Étape de CE vecteur. Ne jamais reprendre l’étape globale (souvent celle d’un autre véhicule). */
 export function etapeDuVecteur(mission, vecteurId, vecteurStatut) {
-  if (vecteurStatut === 'realise') return 'base_rentre'
+  if (vecteurStatut === 'realise' || vecteurStatut === 'terminee_terrain') return 'base_rentre'
   if (vecteurId && mission?.vecteur_etapes && Object.prototype.hasOwnProperty.call(mission.vecteur_etapes, vecteurId)) {
     return normaliserEtape(mission.vecteur_etapes[vecteurId])
   }

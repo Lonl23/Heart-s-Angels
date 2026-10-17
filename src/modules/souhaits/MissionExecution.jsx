@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Btn, F, Sel, inp, fmtAdresse, Loading, Flash, AdresseAffichee, LiensTrajet } from '@/components/ui'
+import { Btn, F, Sel, inp, fmtAdresse, Loading, Flash, AdresseAffichee, LiensTrajet, Modal } from '@/components/ui'
 import {
   STATUT_SUR_PLACE, estSurPlace, itemsChecklistVisibles, itemsChecklistManquants,
   normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
@@ -19,12 +19,23 @@ import ScanConso from '@/modules/stock/ScanConso'
 import ScanEmport from '@/modules/stock/ScanEmport'
 import { PopupDetresse } from './ProtocoleDetresse'
 import { BandeauMedecin } from './EquipePluri'
+import { fusionMissionDemo, fusionRpcDemo } from './formationSession'
+import RappelAsbl from './RappelAsbl'
 
 const fmtDt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }) : '—'
 
 function etapeDefaut(saved, vecteurStatut) {
-  if (vecteurStatut === 'realise') return 'base_rentre'
+  if (vecteurStatut === 'realise' || vecteurStatut === 'terminee_terrain') return 'base_rentre'
   return normaliserEtape(saved)
+}
+
+function estAvance(depuis, vers) {
+  const a = normaliserEtape(depuis)
+  const b = normaliserEtape(vers)
+  if (b === 'a_la_base') return false
+  if (a === 'a_la_base') return true
+  if (a === 'depart_plein') return b !== 'depart_plein'
+  return idxEtape(b) > idxEtape(a)
 }
 
 export default function MissionExecution({ souhaitId, onBack }) {
@@ -44,6 +55,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const [detresse, setDetresse] = useState(false)
   const [complet, setComplet] = useState(false)
   const [lieuxSejour, setLieuxSejour] = useState([])
+  const [rappel, setRappel] = useState(null)
 
   function medicalDeCetteMission(me) {
     return personneEstMedicale({
@@ -78,11 +90,20 @@ export default function MissionExecution({ souhaitId, onBack }) {
       }
       setAff(me)
       setEquipe(eq || [])
-      setSh(full)
-      setM(full?.mission || {})
       const vid = me?.vecteur_id || (vs.length === 1 ? vs[0].id : null)
-      const vstat = vid ? full?.mission?.vecteur_statuts?.[vid] : null
-      setEtape(etapeDefaut(etapeDuVecteur(full?.mission, vid, vstat), vstat))
+      let mission = full?.mission || {}
+      let statutPose = full?.statut
+      let vstat = vid ? mission?.vecteur_statuts?.[vid] : null
+      if (full?.fictif || mission?.demo_cle) {
+        const { data: sess } = await supabase.rpc('lire_session_formation', { p_souhait: souhaitId })
+        const etat = sess?.etat && typeof sess.etat === 'object' ? sess.etat : {}
+        mission = fusionMissionDemo(mission, etat, vid, user.id)
+        statutPose = etat.statut || 'pret'
+        vstat = etat.vecteur_statut || null
+      }
+      setSh({ ...full, statut: statutPose, mission })
+      setM(mission)
+      setEtape(etapeDefaut(etapeDuVecteur(mission, vid, vstat), vstat))
       if (voirComplet) {
         const { data: ints } = await supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId)
         let all = ints || []
@@ -104,26 +125,31 @@ export default function MissionExecution({ souhaitId, onBack }) {
         me = { ...me, vecteur_id: data.vecteur.id }
         setAff(me)
       }
-      setRpc(data)
+      let vue = data
+      if (data.fictif || data.demo_cle) {
+        const { data: sess } = await supabase.rpc('lire_session_formation', { p_souhait: souhaitId })
+        vue = fusionRpcDemo(data, sess?.etat && typeof sess.etat === 'object' ? sess.etat : {})
+      }
+      setRpc(vue)
       setEquipe([])
       setSh({
-        statut: data.statut,
-        beneficiaire_prenom: data.beneficiaire_prenom,
-        description: data.description,
-        date_souhaitee: data.date_souhaitee,
-        date_fin: data.date_fin,
-        dates_possibles: data.dates_possibles,
-        fictif: !!data.fictif,
-        mission: data.demo_cle ? { demo_cle: data.demo_cle } : {},
+        statut: vue.statut,
+        beneficiaire_prenom: vue.beneficiaire_prenom,
+        description: vue.description,
+        date_souhaitee: vue.date_souhaitee,
+        date_fin: vue.date_fin,
+        dates_possibles: vue.dates_possibles,
+        fictif: !!vue.fictif,
+        mission: vue.demo_cle ? { demo_cle: vue.demo_cle } : {},
       })
       setAppel({
-        tel: data.tel_a_appeler,
-        libelle: data.tel_a_appeler_libelle,
-        ok: !!data.tel_a_appeler,
-        medecin_tel: data.medecin_tel || '',
-        medecin_nom: data.medecin_nom || '',
+        tel: vue.tel_a_appeler,
+        libelle: vue.tel_a_appeler_libelle,
+        ok: !!vue.tel_a_appeler,
+        medecin_tel: vue.medecin_tel || '',
+        medecin_nom: vue.medecin_nom || '',
       })
-      setEtape(etapeDefaut(data.etape_terrain, data.vecteur_statut))
+      setEtape(etapeDefaut(vue.etape_terrain, vue.vecteur_statut))
     }
     const { data: sej } = await supabase.rpc('sejour_mission', { p_souhait: souhaitId })
     setLieuxSejour(Array.isArray(sej?.lieux) ? sej.lieux : [])
@@ -189,25 +215,38 @@ export default function MissionExecution({ souhaitId, onBack }) {
     await load()
   }
 
-  async function aller(next) {
-    const n = normaliserEtape(next)
-    if (!locked && !jouette && idxEtape(etape) < 1 && n !== 'a_la_base') {
-      if (!cotesOk) {
-        setErr('Photographiez les 4 côtés du véhicule avant de partir.')
-        return
-      }
-      const essenceN = Number(String(vecteur?.essence_pct ?? '').replace(',', '.'))
-      const besoinPlein = Number.isFinite(essenceN) && essenceN < 100
-      if (besoinPlein && !photos?.ticket_carburant_matin?.path) {
-        if (!confirm('Le réservoir n’est pas à 100 % et le ticket du plein du matin n’est pas photographié. Ce ticket sert au remboursement auprès du prêteur du véhicule. Partir quand même ?')) return
-      }
+  async function aller(next, opts = {}) {
+    let n = normaliserEtape(next)
+    const depuis = normaliserEtape(etape)
+    const quitteBase = depuis === 'a_la_base' || depuis === 'depart_plein'
+    if (!locked && !jouette && depuis === 'a_la_base' && n !== 'a_la_base' && !cotesOk) {
+      setErr('Photographiez les 4 côtés du véhicule avant de partir.')
+      return
+    }
+    if (!locked && quitteBase && (n === 'depart_pec' || (depuis === 'a_la_base' && n !== 'a_la_base' && n !== 'depart_plein')) && !opts.apresTicket) {
+      const essenceMaintenant = Number(String(vecteur?.essence_pct ?? '').replace(',', '.'))
+      const besoinPlein = Number.isFinite(essenceMaintenant) && essenceMaintenant < 100
+      if (besoinPlein && !photos?.ticket_carburant_matin?.path) n = 'depart_plein'
+    }
+    if (!locked && !jouette && depuis === 'depart_plein' && n !== 'a_la_base' && n !== 'depart_plein' && !cotesOk) {
+      setErr('Photographiez les 4 côtés du véhicule avant de partir.')
+      return
+    }
+    if (!locked && jouette && estAvance(depuis, n) && !opts.apresFormation) {
+      setRappel({ kind: 'formation', suite: () => aller(n, { ...opts, apresFormation: true }) })
+      return
+    }
+    if (!locked && n === 'depart_retour' && !opts.apresRappel) {
+      setRappel({ kind: 'retour', suite: () => aller(n, { ...opts, apresRappel: true }) })
+      return
     }
     setEtape(n)
     setErr(null)
     if (locked) return
+    const terrainFerme = v => v === 'realise' || v === 'terminee_terrain'
     const doitDemarrer = n !== 'a_la_base'
-      && vecteurStatut !== 'en_cours' && vecteurStatut !== 'realise'
-      && sh?.statut !== 'realise'
+      && !terrainFerme(vecteurStatut)
+      && !terrainFerme(sh?.statut)
     if (doitDemarrer) {
       await avancer('en_cours', n)
       return
@@ -236,14 +275,16 @@ export default function MissionExecution({ souhaitId, onBack }) {
     const { data, error } = await supabase.rpc('avancer_mission', { p_souhait: souhaitId, p_statut: statut })
     if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Impossible de changer le statut.'); return }
     await supabase.rpc('set_etape_terrain', { p_souhait: souhaitId, p_etape: etapeToSave })
-    setSh(x => ({ ...x, statut: data?.statut || statut }))
-    setRpc(x => x ? { ...x, statut: data?.statut || statut, vecteur_statut: data?.vecteur_statut || statut, etape_terrain: etapeToSave } : x)
+    const statutPose = data?.statut || statut
+    const vecteurPose = data?.vecteur_statut || (statut === 'realise' ? 'terminee_terrain' : statut)
+    setSh(x => ({ ...x, statut: statutPose }))
+    setRpc(x => x ? { ...x, statut: statutPose, vecteur_statut: vecteurPose, etape_terrain: etapeToSave } : x)
     if (complet) {
       setM(prev => {
         let nextM = { ...(prev || {}) }
         const vs = { ...(nextM.vecteur_statuts || {}) }
         if (vecteurId) {
-          vs[vecteurId] = statut
+          vs[vecteurId] = vecteurPose
           nextM.vecteur_statuts = vs
           nextM.vecteur_etapes = { ...(nextM.vecteur_etapes || {}), [vecteurId]: etapeToSave }
           nextM.etape_terrain = etapeToSave
@@ -383,6 +424,38 @@ export default function MissionExecution({ souhaitId, onBack }) {
     try {
       const meta = await uploadMissionPhoto(souhaitId, vecteurId, slot, file)
       await persistPhoto(slot, meta, 'set', slot === 'ticket_carburant_matin' ? 'ticket_matin' : 'ticket')
+      if (slot === 'ticket_carburant_matin') {
+        const suite = async () => {
+          const { error } = await supabase.rpc('notifier_ticket_plein', { p_souhait: souhaitId })
+          if (error) setErr(error.message)
+          const essenceMaintenant = Number(String(vecteur?.essence_pct ?? '').replace(',', '.'))
+          const partiel = (Number.isFinite(essenceMaintenant) && essenceMaintenant < 100) || normaliserEtape(etape) === 'depart_plein'
+          if (partiel) await aller('depart_pec', { apresTicket: true, apresFormation: true, apresRappel: true })
+        }
+        if (jouette) setRappel({ kind: 'formation', suite })
+        else await suite()
+      }
+    } catch (e) { setErr(e.message || 'Photo impossible.') }
+  }
+  async function ajouterPhotoSupp(file) {
+    try {
+      const meta = await uploadMissionPhoto(souhaitId, vecteurId, 'photos_supp', file)
+      const { data, error } = await supabase.rpc('sauver_photo_terrain', {
+        p_souhait: souhaitId, p_vecteur: vecteurId, p_slot: 'photos_supp', p_meta: meta, p_action: 'add',
+      })
+      if (error || data?.ok === false) { setErr(error?.message || data?.error); return }
+      const poser = photosActuelles => ({ ...photosActuelles, photos_supp: [...(photosActuelles.photos_supp || []), meta] })
+      setRpc(x => x ? { ...x, photos: poser(x.photos || {}) } : x)
+      if (complet && vecteurId) {
+        setM(prev => {
+          const next = { ...(prev || {}) }
+          const tp = { ...(next.terrain_photos || {}) }
+          tp[vecteurId] = poser(tp[vecteurId] || {})
+          next.terrain_photos = tp
+          return next
+        })
+      }
+      flash()
     } catch (e) { setErr(e.message || 'Photo impossible.') }
   }
   async function saveAnnot(nextMeta) {
@@ -414,6 +487,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
       p_souhait: souhaitId, p_cle: 'injections_detresse', p_valeur: inj, p_mode: 'append',
     })
     if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Injection non enregistrée.'); return false }
+    const notif = await supabase.rpc('notifier_protocole_detresse', { p_souhait: souhaitId })
+    if (notif.error) setErr(notif.error.message)
     setM(prev => ({
       ...(prev || {}),
       injections_detresse: [...injectionsDetresse(prev), inj],
@@ -423,7 +498,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
   }
 
   const cotesOk = COTES.every(c => photos?.coins?.[c.id]?.path)
-  async function terminer() {
+  async function terminer(opts = {}) {
+    if (jouette && !opts.apresFormation) {
+      setRappel({ kind: 'formation', suite: () => terminer({ apresFormation: true }) })
+      return
+    }
     await avancer('realise', 'base_rentre')
   }
 
@@ -471,7 +550,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const choixTransports = prochainsTransports(etape, missionCtx)
   const docsSejour = documentsSejourVisibles(etape, missionCtx)
   const lieuCourant = def.lieuId ? lieuxAnnexes(missionCtx).find(l => l.id === def.lieuId) : null
-  const locked = statut === 'realise' || vecteurStatut === 'realise'
+  const locked = statut === 'realise' || statut === 'terminee_terrain' || vecteurStatut === 'realise' || vecteurStatut === 'terminee_terrain'
   const monStatut = aff?.statut_base || m?.personnel_statuts?.[user?.id] || rpc?.statut_base || ''
   const jeSuisSurPlace = estSurPlace(monStatut)
   const roleAff = aff?.role_mission || rpc?.role_mission
@@ -525,10 +604,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
           </p>
           {appel?.tel && (
             <p style={{ fontSize: 14.5, margin: '2px 0 10px' }}>
-              <a href={`tel:${String(appel.tel).replace(/\s/g, '')}`} style={{ color: 'var(--accent)', fontWeight: 700, textDecoration: 'none' }}>📞 {appel.tel}</a>
+              <a href={`tel:${String(appel.tel).replace(/\s/g, '')}`} style={{ color: '#A32D2D', fontWeight: 800, textDecoration: 'none' }}>📞 {appel.tel}</a>
               {appel.libelle && <span style={{ color: 'var(--text-muted)', fontSize: 12.5 }}> · {appel.libelle}</span>}
             </p>
           )}
+          <RappelAsbl />
           {showDetresse && (
             <button type="button" className="ha-detresse-btn" onClick={() => setDetresse(true)}>
               Protocole de détresse
@@ -543,7 +623,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
       )}
       {jouette && (
         <Flash>
-          Souhait de formation fictif — ce n’est pas un vrai patient. Photos, scans et tickets sont là pour voir ce qu’il faudra faire sur un vrai souhait : rien n’est obligatoire ici. Une fois clôturé, il revient le lendemain.
+          Souhait de formation, uniquement pour votre compte : votre progression n’est pas partagée avec les autres. Sur ce souhait, certains éléments ne sont pas obligatoires pour passer à l’étape suivante. Sur un vrai souhait, ils devront être remplis.
         </Flash>
       )}
       {err && <Flash kind="err">{err}</Flash>}
@@ -604,10 +684,11 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 {!cotesOk && (
                   <div style={{ fontSize:13, color: jouette ? 'var(--text-muted)' : '#BA7517', marginTop:8 }}>
                     {jouette
-                      ? 'Sur un vrai souhait : photographier les 4 côtés avant de partir. Ici vous pouvez passer.'
+                      ? 'Sur un vrai souhait : photographier les 4 côtés avant de partir. Ici vous pouvez passer, mais il faudra le faire.'
                       : 'Les 4 côtés avant de partir.'}
                   </div>
                 )}
+                <PhotosLibres photos={photos.photos_supp || []} onAdd={ajouterPhotoSupp} disabled={locked || !vecteurId} />
               </Section>
               <Section titre={vecteurMedical ? 'Checklist départ' : 'Kilomètres et essence'}>
                 {userMedical && vecteurMedical && (
@@ -652,6 +733,21 @@ export default function MissionExecution({ souhaitId, onBack }) {
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 6 }}>
                 Les marques de dégâts restent sur la photo, à chaque étape et après la mission.
               </div>
+            </Section>
+          )}
+
+          {etape === 'depart_plein' && (
+            <Section titre="Départ partiel — aller faire le plein">
+              <p style={{ fontSize: 15, fontWeight: 800, color: '#BA7517', marginTop: 0, lineHeight: 1.45 }}>
+                Le réservoir n’est pas à 100 %. Ce départ sert à aller faire le plein. Quand la photo du ticket de caisse est enregistrée, le trésorier et la présidence sont prévenus, et le statut passe au départ vers la prise en charge.
+              </p>
+              <TicketPhoto
+                meta={photos.ticket_carburant_matin}
+                onCapture={f => captureTicket(f, 'ticket_carburant_matin')}
+                disabled={locked || !vecteurId}
+                hint="Ticket du plein du matin."
+                label="Ticket du matin"
+              />
             </Section>
           )}
 
@@ -725,6 +821,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   onDelete={slot=>removeCoin(slot, 'coins_retour')}
                   disabled={locked || !vecteurId}
                 />
+                <PhotosLibres photos={photos.photos_supp || []} onAdd={ajouterPhotoSupp} disabled={locked || !vecteurId} />
               </Section>
               <Section titre="Ticket de caisse — plein du retour">
                 <TicketPhoto
@@ -778,10 +875,24 @@ export default function MissionExecution({ souhaitId, onBack }) {
           )}
         </div>
       )}
+      {!jouette && statut === 'terminee_terrain' && (
+        <div className="ha-terrain-bar">
+          <div style={{ fontWeight:700, color:'#0F6E56', textAlign:'center', padding:'10px', lineHeight:1.45 }}>
+            Mission terminée sur le terrain. Elle n’est pas clôturée : le staff la clôture dans le module Souhaits.
+          </div>
+        </div>
+      )}
+      {!jouette && vecteurStatut === 'terminee_terrain' && statut !== 'terminee_terrain' && statut !== 'realise' && (
+        <div className="ha-terrain-bar">
+          <div style={{ fontWeight:700, color:'#0F6E56', textAlign:'center', padding:'10px', lineHeight:1.45 }}>
+            Ce véhicule est rentré. La mission reste ouverte tant que les autres équipages ne sont pas rentrés. Le staff clôturera ensuite dans le module Souhaits.
+          </div>
+        </div>
+      )}
       {jouette && locked && (
         <div className="ha-terrain-bar">
           <div style={{ fontSize:13, color:'var(--text-2)', textAlign:'center', marginBottom:8, lineHeight:1.45 }}>
-            Mission de formation — chaque volontaire peut la rejouer autant de fois qu’il veut. Le vecteur déjà rentré n’est pas pris en compte.
+            Formation terminée sur le terrain, pour votre compte seulement. Vous pouvez la recommencer.
           </div>
           <div className="ha-wizard-actions">
             <button type="button" className="ha-terrain-cta start" onClick={recommencerFormation}>
@@ -790,7 +901,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
           </div>
         </div>
       )}
-      {!jouette && vecteurStatut === 'realise' && statut !== 'realise' && (
+      {!jouette && vecteurStatut === 'realise' && statut !== 'realise' && statut !== 'terminee_terrain' && (
         <div className="ha-terrain-bar">
           <div style={{ fontWeight:700, color:'#3B6D11', textAlign:'center', padding:'10px' }}>
             Ce véhicule est rentré — d’autres équipages sont encore en mission.
@@ -800,6 +911,32 @@ export default function MissionExecution({ souhaitId, onBack }) {
       {!jouette && statut === 'realise' && <div className="ha-terrain-bar"><div style={{ fontWeight:700, color:'#3B6D11', textAlign:'center', padding:'10px' }}>Mission clôturée</div></div>}
 
       {annot && <PhotoAnnotator meta={annot.meta} onSave={saveAnnot} onClose={()=>setAnnot(null)} />}
+      {rappel && (
+        <Modal
+          title={rappel.kind === 'retour' ? 'Retour vers l’institution' : 'Souhait de formation'}
+          onClose={() => setRappel(null)}
+          footer={(
+            <>
+              <Btn kind="soft" onClick={() => setRappel(null)}>Annuler</Btn>
+              <Btn onClick={() => { const suite = rappel.suite; setRappel(null); suite() }}>J’ai compris</Btn>
+            </>
+          )}
+        >
+          {rappel.kind === 'formation' && (
+            <p style={{ fontWeight: 800, marginTop: 0, lineHeight: 1.45 }}>
+              Sur ce souhait de formation, certains éléments ne sont pas obligatoires pour passer à l’étape suivante. Sur un vrai souhait, ils devront être remplis.
+            </p>
+          )}
+          {rappel.kind === 'retour' && (
+            <>
+              <p style={{ fontWeight: 800, marginTop: 0, lineHeight: 1.45 }}>
+                Contactez l’institution et donnez une heure estimée de retour à l’institution.
+              </p>
+              <RappelAsbl />
+            </>
+          )}
+        </Modal>
+      )}
       {detresse && showDetresse && (
         <PopupDetresse
           m={complet ? m : {}}
@@ -808,6 +945,28 @@ export default function MissionExecution({ souhaitId, onBack }) {
           onInjecter={injecterDetresse}
           onClose={() => setDetresse(false)}
         />
+      )}
+    </div>
+  )
+}
+
+function PhotosLibres({ photos, onAdd, disabled }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4 }}>Photos supplémentaires</div>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 8px' }}>Facultatives pendant le check du véhicule.</p>
+      {(photos || []).length > 0 && (
+        <div style={{ fontSize: 13, marginBottom: 8 }}>{photos.length} photo{photos.length > 1 ? 's' : ''} ajoutée{photos.length > 1 ? 's' : ''}.</div>
+      )}
+      {!disabled && (
+        <label className="ha-check-btn" style={{ display: 'inline-flex', cursor: 'pointer' }}>
+          Ajouter une photo
+          <input type="file" accept="image/*" capture="environment" hidden onChange={e => {
+            const f = e.target.files?.[0]
+            e.target.value = ''
+            if (f) onAdd(f)
+          }} />
+        </label>
       )}
     </div>
   )

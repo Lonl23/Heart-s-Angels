@@ -2,7 +2,8 @@
 // Envoie via le compte Gmail laurent@heartsangels.be.
 // Expéditeur visible : app@heartsangels.be (alias).
 // Réponses → app@heartsangels.be. Copie cachée vers laurent@heartsangels.be,
-// sauf le code de connexion en deux étapes, qui n’est envoyé qu’au destinataire.
+// sauf le code de connexion en deux étapes et le rapport médical,
+// qui ne sont envoyés qu’au destinataire.
 // Les liens ouvrent https://app.heartsangels.be.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import nodemailer from 'npm:nodemailer@6.9.16'
@@ -265,7 +266,15 @@ Deno.serve(async (req) => {
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const admin = createClient(url, serviceKey)
-    const body = await req.json().catch(() => ({})) as { action?: string; origine?: unknown; email?: string; code?: string }
+    const body = await req.json().catch(() => ({})) as {
+      action?: string
+      origine?: unknown
+      email?: string
+      code?: string
+      souhait_id?: string
+      html?: string
+      texte?: string
+    }
     const pub = urlPublique()
     const action = String(body?.action || 'invitation').trim()
     const smtp = await smtpAuth(admin)
@@ -369,6 +378,30 @@ Deno.serve(async (req) => {
         html: mail.html,
       })
       return json({ ok: true, email: user.email || prof.email, action: 'bienvenue' })
+    }
+
+    if (action === 'rapport_medical') {
+      const souhaitId = String(body?.souhait_id || '').trim()
+      const dest = String(body?.email || '').trim()
+      const html = String(body?.html || '')
+      const texte = String(body?.texte || '').trim() || 'Rapport médical — Heart’s Angels.'
+      if (!souhaitId) return json({ error: 'Souhait manquant.' }, 400)
+      if (!dest.includes('@')) return json({ error: 'Adresse e-mail manquante.' }, 400)
+      if (!html) return json({ error: 'Rapport vide.' }, 400)
+      const { data: autorise, error: authz } = await admin.rpc('autoriser_envoi_rapport', {
+        p_souhait: souhaitId,
+        p_user: user.id,
+      })
+      if (authz || autorise !== true) return json({ error: 'Envoi non autorisé.' }, 403)
+      const sujet = '!!! SECRET MEDICAL !!! – INTERVENTION HEART’S ANGELS'
+      await envoyer({ smtp, to: dest, sujet, texte, html, bcc: false })
+      const { error: traceErr } = await admin.from('envois_rapport_medical').insert({
+        souhait_id: souhaitId,
+        expediteur_id: user.id,
+        email: dest,
+      })
+      if (traceErr) return json({ error: 'Le message est parti, la trace n’a pas pu être enregistrée.' }, 500)
+      return json({ ok: true, action: 'rapport_medical' })
     }
 
     const { data: prof } = await admin.from('profiles').select('role,fiche,actif').eq('id', user.id).maybeSingle()

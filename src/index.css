@@ -531,6 +531,7 @@ input:focus, select:focus, textarea:focus {
 .ha-wizard-title { font-size: 1.5rem; font-weight: 800; color: var(--heading); margin: 10px 0 2px; line-height: 1.2; }
 .ha-wizard-sub { font-size: 13.5px; color: var(--text-muted); margin: 0 0 4px; }
 
+.ha-rappel-asbl { color: #A32D2D; font-weight: 800; margin: 8px 0; }
 .ha-detresse-btn {
   width: 100%; min-height: 48px; margin: 10px 0 4px; padding: 12px 14px;
   border: none; border-radius: 12px; background: #A32D2D; color: #fff;

@@ -7,7 +7,7 @@ import { stInfo } from './souhaits/Souhaits'
 import { lblStatutBase, lblEtapeTerrain } from './souhaits/missionSchema'
 import { lblRoleMission } from '@/modules/fiche/ficheSchema'
 import { fmtDatesSouhait } from './souhaits/datesSouhait'
-import MissionExecution from './souhaits/MissionExecution'
+import MenuMission from './souhaits/MenuMission'
 
 const FILTRES = [
   { v:'a_faire', l:'À faire' },
@@ -31,18 +31,28 @@ export default function MesMissions() {
   useEffect(() => { if (!id) load() }, [session?.user?.id, id])
   async function load() {
     setLoading(true); setErr(null)
-    const { data, error } = await supabase.rpc('mes_affectations')
+    const [{ data, error }, { data: sessions }] = await Promise.all([
+      supabase.rpc('mes_affectations'),
+      supabase.rpc('mes_sessions_formation'),
+    ])
     if (error) setErr(error.message)
-    setItems(data || [])
+    const parFormation = new Map((sessions || []).map(s => [s.souhait_id, s]))
+    setItems((data || []).map(m => {
+      if (!m.fictif) return m
+      const sess = parFormation.get(m.souhait_id)
+      if (!sess) return { ...m, statut: 'pret', etape_vehicule: 'a_la_base' }
+      return { ...m, statut: sess.statut || 'pret', etape_vehicule: sess.etape || 'a_la_base' }
+    }))
     setLoading(false)
   }
 
-  if (id) return <MissionExecution souhaitId={id} onBack={() => nav('/app/missions')} />
+  if (id) return <MenuMission souhaitId={id} onBack={() => nav('/app/missions')} />
 
   const aRealiser = items.filter(m => !missionTerminee(m))
   const visible = aRealiser.filter(m => {
-    if (filtre === 'en_cours') return m.statut === 'en_cours'
-    return m.statut !== 'en_cours'
+    const terrain = m.statut === 'en_cours' || m.statut === 'terminee_terrain'
+    if (filtre === 'en_cours') return terrain
+    return !terrain
   })
   const nbCours = aRealiser.filter(m => m.statut === 'en_cours').length
 
@@ -105,7 +115,7 @@ export default function MesMissions() {
                     </div>
                   </div>
                   <div style={{ marginTop:10, fontSize:13.5, fontWeight:600, color:'var(--accent)' }}>
-                    {m.fictif && m.statut === 'realise' ? 'Rejouer ›' : m.statut === 'en_cours' ? 'Continuer ›' : 'Ouvrir ›'}
+                    {m.fictif && m.statut === 'terminee_terrain' ? 'Rejouer ›' : m.statut === 'en_cours' || m.statut === 'terminee_terrain' ? 'Continuer ›' : 'Ouvrir ›'}
                   </div>
                 </Card>
               )
