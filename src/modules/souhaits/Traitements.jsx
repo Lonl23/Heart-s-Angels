@@ -109,7 +109,7 @@ function FormMed({ form, setForm, onSave }) {
         <Btn kind="soft" onClick={()=>setForm(null)}>Annuler</Btn>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'0 12px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap:'0 12px' }}>
         <F label="Médicament" value={form.medicament} set={v=>set('medicament',v)} required />
         <F label="Dosage" value={form.dosage} set={v=>set('dosage',v)} />
         <F label="Voie d'administration" value={form.voie} set={v=>set('voie',v)} placeholder="Per os, IV, IM, SC…" />
@@ -145,7 +145,7 @@ function FormMed({ form, setForm, onSave }) {
       </label>
       {form.estPerf && (
         <div style={{ border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px', margin:'8px 0' }}>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'0 12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap:'0 12px' }}>
             <Sel label="Type de perfusion (si dilution)" value={p.type_liquide||''} set={v=>setPerf('type_liquide',v)} options={LIQUIDES.map(x=>({v:x,l:x||'—'}))} />
             <F label="Quantité de médicament dans la perfusion" value={p.quantite_med||''} set={v=>setPerf('quantite_med',v)} placeholder="ex: 1 g, 40 mg" />
             <F label="Volume de la perfusion (ml)" type="number" value={p.volume_ml??''} set={v=>setPerf('volume_ml',v)} />

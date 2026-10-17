@@ -163,6 +163,17 @@ export function AuthProvider({ children }) {
   function peutGererDispos() {
     return peutEncoderDisposPourAutrui()
   }
+  /** Actualités : présidence, informatique, relations publiques. */
+  function peutPublierActualites() {
+    if (!role || role === 'partenaire') return false
+    if (role === 'admin' || role === 'president') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => [
+      'president', 'vice_president',
+      'resp_informatique', 'resp_informatique_adjoint',
+      'relations_publiques', 'relations_publiques_adjoint',
+    ].includes(r))
+  }
   /** HTML + vignette : informatique (et admin / président). */
   function peutGererEvenementsInternes() {
     return peutEditerEvenementsInternesDepuisFiche(role, rolesAsbl())
@@ -228,7 +239,7 @@ export function AuthProvider({ children }) {
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutPublierActualites, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

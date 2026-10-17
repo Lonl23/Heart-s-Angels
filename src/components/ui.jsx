@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import config from '@/app.config'
 import { mesurerEtapes, fmtMesure, totalMesures } from '@/lib/itineraire'
 // Briques d'interface partagées (thème + mobile)
@@ -181,7 +182,7 @@ export function Modal({ title, onClose, children, footer, wide }) {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
   }, [])
-  return (
+  const noeud = (
     <div className="ha-modal-scrim" onClick={onClose} role="presentation">
       <div className={'ha-modal' + (wide ? ' is-wide' : '')} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="ha-modal-head">
@@ -193,6 +194,8 @@ export function Modal({ title, onClose, children, footer, wide }) {
       </div>
     </div>
   )
+  if (typeof document === 'undefined') return noeud
+  return createPortal(noeud, document.body)
 }
 
 export function fmtAdresse(a) {
@@ -315,7 +318,7 @@ export function AddressFields({ value, set }) {
   const txt = fmtAdresse(a)
   return (
     <div>
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'0 10px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'minmax(0,2fr) minmax(0,1fr)', gap:'0 10px' }}>
         <F label="Rue" value={a.rue||''} set={v=>up('rue',v)} />
         <F label="Numéro" value={a.numero||''} set={v=>up('numero',v)} />
         <F label="Code postal" value={a.cp||''} set={v=>up('cp',v)} />

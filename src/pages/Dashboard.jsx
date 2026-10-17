@@ -8,6 +8,7 @@ import { lblEtapeTerrain } from '@/modules/souhaits/missionSchema'
 import { fmtDatesSouhait } from '@/modules/souhaits/datesSouhait'
 import { iconTypeNotif } from '@/lib/notifications'
 import { DEPARTEMENTS, cheminDepartement, filtrerDepartements, moduleAutorise } from '@/navigation'
+import { VignettesActualites } from '@/modules/actualites/Vignettes'
 
 function ilYA(iso) {
   if (!iso) return ''
@@ -44,6 +45,8 @@ export default function Dashboard() {
     <div style={{ padding:'clamp(16px,3vw,28px)', width:'100%', boxSizing:'border-box' }}>
       <h1 style={{ fontSize:'1.9rem', color:'var(--heading)', marginBottom:4 }}>Bonjour {profile?.prenom || ''}</h1>
       <p style={{ color:'var(--text-muted)', marginBottom:22, textTransform:'capitalize' }}>{date}</p>
+
+      <VignettesActualites />
 
       {montrerPush && (
         <Card style={{ marginBottom:18, padding:'12px 16px', display:'flex', gap:12, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>

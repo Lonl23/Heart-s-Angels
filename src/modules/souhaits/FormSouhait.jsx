@@ -661,16 +661,16 @@ function PopupBeneficiaire({ initial, onSave, onClose }) {
     <Modal title={g.id ? 'Fiche bénéficiaire' : 'Nouveau bénéficiaire'} onClose={onClose} footer={
       <><Btn onClick={go}>Enregistrer dans l’annuaire</Btn><Btn kind="soft" onClick={onClose}>Annuler</Btn></>
     }>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <F label="Prénom" value={g.prenom} set={v => set('prenom', v)} />
         <F label="Nom" value={g.nom} set={v => set('nom', v)} required />
       </div>
       <GenrePicker value={g.genre} set={v => set('genre', v)} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <F label="Date de naissance" type="date" value={g.date_naissance} set={v => set('date_naissance', v)} />
         <NissF value={g.niss} set={v => set('niss', v)} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <PhoneF label="GSM" value={g.tel_gsm} set={v => set('tel_gsm', v)} />
         <PhoneF label="Fixe" value={g.tel_fixe} set={v => set('tel_fixe', v)} />
       </div>
@@ -695,16 +695,16 @@ function PopupContact({ initial, onSave, onClose }) {
     <Modal title={g.id ? 'Contact rattaché' : 'Nouveau contact'} onClose={onClose} footer={
       <><Btn onClick={go}>Enregistrer dans l’annuaire</Btn><Btn kind="soft" onClick={onClose}>Annuler</Btn></>
     }>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <F label="Prénom" value={g.prenom} set={v => set('prenom', v)} />
         <F label="Nom" value={g.nom} set={v => set('nom', v)} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <F label="Lien d'affiliation" value={g.lien} set={v => set('lien', v)} placeholder="conjoint, enfant, tuteur…" />
         <F label="Date de naissance" type="date" value={g.date_naissance} set={v => set('date_naissance', v)} />
       </div>
       <NissF value={g.niss} set={v => set('niss', v)} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <PhoneF label="GSM" value={g.tel_gsm} set={v => set('tel_gsm', v)} />
         <PhoneF label="Fixe" value={g.tel_fixe} set={v => set('tel_fixe', v)} />
       </div>

@@ -322,7 +322,7 @@ function PopupPersonnePluri({ initial, lignes, err, setErr, onClose, onSave }) {
           {g.type_medecin === 'specialiste' && <F label="Spécialité" value={g.specialite || ''} set={v => set('specialite', v)} />}
         </>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <F label="Prénom" value={g.prenom} set={v => set('prenom', v)} />
         <F label="Nom" value={g.nom} set={v => set('nom', v)} />
       </div>

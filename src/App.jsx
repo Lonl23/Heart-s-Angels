@@ -29,6 +29,7 @@ const Organigramme = lazy(() => import('@/modules/rh/Organigramme'))
 const OrganigrammeEdition = lazy(() => import('@/modules/it/OrganigrammeEdition'))
 const ConfigurationSouhaits = lazy(() => import('@/modules/it/ConfigurationSouhaits'))
 const Tresorerie = lazy(() => import('@/modules/Tresorerie'))
+const Actualites = lazy(() => import('@/modules/actualites/Actualites'))
 
 function EcranChargement() {
   return (
@@ -60,6 +61,10 @@ export default function App() {
           <Route path="missions" element={<RequireAcces feature="missions"><MesMissions /></RequireAcces>} />
           <Route path="defraiements"   element={<RequireAcces feature="defraiements"><Defraiements /></RequireAcces>} />
           <Route path="disponibilites" element={<RequireAcces feature="disponibilites"><Disponibilites /></RequireAcces>} />
+          <Route path="actualites/nouveau" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
+          <Route path="actualites/:id/editer" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
+          <Route path="actualites/:id" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
+          <Route path="actualites" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
           <Route path="evenements/nouveau" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id/editer" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />

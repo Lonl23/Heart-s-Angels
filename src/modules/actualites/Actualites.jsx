@@ -1,0 +1,366 @@
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
+import { Page, Card, Btn, F, TA, Empty, Loading } from '@/components/ui'
+import { compressImage } from '@/modules/souhaits/TerrainPhotos'
+import { blocVide, chapoCourt, normaliserBlocs } from './blocs'
+import { Couverture, fmtPublie, urlActu } from './Vignettes'
+
+const BUCKET = 'actualites-images'
+const SELECT = 'id,titre,chapo,vignette_path,blocs,statut,publie_le,created_at,updated_at'
+
+function tri(rows) {
+  return (rows || []).slice().sort((a, b) => {
+    const da = a.publie_le || a.updated_at || a.created_at || ''
+    const db = b.publie_le || b.updated_at || b.created_at || ''
+    return String(db).localeCompare(String(da))
+  })
+}
+
+export function Article({ row }) {
+  const blocs = normaliserBlocs(row?.blocs)
+  return (
+    <article className="ha-actu-article">
+      <Couverture path={row.vignette_path} titre={row.titre} hero />
+      <div className="ha-actu-article-corps">
+        <h1>{row.titre}</h1>
+        {fmtPublie(row.publie_le || row.created_at) && <div className="ha-actu-date">{fmtPublie(row.publie_le || row.created_at)}</div>}
+        {row.chapo && <p className="ha-actu-chapo">{row.chapo}</p>}
+        {blocs.map(b => {
+          if (b.type === 'intertitre') return <h2 key={b.id}>{b.texte}</h2>
+          if (b.type === 'citation') {
+            return (
+              <blockquote key={b.id} className="ha-actu-citation">
+                <p>{b.texte}</p>
+                {b.source && <footer>{b.source}</footer>}
+              </blockquote>
+            )
+          }
+          if (b.type === 'photo') {
+            return (
+              <figure key={b.id} className="ha-actu-figure">
+                <img src={urlActu(b.path)} alt={b.legende || ''} />
+                {b.legende && <figcaption>{b.legende}</figcaption>}
+              </figure>
+            )
+          }
+          return <p key={b.id}>{b.texte}</p>
+        })}
+      </div>
+    </article>
+  )
+}
+
+export default function Actualites() {
+  const { id } = useParams()
+  const loc = useLocation()
+  const nav = useNavigate()
+  const { profile, peutPublierActualites } = useAuth()
+  const publier = peutPublierActualites()
+  const path = String(loc.pathname || '').replace(/\/+$/, '')
+  const estNouveau = path.endsWith('/actualites/nouveau') || id === 'nouveau'
+  const estEditer = path.endsWith('/editer')
+  const edition = estNouveau || estEditer
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => { charger() }, [publier])
+
+  async function charger() {
+    setLoading(true)
+    setErr(null)
+    const { data, error } = await supabase.from('actualites').select(SELECT)
+    if (error) setErr(error.message)
+    setItems(tri(data))
+    setLoading(false)
+  }
+
+  if (edition) {
+    if (!publier) {
+      return <Page title="Actualités"><Empty title="Réservé à la publication" hint="L’informatique, les relations publiques et la présidence rédigent les actualités." /></Page>
+    }
+    return (
+      <FormActualite
+        profile={profile}
+        editId={estEditer && id && id !== 'nouveau' ? id : null}
+        onDone={cible => nav(cible || '/app/actualites')}
+      />
+    )
+  }
+
+  if (id && id !== 'nouveau') {
+    const row = items.find(a => a.id === id)
+    if (loading && !row) return <Page title="Actualités"><Loading /></Page>
+    if (!row) return <Page title="Actualités"><Empty title="Article introuvable" action={<Btn kind="soft" onClick={() => nav('/app/actualites')}>Retour</Btn>} /></Page>
+    return (
+      <Page title="" action={(
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {publier && <Btn kind="soft" onClick={() => nav(`/app/actualites/${row.id}/editer`)}>Modifier</Btn>}
+          <Btn kind="soft" onClick={() => nav('/app/actualites')}>Toutes les actualités</Btn>
+        </div>
+      )}>
+        <Article row={row} />
+      </Page>
+    )
+  }
+
+  const visibles = publier ? items : items.filter(a => a.statut === 'publie')
+  return (
+    <Page
+      title="Actualités"
+      subtitle="Les nouvelles de l’ASBL."
+      action={publier ? <Btn onClick={() => nav('/app/actualites/nouveau')}>+ Actualité</Btn> : null}
+    >
+      {err && <div className="ha-flash ha-flash-err">{err}</div>}
+      {loading ? <Loading />
+        : visibles.length === 0 ? (
+          <Empty
+            title="Aucune actualité"
+            hint={publier ? 'Rédigez un article : couverture, chapô, puis les blocs de texte.' : 'Quand une nouvelle sera publiée, elle apparaîtra ici et sur l’accueil.'}
+          />
+        ) : (
+          <div className="ha-actu-grid">
+            {visibles.map(a => (
+              <button key={a.id} type="button" className="ha-actu-card" onClick={() => nav(`/app/actualites/${a.id}`)}>
+                <Couverture path={a.vignette_path} titre={a.titre} />
+                <div className="ha-actu-card-corps">
+                  {a.statut !== 'publie' && <div className="ha-actu-brouillon">Brouillon</div>}
+                  <div className="ha-actu-card-titre">{a.titre}</div>
+                  {a.chapo && <div className="ha-actu-card-chapo">{a.chapo}</div>}
+                  {fmtPublie(a.publie_le) && <div className="ha-actu-card-date">{fmtPublie(a.publie_le)}</div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+    </Page>
+  )
+}
+
+function FormActualite({ profile, editId, onDone }) {
+  const [form, setForm] = useState({
+    titre: '', chapo: '', vignette_path: '', blocs: [blocVide('texte')], statut: 'brouillon', publie_le: null,
+  })
+  const [loaded, setLoaded] = useState(!editId)
+  const [saving, setSaving] = useState(false)
+  const [apercu, setApercu] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    if (!editId) { setLoaded(true); return }
+    let on = true
+    supabase.from('actualites').select(SELECT).eq('id', editId).maybeSingle()
+      .then(({ data, error }) => {
+        if (!on) return
+        if (error) setErr(error.message)
+        if (data) {
+          const blocs = Array.isArray(data.blocs) ? data.blocs : []
+          setForm({
+            id: data.id,
+            titre: data.titre || '',
+            chapo: data.chapo || '',
+            vignette_path: data.vignette_path || '',
+            blocs: blocs.length ? blocs : [blocVide('texte')],
+            statut: data.statut || 'brouillon',
+            publie_le: data.publie_le || null,
+          })
+        }
+        setLoaded(true)
+      })
+      .catch(e => { if (on) { setErr(e?.message || 'Chargement impossible.'); setLoaded(true) } })
+    return () => { on = false }
+  }, [editId])
+
+  async function envoyerImage(file) {
+    if (!file) return ''
+    if (!file.type.startsWith('image/')) { alert('Choisissez une image (JPG, PNG, WebP).'); return '' }
+    const blob = await compressImage(file)
+    const uid = crypto.randomUUID ? crypto.randomUUID() : String(Date.now())
+    const path = `${profile?.id || 'actu'}/${uid}.jpg`
+    const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+    if (error) throw error
+    return path
+  }
+
+  async function couverture(file) {
+    setSaving(true)
+    try {
+      const path = await envoyerImage(file)
+      if (path) {
+        if (form.vignette_path) await supabase.storage.from(BUCKET).remove([form.vignette_path]).catch(() => {})
+        setForm(s => ({ ...s, vignette_path: path }))
+      }
+    } catch (e) {
+      alert(e.message || 'Envoi impossible.')
+    }
+    setSaving(false)
+  }
+
+  async function photoBloc(id, file) {
+    setSaving(true)
+    try {
+      const path = await envoyerImage(file)
+      if (path) setForm(s => ({ ...s, blocs: s.blocs.map(b => b.id === id ? { ...b, path } : b) }))
+    } catch (e) {
+      alert(e.message || 'Envoi impossible.')
+    }
+    setSaving(false)
+  }
+
+  function majBloc(id, patch) {
+    setForm(s => ({ ...s, blocs: s.blocs.map(b => b.id === id ? { ...b, ...patch } : b) }))
+  }
+  function deplacer(id, sens) {
+    setForm(s => {
+      const i = s.blocs.findIndex(b => b.id === id)
+      const j = i + sens
+      if (i < 0 || j < 0 || j >= s.blocs.length) return s
+      const blocs = s.blocs.slice()
+      const [x] = blocs.splice(i, 1)
+      blocs.splice(j, 0, x)
+      return { ...s, blocs }
+    })
+  }
+  function retirer(id) {
+    setForm(s => ({ ...s, blocs: s.blocs.filter(b => b.id !== id) }))
+  }
+
+  async function enregistrer(publier) {
+    const titre = String(form.titre || '').trim()
+    if (!titre) { alert('Indiquez un titre.'); return }
+    const blocs = normaliserBlocs(form.blocs)
+    if (publier && !blocs.length && !chapoCourt(form.chapo)) {
+      alert('Ajoutez un chapô ou un paragraphe avant de publier.')
+      return
+    }
+    setSaving(true)
+    const restePublie = publier || form.statut === 'publie'
+    const payload = {
+      titre,
+      chapo: chapoCourt(form.chapo) || null,
+      vignette_path: form.vignette_path || null,
+      blocs,
+      statut: restePublie ? 'publie' : 'brouillon',
+      publie_le: restePublie ? (form.publie_le || new Date().toISOString()) : null,
+    }
+    try {
+      let error
+      let nouveauId = form.id
+      if (form.id) {
+        ({ error } = await supabase.from('actualites').update(payload).eq('id', form.id))
+      } else {
+        const ins = await supabase.from('actualites').insert({ ...payload, created_by: profile?.id || null }).select('id').single()
+        error = ins.error
+        nouveauId = ins.data?.id
+      }
+      setSaving(false)
+      if (error) { alert(error.message); return }
+      onDone(nouveauId ? `/app/actualites/${nouveauId}` : '/app/actualites')
+    } catch (e) {
+      setSaving(false)
+      alert(e?.message || 'Enregistrement impossible.')
+    }
+  }
+
+  async function supprimer() {
+    if (!form.id) { onDone(); return }
+    if (!confirm('Retirer cette actualité ?')) return
+    setSaving(true)
+    const { error } = await supabase.from('actualites').delete().eq('id', form.id)
+    setSaving(false)
+    if (error) { alert(error.message); return }
+    onDone('/app/actualites')
+  }
+
+  if (!loaded) return <Page title="Actualité"><Loading /></Page>
+  const apercuRow = {
+    titre: form.titre || 'Titre de l’actualité',
+    chapo: form.chapo,
+    vignette_path: form.vignette_path,
+    blocs: form.blocs,
+    publie_le: form.publie_le || new Date().toISOString(),
+  }
+
+  return (
+    <Page
+      title={form.id ? 'Modifier l’actualité' : 'Nouvelle actualité'}
+      subtitle="Photo de couverture, chapô, puis les blocs dans l’ordre de lecture. La mise en page est celle de l’ASBL."
+      action={<Btn kind="soft" onClick={() => onDone(form.id ? `/app/actualites/${form.id}` : '/app/actualites')}>Annuler</Btn>}
+    >
+      {err && <div className="ha-flash ha-flash-err">{err}</div>}
+      <div className="ha-tabs" style={{ marginBottom: 12 }}>
+        <button type="button" className={'ha-tab' + (!apercu ? ' is-on' : '')} onClick={() => setApercu(false)}>Rédaction</button>
+        <button type="button" className={'ha-tab' + (apercu ? ' is-on' : '')} onClick={() => setApercu(true)}>Aperçu</button>
+      </div>
+      {apercu ? <Article row={apercuRow} /> : (
+        <>
+          <F label="Titre" value={form.titre} set={v => setForm(s => ({ ...s, titre: v }))} required />
+          <TA label="Chapô" value={form.chapo} set={v => setForm(s => ({ ...s, chapo: v }))} rows={3}
+            placeholder="Deux ou trois phrases. Elles s’affichent sur la vignette." />
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>Photo de couverture</div>
+            {form.vignette_path && <img src={urlActu(form.vignette_path)} alt="" className="ha-actu-apercu-img" />}
+            <label className="ha-stock-photo-btn" style={{ marginTop: 8 }}>
+              {form.vignette_path ? 'Changer la photo' : 'Choisir une photo'}
+              <input type="file" accept="image/*" onChange={e => { couverture(e.target.files?.[0]); e.target.value = '' }} />
+            </label>
+            {form.vignette_path && (
+              <button type="button" className="ha-stock-photo-del" style={{ marginLeft: 10 }}
+                onClick={() => setForm(s => ({ ...s, vignette_path: '' }))}>Retirer</button>
+            )}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Corps de l’article</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {form.blocs.map((b, i) => (
+              <Card key={b.id} style={{ padding: '12px 14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-muted)' }}>
+                    {b.type === 'intertitre' ? 'Intertitre' : b.type === 'photo' ? 'Photo' : b.type === 'citation' ? 'Citation' : 'Paragraphe'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Btn kind="soft" onClick={() => deplacer(b.id, -1)} disabled={i === 0} style={{ padding: '4px 8px' }}>↑</Btn>
+                    <Btn kind="soft" onClick={() => deplacer(b.id, 1)} disabled={i === form.blocs.length - 1} style={{ padding: '4px 8px' }}>↓</Btn>
+                    <Btn kind="danger" onClick={() => retirer(b.id)} style={{ padding: '4px 8px' }}>Retirer</Btn>
+                  </div>
+                </div>
+                {b.type === 'photo' ? (
+                  <>
+                    {b.path && <img src={urlActu(b.path)} alt="" className="ha-actu-apercu-img" />}
+                    <label className="ha-stock-photo-btn">
+                      {b.path ? 'Changer la photo' : 'Choisir une photo'}
+                      <input type="file" accept="image/*" onChange={e => { photoBloc(b.id, e.target.files?.[0]); e.target.value = '' }} />
+                    </label>
+                    <div style={{ marginTop: 8 }}>
+                      <F label="Légende" value={b.legende || ''} set={v => majBloc(b.id, { legende: v })} />
+                    </div>
+                  </>
+                ) : b.type === 'citation' ? (
+                  <>
+                    <TA label="Citation" value={b.texte || ''} set={v => majBloc(b.id, { texte: v })} rows={3} />
+                    <F label="Source (facultatif)" value={b.source || ''} set={v => majBloc(b.id, { source: v })} />
+                  </>
+                ) : (
+                  <TA label={b.type === 'intertitre' ? 'Intertitre' : 'Texte'} value={b.texte || ''} set={v => majBloc(b.id, { texte: v })}
+                    rows={b.type === 'intertitre' ? 2 : 4} />
+                )}
+              </Card>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0 18px' }}>
+            <Btn kind="soft" onClick={() => setForm(s => ({ ...s, blocs: [...s.blocs, blocVide('texte')] }))}>+ Paragraphe</Btn>
+            <Btn kind="soft" onClick={() => setForm(s => ({ ...s, blocs: [...s.blocs, blocVide('intertitre')] }))}>+ Intertitre</Btn>
+            <Btn kind="soft" onClick={() => setForm(s => ({ ...s, blocs: [...s.blocs, blocVide('photo')] }))}>+ Photo</Btn>
+            <Btn kind="soft" onClick={() => setForm(s => ({ ...s, blocs: [...s.blocs, blocVide('citation')] }))}>+ Citation</Btn>
+          </div>
+        </>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+        <Btn onClick={() => enregistrer(true)} disabled={saving}>{saving ? '…' : (form.statut === 'publie' ? 'Mettre à jour' : 'Publier')}</Btn>
+        {form.statut !== 'publie' && <Btn kind="soft" onClick={() => enregistrer(false)} disabled={saving}>Enregistrer le brouillon</Btn>}
+        {form.id && <Btn kind="danger" onClick={supprimer} disabled={saving}>Supprimer</Btn>}
+      </div>
+    </Page>
+  )
+}
