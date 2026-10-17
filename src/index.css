@@ -1402,6 +1402,26 @@ img, svg, video, table { max-width: 100%; }
   flex-shrink: 0;
 }
 
+.ha-graph {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px 16px; margin-bottom: 12px;
+}
+.ha-graph h2 { margin: 0 0 8px; font-size: 1.05rem; color: var(--heading); }
+.ha-graph svg { display: block; color: var(--text); }
+.ha-graph-vide { color: var(--text-muted); margin: 0; }
+.ha-graph-grille {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;
+}
+.ha-graph-grille .ha-graph { margin: 0; }
+
+.ha-actu-ligne {
+  display: flex; justify-content: space-between; align-items: center; gap: 10;
+  width: 100%; text-align: left; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+  cursor: pointer; color: inherit; font: inherit;
+}
+.ha-actu-ligne:hover { border-color: var(--accent); }
+
 .ha-actu-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

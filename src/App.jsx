@@ -31,6 +31,7 @@ const ConfigurationSouhaits = lazy(() => import('@/modules/it/ConfigurationSouha
 const Tresorerie = lazy(() => import('@/modules/Tresorerie'))
 const Actualites = lazy(() => import('@/modules/actualites/Actualites'))
 const Statistiques = lazy(() => import('@/modules/it/Statistiques'))
+const Helpdesk = lazy(() => import('@/modules/it/Helpdesk'))
 
 function EcranChargement() {
   return (
@@ -62,10 +63,14 @@ export default function App() {
           <Route path="missions" element={<RequireAcces feature="missions"><MesMissions /></RequireAcces>} />
           <Route path="defraiements"   element={<RequireAcces feature="defraiements"><Defraiements /></RequireAcces>} />
           <Route path="disponibilites" element={<RequireAcces feature="disponibilites"><Disponibilites /></RequireAcces>} />
-          <Route path="actualites/nouveau" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
-          <Route path="actualites/:id/editer" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
           <Route path="actualites/:id" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
           <Route path="actualites" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
+          <Route path="it/actualites/nouveau" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
+          <Route path="it/actualites/:id/editer" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
+          <Route path="it/actualites" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
+          <Route path="it/helpdesk" element={<RequireAcces feature="helpdesk"><Helpdesk /></RequireAcces>} />
+          <Route path="statistiques" element={<RequireAcces feature="statistiques"><Statistiques /></RequireAcces>} />
+          <Route path="it/statistiques" element={<Navigate to="/app/statistiques" replace />} />
           <Route path="evenements/nouveau" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id/editer" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
@@ -76,7 +81,6 @@ export default function App() {
           <Route path="rh/organigramme" element={<RequireAcces feature="organigramme"><Organigramme /></RequireAcces>} />
           <Route path="it/organigramme" element={<RequireAcces feature="organigramme_edition"><OrganigrammeEdition /></RequireAcces>} />
           <Route path="it/configuration" element={<RequireAcces feature="config_souhaits"><ConfigurationSouhaits /></RequireAcces>} />
-          <Route path="it/statistiques" element={<RequireAcces feature="statistiques"><Statistiques /></RequireAcces>} />
           <Route path="tresorerie"     element={<RequireAcces feature="tresorerie"><Tresorerie /></RequireAcces>} />
           <Route path="admin"          element={<RequireAcces feature="admin"><Admin /></RequireAcces>} />
           <Route path="profil"         element={<FicheVolontaire />} />

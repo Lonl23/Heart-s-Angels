@@ -56,16 +56,25 @@ export const DEPARTEMENTS = [
     ],
   },
   {
+    id: 'statistiques',
+    label: 'Statistiques',
+    icon: '📊',
+    to: '/app/departement/statistiques',
+    modules: [
+      { key: 'statistiques', to: '/app/statistiques', label: 'Statistiques', icon: '📊', desc: 'Graphiques des souhaits, et plus tard le département secours' },
+    ],
+  },
+  {
     id: 'it',
     label: 'IT',
     icon: '⚙️',
     to: '/app/departement/it',
     modules: [
+      { key: 'helpdesk', to: '/app/it/helpdesk', label: 'Helpdesk', icon: '🛠️', desc: 'Signaler un bug ou une suggestion' },
       { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Photos de fond, partenaires et accès' },
       { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
       { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
-      { key: 'actualites_edition', to: '/app/actualites', label: 'Actualités', icon: '📰', desc: 'HTML, collage Word, ou blocs' },
-      { key: 'statistiques', to: '/app/it/statistiques', label: 'Statistiques', icon: '📊', desc: 'Souhaits, et plus tard le département secours' },
+      { key: 'actualites_edition', to: '/app/it/actualites', label: 'Rédaction des actualités', icon: '📰', desc: 'Écrire, dater, publier' },
     ],
   },
 ]
@@ -74,6 +83,7 @@ export function moduleAutorise(key, auth) {
   if (!auth?.can?.('staff')) return false
   if (key === 'fiches') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
+  if (key === 'helpdesk') return auth.can('staff')
   if (key === 'actualites') return true
   if (key === 'actualites_edition') return auth.peutPublierActualites()
   if (key === 'organigramme') return true

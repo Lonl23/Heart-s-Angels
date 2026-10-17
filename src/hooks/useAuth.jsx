@@ -198,6 +198,13 @@ export function AuthProvider({ children }) {
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => ['president', 'vice_president', 'tresorier', 'tresorier_adjoint'].includes(r))
   }
+  /** File des tickets : responsable informatique et son adjoint. */
+  function peutGererHelpdesk() {
+    if (!role || role === 'partenaire') return false
+    if (role === 'admin') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['resp_informatique', 'resp_informatique_adjoint'].includes(r))
+  }
   /** Suppression définitive d’une note : équipe informatique (et accès total). */
   function peutSupprimerNoteFrais() {
     if (!role || role === 'partenaire') return false
@@ -239,7 +246,7 @@ export function AuthProvider({ children }) {
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutPublierActualites, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutPublierActualites, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutGererHelpdesk, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

@@ -135,6 +135,7 @@ async function main() {
     await client.query(lireSQL('96_menu_mission_dar_stats.sql'))
     await client.query(lireSQL('97_validation_equipage.sql'))
     await client.query(lireSQL('98_actualites_vignette_html.sql'))
+    await client.query(lireSQL('99_helpdesk_parution.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

@@ -78,9 +78,11 @@ export default function Actualites() {
   const { profile, peutPublierActualites } = useAuth()
   const publier = peutPublierActualites()
   const path = String(loc.pathname || '').replace(/\/+$/, '')
+  const redaction = path.includes('/it/actualites')
   const estNouveau = path.endsWith('/actualites/nouveau') || id === 'nouveau'
   const estEditer = path.endsWith('/editer')
   const edition = estNouveau || estEditer
+  const retourRedaction = '/app/it/actualites'
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
@@ -104,7 +106,7 @@ export default function Actualites() {
       <FormActualite
         profile={profile}
         editId={estEditer && id && id !== 'nouveau' ? id : null}
-        onDone={cible => nav(cible || '/app/actualites')}
+        onDone={cible => nav(cible || retourRedaction)}
       />
     )
   }
@@ -116,7 +118,7 @@ export default function Actualites() {
     return (
       <Page title="" action={(
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {publier && <Btn kind="soft" onClick={() => nav(`/app/actualites/${row.id}/editer`)}>Modifier</Btn>}
+          {publier && <Btn kind="soft" onClick={() => nav(`/app/it/actualites/${row.id}/editer`)}>Modifier</Btn>}
           <Btn kind="soft" onClick={() => nav('/app/actualites')}>Toutes les actualités</Btn>
         </div>
       )}>
@@ -125,19 +127,41 @@ export default function Actualites() {
     )
   }
 
-  const visibles = publier ? items : items.filter(a => a.statut === 'publie')
+  const visibles = items.filter(visibleAuPublic)
+  if (redaction) {
+    return (
+      <Page
+        title="Rédaction des actualités"
+        subtitle="L’écriture se fait ici. La lecture, pour tout le monde, est dans Gestion RH."
+        action={<Btn onClick={() => nav('/app/it/actualites/nouveau')}>+ Actualité</Btn>}
+      >
+        {err && <div className="ha-flash ha-flash-err">{err}</div>}
+        {loading ? <Loading /> : items.length === 0 ? (
+          <Empty title="Aucune actualité" hint="Rédigez un article, puis choisissez une date de parution." />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {items.map(a => (
+              <button key={a.id} type="button" className="ha-actu-ligne" onClick={() => nav(`/app/it/actualites/${a.id}/editer`)}>
+                <strong>{a.titre}</strong>
+                <span>{libelleParution(a)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Page>
+    )
+  }
   return (
     <Page
       title="Actualités"
       subtitle="Les nouvelles de l’ASBL."
-      action={publier ? <Btn onClick={() => nav('/app/actualites/nouveau')}>+ Actualité</Btn> : null}
     >
       {err && <div className="ha-flash ha-flash-err">{err}</div>}
       {loading ? <Loading />
         : visibles.length === 0 ? (
           <Empty
             title="Aucune actualité"
-            hint={publier ? 'Rédigez un article : couverture, chapô, puis les blocs de texte.' : 'Quand une nouvelle sera publiée, elle apparaîtra ici et sur l’accueil.'}
+            hint="Quand une nouvelle sera publiée, elle apparaîtra ici et sur l’accueil."
           />
         ) : (
           <div className="ha-actu-grid">
@@ -150,9 +174,34 @@ export default function Actualites() {
   )
 }
 
+function visibleAuPublic(a, maintenant = new Date()) {
+  if (a?.statut !== 'publie') return false
+  if (!a.publie_le) return true
+  const d = new Date(a.publie_le)
+  return !Number.isNaN(d.getTime()) && d.getTime() <= maintenant.getTime()
+}
+
+function libelleParution(a) {
+  if (a.statut !== 'publie') return 'Brouillon'
+  if (!a.publie_le) return 'Publié'
+  const d = new Date(a.publie_le)
+  const quand = fmtPublie(a.publie_le)
+  if (d.getTime() > Date.now()) return `À paraître le ${quand}`
+  return `Paru le ${quand}`
+}
+
+function versChampDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 function FormActualite({ profile, editId, onDone }) {
   const [form, setForm] = useState({
     titre: '', chapo: '', vignette_path: '', vignette_html: '', format: 'html', html: '', blocs: [blocVide('texte')], statut: 'brouillon', publie_le: null,
+    parution: 'immediat', parution_le: '',
   })
   const [loaded, setLoaded] = useState(!editId)
   const [saving, setSaving] = useState(false)
@@ -179,6 +228,8 @@ function FormActualite({ profile, editId, onDone }) {
             blocs: blocs.length ? blocs : [blocVide('texte')],
             statut: data.statut || 'brouillon',
             publie_le: data.publie_le || null,
+            parution: data.publie_le ? 'date' : 'immediat',
+            parution_le: versChampDate(data.publie_le),
           })
         }
         setLoaded(true)
@@ -255,6 +306,17 @@ function FormActualite({ profile, editId, onDone }) {
       alert('Ajoutez un chapô ou un paragraphe avant de publier.')
       return
     }
+    let publieLe = null
+    if (publier || form.statut === 'publie') {
+      if (form.parution === 'date') {
+        if (!form.parution_le) { alert('Indiquez la date de parution.'); return }
+        const d = new Date(form.parution_le)
+        if (Number.isNaN(d.getTime())) { alert('Date de parution invalide.'); return }
+        publieLe = d.toISOString()
+      } else {
+        publieLe = new Date().toISOString()
+      }
+    }
     setSaving(true)
     const restePublie = publier || form.statut === 'publie'
     const payload = {
@@ -266,7 +328,7 @@ function FormActualite({ profile, editId, onDone }) {
       html: html || null,
       blocs,
       statut: restePublie ? 'publie' : 'brouillon',
-      publie_le: restePublie ? (form.publie_le || new Date().toISOString()) : null,
+      publie_le: publieLe,
     }
     try {
       let error
@@ -280,7 +342,7 @@ function FormActualite({ profile, editId, onDone }) {
       }
       setSaving(false)
       if (error) { alert(error.message); return }
-      onDone(nouveauId ? `/app/actualites/${nouveauId}` : '/app/actualites')
+      onDone('/app/it/actualites')
     } catch (e) {
       setSaving(false)
       alert(e?.message || 'Enregistrement impossible.')
@@ -294,7 +356,7 @@ function FormActualite({ profile, editId, onDone }) {
     const { error } = await supabase.from('actualites').delete().eq('id', form.id)
     setSaving(false)
     if (error) { alert(error.message); return }
-    onDone('/app/actualites')
+    onDone('/app/it/actualites')
   }
 
   if (!loaded) return <Page title="Actualité"><Loading /></Page>
@@ -313,7 +375,7 @@ function FormActualite({ profile, editId, onDone }) {
     <Page
       title={form.id ? 'Modifier l’actualité' : 'Nouvelle actualité'}
       subtitle="Le HTML de la page et celui de la vignette peuvent contenir l’image, le titre et le chapô."
-      action={<Btn kind="soft" onClick={() => onDone(form.id ? `/app/actualites/${form.id}` : '/app/actualites')}>Annuler</Btn>}
+      action={<Btn kind="soft" onClick={() => onDone('/app/it/actualites')}>Annuler</Btn>}
     >
       {err && <div className="ha-flash ha-flash-err">{err}</div>}
       <div className="ha-tabs" style={{ marginBottom: 12 }}>
@@ -348,6 +410,21 @@ function FormActualite({ profile, editId, onDone }) {
             {form.vignette_path && (
               <button type="button" className="ha-stock-photo-del" style={{ marginLeft: 10 }}
                 onClick={() => setForm(s => ({ ...s, vignette_path: '' }))}>Retirer</button>
+            )}
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Date de parution</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+              <button type="button" className={'ha-tab' + (form.parution !== 'date' ? ' is-on' : '')} onClick={() => setForm(s => ({ ...s, parution: 'immediat' }))}>Immédiatement</button>
+              <button type="button" className={'ha-tab' + (form.parution === 'date' ? ' is-on' : '')} onClick={() => setForm(s => ({ ...s, parution: 'date' }))}>Choisir une date</button>
+            </div>
+            {form.parution === 'date' && (
+              <>
+                <input type="datetime-local" value={form.parution_le} onChange={e => setForm(s => ({ ...s, parution_le: e.target.value }))} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }} />
+                <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                  Une date dans le passé fait paraître l’article à cette date. Une date dans le futur le garde invisible jusqu’à ce moment-là.
+                </p>
+              </>
             )}
           </div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)', margin: '4px 0 8px' }}>Vignette en HTML</div>
