@@ -7,10 +7,10 @@ import { compressImage } from '@/modules/souhaits/TerrainPhotos'
 import { sanitizeHtml } from '@/lib/sanitizeHtml'
 import { blocVide, chapoCourt, normaliserBlocs } from './blocs'
 import { chapoDepuisHtml, htmlDepuisPressePapier } from './htmlWord'
-import { Couverture, fmtPublie, urlActu } from './Vignettes'
+import { CarteActualite, Couverture, fmtPublie, urlActu } from './Vignettes'
 
 const BUCKET = 'actualites-images'
-const SELECT = 'id,titre,chapo,vignette_path,blocs,format,html,statut,publie_le,created_at,updated_at'
+const SELECT = 'id,titre,chapo,vignette_path,vignette_html,blocs,format,html,statut,publie_le,created_at,updated_at'
 
 function tri(rows) {
   return (rows || []).slice().sort((a, b) => {
@@ -22,6 +22,17 @@ function tri(rows) {
 
 export function Article({ row }) {
   const blocs = normaliserBlocs(row?.blocs)
+  const pageHtml = row?.format === 'html' ? sanitizeHtml(row.html) : ''
+  if (pageHtml) {
+    return (
+      <article className="ha-actu-article">
+        <div className="ha-actu-article-corps">
+          {fmtPublie(row.publie_le || row.created_at) && <div className="ha-actu-date">{fmtPublie(row.publie_le || row.created_at)}</div>}
+          <HtmlCorps html={row.html} />
+        </div>
+      </article>
+    )
+  }
   return (
     <article className="ha-actu-article">
       <Couverture path={row.vignette_path} titre={row.titre} hero />
@@ -29,9 +40,7 @@ export function Article({ row }) {
         <h1>{row.titre}</h1>
         {fmtPublie(row.publie_le || row.created_at) && <div className="ha-actu-date">{fmtPublie(row.publie_le || row.created_at)}</div>}
         {row.chapo && <p className="ha-actu-chapo">{row.chapo}</p>}
-        {row.format === 'html' ? (
-          <HtmlCorps html={row.html} />
-        ) : blocs.map(b => {
+        {blocs.map(b => {
           if (b.type === 'intertitre') return <h2 key={b.id}>{b.texte}</h2>
           if (b.type === 'citation') {
             return (
@@ -133,15 +142,7 @@ export default function Actualites() {
         ) : (
           <div className="ha-actu-grid">
             {visibles.map(a => (
-              <button key={a.id} type="button" className="ha-actu-card" onClick={() => nav(`/app/actualites/${a.id}`)}>
-                <Couverture path={a.vignette_path} titre={a.titre} />
-                <div className="ha-actu-card-corps">
-                  {a.statut !== 'publie' && <div className="ha-actu-brouillon">Brouillon</div>}
-                  <div className="ha-actu-card-titre">{a.titre}</div>
-                  {a.chapo && <div className="ha-actu-card-chapo">{a.chapo}</div>}
-                  {fmtPublie(a.publie_le) && <div className="ha-actu-card-date">{fmtPublie(a.publie_le)}</div>}
-                </div>
-              </button>
+              <CarteActualite key={a.id} row={a} onOpen={() => nav(`/app/actualites/${a.id}`)} />
             ))}
           </div>
         )}
@@ -151,7 +152,7 @@ export default function Actualites() {
 
 function FormActualite({ profile, editId, onDone }) {
   const [form, setForm] = useState({
-    titre: '', chapo: '', vignette_path: '', format: 'html', html: '', blocs: [blocVide('texte')], statut: 'brouillon', publie_le: null,
+    titre: '', chapo: '', vignette_path: '', vignette_html: '', format: 'html', html: '', blocs: [blocVide('texte')], statut: 'brouillon', publie_le: null,
   })
   const [loaded, setLoaded] = useState(!editId)
   const [saving, setSaving] = useState(false)
@@ -172,6 +173,7 @@ function FormActualite({ profile, editId, onDone }) {
             titre: data.titre || '',
             chapo: data.chapo || '',
             vignette_path: data.vignette_path || '',
+            vignette_html: data.vignette_html || '',
             format: data.format === 'html' || (data.html && data.format !== 'blocs') ? 'html' : 'blocs',
             html: data.html || '',
             blocs: blocs.length ? blocs : [blocVide('texte')],
@@ -259,6 +261,7 @@ function FormActualite({ profile, editId, onDone }) {
       titre,
       chapo: chapoCourt(form.chapo) || (enHtml ? chapoCourt(chapoDepuisHtml(html)) : null) || null,
       vignette_path: form.vignette_path || null,
+      vignette_html: sanitizeHtml(form.vignette_html) || null,
       format: enHtml ? 'html' : 'blocs',
       html: html || null,
       blocs,
@@ -299,6 +302,7 @@ function FormActualite({ profile, editId, onDone }) {
     titre: form.titre || 'Titre de l’actualité',
     chapo: form.chapo,
     vignette_path: form.vignette_path,
+    vignette_html: form.vignette_html,
     blocs: form.blocs,
     format: form.format,
     html: form.html,
@@ -308,7 +312,7 @@ function FormActualite({ profile, editId, onDone }) {
   return (
     <Page
       title={form.id ? 'Modifier l’actualité' : 'Nouvelle actualité'}
-      subtitle="HTML pour une page composée, ou collage direct depuis Word. Les blocs restent disponibles."
+      subtitle="Le HTML de la page et celui de la vignette peuvent contenir l’image, le titre et le chapô."
       action={<Btn kind="soft" onClick={() => onDone(form.id ? `/app/actualites/${form.id}` : '/app/actualites')}>Annuler</Btn>}
     >
       {err && <div className="ha-flash ha-flash-err">{err}</div>}
@@ -316,11 +320,24 @@ function FormActualite({ profile, editId, onDone }) {
         <button type="button" className={'ha-tab' + (!apercu ? ' is-on' : '')} onClick={() => setApercu(false)}>Rédaction</button>
         <button type="button" className={'ha-tab' + (apercu ? ' is-on' : '')} onClick={() => setApercu(true)}>Aperçu</button>
       </div>
-      {apercu ? <Article row={apercuRow} /> : (
+      {apercu ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Vignette</div>
+            <div className="ha-actu-grid" style={{ maxWidth: 280 }}>
+              <CarteActualite row={apercuRow} onOpen={() => {}} />
+            </div>
+          </div>
+          <Article row={apercuRow} />
+        </div>
+      ) : (
         <>
           <F label="Titre" value={form.titre} set={v => setForm(s => ({ ...s, titre: v }))} required />
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '-4px 0 12px' }}>
+            Nom de l’actualité. En mode HTML, la page affiche le code : le titre, le chapô et l’image s’y mettent, ils ne sont pas répétés au-dessus.
+          </p>
           <TA label="Chapô" value={form.chapo} set={v => setForm(s => ({ ...s, chapo: v }))} rows={3}
-            placeholder="Deux ou trois phrases. Elles s’affichent sur la vignette." />
+            placeholder="Deux ou trois phrases. Elles s’affichent sur la vignette, sauf si la vignette a son propre HTML." />
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>Photo de couverture</div>
             {form.vignette_path && <img src={urlActu(form.vignette_path)} alt="" className="ha-actu-apercu-img" />}
@@ -333,6 +350,18 @@ function FormActualite({ profile, editId, onDone }) {
                 onClick={() => setForm(s => ({ ...s, vignette_path: '' }))}>Retirer</button>
             )}
           </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)', margin: '4px 0 8px' }}>Vignette en HTML</div>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Facultatif. S’il est rempli, ce code remplace la photo, le titre et le chapô sur la vignette. Il peut contenir une image, un titre et un chapô.
+          </p>
+          <EditeurHtml
+            html={form.vignette_html}
+            setHtml={v => setForm(s => ({ ...s, vignette_html: v }))}
+            depart="code"
+            rows={8}
+            aide="Collez le HTML de la vignette. Une image en https, un titre et un court texte suffisent. Les scripts sont retirés."
+            placeholder={'<img src="https://…" alt="">\n<h2>Titre de la vignette</h2>\n<p>Le chapô, en deux lignes.</p>'}
+          />
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Corps de l’article</div>
           <div className="ha-tabs" style={{ marginBottom: 12 }}>
             <button type="button" className={'ha-tab' + (form.format === 'html' ? ' is-on' : '')} onClick={() => setForm(s => ({ ...s, format: 'html' }))}>HTML</button>
@@ -397,8 +426,8 @@ function FormActualite({ profile, editId, onDone }) {
   )
 }
 
-function EditeurHtml({ html, setHtml }) {
-  const [vue, setVue] = useState('word')
+function EditeurHtml({ html, setHtml, aide, placeholder, rows = 16, depart = 'word' }) {
+  const [vue, setVue] = useState(depart)
   return (
     <div style={{ marginBottom: 16 }}>
       <div className="ha-tabs" style={{ marginBottom: 8 }}>
@@ -415,10 +444,10 @@ function EditeurHtml({ html, setHtml }) {
       ) : (
         <>
           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>
-            Collez ou écrivez le HTML de la page. Les scripts sont retirés. Le titre, le chapô et la photo de couverture restent au-dessus.
+            {aide || 'Le code peut contenir une image, le titre, le chapô et le texte. Les scripts sont retirés. En mode HTML, ce code est la page : le titre et le chapô des champs au-dessus ne sont pas répétés.'}
           </p>
-          <TA label="HTML" value={html} set={setHtml} rows={16}
-            placeholder={'<h2>Titre de partie</h2>\n<p>Le texte de l’actualité.</p>'} />
+          <TA label="HTML" value={html} set={setHtml} rows={rows}
+            placeholder={placeholder || '<img src="https://…" alt="">\n<h1>Titre</h1>\n<p>Le chapô.</p>\n<p>Le texte.</p>'} />
         </>
       )}
     </div>

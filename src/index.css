@@ -1459,6 +1459,14 @@ img, svg, video, table { max-width: 100%; }
 .ha-actu-html a { color: var(--accent); }
 .ha-actu-html ul, .ha-actu-html ol { margin: 0 0 12px; padding-left: 1.3em; }
 .ha-actu-html img { max-width: 100%; height: auto; border-radius: 10px; }
+.ha-actu-vignette-html { padding-bottom: 12px; }
+.ha-actu-vignette-html img:first-child {
+  width: 100%; max-height: 180px; object-fit: cover; border-radius: 0; display: block; margin: 0;
+}
+.ha-actu-vignette-html h2, .ha-actu-vignette-html h3 {
+  font-size: 1.25rem; margin: 12px 14px 0;
+}
+.ha-actu-vignette-html p { margin: 6px 14px 0; font-size: 13px; line-height: 1.45; color: var(--text-2); }
 .ha-actu-html table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 14.5px; }
 .ha-actu-html td, .ha-actu-html th { border: 1px solid var(--border); padding: 6px 8px; vertical-align: top; }
 .ha-actu-word {

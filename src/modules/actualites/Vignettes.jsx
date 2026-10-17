@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
+import { sanitizeHtml } from '@/lib/sanitizeHtml'
 
 const BUCKET = 'actualites-images'
 
@@ -30,6 +31,37 @@ export function Couverture({ path, titre, hero }) {
   )
 }
 
+export function CarteActualite({ row, onOpen }) {
+  const html = sanitizeHtml(row?.vignette_html)
+  function clavier(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen?.() }
+  }
+  return (
+    <div className="ha-actu-card" role="link" tabIndex={0} onClick={() => onOpen?.()} onKeyDown={clavier}>
+      {html ? (
+        <>
+          {row.statut && row.statut !== 'publie' && (
+            <div className="ha-actu-card-corps" style={{ paddingBottom: 0 }}>
+              <div className="ha-actu-brouillon">Brouillon</div>
+            </div>
+          )}
+          <div className="ha-actu-html ha-actu-vignette-html" dangerouslySetInnerHTML={{ __html: html }} />
+        </>
+      ) : (
+        <>
+          <Couverture path={row.vignette_path} titre={row.titre} />
+          <div className="ha-actu-card-corps">
+            {row.statut && row.statut !== 'publie' && <div className="ha-actu-brouillon">Brouillon</div>}
+            <div className="ha-actu-card-titre">{row.titre}</div>
+            {row.chapo && <div className="ha-actu-card-chapo">{row.chapo}</div>}
+            {fmtPublie(row.publie_le) && <div className="ha-actu-card-date">{fmtPublie(row.publie_le)}</div>}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function VignettesActualites() {
   const nav = useNavigate()
   const [rows, setRows] = useState(null)
@@ -37,7 +69,7 @@ export function VignettesActualites() {
   useEffect(() => {
     let on = true
     supabase.from('actualites')
-      .select('id,titre,chapo,vignette_path,publie_le')
+      .select('id,titre,chapo,vignette_path,vignette_html,publie_le')
       .eq('statut', 'publie')
       .order('publie_le', { ascending: false })
       .limit(4)
@@ -57,14 +89,7 @@ export function VignettesActualites() {
       </div>
       <div className="ha-actu-grid">
         {rows.map(a => (
-          <button key={a.id} type="button" className="ha-actu-card" onClick={() => nav(`/app/actualites/${a.id}`)}>
-            <Couverture path={a.vignette_path} titre={a.titre} />
-            <div className="ha-actu-card-corps">
-              <div className="ha-actu-card-titre">{a.titre}</div>
-              {a.chapo && <div className="ha-actu-card-chapo">{a.chapo}</div>}
-              {fmtPublie(a.publie_le) && <div className="ha-actu-card-date">{fmtPublie(a.publie_le)}</div>}
-            </div>
-          </button>
+          <CarteActualite key={a.id} row={a} onOpen={() => nav(`/app/actualites/${a.id}`)} />
         ))}
       </div>
     </section>
