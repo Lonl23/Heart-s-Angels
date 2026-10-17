@@ -20,6 +20,8 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
   const [pool, setPool] = useState([])
   const [dates, setDates] = useState({ label: '', jours: [], d0: null, d1: null, periodes: [] })
   const [periodeSel, setPeriodeSel] = useState(null)
+  const [valideMsg, setValideMsg] = useState('')
+  const [validation, setValidation] = useState(false)
 
   const cleVecteurs = (m.vecteurs || []).map(v => v.id).join('|')
   useEffect(() => { charger() }, [souhaitId, cleVecteurs])
@@ -141,7 +143,6 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
         ? `Déjà affectée à une autre mission le ${fmtPeriode(periodeSel)}. L’affecter quand même ?`
         : 'Déjà affectée à une autre mission sur ces dates. L’affecter quand même ?')) return
     }
-    await flushMission()
     const v = (m.vecteurs||[]).find(x => x.id === vid)
     const requisV = rolesRequisVecteur(v, m.roles_requis)
     const membresV = equipe.filter(e => e.vecteur_id === vid)
@@ -152,20 +153,69 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
     })
     const remaining = rolesEncoreManquants(requisV, personnesV)
     const role = roleSuggere(p?.quals || [], remaining.length ? remaining : requisV, rolesDejaV)
-    const { error } = await supabase.from('souhait_personnel')
-      .upsert({
-        souhait_id: souhaitId,
-        user_id: userId,
+    await flushMission()
+    const vehicule = [v?.nom, v?.plaque].filter(Boolean).join(' · ') || null
+    const row = {
+      souhait_id: souhaitId,
+      user_id: userId,
+      vecteur_id: vid,
+      vehicule,
+      role_mission: role || null,
+      publie: false,
+    }
+    let { error } = await supabase.from('souhait_personnel').insert(row)
+    if (error?.code === '23505') {
+      const upd = await supabase.from('souhait_personnel').update({
         vecteur_id: vid,
-        vehicule: [v?.nom, v?.plaque].filter(Boolean).join(' · ') || null,
+        vehicule,
         role_mission: role || null,
-      }, { onConflict: 'souhait_id,user_id' })
+      }).eq('souhait_id', souhaitId).eq('user_id', userId)
+      error = upd.error
+    }
     if (error) { alert("Impossible d'ajouter cet équipier : " + error.message); return }
-    await retenirJour()
+    setValideMsg('')
+    await charger()
+  }
+  async function valider() {
+    if (validation) return
+    if (!vecteurs.length) {
+      alert('Ajoutez un vecteur avant de valider.')
+      return
+    }
+    const externes = vecteurs.reduce((n, v) => n + (v.externes || []).length, 0)
+    if (!equipe.length && !externes) {
+      alert('Ajoutez l’équipage sur le vecteur avant de valider.')
+      return
+    }
+    if (!periodeSel?.debut) {
+      alert('Choisissez la date retenue avant de valider.')
+      return
+    }
+    const manques = manquesEquipage(m, equipe, pool)
+    if (manques.length) {
+      const phrase = phraseIlManque(manques)
+      if (!confirm(`${phrase}. Valider quand même ?`)) return
+    }
+    setValidation(true)
+    const ok = await retenirJour()
+    if (!ok) { setValidation(false); return }
+    const { data: publies, error } = await supabase.from('souhait_personnel')
+      .update({ publie: true })
+      .eq('souhait_id', souhaitId)
+      .eq('publie', false)
+      .select('id')
+    setValidation(false)
+    if (error) {
+      alert('La date est retenue, mais l’envoi aux volontaires a échoué : ' + error.message)
+      return
+    }
+    setValideMsg((publies || []).length
+      ? 'Date retenue. Équipage à prévoir est décoché. Les volontaires ont reçu leur mission.'
+      : 'Date retenue. Équipage à prévoir est décoché.')
     await charger()
   }
   async function retenirJour() {
-    if (!periodeSel?.debut) return
+    if (!periodeSel?.debut) return false
     const periode = {
       debut: periodeSel.debut,
       fin: periodeSel.fin || periodeSel.debut,
@@ -174,17 +224,20 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
     }
     const mission = {
       ...m,
+      vecteurs: (m.vecteurs || []).map(v => ({ ...v, valide: true })),
       attente: { ...(m.attente || {}), equipage: false },
       jour_retenu: periode.debut,
     }
-    await supabase.from('souhaits').update({
+    const { error } = await supabase.from('souhaits').update({
       date_souhaitee: periode.debut,
       date_fin: periode.fin,
       dates_possibles: [periode],
       mission,
     }).eq('id', souhaitId)
+    if (error) { alert('Impossible de retenir la date : ' + error.message); return false }
     setM(() => mission)
     onJourRetenu?.(periode, mission)
+    return true
   }
   function ajouterExterne(vid, personne) {
     const id = uid()
@@ -192,7 +245,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
       ...o,
       vecteurs: (o.vecteurs || []).map(v => v.id === vid ? { ...v, externes: [...(v.externes || []), { ...personne, id }] } : v),
     }))
-    retenirJour()
+    setValideMsg('')
   }
   async function retirerMembre(id) {
     await supabase.from('souhait_personnel').delete().eq('id', id)
@@ -265,6 +318,11 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
               ? 'personne n’est disponible et libre.'
               : `${libres.length} volontaire${libres.length>1?'s':''} disponible${libres.length>1?'s':''}.`}
           </div>
+          {!lecture && (
+            <div style={{ fontSize:13, color:'var(--text-2)', marginTop:8 }}>
+              La date surlignée est celle qui sera gardée. Les autres disparaissent au clic sur Valider.
+            </div>
+          )}
         </div>
       )}
       {dates.d0 && !alternatives && (
@@ -282,9 +340,18 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
         </Flash>
       )}
 
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:10, flexWrap:'wrap' }}>
-        <div />
-        {!lecture && <Btn onClick={ajouterVecteur}>+ Vecteur</Btn>}
+      {valideMsg && <Flash>{valideMsg}</Flash>}
+      {!lecture && !valideMsg && equipe.some(e => e.publie === false) && (
+        <Flash kind="warn">Ces volontaires ne voient pas encore la mission. Elle part dans Mes souhaits, avec la notification, au clic sur Valider.</Flash>
+      )}
+
+      <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', marginBottom:12, gap:10, flexWrap:'wrap' }}>
+        {!lecture && (
+          <Btn onClick={valider} disabled={validation}>
+            {validation ? 'Validation…' : 'Valider'}
+          </Btn>
+        )}
+        {!lecture && <Btn kind="soft" onClick={ajouterVecteur}>+ Vecteur</Btn>}
       </div>
 
       {vecteurs.length === 0 && <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Aucun vecteur. Ajoutez-en un pour constituer l'équipage.</div>}
@@ -333,6 +400,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
                         <span>
                           {e.profiles?.prenom} {e.profiles?.nom}
                           {e.role_mission && <span style={{ color:'var(--text-muted)' }}> — {lblRoleMission(e.role_mission) || e.role_mission}</span>}
+                          {e.publie === false && <span style={{ fontSize:11.5, color:'#BA7517', marginLeft:8 }}>en attente de validation</span>}
                           {dispoTxt && <span style={{ fontSize:11.5, color: st === 'plein' ? '#3B6D11' : '#C62828', marginLeft:8 }}>{dispoTxt}</span>}
                           {conf && <span style={{ fontSize:11.5, color:'#C62828', marginLeft:6 }}>autre mission</span>}
                         </span>
@@ -383,6 +451,22 @@ function conflitSur(p, periode) {
   if (!periode?.debut) return !!p.conflit
   if (p.conflitPrecis) return !!p.conflitPeriode?.[clePeriode(periode)]
   return !!p.conflit
+}
+
+function manquesEquipage(m, equipe, pool) {
+  const out = []
+  for (const v of m?.vecteurs || []) {
+    const membres = (equipe || []).filter(e => e.vecteur_id === v.id)
+    const personnes = [
+      ...membres.map(e => {
+        const p = (pool || []).find(x => x.user_id === e.user_id)
+        return { quals: p?.quals || qualsImplicites(e.profiles?.role, e.profiles?.fiche) }
+      }),
+      ...(v.externes || []).map(e => ({ quals: e.role ? [e.role] : [] })),
+    ]
+    out.push(...rolesEncoreManquants(rolesRequisVecteur(v, m?.roles_requis), personnes))
+  }
+  return out
 }
 
 function rolesTousVecteurs(m) {
