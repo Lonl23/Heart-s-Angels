@@ -1448,6 +1448,27 @@ img, svg, video, table { max-width: 100%; }
 }
 .ha-actu-chapo { font-size: 1.05rem; line-height: 1.5; color: var(--text-2); margin: 14px 0 18px; }
 .ha-actu-article p { font-size: 16px; line-height: 1.65; color: var(--text); margin: 0 0 14px; white-space: pre-wrap; }
+.ha-actu-article .ha-actu-html p { white-space: normal; }
+.ha-actu-html h2, .ha-actu-html h3 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  color: var(--heading); margin: 18px 0 8px; line-height: 1.2;
+}
+.ha-actu-html h2 { font-size: 1.45rem; }
+.ha-actu-html h3 { font-size: 1.2rem; }
+.ha-actu-html a { color: var(--accent); }
+.ha-actu-html ul, .ha-actu-html ol { margin: 0 0 12px; padding-left: 1.3em; }
+.ha-actu-html img { max-width: 100%; height: auto; border-radius: 10px; }
+.ha-actu-html table { width: 100%; border-collapse: collapse; margin: 0 0 14px; font-size: 14.5px; }
+.ha-actu-html td, .ha-actu-html th { border: 1px solid var(--border); padding: 6px 8px; vertical-align: top; }
+.ha-actu-word {
+  min-height: 220px; border: 1px dashed var(--border); border-radius: 12px;
+  padding: 14px 16px; background: var(--surface); outline: none;
+}
+.ha-actu-word:focus { border-style: solid; border-color: var(--accent); }
+.ha-actu-word:empty:before {
+  content: 'Collez ici le texte copié depuis Word.';
+  color: var(--text-faint);
+}
 .ha-actu-article h2 {
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-size: 1.45rem; font-weight: 600; color: var(--heading); margin: 22px 0 8px;

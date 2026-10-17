@@ -64,7 +64,7 @@ export const DEPARTEMENTS = [
       { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Photos de fond, partenaires et accès' },
       { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
       { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
-      { key: 'actualites_edition', to: '/app/actualites', label: 'Actualités', icon: '📰', desc: 'Rédiger et publier les nouvelles de l’ASBL' },
+      { key: 'actualites_edition', to: '/app/actualites', label: 'Actualités', icon: '📰', desc: 'HTML, collage Word, ou blocs' },
     ],
   },
 ]

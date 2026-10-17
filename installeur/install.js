@@ -130,6 +130,7 @@ async function main() {
     await client.query(lireSQL('91_mfa_email.sql'))
     await client.query(lireSQL('92_affectation_vecteur_et_non_realise.sql'))
     await client.query(lireSQL('93_actualites.sql'))
+    await client.query(lireSQL('94_actualites_html.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

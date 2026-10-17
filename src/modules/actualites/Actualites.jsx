@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, TA, Empty, Loading } from '@/components/ui'
 import { compressImage } from '@/modules/souhaits/TerrainPhotos'
+import { sanitizeHtml } from '@/lib/sanitizeHtml'
 import { blocVide, chapoCourt, normaliserBlocs } from './blocs'
+import { chapoDepuisHtml, htmlDepuisPressePapier } from './htmlWord'
 import { Couverture, fmtPublie, urlActu } from './Vignettes'
 
 const BUCKET = 'actualites-images'
-const SELECT = 'id,titre,chapo,vignette_path,blocs,statut,publie_le,created_at,updated_at'
+const SELECT = 'id,titre,chapo,vignette_path,blocs,format,html,statut,publie_le,created_at,updated_at'
 
 function tri(rows) {
   return (rows || []).slice().sort((a, b) => {
@@ -27,7 +29,9 @@ export function Article({ row }) {
         <h1>{row.titre}</h1>
         {fmtPublie(row.publie_le || row.created_at) && <div className="ha-actu-date">{fmtPublie(row.publie_le || row.created_at)}</div>}
         {row.chapo && <p className="ha-actu-chapo">{row.chapo}</p>}
-        {blocs.map(b => {
+        {row.format === 'html' ? (
+          <HtmlCorps html={row.html} />
+        ) : blocs.map(b => {
           if (b.type === 'intertitre') return <h2 key={b.id}>{b.texte}</h2>
           if (b.type === 'citation') {
             return (
@@ -50,6 +54,12 @@ export function Article({ row }) {
       </div>
     </article>
   )
+}
+
+function HtmlCorps({ html }) {
+  const clean = sanitizeHtml(html)
+  if (!clean) return null
+  return <div className="ha-actu-html" dangerouslySetInnerHTML={{ __html: clean }} />
 }
 
 export default function Actualites() {
@@ -141,7 +151,7 @@ export default function Actualites() {
 
 function FormActualite({ profile, editId, onDone }) {
   const [form, setForm] = useState({
-    titre: '', chapo: '', vignette_path: '', blocs: [blocVide('texte')], statut: 'brouillon', publie_le: null,
+    titre: '', chapo: '', vignette_path: '', format: 'html', html: '', blocs: [blocVide('texte')], statut: 'brouillon', publie_le: null,
   })
   const [loaded, setLoaded] = useState(!editId)
   const [saving, setSaving] = useState(false)
@@ -162,6 +172,8 @@ function FormActualite({ profile, editId, onDone }) {
             titre: data.titre || '',
             chapo: data.chapo || '',
             vignette_path: data.vignette_path || '',
+            format: data.format === 'html' || (data.html && data.format !== 'blocs') ? 'html' : 'blocs',
+            html: data.html || '',
             blocs: blocs.length ? blocs : [blocVide('texte')],
             statut: data.statut || 'brouillon',
             publie_le: data.publie_le || null,
@@ -230,8 +242,14 @@ function FormActualite({ profile, editId, onDone }) {
   async function enregistrer(publier) {
     const titre = String(form.titre || '').trim()
     if (!titre) { alert('Indiquez un titre.'); return }
+    const enHtml = form.format === 'html'
+    const html = enHtml ? sanitizeHtml(form.html) : ''
     const blocs = normaliserBlocs(form.blocs)
-    if (publier && !blocs.length && !chapoCourt(form.chapo)) {
+    if (publier && enHtml && !html && !chapoCourt(form.chapo)) {
+      alert('Collez le texte ou écrivez le HTML avant de publier.')
+      return
+    }
+    if (publier && !enHtml && !blocs.length && !chapoCourt(form.chapo)) {
       alert('Ajoutez un chapô ou un paragraphe avant de publier.')
       return
     }
@@ -239,8 +257,10 @@ function FormActualite({ profile, editId, onDone }) {
     const restePublie = publier || form.statut === 'publie'
     const payload = {
       titre,
-      chapo: chapoCourt(form.chapo) || null,
+      chapo: chapoCourt(form.chapo) || (enHtml ? chapoCourt(chapoDepuisHtml(html)) : null) || null,
       vignette_path: form.vignette_path || null,
+      format: enHtml ? 'html' : 'blocs',
+      html: html || null,
       blocs,
       statut: restePublie ? 'publie' : 'brouillon',
       publie_le: restePublie ? (form.publie_le || new Date().toISOString()) : null,
@@ -280,13 +300,15 @@ function FormActualite({ profile, editId, onDone }) {
     chapo: form.chapo,
     vignette_path: form.vignette_path,
     blocs: form.blocs,
+    format: form.format,
+    html: form.html,
     publie_le: form.publie_le || new Date().toISOString(),
   }
 
   return (
     <Page
       title={form.id ? 'Modifier l’actualité' : 'Nouvelle actualité'}
-      subtitle="Photo de couverture, chapô, puis les blocs dans l’ordre de lecture. La mise en page est celle de l’ASBL."
+      subtitle="HTML pour une page composée, ou collage direct depuis Word. Les blocs restent disponibles."
       action={<Btn kind="soft" onClick={() => onDone(form.id ? `/app/actualites/${form.id}` : '/app/actualites')}>Annuler</Btn>}
     >
       {err && <div className="ha-flash ha-flash-err">{err}</div>}
@@ -312,6 +334,14 @@ function FormActualite({ profile, editId, onDone }) {
             )}
           </div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)', marginBottom: 8 }}>Corps de l’article</div>
+          <div className="ha-tabs" style={{ marginBottom: 12 }}>
+            <button type="button" className={'ha-tab' + (form.format === 'html' ? ' is-on' : '')} onClick={() => setForm(s => ({ ...s, format: 'html' }))}>HTML</button>
+            <button type="button" className={'ha-tab' + (form.format !== 'html' ? ' is-on' : '')} onClick={() => setForm(s => ({ ...s, format: 'blocs' }))}>Blocs</button>
+          </div>
+          {form.format === 'html' ? (
+            <EditeurHtml html={form.html} setHtml={v => setForm(s => ({ ...s, html: v }))} />
+          ) : (
+          <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {form.blocs.map((b, i) => (
               <Card key={b.id} style={{ padding: '12px 14px' }}>
@@ -354,6 +384,8 @@ function FormActualite({ profile, editId, onDone }) {
             <Btn kind="soft" onClick={() => setForm(s => ({ ...s, blocs: [...s.blocs, blocVide('photo')] }))}>+ Photo</Btn>
             <Btn kind="soft" onClick={() => setForm(s => ({ ...s, blocs: [...s.blocs, blocVide('citation')] }))}>+ Citation</Btn>
           </div>
+          </>
+          )}
         </>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
@@ -362,5 +394,72 @@ function FormActualite({ profile, editId, onDone }) {
         {form.id && <Btn kind="danger" onClick={supprimer} disabled={saving}>Supprimer</Btn>}
       </div>
     </Page>
+  )
+}
+
+function EditeurHtml({ html, setHtml }) {
+  const [vue, setVue] = useState('word')
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="ha-tabs" style={{ marginBottom: 8 }}>
+        <button type="button" className={'ha-tab' + (vue === 'word' ? ' is-on' : '')} onClick={() => setVue('word')}>Depuis Word</button>
+        <button type="button" className={'ha-tab' + (vue === 'code' ? ' is-on' : '')} onClick={() => setVue('code')}>Code HTML</button>
+      </div>
+      {vue === 'word' ? (
+        <>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Dans Word : tout sélectionner, copier, puis coller ici. Le gras, les titres et les listes sont gardés. La police de Word est retirée pour rester dans le style de l’ASBL.
+          </p>
+          <ZoneCollage html={html} onChange={setHtml} />
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+            Collez ou écrivez le HTML de la page. Les scripts sont retirés. Le titre, le chapô et la photo de couverture restent au-dessus.
+          </p>
+          <TA label="HTML" value={html} set={setHtml} rows={16}
+            placeholder={'<h2>Titre de partie</h2>\n<p>Le texte de l’actualité.</p>'} />
+        </>
+      )}
+    </div>
+  )
+}
+
+function ZoneCollage({ html, onChange }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || document.activeElement === el) return
+    const propre = sanitizeHtml(html) || ''
+    if (el.innerHTML !== propre) el.innerHTML = propre
+  }, [html])
+
+  function poser(brut) {
+    const clean = sanitizeHtml(brut)
+    if (ref.current && ref.current.innerHTML !== clean) ref.current.innerHTML = clean
+    onChange(clean)
+  }
+
+  function onPaste(e) {
+    e.preventDefault()
+    const source = htmlDepuisPressePapier(
+      e.clipboardData?.getData('text/html'),
+      e.clipboardData?.getData('text/plain'),
+    )
+    poser(source)
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="ha-actu-word ha-actu-html"
+      contentEditable
+      role="textbox"
+      aria-multiline="true"
+      aria-label="Texte collé depuis Word"
+      onPaste={onPaste}
+      onBlur={() => poser(ref.current?.innerHTML || '')}
+      suppressContentEditableWarning
+    />
   )
 }
