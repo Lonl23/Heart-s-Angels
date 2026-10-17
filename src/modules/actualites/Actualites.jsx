@@ -127,7 +127,6 @@ export default function Actualites() {
     )
   }
 
-  const visibles = items.filter(visibleAuPublic)
   if (redaction) {
     return (
       <Page
@@ -151,6 +150,7 @@ export default function Actualites() {
       </Page>
     )
   }
+  const visibles = items.filter(a => visibleAuPublic(a))
   return (
     <Page
       title="Actualités"
@@ -174,17 +174,25 @@ export default function Actualites() {
   )
 }
 
+function dateValide(valeur) {
+  if (valeur instanceof Date) return Number.isNaN(valeur.getTime()) ? null : valeur
+  if (valeur == null || valeur === '') return null
+  const d = new Date(valeur)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 function visibleAuPublic(a, maintenant = new Date()) {
   if (a?.statut !== 'publie') return false
-  if (!a.publie_le) return true
-  const d = new Date(a.publie_le)
-  return !Number.isNaN(d.getTime()) && d.getTime() <= maintenant.getTime()
+  const d = dateValide(a.publie_le)
+  if (!d) return !a?.publie_le
+  const ref = maintenant instanceof Date && !Number.isNaN(maintenant.getTime()) ? maintenant : new Date()
+  return d.getTime() <= ref.getTime()
 }
 
 function libelleParution(a) {
   if (a.statut !== 'publie') return 'Brouillon'
-  if (!a.publie_le) return 'Publié'
-  const d = new Date(a.publie_le)
+  const d = dateValide(a.publie_le)
+  if (!d) return 'Publié'
   const quand = fmtPublie(a.publie_le)
   if (d.getTime() > Date.now()) return `À paraître le ${quand}`
   return `Paru le ${quand}`
