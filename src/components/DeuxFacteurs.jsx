@@ -35,7 +35,8 @@ export function PorteDeuxFacteurs({ children }) {
     const f = await chargerFacteurs()
     if (f.erreur) { setEtat('erreur'); setFacteurs(f); return }
     setFacteurs(f)
-    setEtat(besoinDefi({ totpActif: !!f.totp, aal2: f.aal2, emailActif: f.emailActif, emailOk: f.emailOk }) ? 'defi' : 'ok')
+    if (!f.totp || !f.emailActif) { setEtat('configurer'); return }
+    setEtat(besoinDefi({ totpActif: true, aal2: f.aal2, emailActif: true, emailOk: f.emailOk }) ? 'defi' : 'ok')
   }
 
   useEffect(() => { evaluer() }, [])
@@ -46,10 +47,19 @@ export function PorteDeuxFacteurs({ children }) {
   }
   return (
     <FondEcran page="login" style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20 }}>
-      <div style={{ width:'100%', maxWidth:380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
+      <div style={{ width:'100%', maxWidth: etat === 'configurer' ? 460 : 380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
         <Logo size={100} style={{ margin:'0 auto 8px' }} />
-        <h1 style={{ textAlign:'center', fontSize:'1.35rem', color:'var(--heading)', margin:'8px 0 6px' }}>Code de vérification</h1>
-        {etat === 'erreur' ? (
+        <h1 style={{ textAlign:'center', fontSize:'1.35rem', color:'var(--heading)', margin:'8px 0 6px' }}>
+          {etat === 'configurer' ? 'Connexion en deux étapes' : 'Code de vérification'}
+        </h1>
+        {etat === 'configurer' ? (
+          <>
+            <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, margin:'0 0 14px' }}>
+              Activez l’application d’authentification et le code par e-mail. Les deux sont nécessaires pour entrer. Ensuite, à chaque connexion, vous choisirez l’un ou l’autre.
+            </p>
+            <ReglageDeuxFacteurs obligatoire onMaj={f => { if (f?.totp && f?.emailActif) evaluer() }} />
+          </>
+        ) : etat === 'erreur' ? (
           <>
             <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5 }}>{facteurs?.erreur || 'Vérification impossible.'}</p>
             <Btn onClick={evaluer} style={{ width:'100%', marginTop:8 }}>Réessayer</Btn>
@@ -72,7 +82,10 @@ function Defi({ facteurs, onOk }) {
   const [err, setErr] = useState(null)
   const [info, setInfo] = useState(null)
   const [busy, setBusy] = useState(false)
-  const lesDeux = !!(facteurs.totp && facteurs.emailActif)
+  const choix = [
+    facteurs.totp ? ['totp', 'Code de l’application'] : null,
+    facteurs.emailActif ? ['email', 'Code par e-mail'] : null,
+  ].filter(Boolean)
 
   async function valider(e) {
     e?.preventDefault()
@@ -96,9 +109,9 @@ function Defi({ facteurs, onOk }) {
 
   return (
     <form onSubmit={valider}>
-      {lesDeux && (
+      {choix.length > 1 && (
         <div style={{ display:'flex', gap:8, margin:'12px 0' }}>
-          {[['totp', 'Application'], ['email', 'E-mail']].map(([v, l]) => (
+          {choix.map(([v, l]) => (
             <button key={v} type="button" onClick={() => { setMethode(v); setErr(null); setCode('') }}
               style={{ flex:1, padding:'8px 10px', borderRadius:9, cursor:'pointer', fontWeight:600, fontSize:13, fontFamily:'inherit', border: methode === v ? 'none' : '1px solid var(--border)', background: methode === v ? 'var(--accent)' : 'var(--bg-alt)', color: methode === v ? '#fff' : 'var(--text-2)' }}>
               {l}
@@ -122,7 +135,7 @@ function Defi({ facteurs, onOk }) {
   )
 }
 
-export function ReglageDeuxFacteurs() {
+export function ReglageDeuxFacteurs({ obligatoire, onMaj }) {
   const [charge, setCharge] = useState(true)
   const [facteurs, setFacteurs] = useState(null)
   const [err, setErr] = useState(null)
@@ -139,6 +152,7 @@ export function ReglageDeuxFacteurs() {
     setFacteurs(f)
     setCharge(false)
     if (f.erreur) setErr(f.erreur)
+    onMaj?.(f)
   }
 
   useEffect(() => { recharger() }, [])
@@ -214,7 +228,7 @@ export function ReglageDeuxFacteurs() {
 
   return (
     <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
-      <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Connexion en deux étapes</div>
+      {!obligatoire && <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Connexion en deux étapes</div>}
       {charge ? <div style={{ fontSize:13, color:'var(--text-muted)' }}>Chargement…</div> : (
         <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
           <Bloc
@@ -241,7 +255,7 @@ export function ReglageDeuxFacteurs() {
                 <Btn kind="danger" onClick={retirerApp} disabled={busy}>Confirmer le retrait</Btn>
                 <Btn kind="soft" onClick={() => setConfirmerRetrait(null)}>Annuler</Btn>
               </div>
-            ) : (
+            ) : totpOn && obligatoire ? null : (
               <Btn kind={totpOn ? 'soft' : 'primary'} onClick={totpOn ? () => setConfirmerRetrait('totp') : activerApp} disabled={busy}>
                 {totpOn ? 'Retirer' : 'Activer'}
               </Btn>
@@ -262,7 +276,7 @@ export function ReglageDeuxFacteurs() {
                 <Btn kind="danger" onClick={retirerEmail} disabled={busy}>Confirmer le retrait</Btn>
                 <Btn kind="soft" onClick={() => setConfirmerRetrait(null)}>Annuler</Btn>
               </div>
-            ) : (
+            ) : emailOn && obligatoire ? null : (
               <Btn kind={emailOn ? 'soft' : 'primary'} onClick={emailOn ? () => setConfirmerRetrait('email') : envoyerEmail} disabled={busy}>
                 {emailOn ? 'Retirer' : 'Activer'}
               </Btn>

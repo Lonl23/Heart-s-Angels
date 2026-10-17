@@ -128,6 +128,7 @@ async function main() {
     await client.query(lireSQL('89_souhaits_module.sql'))
     await client.query(lireSQL('90_liberer_affectation_non_realise.sql'))
     await client.query(lireSQL('91_mfa_email.sql'))
+    await client.query(lireSQL('92_affectation_vecteur_et_non_realise.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

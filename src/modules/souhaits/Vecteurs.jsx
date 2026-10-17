@@ -21,11 +21,12 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
   const [dates, setDates] = useState({ label: '', jours: [], d0: null, d1: null, periodes: [] })
   const [periodeSel, setPeriodeSel] = useState(null)
 
-  useEffect(() => { charger() }, [souhaitId])
+  const cleVecteurs = (m.vecteurs || []).map(v => v.id).join('|')
+  useEffect(() => { charger() }, [souhaitId, cleVecteurs])
 
   async function charger() {
     const [{ data: sh }, { data: eq }, rpc] = await Promise.all([
-      supabase.from('souhaits').select('date_souhaitee,date_fin,dates_possibles').eq('id', souhaitId).single(),
+      supabase.from('souhaits').select('date_souhaitee,date_fin,dates_possibles,mission').eq('id', souhaitId).single(),
       supabase.from('souhait_personnel').select('*, profiles(prenom,nom,role,fiche)').eq('souhait_id', souhaitId),
       supabase.rpc('personnel_disponible_souhait', { p_souhait: souhaitId }),
     ])
@@ -39,7 +40,16 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
       d1: plage.date_fin,
       periodes,
     })
-    setEquipe(eq || [])
+    let eqRows = eq || []
+    const vecteursDb = Array.isArray(sh?.mission?.vecteurs) ? sh.mission.vecteurs : []
+    const idsVecteurs = new Set(vecteursDb.map(v => v.id))
+    const orphelins = eqRows.filter(e => !idsVecteurs.has(e.vecteur_id))
+    if (orphelins.length && vecteursDb.length === 1) {
+      const vid = vecteursDb[0].id
+      await Promise.all(orphelins.map(e => supabase.from('souhait_personnel').update({ vecteur_id: vid }).eq('id', e.id)))
+      eqRows = eqRows.map(e => idsVecteurs.has(e.vecteur_id) ? e : { ...e, vecteur_id: vid })
+    }
+    setEquipe(eqRows)
     let pers = normaliserPool(rpc.data)
     const depuisFiches = await poolDepuisProfils(jours, plage.date_souhaitee, plage.date_fin)
     if (!pers.length) pers = depuisFiches

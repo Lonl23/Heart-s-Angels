@@ -49,13 +49,13 @@ export async function chargerFacteurs() {
     supabase.auth.mfa.listFactors(),
     supabase.rpc('etat_email_2fa'),
   ])
-  if (aalErr || facErr) {
-    return { erreur: messageCode(aalErr || facErr) }
+  if (aalErr || facErr || mail.error) {
+    return { erreur: messageCode(aalErr || facErr || mail.error) }
   }
   const totp = factors?.totp?.[0] || null
   const emailActif = !!mail.data?.email_actif
   let emailOk = false
-  if (emailActif && !mail.error) {
+  if (emailActif) {
     const preuve = lirePreuve()
     if (preuve) {
       const { data } = await supabase.rpc('email_2fa_valide', { p_preuve: preuve })
@@ -66,7 +66,7 @@ export async function chargerFacteurs() {
   return {
     totp,
     aal2: aal?.currentLevel === 'aal2',
-    emailActif: emailActif && !mail.error,
+    emailActif,
     emailOk,
     facteursBruts: factors,
   }
