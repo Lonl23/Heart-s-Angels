@@ -1,6 +1,7 @@
 import { TRANCHES_AGE, ageEnAnnees, libelleTranche } from '../souhaits/fenetreMission.js'
 
 export const GRAINS = [
+  { v: 'ensemble', l: 'Ensemble' },
   { v: 'mois', l: 'Mois' },
   { v: 'trimestre', l: 'Trimestre' },
   { v: 'semestre', l: 'Semestre' },
@@ -44,6 +45,7 @@ export function dansPeriode(jour, { grain, annee, mois }) {
 
 export function libellePeriode({ grain, annee, mois }) {
   const m = Number(mois)
+  if (grain === 'ensemble') return 'Ensemble des souhaits'
   if (grain === 'annee') return String(annee)
   if (grain === 'semestre') return `${m <= 6 ? '1er' : '2e'} semestre ${annee}`
   if (grain === 'trimestre') return `T${Math.floor((m - 1) / 3) + 1} ${annee}`
@@ -62,6 +64,9 @@ export function preparerLigne(l) {
     ...l,
     jour,
     annee: anneeDe(jour),
+    statut: String(l.statut || ''),
+    beneficiaire: String(l.beneficiaire || '').trim(),
+    age,
     km: Number(l.km) || 0,
     activites: commeListe(l.activites),
     pathologies: commeListe(l.pathologies),
@@ -111,7 +116,7 @@ export function parVolontaire(lignes) {
     for (const v of l.volontaires) {
       const id = v.id || v.nom
       if (!id) continue
-      const cur = map.get(id) || { nom: v.nom || 'Volontaire', n: 0 }
+      const cur = map.get(id) || { id, nom: v.nom || 'Volontaire', n: 0 }
       cur.n += 1
       map.set(id, cur)
     }
@@ -132,6 +137,45 @@ export function evolutionAnnees(lignes) {
 
 export function totalKm(lignes) {
   return Math.round(lignes.reduce((s, l) => s + (Number(l.km) || 0), 0) * 10) / 10
+}
+
+export function filtrerLignes(lignes, f = {}) {
+  const statuts = f.statuts
+  return (lignes || []).filter(l => {
+    if (f.grain && f.grain !== 'ensemble' && !dansPeriode(l.jour, f)) return false
+    if (Array.isArray(statuts) && !statuts.includes(l.statut)) return false
+    if (f.genre && l.genre !== f.genre) return false
+    if (f.tranche && l.tranche !== f.tranche) return false
+    if (f.lieu && l.lieu !== f.lieu) return false
+    if (f.institution && l.institution !== f.institution) return false
+    if (f.service && l.service !== f.service) return false
+    if (f.pathologie && !(l.pathologies || []).includes(f.pathologie)) return false
+    if (f.activite && !(l.activites || []).includes(f.activite)) return false
+    if (f.volontaire && !(l.volontaires || []).some(v => v.id === f.volontaire || v.nom === f.volontaire)) return false
+    return true
+  })
+}
+
+export function valeursUniques(lignes, cle) {
+  const set = new Set()
+  for (const l of lignes || []) {
+    const v = l[cle]
+    if (Array.isArray(v)) v.forEach(x => { if (x) set.add(x) })
+    else if (v) set.add(v)
+  }
+  return [...set].sort((a, b) => String(a).localeCompare(String(b), 'fr'))
+}
+
+/** Plus grande valeur affichée : tous les graphiques s’y rapportent. */
+export function echelleCommune(series) {
+  let m = 0
+  for (const rows of series) {
+    for (const r of rows || []) {
+      const n = Number(r?.n) || 0
+      if (n > m) m = n
+    }
+  }
+  return m || 1
 }
 
 export function ordreTranches(rows) {

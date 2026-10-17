@@ -69,8 +69,8 @@ export default function App() {
           <Route path="it/actualites/:id/editer" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
           <Route path="it/actualites" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
           <Route path="it/helpdesk" element={<RequireAcces feature="helpdesk"><Helpdesk /></RequireAcces>} />
-          <Route path="statistiques" element={<RequireAcces feature="statistiques"><Statistiques /></RequireAcces>} />
-          <Route path="it/statistiques" element={<Navigate to="/app/statistiques" replace />} />
+          <Route path="it/statistiques" element={<RequireAcces feature="statistiques"><Statistiques /></RequireAcces>} />
+          <Route path="statistiques" element={<Navigate to="/app/it/statistiques" replace />} />
           <Route path="evenements/nouveau" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id/editer" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
