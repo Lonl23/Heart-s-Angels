@@ -53,6 +53,13 @@ export async function envoyerInvitationEmail(code) {
   return { ok: false, error: await lireErreur(data, error) }
 }
 
+/** Code à 6 chiffres pour la connexion en deux étapes. Jamais renvoyé au navigateur. */
+export async function demanderCodeEmail() {
+  const { data, error } = await invokeEnvoyerInvitation({ action: 'code_2fa' })
+  if (data?.ok) return { ok: true }
+  return { ok: false, error: await lireErreur(data, error) }
+}
+
 /** Mail « ton compte est prêt » avec le bouton Accéder à l’application. */
 export async function envoyerMailBienvenue() {
   const { data, error } = await invokeEnvoyerInvitation({ action: 'bienvenue' })

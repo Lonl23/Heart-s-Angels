@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
+import { poserPreuve } from '@/lib/deuxFacteurs'
 
 const AuthContext = createContext(null)
 
@@ -218,7 +219,10 @@ export function AuthProvider({ children }) {
     return roles.some(r => ['president', 'vice_president', 'resp_informatique', 'recolteur_souhait'].includes(r))
   }
 
-  async function signOut() { await supabase.auth.signOut() }
+  async function signOut() {
+    poserPreuve('')
+    await supabase.auth.signOut()
+  }
 
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,

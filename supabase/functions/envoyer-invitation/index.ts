@@ -1,7 +1,8 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 // Envoie via le compte Gmail laurent@heartsangels.be.
 // Expéditeur visible : app@heartsangels.be (alias).
-// Réponses → app@heartsangels.be. Copie cachée vers laurent@heartsangels.be.
+// Réponses → app@heartsangels.be. Copie cachée vers laurent@heartsangels.be,
+// sauf le code de connexion en deux étapes, qui n’est envoyé qu’au destinataire.
 // Les liens ouvrent https://app.heartsangels.be.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import nodemailer from 'npm:nodemailer@6.9.16'
@@ -164,6 +165,24 @@ Heart's Angels ASBL`
   return { texte, html, sujet: 'Heart’s Angels — réinitialise ton mot de passe' }
 }
 
+function mailCode2fa(opts: { prenom: string | null; code: string }) {
+  const salut = opts.prenom ? `Bonjour ${opts.prenom}` : 'Bonjour'
+  const texte = `${salut},
+
+Ton code de connexion Heart's Angels : ${opts.code}
+
+Il est valable 10 minutes. Si tu n’as pas demandé ce code, ignore ce message.
+
+Heart's Angels ASBL`
+  const html = cadreHtml(`
+    <p style="margin:0 0 12px">${esc(salut)},</p>
+    <p style="margin:0 0 12px">Ton code de connexion :</p>
+    <p style="margin:0;font-size:28px;font-weight:700;letter-spacing:.28em;color:${ACCENT}">${esc(opts.code)}</p>
+    <p style="margin:16px 0 0;font-size:14px;color:#5A6F74">Il est valable 10 minutes. Si tu n’es pas à l’origine de cette demande, ignore ce message.</p>
+  `)
+  return { texte, html, sujet: 'Heart’s Angels — code de connexion' }
+}
+
 function mailBienvenue(opts: { prenom: string | null; partenaire: boolean; nomInstitution: string | null; pub: string }) {
   const lien = urlConnexion(opts.pub, opts.partenaire)
   if (opts.partenaire) {
@@ -218,6 +237,7 @@ async function envoyer(opts: {
   sujet: string
   texte: string
   html: string
+  bcc?: boolean
 }) {
   const transporter = nodemailer.createTransport({
     host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
@@ -226,7 +246,7 @@ async function envoyer(opts: {
     auth: { user: opts.smtp.user, pass: opts.smtp.pass },
   })
   const dest = String(opts.to || '').trim()
-  const bcc = dest.toLowerCase() === CCI.toLowerCase() ? undefined : CCI
+  const bcc = opts.bcc === false || dest.toLowerCase() === CCI.toLowerCase() ? undefined : CCI
   await transporter.sendMail({
     from: opts.smtp.from,
     replyTo: opts.smtp.replyTo,
@@ -295,6 +315,41 @@ Deno.serve(async (req) => {
       user = (await asCaller.auth.getUser(jwt)).data.user
     }
     if (!user) return json({ error: 'Non authentifié.' }, 401)
+
+    if (action === 'code_2fa') {
+      const { data: prof } = await admin.from('profiles')
+        .select('email,prenom,actif')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (!prof || prof.actif === false) return json({ error: 'Accès refusé.' }, 403)
+      const dest = String(user.email || '').trim()
+      if (!dest) return json({ error: 'Aucune adresse e-mail de connexion.' }, 400)
+      const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0')
+      const { data: pose, error: poseErr } = await admin.rpc('poser_code_email_2fa', {
+        p_user: user.id,
+        p_code: code,
+      })
+      if (poseErr || !pose?.ok) {
+        const msg = pose?.erreur || 'Envoi impossible.'
+        return json({ error: msg, attente: pose?.attente ?? null }, poseErr ? 500 : 429)
+      }
+      const mail = mailCode2fa({ prenom: prof.prenom, code })
+      try {
+        await envoyer({
+          smtp,
+          to: dest,
+          sujet: mail.sujet,
+          texte: mail.texte,
+          html: mail.html,
+          bcc: false,
+        })
+      } catch (envoi) {
+        await admin.from('mfa_email_codes').delete().eq('user_id', user.id)
+        const msg = envoi instanceof Error ? envoi.message : String(envoi)
+        return json({ error: msg }, 500)
+      }
+      return json({ ok: true, action: 'code_2fa' })
+    }
 
     if (action === 'bienvenue') {
       const { data: prof } = await admin.from('profiles').select('email,prenom,nom,role,partenaire_id,actif').eq('id', user.id).maybeSingle()

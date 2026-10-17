@@ -7,6 +7,7 @@ import { Card, Btn, F, TA, Pill, PillFictif, Empty, Loading, Logo, PhoneF, Addre
 import { ApercuPartenaire } from '@/modules/souhaits/RapportPartenaire'
 import { GenrePicker } from '@/modules/annuaire/genre'
 import BadgeBeta from '@/components/BadgeBeta'
+import { ReglageDeuxFacteurs } from '@/components/DeuxFacteurs'
 
 const STATUT = {
   nouvelle:  { l:'Reçue',       c:'#BA7517', bg:'#FAEEDA' },
@@ -55,7 +56,10 @@ export default function PartenairePortail() {
           </div>
         )}
         {view === 'liste' && (
-          <ListeDemandes profile={profile} onNew={() => setView('nouvelle')} onOpen={(id) => { setSelId(id); setView('detail') }} />
+          <>
+            <ReglageDeuxFacteurs />
+            <ListeDemandes profile={profile} onNew={() => setView('nouvelle')} onOpen={(id) => { setSelId(id); setView('detail') }} />
+          </>
         )}
         {view === 'nouvelle' && (
           <NouvelleDemande profile={profile} onDone={() => setView('liste')} />
