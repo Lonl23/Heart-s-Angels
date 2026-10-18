@@ -62,7 +62,7 @@ export function CarteActualite({ row, onOpen }) {
   )
 }
 
-export function VignettesActualites() {
+export function VignettesActualites({ accueil = false }) {
   const nav = useNavigate()
   const [rows, setRows] = useState(null)
 
@@ -81,8 +81,8 @@ export function VignettesActualites() {
 
   if (!rows?.length) return null
   return (
-    <section style={{ marginBottom: 28 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+    <section className={accueil ? 'ha-accueil-actus' : undefined} style={accueil ? undefined : { marginBottom: 28 }}>
+      <div className={accueil ? 'ha-accueil-actus-bar' : undefined} style={accueil ? undefined : { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>Actualités</div>
         <button type="button" onClick={() => nav('/app/actualites')} style={{ background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
           Toutes les actualités

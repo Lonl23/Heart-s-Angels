@@ -83,9 +83,9 @@ export default function Login() {
   }
 
   return (
-    <FondEcran page="login" style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20 }}>
-      <div style={{ width:'100%', maxWidth:380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
-        <Logo size={140} style={{ margin:'0 auto 8px' }} />
+    <FondEcran page="login" className="ha-login">
+      <div className="ha-login-carte">
+        <Logo size={88} className="ha-login-logo" />
         <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, marginBottom:6, display:'flex', justifyContent:'center', alignItems:'center', gap:8 }}>
           {partenaire ? 'Espace partenaires' : 'Espace de gestion'}
           <BadgeBeta />
@@ -95,7 +95,7 @@ export default function Login() {
             Encodez une demande de souhait et suivez son avancement.
           </p>
         )}
-        {!partenaire && <div style={{ height:16 }} />}
+        {!partenaire && <div style={{ height:8 }} />}
         {loc.state?.info && (
           <div className="ha-flash ha-flash-ok" style={{ marginBottom:14 }}>{loc.state.info}</div>
         )}
@@ -108,7 +108,7 @@ export default function Login() {
             </button>
           </div>
         )}
-        <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        <form onSubmit={submit} className="ha-login-form">
           {partenaire && (
             <div>
               <label style={lbl}>Nom de l’institution</label>
