@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Btn, F, Sel, Empty, Modal } from '@/components/ui'
-import { libelleQualsImplicites, teinteCalendrier, rolesRequisEffectifs, phraseIlManque, rolesManquantsMultiset } from '@/modules/fiche/ficheSchema'
+import { libelleQualsImplicites, teinteCalendrier, rolesRequisEffectifs, phraseIlManque, rolesManquantsMultiset, estChauffeurFiche } from '@/modules/fiche/ficheSchema'
 import { allouerCouverturesCalendrier, cleCouvertureCalendrier } from './disponibilites/couverture'
 import GrilleMois from './disponibilites/GrilleMois'
 import {
@@ -21,11 +21,34 @@ const DEMI = [
   { v: 'matin', l: 'Matin' },
   { v: 'apres_midi', l: 'Après-midi' },
 ]
-const MAX_PILLS = 4
+function commeListe(v) {
+  if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean)
+  if (v == null || v === '') return []
+  return [String(v).trim()].filter(Boolean)
+}
+
+function activitesDe(mission, deja) {
+  const depuis = commeListe(mission?.categories?.activites)
+  return depuis.length ? depuis : commeListe(deja)
+}
+
+function villeDe(mission, deja) {
+  const adresse = mission?.base_adresse
+  const loc = adresse && typeof adresse === 'object' ? String(adresse.localite || '').trim() : ''
+  return loc || String(deja || '').trim()
+}
+
+function textesMission(m) {
+  const acts = commeListe(m?.activites)
+  const ville = String(m?.ville_base || '').trim()
+  const gauche = acts.length ? acts.join(', ') : String(m?.lieu || m?.activite || '').trim()
+  if (gauche && ville) return `${gauche} – ${ville}`
+  return gauche || ville || 'Souhait'
+}
 
 function libelleMission(it) {
   const m = it.ev
-  const base = (m.lieu || m.activite || 'Mission').trim()
+  const base = textesMission(m)
   const hRdv = hhmm(m.rdv_base)
   const heures = hRdv
     ? ` · ${hRdv}–24 h`
@@ -50,12 +73,18 @@ function manques(m) {
 
 function prenomTag(p, mine) {
   if (mine) return 'Moi'
-  return (p?.prenom || '').trim() || (p?.nom || '').trim() || '?'
+  const nom = [p?.prenom, p?.nom].map(x => String(x || '').trim()).filter(Boolean).join(' ')
+  return nom || '?'
+}
+
+function marqueChauffeur(p) {
+  return estChauffeurFiche(p?.role, p?.fiche) ? ' is-chauffeur' : ''
 }
 
 export default function Disponibilites() {
   const { profile, peutVoirToutesDispos, peutEncoderDisposPourAutrui, estVolontaireNonMedical } = useAuth()
-  const voirTous = peutVoirToutesDispos()
+  const [retraits, setRetraits] = useState(() => new Set())
+  const voirTous = peutVoirToutesDispos() || retraits.size > 0
   const encoderAutrui = peutEncoderDisposPourAutrui()
   const nonMed = estVolontaireNonMedical()
   const [vue, setVue] = useState(() => {
@@ -69,6 +98,15 @@ export default function Disponibilites() {
   const [form, setForm] = useState(null)
   const [err, setErr] = useState(null)
 
+  useEffect(() => {
+    let stop = false
+    supabase.rpc('mes_retraits_disponibilites').then(({ data, error }) => {
+      if (stop || error) return
+      setRetraits(new Set((data || []).map(x => (x && typeof x === 'object' ? x.mes_retraits_disponibilites || x.id : x)).filter(Boolean)))
+    })
+    return () => { stop = true }
+  }, [profile?.id])
+
   const grille = useMemo(() => {
     if (vue === 'semaine') return grilleSemaine(anchor)
     if (vue === 'jour') return grilleJour(anchor)
@@ -79,7 +117,7 @@ export default function Disponibilites() {
   useEffect(() => { charger() }, [grille.debut, grille.fin, profile?.id, voirTous])
   useEffect(() => {
     if (!encoderAutrui) { setEquipe([]); return }
-    supabase.from('profiles').select('id,prenom,nom,role,fiche').neq('role','partenaire').eq('actif',true).order('nom')
+    supabase.from('profiles').select('id,prenom,nom,role,fiche,actif').neq('role','partenaire').order('nom')
       .then(({ data }) => setEquipe(data || []))
   }, [encoderAutrui])
 
@@ -115,10 +153,15 @@ export default function Disponibilites() {
       rows = rows.map(m => {
         const mission = by[m.souhait_id]
         const cov = covByRow.get(cleCouvertureCalendrier(m))
-        if (!cov) return { ...m }
-        return {
+        const base = {
           ...m,
+          activites: activitesDe(mission, m.activites),
+          ville_base: villeDe(mission, m.ville_base),
           rdv_base: m.rdv_base || mission?.rdv_base || null,
+        }
+        if (!cov) return base
+        return {
+          ...base,
           roles_requis: cov.requis.length ? cov.requis : rolesRequisEffectifs(m.roles_requis),
           roles_couverts: cov.couverts,
         }
@@ -143,6 +186,9 @@ export default function Disponibilites() {
   function peutEditer(d) {
     return d?.user_id === profile?.id || encoderAutrui
   }
+  function peutRetirer(d) {
+    return !!(d?.user_id && retraits.has(d.user_id))
+  }
   function nouveauForm(dayIso, extra = {}) {
     return {
       user_id: encoderAutrui ? '' : profile?.id,
@@ -166,9 +212,10 @@ export default function Disponibilites() {
     if (peutEditer(d)) setForm({ ...d, jour: d.date_debut })
   }
   async function supprimer(d) {
-    if (!peutEditer(d)) return
-    if (!confirm('Supprimer cette disponibilité ?')) return
-    await supabase.from('disponibilites').delete().eq('id', d.id)
+    if (!peutRetirer(d)) return
+    if (!confirm('Retirer cette inscription ? Seuls le N+1 et le N+2 peuvent le faire.')) return
+    const { error } = await supabase.from('disponibilites').delete().eq('id', d.id)
+    if (error) { alert(error.message); return }
     charger()
   }
 
@@ -178,7 +225,7 @@ export default function Disponibilites() {
       ? 'Cliquez un jour pour indiquer vos disponibilités. Une disponibilité = la journée (ou le créneau) choisi.'
       : nonMed
         ? 'Vos jours. Seules les missions qui demandent un volontaire non médical apparaissent — avec ce qui manque, sans nom de patient.'
-        : 'Cliquez un jour pour indiquer vos disponibilités. Un séjour de plusieurs jours n’est complet que si le même équipage est dispo tous les jours.'
+        : 'Cliquez un jour pour indiquer vos disponibilités. Un séjour de plusieurs jours n’est complet que si le même équipage est dispo tous les jours. Une inscription ne se retire pas soi-même.'
 
   const today = todayISO()
   const jourForm = form?.jour || form?.date_debut
@@ -209,71 +256,75 @@ export default function Disponibilites() {
 
       {form && (
         <FormDispo form={form} setForm={setForm} profile={profile} equipe={equipe}
-          encoderAutrui={encoderAutrui}
+          encoderAutrui={encoderAutrui} peutRetirer={peutRetirer(form)}
           disposDuJour={disposDuJour} missionsDuJour={missionsDuJour}
           onPickDispo={d => setForm({ ...d, jour: jourForm })}
           onDone={() => { setForm(null); charger() }} />
       )}
 
       <div className="ha-cal-legend">
-        <span><i className="ha-cal-dot ambu" /> Ambulancier</span>
-        <span><i className="ha-cal-dot infi" /> Infirmier</span>
-        <span><i className="ha-cal-dot dual" /> Infirmier et ambulancier</span>
+        <span><i className="ha-cal-dot ambu" /> Ambulancier(ère)</span>
+        <span><i className="ha-cal-dot infi" /> Infirmier(ère)</span>
+        <span><i className="ha-cal-dot dual" /> Infirmier(ère) et ambulancier(ère)</span>
+        <span><i className="ha-cal-dot chauffeur" /> Sélection médicale (chauffeur)</span>
         <span><i className="ha-cal-dot peach" /> Autres volontaires</span>
-        <span><i className="ha-cal-dot miss-no" /> Mission incomplète</span>
-        <span><i className="ha-cal-dot miss-ok" /> Mission complète</span>
+        <span><i className="ha-cal-dot miss-no" /> Souhait incomplet</span>
+        <span><i className="ha-cal-dot miss-ok" /> Souhait complet</span>
       </div>
+      <p className="ha-cal-regle">Une inscription ne se retire pas soi-même : seuls le N+1 et le N+2 peuvent la retirer. Si le souhait est annulé, la disponibilité reste pour une autre date identique.</p>
 
       <div className="ha-cal-scroll">
         {vue === 'semaine' ? (
           <SemaineHoraire weekStart={grille.weeks[0]} today={today}
             missions={missions} dispos={dispos} moi={profile?.id}
             encoderAutrui={encoderAutrui}
-            onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
+            onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} peutRetirer={peutRetirer} />
         ) : vue === 'jour' ? (
           <VueJour day={anchor} today={today}
             missions={missions} dispos={dispos} moi={profile?.id}
             encoderAutrui={encoderAutrui}
-            onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} />
+            onJour={clicJour} onDispo={clicDispo} onSuppr={supprimer} peutRetirer={peutRetirer} />
         ) : (
           <GrilleMois weeks={grille.weeks} anchor={anchor} today={today} onJour={clicJour}
             renderJour={(id) => {
               const dJour = dispos.filter(d => couvreJour(d, id))
               const mJour = missions.filter(m => couvreJour(m, id))
               const pills = []
-              for (const d of dJour) {
-                const mine = d.user_id === profile?.id
-                const p = d.profiles
-                const teinte = teinteCalendrier(p?.role, p?.fiche, d.user_id)
-                pills.push({
-                  key: 'd' + d.id,
-                  cls: 'ha-mois-pill dispo-' + teinte,
-                  label: prenomTag(p, mine),
-                  title: libelleQualsImplicites(p?.role, p?.fiche) || prenomTag(p, mine),
-                  onClick: peutEditer(d) ? (e) => { e.stopPropagation(); clicDispo(d) } : undefined,
-                })
-              }
               for (const m of mJour) {
                 const cov = couverture(m)
-                const txt = (m.lieu || m.activite || 'Mission').trim()
+                const manque = manques(m)
+                const txt = textesMission(m)
                 pills.push({
                   key: 'm' + m.souhait_id + m.date_debut,
                   cls: 'ha-mois-pill mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet'),
                   label: txt,
+                  sous: manque.length ? phraseIlManque(manque) : 'Équipage complet',
                   title: libelleMission({ ev: m, total: 1, j0: 1, j1: 1 }),
                 })
               }
-              const shown = pills.slice(0, MAX_PILLS)
-              const more = pills.length - shown.length
+              for (const d of dJour) {
+                const mine = d.user_id === profile?.id
+                const p = d.profiles
+                const teinte = teinteCalendrier(p?.role, p?.fiche, d.user_id)
+                const quals = libelleQualsImplicites(p?.role, p?.fiche)
+                pills.push({
+                  key: 'd' + d.id,
+                  cls: 'ha-mois-pill dispo-' + teinte + marqueChauffeur(p),
+                  label: prenomTag(p, mine),
+                  sous: quals,
+                  title: [prenomTag(p, mine), quals].filter(Boolean).join(' · '),
+                  onClick: peutEditer(d) ? (e) => { e.stopPropagation(); clicDispo(d) } : undefined,
+                })
+              }
               return (
                 <>
-                  {shown.map(p => (
+                  {pills.map(p => (
                     <button key={p.key} type="button" className={p.cls} title={p.title}
                       onClick={e => { e.stopPropagation(); p.onClick?.(e) }}>
-                      {p.label}
+                      <span className="ha-mois-pill-l1">{p.label}</span>
+                      {p.sous && <span className="ha-mois-pill-l2">{p.sous}</span>}
                     </button>
                   ))}
-                  {more > 0 && <span className="ha-mois-more">…</span>}
                 </>
               )
             }} />
@@ -300,9 +351,10 @@ function ChipMission({ it }) {
   )
 }
 
-function ChipDispo({ it, moi, encoderAutrui, onDispo, onSuppr }) {
+function ChipDispo({ it, moi, encoderAutrui, peutRetirer, onDispo, onSuppr }) {
   const mine = it.ev.user_id === moi
   const editable = mine || encoderAutrui
+  const retirable = peutRetirer?.(it.ev)
   const p = it.ev.profiles
   const quals = libelleQualsImplicites(p?.role, p?.fiche)
   const nom = prenomTag(p, mine)
@@ -310,11 +362,11 @@ function ChipDispo({ it, moi, encoderAutrui, onDispo, onSuppr }) {
   const teinte = teinteCalendrier(p?.role, p?.fiche, it.ev.user_id)
   return (
     <button type="button"
-      className={'ha-cal-ev dispo-' + teinte}
+      className={'ha-cal-ev dispo-' + teinte + marqueChauffeur(p)}
       style={{ gridColumn: `${it.col + 1} / span ${it.span}`, cursor: editable ? 'pointer' : 'default' }}
       title={label}
       onClick={() => editable ? onDispo(it.ev) : null}
-      onContextMenu={e => { if (editable) { e.preventDefault(); onSuppr(it.ev) } }}>
+      onContextMenu={e => { if (retirable) { e.preventDefault(); onSuppr(it.ev) } }}>
       {label}
     </button>
   )
@@ -332,9 +384,10 @@ function creneauDemi(v) {
   return null
 }
 
-function TagPersonne({ d, moi, encoderAutrui, onDispo, onSuppr, className }) {
+function TagPersonne({ d, moi, encoderAutrui, peutRetirer, onDispo, onSuppr, className }) {
   const mine = d.user_id === moi
   const editable = mine || encoderAutrui
+  const retirable = peutRetirer?.(d)
   const p = d.profiles
   const teinte = teinteCalendrier(p?.role, p?.fiche, d.user_id)
   const nom = prenomTag(p, mine)
@@ -343,17 +396,18 @@ function TagPersonne({ d, moi, encoderAutrui, onDispo, onSuppr, className }) {
   const title = [nom, quals, demi].filter(Boolean).join(' · ')
   return (
     <button type="button"
-      className={'ha-mois-pill dispo-' + teinte + (className ? ' ' + className : '')}
+      className={'ha-mois-pill dispo-' + teinte + marqueChauffeur(p) + (className ? ' ' + className : '')}
       title={title}
       style={{ cursor: editable ? 'pointer' : 'default', width: 'auto' }}
       onClick={e => { e.stopPropagation(); if (editable) onDispo(d) }}
-      onContextMenu={e => { if (editable) { e.preventDefault(); onSuppr(d) } }}>
-      {nom}{d.demi_journee && d.demi_journee !== 'journee_complete' ? ` · ${demi}` : ''}
+      onContextMenu={e => { if (retirable) { e.preventDefault(); onSuppr(d) } }}>
+      <span className="ha-mois-pill-l1">{nom}{d.demi_journee && d.demi_journee !== 'journee_complete' ? ` · ${demi}` : ''}</span>
+      {quals && <span className="ha-mois-pill-l2">{quals}</span>}
     </button>
   )
 }
 
-function VueJour({ day, today, missions, dispos, moi, encoderAutrui, onJour, onDispo, onSuppr }) {
+function VueJour({ day, today, missions, dispos, moi, encoderAutrui, peutRetirer, onJour, onDispo, onSuppr }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60000)
@@ -399,7 +453,7 @@ function VueJour({ day, today, missions, dispos, moi, encoderAutrui, onJour, onD
           : (
             <div className="ha-jour-tags">
               {dJour.map(d => (
-                <TagPersonne key={d.id} d={d} moi={moi} encoderAutrui={encoderAutrui} onDispo={onDispo} onSuppr={onSuppr} />
+                <TagPersonne key={d.id} d={d} moi={moi} encoderAutrui={encoderAutrui} peutRetirer={peutRetirer} onDispo={onDispo} onSuppr={onSuppr} />
               ))}
             </div>
           )}
@@ -411,12 +465,16 @@ function VueJour({ day, today, missions, dispos, moi, encoderAutrui, onJour, onD
           <div className="ha-jour-tags">
             {journeeMiss.map(m => {
               const cov = couverture(m)
-              const txt = (m.lieu || m.activite || 'Mission').trim()
+              const txt = textesMission(m)
+              const manque = manques(m)
               return (
                 <span key={m.souhait_id + m.date_debut}
                   className={'ha-mois-pill mission ' + (cov === 'ok' ? 'is-complet' : 'is-incomplet')}
                   title={libelleMission({ ev: m, total: 1, j0: 1, j1: 1 })}
-                  style={{ width: 'auto' }}>{txt}</span>
+                  style={{ width: 'auto' }}>
+                  <span className="ha-mois-pill-l1">{txt}</span>
+                  <span className="ha-mois-pill-l2">{manque.length ? phraseIlManque(manque) : 'Équipage complet'}</span>
+                </span>
               )
             })}
           </div>
@@ -448,15 +506,16 @@ function VueJour({ day, today, missions, dispos, moi, encoderAutrui, onJour, onD
                 const mine = it.ev.user_id === moi
                 const editable = mine || encoderAutrui
                 const nom = prenomTag(p, mine)
+                const quals = libelleQualsImplicites(p?.role, p?.fiche)
                 const w = 100 / it.cols
                 const left = it.col * w
                 return (
                   <button key={'demi-' + it.ev.id} type="button"
-                    className={'ha-cal-h-ev dispo-' + teinte}
+                    className={'ha-cal-h-ev dispo-' + teinte + marqueChauffeur(p)}
                     style={{ top, height: Math.max(px * 0.65, bot - top), left: `calc(${left}% + 2px)`, width: `calc(${w}% - 4px)` }}
-                    title={`${nom} · ${libelleDemi(it.ev.demi_journee)}`}
+                    title={[nom, quals, libelleDemi(it.ev.demi_journee)].filter(Boolean).join(' · ')}
                     onClick={e => { e.stopPropagation(); if (editable) onDispo(it.ev) }}>
-                    {nom} · {libelleDemi(it.ev.demi_journee)}
+                    {nom} · {libelleDemi(it.ev.demi_journee)}{quals ? ` · ${quals}` : ''}
                   </button>
                 )
               })}
@@ -487,7 +546,7 @@ function VueJour({ day, today, missions, dispos, moi, encoderAutrui, onJour, onD
   )
 }
 
-function SemaineHoraire({ weekStart, today, missions, dispos, moi, encoderAutrui, onJour, onDispo, onSuppr }) {
+function SemaineHoraire({ weekStart, today, missions, dispos, moi, encoderAutrui, peutRetirer, onJour, onDispo, onSuppr }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60000)
@@ -541,7 +600,7 @@ function SemaineHoraire({ weekStart, today, missions, dispos, moi, encoderAutrui
           {dispoLanes.map((lane, li) => (
             <div key={'d'+li} className="ha-cal-lane">
               {lane.map(it => (
-                <ChipDispo key={it.ev.id} it={it} moi={moi} encoderAutrui={encoderAutrui} onDispo={onDispo} onSuppr={onSuppr} />
+                <ChipDispo key={it.ev.id} it={it} moi={moi} encoderAutrui={encoderAutrui} peutRetirer={peutRetirer} onDispo={onDispo} onSuppr={onSuppr} />
               ))}
             </div>
           ))}
@@ -612,19 +671,26 @@ function SemaineHoraire({ weekStart, today, missions, dispos, moi, encoderAutrui
   )
 }
 
-function FormDispo({ form, setForm, profile, equipe, encoderAutrui, disposDuJour, missionsDuJour, onPickDispo, onDone }) {
+function FormDispo({ form, setForm, profile, equipe, encoderAutrui, peutRetirer, disposDuJour, missionsDuJour, onPickDispo, onDone }) {
   const set = (k, v) => setForm(s => ({ ...s, [k]: v }))
   const [saving, setSaving] = useState(false)
+  const [engagement, setEngagement] = useState(false)
   const edit = !!form.id
   const cible = (equipe || []).find(p => p.id === form.user_id)
     || (form.user_id === profile?.id ? profile : null)
     || form.profiles
   const quals = libelleQualsImplicites(cible?.role, cible?.fiche)
   const jour = form.jour || form.date_debut
-  async function save() {
+  useEffect(() => { setEngagement(false) }, [form.id, form.user_id, form.date_debut])
+  function preparer() {
     const uid = encoderAutrui ? (form.user_id || '') : profile?.id
     if (!uid) { alert('Choisissez un volontaire.'); return }
     if (!form.date_debut) { alert('Indiquez la date.'); return }
+    setEngagement(true)
+  }
+  async function save() {
+    const uid = encoderAutrui ? (form.user_id || '') : profile?.id
+    if (!uid || !form.date_debut) { setEngagement(false); return }
     const debut = form.date_debut
     const fin = form.date_fin && form.date_fin >= form.date_debut ? form.date_fin : form.date_debut
     setSaving(true)
@@ -640,24 +706,45 @@ function FormDispo({ form, setForm, profile, equipe, encoderAutrui, disposDuJour
       ? await supabase.from('disponibilites').update(payload).eq('id', form.id)
       : await supabase.from('disponibilites').insert(payload)
     setSaving(false)
-    if (error) { alert(error.message); return }
+    if (error) { alert(error.message); setEngagement(false); return }
     onDone()
   }
   async function supprimer() {
-    if (!form.id || !confirm('Supprimer cette disponibilité ?')) return
-    await supabase.from('disponibilites').delete().eq('id', form.id)
+    if (!form.id || !peutRetirer) return
+    if (!confirm('Retirer cette inscription ? Seuls le N+1 et le N+2 peuvent le faire.')) return
+    const { error } = await supabase.from('disponibilites').delete().eq('id', form.id)
+    if (error) { alert(error.message); return }
     onDone()
   }
-  const titre = edit ? 'Modifier la disponibilité' : (jour ? fmtJourLong(jour) : 'Nouvelle disponibilité')
+  const titre = engagement
+    ? 'Engagement de disponibilité'
+    : (edit ? 'Modifier la disponibilité' : (jour ? fmtJourLong(jour) : 'Nouvelle disponibilité'))
   return (
     <Modal title={titre} onClose={onDone} footer={
-      <>
-        <Btn onClick={save} disabled={saving}>{saving ? '…' : 'Enregistrer'}</Btn>
-        {edit && <Btn kind="danger" onClick={supprimer}>Supprimer</Btn>}
-        <Btn kind="soft" onClick={onDone}>Annuler</Btn>
-      </>
+      engagement ? (
+        <>
+          <Btn onClick={save} disabled={saving}>{saving ? '…' : 'Je valide l’inscription'}</Btn>
+          <Btn kind="soft" onClick={() => setEngagement(false)}>Revenir</Btn>
+        </>
+      ) : (
+        <>
+          <Btn onClick={preparer} disabled={saving}>Enregistrer</Btn>
+          {edit && peutRetirer && <Btn kind="danger" onClick={supprimer}>Retirer</Btn>}
+          <Btn kind="soft" onClick={onDone}>Annuler</Btn>
+        </>
+      )
     }>
-      {!edit && (disposDuJour.length > 0 || missionsDuJour.length > 0) && (
+      {engagement ? (
+        <div className="ha-dispo-engagement">
+          <p>
+            En inscrivant une disponibilité pour une date, {encoderAutrui ? 'le volontaire est tenu à sa disponibilité' : 'vous êtes tenu à votre disponibilité'} jusqu’à 2 jours avant la date du souhait, où il y aura une confirmation du souhait.
+          </p>
+          <p>
+            L’ASBL n’est pas responsable si {encoderAutrui ? 'le volontaire prend un congé ou arrange son temps de travail' : 'vous prenez un congé ou arrangez votre temps de travail'} et si le souhait ne se réalise pas.
+          </p>
+        </div>
+      ) : null}
+      {!engagement && !edit && (disposDuJour.length > 0 || missionsDuJour.length > 0) && (
         <div style={{ marginBottom: 14 }}>
           {disposDuJour.length > 0 && (
             <>
@@ -679,33 +766,39 @@ function FormDispo({ form, setForm, profile, equipe, encoderAutrui, disposDuJour
               </div>
             </>
           )}
-          {missionsDuJour.map(m => (
-            <div key={m.souhait_id + m.date_debut} style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 4 }}>
-              Mission · {(m.lieu || m.activite || '').trim() || 'sans lieu'}
-            </div>
-          ))}
+          {missionsDuJour.map(m => {
+            const manque = manques(m)
+            return (
+              <div key={m.souhait_id + m.date_debut} style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 4 }}>
+                Souhait · {textesMission(m)}
+                {manque.length ? ` · ${phraseIlManque(manque)}` : ' · équipage complet'}
+              </div>
+            )
+          })}
         </div>
       )}
+      {!engagement && (
       <p style={{ margin:'0 0 10px', fontSize:13, color:'var(--text-muted)' }}>
         {encoderAutrui
           ? 'Choisissez la personne, puis les dates. Le rôle vient de la fiche — rien à choisir ici.'
-          : 'Vos jours, de date à date. Le rôle vient de la fiche (ambulancier, infirmier, chauffeur si permis et sélection médicale).'}
+          : 'Vos jours, de date à date. Le rôle vient de la fiche. Ambulancier(ère) ou infirmier(ère) avec permis et sélection médicale est chauffeur.'}
       </p>
-      {encoderAutrui ? (
+      )}
+      {!engagement && encoderAutrui ? (
         <Sel label="Volontaire" value={form.user_id || ''} set={v => setForm(s => ({ ...s, user_id: v }))}
-          options={[{ v:'', l:'— Choisir —' }, ...equipe.map(p => ({ v:p.id, l:`${p.prenom} ${p.nom}` }))]} />
-      ) : (
+          options={[{ v:'', l:'— Choisir —' }, ...equipe.map(p => ({ v:p.id, l:`${p.prenom} ${p.nom}${p.actif === false ? ' (inactif)' : ''}` }))]} />
+      ) : !engagement ? (
         <div style={{ fontSize:13.5, fontWeight:600, color:'var(--text)', margin:'0 0 10px' }}>
           {profile?.prenom} {profile?.nom}
         </div>
-      )}
-      {quals && <div style={{ fontSize:13, color:'var(--text-2)', margin:'0 0 10px' }}>Rôle pour les missions : <strong>{quals}</strong></div>}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+      ) : null}
+      {!engagement && quals && <div style={{ fontSize:13, color:'var(--text-2)', margin:'0 0 10px' }}>Rôle pour les missions : <strong>{quals}</strong></div>}
+      {!engagement && <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <F label="Du" type="date" value={form.date_debut} set={v => set('date_debut', v)} required />
         <F label="Au" type="date" value={form.date_fin || form.date_debut} set={v => set('date_fin', v)} />
-      </div>
-      <Sel label="Créneau" value={form.demi_journee || 'journee_complete'} set={v => set('demi_journee', v)} options={DEMI} />
-      <F label="Commentaire (optionnel)" value={form.commentaire} set={v => set('commentaire', v)} />
+      </div>}
+      {!engagement && <Sel label="Créneau" value={form.demi_journee || 'journee_complete'} set={v => set('demi_journee', v)} options={DEMI} />}
+      {!engagement && <F label="Commentaire (optionnel)" value={form.commentaire} set={v => set('commentaire', v)} />}
     </Modal>
   )
 }

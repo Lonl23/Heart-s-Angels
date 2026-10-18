@@ -1,7 +1,7 @@
 // Listes de référence de la fiche volontaire.
 
 export const QUALIFS = [
-  { v:'ambulancier', l:'Ambulancier' },
+  { v:'ambulancier', l:'Ambulancier(ère)' },
   { v:'infirmier',   l:'Infirmier(ère)' },
   { v:'medecin',     l:'Médecin' },
   { v:'kine',        l:'Kiné' },
@@ -84,7 +84,7 @@ export function qualsImplicites(role, fiche) {
   }
   const p = fiche?.permis || {}
   const permis = !!(p.B || p.C || p.E)
-  if (qs.has('ambulancier') && permis && p.selection_medicale) qs.add('chauffeur')
+  if ((qs.has('ambulancier') || qs.has('infirmier')) && permis && p.selection_medicale) qs.add('chauffeur')
   return [...qs]
 }
 
@@ -227,8 +227,8 @@ export function roleSuggere(quals, requis, rolesDeja) {
 }
 
 const UN = {
-  ambulancier: 'un ambulancier',
-  infirmier: 'un infirmier',
+  ambulancier: 'un ambulancier(ère)',
+  infirmier: 'un infirmier(ère)',
   chauffeur: 'un chauffeur',
   medecin: 'un médecin',
   kine: 'un kiné',
@@ -239,8 +239,8 @@ const UN = {
 }
 
 const PLURIEL = {
-  ambulancier: 'ambulanciers',
-  infirmier: 'infirmiers',
+  ambulancier: 'ambulanciers(ères)',
+  infirmier: 'infirmiers(ères)',
   chauffeur: 'chauffeurs',
   medecin: 'médecins',
   kine: 'kinés',
@@ -292,6 +292,11 @@ export function rolesEncoreManquants(requis, personnes) {
     deja.push(role)
   }
   return remaining
+}
+
+/** Ambulancier(ère) ou infirmier(ère) avec permis et sélection médicale : chauffeur. */
+export function estChauffeurFiche(role, fiche) {
+  return qualsImplicites(role, fiche).includes('chauffeur')
 }
 
 export function libelleQualsImplicites(role, fiche) {

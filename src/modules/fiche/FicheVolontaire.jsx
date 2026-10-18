@@ -115,7 +115,7 @@ export default function FicheVolontaire({ userId, onBack }) {
 
   async function save() {
     if (!prof?.prenom || !prof?.nom) { setMsg({ t:'Prénom et nom requis.', ok:false }); return }
-    if (estAmbu && !f.ambulancier.visa_atnup.trim() && !f.compte_a_configurer) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier.', ok:false }); return }
+    if (estAmbu && !f.ambulancier.visa_atnup.trim() && !f.compte_a_configurer) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier(ère).', ok:false }); return }
     let rolesAsbl = f.roles_asbl
     if (gestionRoles) {
       rolesAsbl = rolesAsblPourEnregistrement(roleParticulier, f.roles_asbl)
@@ -202,7 +202,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
         <Sec>Rôle de compte</Sec>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
-          Accès à l’application (administrateur, président, volontaire…). Infirmier, médecin, ambulancier se choisissent dans les qualifications, pas ici.
+          Accès à l’application (administrateur, président, volontaire…). Infirmier(ère), médecin, ambulancier(ère) se choisissent dans les qualifications, pas ici.
         </div>
         {peutChangerRoleCompte ? (
           <div style={{ maxWidth:280 }}>
@@ -236,7 +236,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       {/* Ambulancier */}
       {estAmbu && (
         <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
-          <Sec>Ambulancier</Sec>
+          <Sec>Ambulancier(ère)</Sec>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px' }}>
             <F label="N° visa ATNUP (obligatoire)" value={f.ambulancier.visa_atnup} set={v=>setIn('ambulancier','visa_atnup',v)} required />
             <F label="N° badge 112 (optionnel)" value={f.ambulancier.badge_112} set={v=>setIn('ambulancier','badge_112',v)} />
