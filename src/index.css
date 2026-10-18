@@ -384,6 +384,43 @@ input:focus, select:focus, textarea:focus {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
 }
+.ha-vol-barre {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  justify-content: space-between; margin-bottom: 16px;
+}
+.ha-vol-barre .ha-search { width: min(100%, 360px); margin: 0; }
+.ha-vol-liste { display: flex; flex-direction: column; gap: 8px; }
+.ha-vol-ligne {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  gap: 12px; align-items: center;
+  width: 100%; text-align: left;
+  padding: 10px 12px; border-radius: 14px;
+  border: 1px solid var(--border); background: var(--card);
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.ha-vol-ligne-nom, .ha-vol-ligne-meta {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.ha-vol-ligne-nom strong { font-size: 14.5px; color: var(--heading); }
+.ha-vol-ligne-nom span, .ha-vol-ligne-meta span {
+  font-size: 12.5px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ha-vol-ligne-meta { font-size: 13px; }
+.ha-vol-ligne-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.ha-tag-chauffeur, .ha-tag-pas-chauffeur {
+  display: inline-block; margin-left: 8px;
+  padding: 1px 8px; border-radius: 99px;
+  font-size: 11.5px; font-weight: 700; vertical-align: 1px;
+}
+.ha-tag-chauffeur { background: #F8E7B0; color: #6A4A00; }
+.ha-tag-pas-chauffeur { background: var(--bg-alt); color: #5C5346; border: 1px solid var(--border); }
+@media (max-width: 799px) {
+  .ha-vol-ligne { grid-template-columns: 40px minmax(0, 1fr); }
+  .ha-vol-ligne-meta { grid-column: 2; }
+  .ha-vol-ligne-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
 
 .ha-check {
   display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; color: var(--text-2);

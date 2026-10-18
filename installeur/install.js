@@ -138,6 +138,7 @@ async function main() {
     await client.query(lireSQL('99_helpdesk_parution.sql'))
     await client.query(lireSQL('100_stats_tous_statuts.sql'))
     await client.query(lireSQL('101_dispos_retrait_base.sql'))
+    await client.query(lireSQL('102_rh_documents.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

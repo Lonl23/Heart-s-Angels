@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
-import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, equipeAsblOuverteParDefaut, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
+import { Page, Card, Btn, F, Sel, PhoneF, Tabs, inp, lbl } from '@/components/ui'
+import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsAvecSelection, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, equipeAsblOuverteParDefaut, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
 import { TYPES_NOTIF, prefsDepuisFiche } from '@/lib/notifications'
 import { FormPinFiche } from '@/components/PinArchive'
 import { ReglageDeuxFacteurs } from '@/components/DeuxFacteurs'
@@ -35,6 +35,7 @@ export default function FicheVolontaire({ userId, onBack }) {
   const [savingPin, setSavingPin] = useState(false)
   const [roleParticulier, setRoleParticulier] = useState(false)
   const [equipeOuverte, setEquipeOuverte] = useState(null)
+  const [onglet, setOnglet] = useState('coordonnees')
   const rolesAvantNon = useRef([])
   const fileRef = useRef()
 
@@ -57,11 +58,13 @@ export default function FicheVolontaire({ userId, onBack }) {
   useEffect(() => { (async () => {
     const { data } = await supabase.from('profiles').select('id,prenom,nom,email,role,fiche').eq('id', uid).single()
     setProf(data)
+    const permisCharge = { ...vide.permis, ...((data?.fiche||{}).permis||{}) }
     setF({ ...vide, ...(data?.fiche || {}),
-      permis:{ ...vide.permis, ...((data?.fiche||{}).permis||{}) },
+      permis: permisCharge,
       ambulancier:{ ...vide.ambulancier, ...((data?.fiche||{}).ambulancier||{}) },
       infirmier:{ ...vide.infirmier, ...((data?.fiche||{}).infirmier||{}) },
-      qualifications:(data?.fiche||{}).qualifications||[],
+      documents: Array.isArray(data?.fiche?.documents) ? data.fiche.documents : [],
+      qualifications: qualificationsAvecSelection((data?.fiche||{}).qualifications||[], permisCharge),
       roles_asbl:(data?.fiche||{}).roles_asbl||[],
       contacts_urgence:(data?.fiche||{}).contacts_urgence||[],
       notif_prefs: prefsDepuisFiche(data?.fiche),
@@ -86,7 +89,20 @@ export default function FicheVolontaire({ userId, onBack }) {
     if (v === 'volontaire_non_medical') setTypeBenevole('non_medical')
   }
   const setIn = (grp,k,v) => setF(s => ({ ...s, [grp]:{ ...s[grp], [k]:v } }))
-  const toggleArr = (k,val) => setF(s => ({ ...s, [k]: s[k].includes(val) ? s[k].filter(x=>x!==val) : [...s[k], val] }))
+  const toggleArr = (k, val) => setF(s => {
+    const has = (s[k] || []).includes(val)
+    const next = has ? s[k].filter(x => x !== val) : [...(s[k] || []), val]
+    if (k === 'qualifications' && val === 'chauffeur' && has) {
+      return { ...s, qualifications: next, permis: { ...s.permis, selection_medicale: false } }
+    }
+    return { ...s, [k]: next }
+  })
+  function setSelectionMedicale(on) {
+    setF(s => {
+      const permis = { ...s.permis, selection_medicale: on }
+      return { ...s, permis, qualifications: qualificationsAvecSelection(s.qualifications, permis, true) }
+    })
+  }
   const toggleSpec = (val) => setF(s => ({ ...s, infirmier:{ ...s.infirmier, specialisations: s.infirmier.specialisations.includes(val) ? s.infirmier.specialisations.filter(x=>x!==val) : [...s.infirmier.specialisations, val] } }))
   function togglePref(cle) {
     setF(s => ({ ...s, notif_prefs: { ...prefsDepuisFiche(s), [cle]: !prefsDepuisFiche(s)[cle] } }))
@@ -125,7 +141,11 @@ export default function FicheVolontaire({ userId, onBack }) {
       }
     }
     setSaving(true)
-    const fiche = { ...f, qualifications: qualificationsCompatibles(f.type_benevole, f.qualifications), roles_asbl: rolesAsbl }
+    const qualifications = qualificationsAvecSelection(
+      qualificationsCompatibles(f.type_benevole, f.qualifications),
+      f.permis,
+    )
+    const fiche = { ...f, qualifications, roles_asbl: rolesAsbl }
     const patch = { prenom:prof.prenom, nom:prof.nom, fiche }
     if (peutChangerRoleCompte && prof.role && prof.role !== 'partenaire') patch.role = prof.role
     const { data, error } = await supabase.from('profiles')
@@ -140,7 +160,8 @@ export default function FicheVolontaire({ userId, onBack }) {
       permis:{ ...vide.permis, ...((data[0].fiche||{}).permis||{}) },
       ambulancier:{ ...vide.ambulancier, ...((data[0].fiche||{}).ambulancier||{}) },
       infirmier:{ ...vide.infirmier, ...((data[0].fiche||{}).infirmier||{}) },
-      qualifications:(data[0].fiche||{}).qualifications||[],
+      documents: Array.isArray(data[0].fiche?.documents) ? data[0].fiche.documents : [],
+      qualifications: qualificationsAvecSelection((data[0].fiche||{}).qualifications||[], (data[0].fiche||{}).permis || {}),
       roles_asbl:(data[0].fiche||{}).roles_asbl||[],
       contacts_urgence:(data[0].fiche||{}).contacts_urgence||[],
       notif_prefs: prefsDepuisFiche(data[0].fiche),
@@ -173,9 +194,20 @@ export default function FicheVolontaire({ userId, onBack }) {
         </Card>
       )}
 
-      <div style={{ columns:'300px', columnGap:14 }}>
-      {/* Identité */}
-      <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      <Tabs
+        items={[
+          { v: 'coordonnees', l: 'Coordonnées' },
+          { v: 'qualifications', l: 'Qualifications' },
+          { v: 'it', l: 'IT' },
+          { v: 'documents', l: 'Documents' },
+        ]}
+        value={onglet}
+        onChange={setOnglet}
+      />
+
+      <div>
+      {onglet === 'coordonnees' && (
+      <Card style={{ marginBottom:14 }}>
         <Sec>Identité</Sec>
         <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:12 }}>
           <div style={{ width:76, height:76, borderRadius:99, overflow:'hidden', flexShrink:0, background:'var(--accent)', color:'#fff', display:'grid', placeItems:'center', fontSize:24, fontWeight:700 }}>
@@ -198,8 +230,10 @@ export default function FicheVolontaire({ userId, onBack }) {
           E-mail (connexion) : {(prof.email || '').trim() || 'pas encore de compte'} — l’IBAN sert aux notes de frais forfaitaires.
         </div>
       </Card>
+      )}
 
-      <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'it' && (
+      <Card style={{ marginBottom:14 }}>
         <Sec>Rôle de compte</Sec>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
           Accès à l’application (administrateur, président, volontaire…). Infirmier(ère), médecin, ambulancier(ère) se choisissent dans les qualifications, pas ici.
@@ -212,9 +246,10 @@ export default function FicheVolontaire({ userId, onBack }) {
           <div style={{ fontSize:13.5 }}>{lblRoleCompte(prof.role)}</div>
         )}
       </Card>
+      )}
 
-      {/* Type + qualifications */}
-      <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'qualifications' && (
+      <Card style={{ marginBottom:14 }}>
         <Sec>Type de bénévole & qualifications</Sec>
         {gestionQualif ? (
           <>
@@ -232,10 +267,11 @@ export default function FicheVolontaire({ userId, onBack }) {
           </>
         )}
       </Card>
+      )}
 
       {/* Ambulancier */}
-      {estAmbu && (
-        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'qualifications' && estAmbu && (
+        <Card style={{ marginBottom:14 }}>
           <Sec>Ambulancier(ère)</Sec>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px' }}>
             <F label="N° visa ATNUP (obligatoire)" value={f.ambulancier.visa_atnup} set={v=>setIn('ambulancier','visa_atnup',v)} required />
@@ -245,8 +281,8 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       {/* Infirmier */}
-      {estInfi && (
-        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'qualifications' && estInfi && (
+        <Card style={{ marginBottom:14 }}>
           <Sec>Infirmier(ère)</Sec>
           <div style={{ maxWidth:280 }}>
             <F label="N° visa infirmier" value={f.infirmier.visa} set={v=>setIn('infirmier','visa',v)} />
@@ -257,8 +293,8 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       {/* Rôles ASBL : éditeur pour coord./accès total ; le simple volontaire ne voit rien. */}
-      {gestionRoles ? (
-        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'it' && gestionRoles ? (
+        <Card style={{ marginBottom:14 }}>
           <Sec>Rôle dans l'ASBL</Sec>
           <EditeurRolesAsbl
             particulier={roleParticulier}
@@ -269,23 +305,23 @@ export default function FicheVolontaire({ userId, onBack }) {
             setEquipeOuverte={setEquipeOuverte}
           />
         </Card>
-      ) : aRoleAsblParticulier(f.roles_asbl) ? (
-        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      ) : onglet === 'it' && aRoleAsblParticulier(f.roles_asbl) ? (
+        <Card style={{ marginBottom:14 }}>
           <RolesAsblLecture roles={f.roles_asbl} />
         </Card>
       ) : null}
 
-      {maFiche && <ReglageDeuxFacteurs />}
+      {onglet === 'it' && maFiche && <ReglageDeuxFacteurs />}
 
-      {pinEligible && (
-        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'it' && pinEligible && (
+        <Card style={{ marginBottom:14 }}>
           <Sec>Code d’ouverture des dossiers verrouillés</Sec>
           <FormPinFiche aPin={aPin} onSauver={sauverPin} saving={savingPin} msg={pinMsg} />
         </Card>
       )}
 
-      {prefsNotif && (
-        <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'it' && prefsNotif && (
+        <Card style={{ marginBottom:14 }}>
           <Sec>Notifications reçues</Sec>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
             Président et coordinateur informatique : vous recevez toutes les alertes. Décochez celles que vous ne voulez plus.
@@ -304,11 +340,15 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       {/* Permis */}
-      <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'qualifications' && (
+      <Card style={{ marginBottom:14 }}>
         <Sec>Permis de conduire</Sec>
         <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:10 }}>
           {['B','C','E'].map(c => <Toggle key={c} label={`Permis ${c}`} on={f.permis[c]} onClick={()=>setIn('permis',c,!f.permis[c])} />)}
-          <Toggle label="Sélection médicale" on={f.permis.selection_medicale} onClick={()=>setIn('permis','selection_medicale',!f.permis.selection_medicale)} />
+          <Toggle label="Sélection médicale" on={!!f.permis.selection_medicale} onClick={() => setSelectionMedicale(!f.permis.selection_medicale)} />
+        </div>
+        <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
+          Dès que la sélection médicale est cochée, la qualification Chauffeur l’est aussi. La décocher retire Chauffeur.
         </div>
         {f.permis.selection_medicale && (
           <div style={{ maxWidth:240 }}>
@@ -316,9 +356,10 @@ export default function FicheVolontaire({ userId, onBack }) {
           </div>
         )}
       </Card>
+      )}
 
-      {/* Contacts d'urgence */}
-      <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
+      {onglet === 'coordonnees' && (
+      <Card style={{ marginBottom:14 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
           <Sec noMargin>Contacts en cas d'urgence</Sec>
           <Btn kind="soft" onClick={()=>set('contacts_urgence',[...f.contacts_urgence,{ prenom:'', nom:'', affiliation:'', telephone:'' }])}>+ Ajouter</Btn>
@@ -338,10 +379,121 @@ export default function FicheVolontaire({ userId, onBack }) {
           ))}
         </div>
       </Card>
+      )}
+
+      {onglet === 'documents' && (
+        <DocumentsRh
+          uid={uid}
+          fiche={f}
+          peutEcrire={maFiche || gestionQualif}
+          onFiche={nf => setF(nf)}
+          onMsg={setMsg}
+        />
+      )}
 
       </div>
-      <Btn onClick={save} disabled={saving} style={{ width:'100%', marginTop:14 }}>{saving?'Enregistrement…':'✓ Enregistrer la fiche'}</Btn>
+      {onglet !== 'documents' && (
+        <Btn onClick={save} disabled={saving} style={{ width:'100%', marginTop:14 }}>{saving?'Enregistrement…':'✓ Enregistrer la fiche'}</Btn>
+      )}
     </Page>
+  )
+}
+
+const DOCS_RH = [
+  { v: 'carte_identite', l: 'Carte d’identité' },
+  { v: 'permis', l: 'Permis de conduire' },
+  { v: 'visa_atnup', l: 'Visa ATNUP' },
+  { v: 'visa_infirmier', l: 'Visa infirmier' },
+  { v: 'autre', l: 'Autre document' },
+]
+const BUCKET_RH = 'rh-documents'
+const MIME_RH = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']
+
+function DocumentsRh({ uid, fiche, peutEcrire, onFiche, onMsg }) {
+  const [busy, setBusy] = useState(false)
+  const [nomAutre, setNomAutre] = useState('')
+  const docs = Array.isArray(fiche.documents) ? fiche.documents : []
+
+  async function persister(liste, texte) {
+    const nf = { ...fiche, documents: liste }
+    onFiche(nf)
+    const { error } = await supabase.from('profiles').update({ fiche: nf }).eq('id', uid)
+    if (error) { onMsg({ t: error.message, ok: false }); return false }
+    onMsg({ t: texte, ok: true })
+    setTimeout(() => onMsg(null), 2500)
+    return true
+  }
+
+  async function ajouter(type, file) {
+    if (!file || !peutEcrire) return
+    if (file.size > 15 * 1024 * 1024) { onMsg({ t: 'Document trop lourd (max 15 Mo).', ok: false }); return }
+    if (file.type && !MIME_RH.includes(file.type)) { onMsg({ t: 'Format accepté : PDF, JPG ou PNG.', ok: false }); return }
+    const nom = type === 'autre' ? (nomAutre.trim() || file.name) : (DOCS_RH.find(d => d.v === type)?.l || file.name)
+    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin'
+    setBusy(true)
+    const up = await supabase.storage.from(BUCKET_RH).upload(`${uid}/${id}.${ext}`, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+    })
+    if (up.error) { setBusy(false); onMsg({ t: up.error.message, ok: false }); return }
+    const doc = { id, type, nom, path: `${uid}/${id}.${ext}`, mime: file.type || '', taille: file.size, ajoute_le: new Date().toISOString() }
+    const ok = await persister([...docs, doc], 'Document enregistré.')
+    setBusy(false)
+    if (ok && type === 'autre') setNomAutre('')
+  }
+
+  async function ouvrir(doc) {
+    const { data, error } = await supabase.storage.from(BUCKET_RH).createSignedUrl(doc.path, 3600)
+    if (error || !data?.signedUrl) { onMsg({ t: error?.message || 'Ouverture impossible.', ok: false }); return }
+    window.open(data.signedUrl, '_blank', 'noopener')
+  }
+
+  async function retirer(doc) {
+    if (!peutEcrire || !confirm(`Retirer ${doc.nom || 'ce document'} ?`)) return
+    setBusy(true)
+    await supabase.storage.from(BUCKET_RH).remove([doc.path])
+    await persister(docs.filter(d => d.id !== doc.id), 'Document retiré.')
+    setBusy(false)
+  }
+
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <Sec>Documents du volontaire</Sec>
+      <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+        Carte d’identité, permis, visas, et tout autre document. PDF ou photo, 15 Mo maximum. Seuls le volontaire et la gestion RH peuvent les ouvrir.
+      </p>
+      {!peutEcrire && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Consultation seule.</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {DOCS_RH.map(type => {
+          const lignes = docs.filter(d => d.type === type.v)
+          return (
+            <div key={type.v} style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--heading)', marginBottom: 8 }}>{type.l}</div>
+              {lignes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Aucun fichier.</div>}
+              {lignes.map(d => (
+                <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => ouvrir(d)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', textAlign: 'left' }}>
+                    {d.nom || type.l}
+                  </button>
+                  {peutEcrire && <Btn kind="danger" onClick={() => retirer(d)} disabled={busy} style={{ padding: '4px 10px' }}>Retirer</Btn>}
+                </div>
+              ))}
+              {peutEcrire && type.v === 'autre' && (
+                <F label="Nom du document" value={nomAutre} set={setNomAutre} placeholder="Attestation, diplôme…" />
+              )}
+              {peutEcrire && (
+                <label className="ha-stock-photo-btn">
+                  {busy ? 'Envoi…' : 'Téléverser'}
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf,.pdf" disabled={busy}
+                    onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) ajouter(type.v, file) }} />
+                </label>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </Card>
   )
 }
 

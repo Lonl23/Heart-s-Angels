@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Modal, Empty, Loading } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
-import { QUALIFS, lblRoleCompte, libelleRoleAsblPropre, libellesRolesAsblPropres, personneEstMedicale, rolesAsblSpecifiques } from '@/modules/fiche/ficheSchema'
+import { QUALIFS, lblRoleCompte, libelleRoleAsblPropre, libellesRolesAsblPropres, mentionChauffeur, personneEstMedicale, qualsImplicites, rolesAsblSpecifiques } from '@/modules/fiche/ficheSchema'
 import { CodeBox, FormInvit, Msg, genCode, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
 
 const TYPES_INVIT = [
@@ -41,6 +41,13 @@ function estMedical(u) {
 function nomPrenom(u) {
   return `${u.prenom || ''} ${u.nom || ''}`.trim() || 'Sans nom'
 }
+function triAlpha(a, b) {
+  return String(a.nom || '').localeCompare(String(b.nom || ''), 'fr', { sensitivity: 'base' })
+    || String(a.prenom || '').localeCompare(String(b.prenom || ''), 'fr', { sensitivity: 'base' })
+}
+function chauffeurDe(u) {
+  return mentionChauffeur(qualsImplicites(u.role, u.fiche))
+}
 
 export default function Volontaires() {
   const { peutGererFiches } = useAuth()
@@ -50,7 +57,7 @@ export default function Volontaires() {
   return (
     <Page
       title="Volontaires"
-      subtitle="Ajoutez une fiche sans e-mail si besoin ; l’invitation pourra suivre plus tard. La gestion de l’application (accès, partenaires) est dans Administration."
+      subtitle="Liste ou vignettes, par ordre alphabétique. La fiche ouvre les coordonnées, les qualifications, les rôles (IT) et les documents."
     >
       <Membres onOpenFiche={setFiche} />
     </Page>
@@ -197,79 +204,81 @@ function Membres({ onOpenFiche }) {
 
 function GrillesVolontaires({ membres, onOpenFiche, onConfigurer, onToggle }) {
   const [q, setQ] = useState('')
+  const [vue, setVue] = useState(() => sessionStorage.getItem('rh-volontaires-vue') === 'liste' ? 'liste' : 'vignettes')
   const needle = q.trim().toLowerCase()
-  const filtrés = needle
+  const filtrés = (needle
     ? membres.filter(u => {
-        const hay = [u.prenom, u.nom, u.email, typeBenevoleTxt(u), rolesAsblTxt(u), qualifsTxt(u)].join(' ').toLowerCase()
+        const hay = [u.prenom, u.nom, u.email, typeBenevoleTxt(u), rolesAsblTxt(u), qualifsTxt(u), chauffeurDe(u)].join(' ').toLowerCase()
         return hay.includes(needle)
       })
     : membres
-  const medicaux = filtrés.filter(estMedical)
-  const nonMedicaux = filtrés.filter(u => !estMedical(u))
+  ).slice().sort(triAlpha)
+
+  function choisirVue(v) {
+    setVue(v)
+    sessionStorage.setItem('rh-volontaires-vue', v)
+  }
 
   return (
     <div>
       {membres.length > 0 && (
-        <input
-          className="ha-search"
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          placeholder="Rechercher un volontaire…"
-          style={{ width: '100%', maxWidth: 360, marginBottom: 18 }}
-        />
+        <div className="ha-vol-barre">
+          <input
+            className="ha-search"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            placeholder="Rechercher un volontaire…"
+          />
+          <div className="ha-cal-vues" role="tablist" aria-label="Affichage des volontaires">
+            <button type="button" className={'ha-tab-like' + (vue === 'liste' ? ' is-on' : '')} onClick={() => choisirVue('liste')}>Liste</button>
+            <button type="button" className={'ha-tab-like' + (vue === 'vignettes' ? ' is-on' : '')} onClick={() => choisirVue('vignettes')}>Vignettes</button>
+          </div>
+        </div>
       )}
       {filtrés.length === 0 ? (
         <Empty
           title={needle ? 'Aucun volontaire pour cette recherche' : 'Aucun volontaire'}
           hint={needle ? 'Essayez un autre nom, e-mail ou qualification.' : 'Ajoutez un volontaire pour commencer.'}
         />
+      ) : vue === 'liste' ? (
+        <ListeVolontaires items={filtrés} onOpenFiche={onOpenFiche} onConfigurer={onConfigurer} onToggle={onToggle} />
       ) : (
-        <>
-          <GroupeTuiles
-            titre="Volontaires médicaux"
-            hint="Médecins, infirmiers, ambulanciers…"
-            items={medicaux}
-            onOpenFiche={onOpenFiche}
-            onConfigurer={onConfigurer}
-            onToggle={onToggle}
-          />
-          <GroupeTuiles
-            titre="Volontaires non médicaux"
-            hint="Secouristes, chauffeurs, accompagnement…"
-            items={nonMedicaux}
-            onOpenFiche={onOpenFiche}
-            onConfigurer={onConfigurer}
-            onToggle={onToggle}
-          />
-        </>
+        <div className="ha-vol-grille">
+          {filtrés.map(u => (
+            <TuileVolontaire key={u.id} u={u} onOpenFiche={onOpenFiche} onConfigurer={onConfigurer} onToggle={onToggle} />
+          ))}
+        </div>
       )}
     </div>
   )
 }
 
-function GroupeTuiles({ titre, hint, items, onOpenFiche, onConfigurer, onToggle }) {
+function ListeVolontaires({ items, onOpenFiche, onConfigurer, onToggle }) {
   return (
-    <section style={{ marginBottom: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--heading)' }}>{titre}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{items.length} · {hint}</div>
-      </div>
-      {items.length === 0 ? (
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>Personne dans ce groupe.</p>
-      ) : (
-        <div className="ha-vol-grille">
-          {items.map(u => (
-            <TuileVolontaire
-              key={u.id}
-              u={u}
-              onOpenFiche={onOpenFiche}
-              onConfigurer={onConfigurer}
-              onToggle={onToggle}
-            />
-          ))}
-        </div>
-      )}
-    </section>
+    <div className="ha-vol-liste">
+      {items.map(u => {
+        const aConfigurer = compteAConfigurer(u)
+        const ch = chauffeurDe(u)
+        return (
+          <div key={u.id} className="ha-vol-ligne" style={{ opacity: u.actif ? 1 : .55 }} onClick={() => onOpenFiche(u.id)} role="link" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') onOpenFiche(u.id) }}>
+            <AvatarVolontaire url={u.fiche?.photo_url} prenom={u.prenom} nom={u.nom} petit />
+            <span className="ha-vol-ligne-nom">
+              <strong>{u.nom} {u.prenom}</strong>
+              <span>{aConfigurer ? 'Compte à configurer' : (u.email || '—')}</span>
+            </span>
+            <span className="ha-vol-ligne-meta">
+              {u.fiche?.telephone || '—'}
+              <span>{typeBenevoleTxt(u)}{ch ? ` · ${ch}` : ''}</span>
+            </span>
+            <span className="ha-vol-ligne-actions" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+              <Btn kind="soft" onClick={() => onOpenFiche(u.id)} style={{ padding: '5px 10px' }}>Fiche</Btn>
+              {aConfigurer && <Btn onClick={() => onConfigurer(u)} style={{ padding: '5px 10px' }}>Configurer</Btn>}
+              <Btn kind={u.actif ? 'danger' : 'ok'} onClick={() => onToggle(u)} style={{ padding: '5px 10px' }}>{u.actif ? 'Désactiver' : 'Activer'}</Btn>
+            </span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -277,6 +286,7 @@ function TuileVolontaire({ u, onOpenFiche, onConfigurer, onToggle }) {
   const aConfigurer = compteAConfigurer(u)
   const roles = libellesRolesAsblPropres(u.fiche?.roles_asbl)
   const quals = (u.fiche?.qualifications || []).map(_lblQual)
+  const ch = chauffeurDe(u)
   return (
     <Card
       clickable
@@ -301,8 +311,11 @@ function TuileVolontaire({ u, onOpenFiche, onConfigurer, onToggle }) {
           : u.actif
             ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill>
             : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}
+        <Pill>{typeBenevoleTxt(u)}</Pill>
+        {ch === 'Chauffeur' && <Pill color="#6A4A00" bg="#F8E7B0">Chauffeur</Pill>}
+        {ch === 'Pas chauffeur' && <Pill color="#5C5346" bg="var(--bg-alt)">Pas chauffeur</Pill>}
         {roles.slice(0, 2).map(r => <Pill key={r}>{r}</Pill>)}
-        {quals.slice(0, 2).map(q => <Pill key={q} color="var(--accent-blue)" bg="var(--blue-light)">{q}</Pill>)}
+        {quals.filter(q => q !== 'Chauffeur').slice(0, 2).map(q => <Pill key={q} color="var(--accent-blue)" bg="var(--blue-light)">{q}</Pill>)}
       </div>
       <div
         style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 'auto' }}
@@ -316,11 +329,12 @@ function TuileVolontaire({ u, onOpenFiche, onConfigurer, onToggle }) {
   )
 }
 
-function AvatarVolontaire({ url, prenom, nom }) {
+function AvatarVolontaire({ url, prenom, nom, petit }) {
   const initiales = `${(prenom || '').charAt(0)}${(nom || '').charAt(0)}`.toUpperCase()
+  const taille = petit ? 40 : 52
   return (
     <div style={{
-      width: 52, height: 52, borderRadius: 99, overflow: 'hidden', flexShrink: 0,
+      width: taille, height: taille, borderRadius: 99, overflow: 'hidden', flexShrink: 0,
       background: 'var(--accent)', color: '#fff', display: 'grid', placeItems: 'center',
       fontSize: 16, fontWeight: 700, boxShadow: '0 0 0 3px var(--ring)',
     }}>

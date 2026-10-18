@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, F, Sel, inp, lbl, Flash } from '@/components/ui'
 import {
-  ROLES_MISSION, lblRoleMission, teinteDepuisQuals, roleSuggere, qualsImplicites,
+  ROLES_MISSION, lblRoleMission, teinteDepuisQuals, roleSuggere, qualsImplicites, mentionChauffeur,
   rolesRequisEffectifs, rolesRequisVecteur, phraseIlManque, rolesEncoreManquants,
   rolesManquantsMultiset, couvertureMission, countRole, withRoleCount,
 } from '@/modules/fiche/ficheSchema'
@@ -400,6 +400,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
                         <span>
                           {e.profiles?.prenom} {e.profiles?.nom}
                           {e.role_mission && <span style={{ color:'var(--text-muted)' }}> — {lblRoleMission(e.role_mission) || e.role_mission}</span>}
+                          <MarqueChauffeur quals={info?.quals || qualsImplicites(e.profiles?.role, e.profiles?.fiche)} />
                           {e.publie === false && <span style={{ fontSize:11.5, color:'#BA7517', marginLeft:8 }}>en attente de validation</span>}
                           {dispoTxt && <span style={{ fontSize:11.5, color: st === 'plein' ? '#3B6D11' : '#C62828', marginLeft:8 }}>{dispoTxt}</span>}
                           {conf && <span style={{ fontSize:11.5, color:'#C62828', marginLeft:6 }}>autre mission</span>}
@@ -495,9 +496,10 @@ function nomsDispoPeriode(pool, periode, requis) {
     if (need.length && !(p.quals || []).some(q => need.includes(q))) continue
     const role = roleSuggere(p.quals || [], need, [])
     const tag = conflitSur(p, periode) ? ' (autre mission)' : ''
+    const ch = mentionChauffeur(p.quals)
     out.push({
       id: p.user_id,
-      txt: `${p.prenom} ${p.nom}${role ? ' · ' + lblRoleMission(role) : ''}${tag}`,
+      txt: `${p.prenom} ${p.nom}${role ? ' · ' + lblRoleMission(role) : ''}${ch ? ' · ' + ch : ''}${tag}`,
     })
   }
   return out
@@ -636,6 +638,15 @@ function normaliserQuals(list) {
   return [...out]
 }
 
+function MarqueChauffeur({ quals }) {
+  const ch = mentionChauffeur(quals)
+  if (!ch) return null
+  const on = ch === 'Chauffeur'
+  return (
+    <span className={on ? 'ha-tag-chauffeur' : 'ha-tag-pas-chauffeur'}>{ch}</span>
+  )
+}
+
 function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque, onAdd, periodeSel }) {
   const [u, setU] = useState('')
   const needNow = (remaining && remaining.length) ? remaining : rolesRequisEffectifs(requis)
@@ -660,11 +671,12 @@ function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque
             const teinte = teinteDepuisQuals(p.quals)
             const role = roleSuggere(p.quals, needNow, rolesDeja)
             const quals = (p.quals || []).map(lblRoleMission).join(' · ')
+            const ch = mentionChauffeur(p.quals)
             return (
               <button key={p.user_id} type="button" className={'ha-aff-p dispo-' + teinte}
                 onClick={() => onAdd(p.user_id)}
                 title={quals}>
-                {p.prenom} {p.nom}{role ? ` · ${lblRoleMission(role)}` : ''}
+                {p.prenom} {p.nom}{role ? ` · ${lblRoleMission(role)}` : ''}{ch ? ` · ${ch}` : ''}
               </button>
             )
           })}
@@ -677,11 +689,14 @@ function AjoutMembre({ pool, dejaIds, requis, remaining, rolesDeja, phraseManque
             <option value="">— Choisir —</option>
             {groupesVisibles.map(g => (
               <optgroup key={g.k} label={g.l}>
-                {g.items.map(p => (
+                {g.items.map(p => {
+                  const ch = mentionChauffeur(p.quals)
+                  return (
                   <option key={p.user_id} value={p.user_id}>
-                    {p.prenom} {p.nom}{disponibleCeJour(p, periodeSel) ? '' : ' · indisponible'}
+                    {p.prenom} {p.nom}{ch ? ` · ${ch}` : ''}{disponibleCeJour(p, periodeSel) ? '' : ' · indisponible'}
                   </option>
-                ))}
+                  )
+                })}
               </optgroup>
             ))}
           </select>

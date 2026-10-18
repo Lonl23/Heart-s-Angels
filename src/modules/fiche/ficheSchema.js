@@ -11,7 +11,7 @@ export const QUALIFS = [
   { v:'autre',       l:'Autre' },
 ]
 
-/** Non médical : secouriste puis chauffeur (sélection médicale / permis reste un chip explicite). */
+/** Non médical : secouriste puis chauffeur (le chip Chauffeur reste explicite sans sélection). */
 const QUALS_FICHE_NON_MED = ['secouriste', 'chauffeur']
 
 export function qualifsPourType(type) {
@@ -82,10 +82,33 @@ export function qualsImplicites(role, fiche) {
   if (role === 'volontaire_non_medical' || fiche?.type_benevole === 'non_medical' || qs.has('secouriste')) {
     qs.add('volontaire_non_medical')
   }
-  const p = fiche?.permis || {}
-  const permis = !!(p.B || p.C || p.E)
-  if ((qs.has('ambulancier') || qs.has('infirmier')) && permis && p.selection_medicale) qs.add('chauffeur')
+  if (selectionMedicaleActive(fiche?.permis)) qs.add('chauffeur')
   return [...qs]
+}
+
+/** Vrai si la case « Sélection médicale » est enregistrée. */
+export function selectionMedicaleActive(permis) {
+  const v = permis?.selection_medicale
+  return v === true || v === 'true' || v === 't' || v === 1 || v === '1'
+}
+
+/**
+ * Coche Chauffeur dès que la sélection médicale est encodée.
+ * retirerSiSans : quand on décoche la sélection, Chauffeur part avec elle.
+ */
+export function qualificationsAvecSelection(qualifications, permis, retirerSiSans = false) {
+  const qs = new Set(Array.isArray(qualifications) ? qualifications : [])
+  if (selectionMedicaleActive(permis)) qs.add('chauffeur')
+  else if (retirerSiSans) qs.delete('chauffeur')
+  return [...qs]
+}
+
+/** Pour l’équipage : dire explicitement si la personne conduit ou non. */
+export function mentionChauffeur(quals) {
+  const q = quals || []
+  if (q.includes('chauffeur')) return 'Chauffeur'
+  if (q.includes('ambulancier') || q.includes('infirmier')) return 'Pas chauffeur'
+  return ''
 }
 
 export function teinteDepuisQuals(qs) {
@@ -294,7 +317,7 @@ export function rolesEncoreManquants(requis, personnes) {
   return remaining
 }
 
-/** Ambulancier(ère) ou infirmier(ère) avec permis et sélection médicale : chauffeur. */
+/** Chauffeur dès que la sélection médicale est cochée, ou si la qualification est déjà sur la fiche. */
 export function estChauffeurFiche(role, fiche) {
   return qualsImplicites(role, fiche).includes('chauffeur')
 }
