@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Pill, Empty, Loading, Flash, inp } from '@/components/ui'
-import { TYPES_LIEU, MODES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, cheminLieux, enfantsDe, resteLabel, nomTypeO2 } from './stock/stockSchema'
+import { TYPES_LIEU, MODES, NATURES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, lblNature, natureDepuisMode, cheminLieux, enfantsDe, resteLabel, nomTypeO2 } from './stock/stockSchema'
 import VueLots from './stock/VueLots'
 import { aggregerLots, fmtDlc, dlcPassee, dlcProche, qteLotLabel, lotCorrespond } from './stock/lotsStock'
 import { telechargerWord, telechargerCsv } from './stock/QrImg'
@@ -72,15 +72,15 @@ export default function Stock() {
   const fileRef = useRef()
 
   useEffect(() => { load() }, [])
-  async function load() {
-    setLoading(true)
+  async function load(silencieux) {
+    if (silencieux !== true) setLoading(true)
     const page = 1000
     const selUnites = '*, stock_catalogue(nom,mode,unite,volume_l,photo_path,fournisseur_id), stock_lieux(nom)'
     const [a, b, c0, d, e] = await Promise.all([
       supabase.from('stock_lieux').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_catalogue').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_unites').select(selUnites).order('created_at', { ascending: false }).range(0, page - 1),
-      supabase.from('stock_fournisseurs').select('*').eq('actif', true).order('nom'),
+      supabase.from('stock_fournisseurs').select('*, stock_fournisseur_contacts(id,prenom,nom,telephone,email,ordre)').eq('actif', true).order('nom'),
       supabase.from('stock_dotation').select('id, lieu_id, catalogue_id'),
     ])
     const unitesBrutes = [...(c0.data || [])]
@@ -313,7 +313,7 @@ export default function Stock() {
                 if (cat) setRecv(cat)
               }} />
           )}
-          {tab === 'fournisseurs' && <OngletFournisseurs fournisseurs={fournisseurs} cats={cats} onChange={load} onOk={ok} onErr={setErr} />}
+          {tab === 'fournisseurs' && <OngletFournisseurs fournisseurs={fournisseurs} cats={cats} onChange={load} onRefresh={() => load(true)} onOk={ok} onErr={setErr} />}
           {tab === 'lieux' && <OngletLieux lieux={lieux} unites={unites} cats={cats} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} />}
           {tab === 'inventaire' && inv && (
             <>
@@ -613,7 +613,8 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
                           {c.mode !== 'oxygene' && (Number(c.stock_minimal) || Number(c.stock_minimal_sacs))
                             ? ` · mini réserve ${Number(c.stock_minimal) || 0} · mini sacs ${Number(c.stock_minimal_sacs) || 0}`
                             : ''}
-                          {c.fournisseur_id && fourById[c.fournisseur_id] ? ` · ${fourById[c.fournisseur_id].nom}` : ''}
+                          {` · ${lblNature(natureDepuisMode(c.mode, c.nature))}`}
+                          {c.fournisseur_id && fourById[c.fournisseur_id] ? ` · ${fourById[c.fournisseur_id].nom}` : ' · sans fournisseur'}
                           {c.ref_fournisseur ? ` · réf. ${c.ref_fournisseur}` : ''}
                         </div>
                         {(dotations || []).filter(d => d.catalogue_id === c.id).length > 0 && (
@@ -690,7 +691,11 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
 }
 
 function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
-  const [f, setF] = useState({ unite:'pièce', mode:'piece', stock_minimal:0, stock_minimal_sacs:0, fournisseur_id:'', ref_fournisseur:'', ...item })
+  const [f, setF] = useState({
+    unite: 'pièce', mode: 'piece', stock_minimal: 0, stock_minimal_sacs: 0, fournisseur_id: '', ref_fournisseur: '',
+    ...item,
+    nature: natureDepuisMode(item.mode, item.nature),
+  })
   const [saving, setSaving] = useState(false)
   const [photoPath, setPhotoPath] = useState(item.photo_path || null)
   async function save() {
@@ -703,6 +708,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       nom: f.nom.trim() || (f.mode === 'oxygene' ? nomTypeO2(f.volume_l) : ''),
       categorie: f.mode === 'oxygene' ? 'oxygène' : (f.categorie || null),
       mode: f.mode,
+      nature: natureDepuisMode(f.mode, f.nature),
       unite: f.mode === 'oxygene' ? 'L' : (f.unite || 'pièce'),
       qte_defaut: f.mode === 'boite' ? Number(f.qte_defaut) : null,
       volume_l: f.mode === 'oxygene' ? Number(f.volume_l) : null,
@@ -733,7 +739,11 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       </div>
       <PhotoArticleChamp path={photoPath} catalogueId={f.id} onChange={setPhotoPath} onErr={onErr} />
       <F label="Nom" value={f.nom} set={v=>setF(s=>({ ...s, nom:v }))} required placeholder="Gants nitrile M, Compresse, O2 B5L" />
-      <Sel label="Mode QR" value={f.mode} set={v=>setF(s=>({ ...s, mode:v, ...(v==='oxygene' && !s.volume_l ? { volume_l:'5' } : {}) }))} options={MODES} />
+      <Sel label="Mode QR" value={f.mode} set={v=>setF(s=>({ ...s, mode:v, nature: v === 'boite' ? 'consommable' : (v === 'durable' || v === 'oxygene' ? 'materiel' : s.nature), ...(v==='oxygene' && !s.volume_l ? { volume_l:'5' } : {}) }))} options={MODES} />
+      <Sel label="Nature" value={natureDepuisMode(f.mode, f.nature)} set={v=>setF(s=>({ ...s, nature:v }))} options={NATURES} />
+      <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:-4, marginBottom:10 }}>
+        La garantie d’une commande concerne le matériel. Un consommable n’en a pas.
+      </div>
       {f.mode === 'boite' && <F label="Nombre par défaut dans une boîte" type="number" value={f.qte_defaut} set={v=>setF(s=>({ ...s, qte_defaut:v }))} required />}
       {f.mode === 'oxygene' && (
         <Sel label="Volume de la bouteille" value={String(f.volume_l || '5')} set={v=>setF(s=>({ ...s, volume_l:v, nom: s.nom || nomTypeO2(v) }))} options={VOLUMES_O2} />

@@ -60,6 +60,7 @@ export async function exporterStockExcel(data, lieux) {
     { h:'id', w:38, v: r => r.id },
     { h:'nom', w:28, v: r => r.nom },
     { h:'mode', w:12, v: r => r.mode },
+    { h:'nature', w:14, v: r => r.nature === 'materiel' ? 'Matériel' : (r.nature === 'consommable' ? 'Consommable' : '') },
     { h:'categorie', w:16, v: r => r.categorie },
     { h:'unite', w:10, v: r => r.unite },
     { h:'qte_defaut', w:12, v: r => r.qte_defaut },
@@ -86,6 +87,7 @@ export async function exporterStockExcel(data, lieux) {
     { h:'email', w:24, v: r => r.email },
     { h:'adresse', w:32, v: r => r.adresse },
     { h:'notes', w:28, v: r => r.notes },
+    { h:'contacts', w:40, v: r => r.contacts },
   ]), 'Fournisseurs')
 
   XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.commandes, [
@@ -96,6 +98,9 @@ export async function exporterStockExcel(data, lieux) {
     { h:'date_rappel', w:14, v: r => r.date_rappel },
     { h:'date_commande', w:14, v: r => r.date_commande },
     { h:'notes', w:28, v: r => r.notes },
+    { h:'garantie_debut', w:16, v: r => r.garantie_debut },
+    { h:'garantie_fin', w:16, v: r => r.garantie_fin },
+    { h:'garantie_notes', w:28, v: r => r.garantie_notes },
   ]), 'Commandes')
 
   XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.mouvements, [

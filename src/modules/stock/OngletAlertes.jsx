@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, Btn, F, Sel, TA, Loading } from '@/components/ui'
-import { resteLabel, lblCommande } from './stockSchema'
+import { resteLabel, lblCommande, estMateriel } from './stockSchema'
+import CommandeSuivi from './CommandeSuivi'
 import { PhotoArticle } from './photoStock'
 import { sacsIncomplets } from './dotationStock'
 import { fmtDlc } from './lotsStock'
@@ -23,11 +24,12 @@ export default function OngletAlertes({ cats, fournisseurs, lieux, unites, dotat
   const [cmds, setCmds] = useState([])
   const [edit, setEdit] = useState(null)
   const [voirFermees, setVoirFermees] = useState(false)
+  const [suiviId, setSuiviId] = useState(null)
 
   async function load() {
     const [{ data }, c] = await Promise.all([
       supabase.rpc('stock_alertes'),
-      supabase.from('stock_commandes').select('*, stock_catalogue(nom,photo_path,mode), stock_fournisseurs(nom)')
+      supabase.from('stock_commandes').select('*, stock_catalogue(nom,photo_path,mode,nature), stock_fournisseurs(nom)')
         .order('date_rappel', { ascending: true, nullsFirst: false }).limit(200),
     ])
     setA(data)
@@ -192,7 +194,10 @@ export default function OngletAlertes({ cats, fournisseurs, lieux, unites, dotat
           <FormCommande item={edit} cats={cats} fournisseurs={fournisseurs}
             onDone={() => { setEdit(null); load() }} onOk={onOk} onErr={onErr} />
         )}
-        {cmdsAffichees.length === 0 ? <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aucune commande enregistrée.</div> : cmdsAffichees.map(cmd => (
+        {cmdsAffichees.length === 0 ? <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aucune commande enregistrée.</div> : cmdsAffichees.map(cmd => {
+          const article = (cats || []).find(c => c.id === cmd.catalogue_id) || cmd.stock_catalogue
+          const materiel = estMateriel(article)
+          return (
           <Card key={cmd.id} style={{ padding: '10px 14px', marginBottom: 6, opacity: cmd.statut === 'annulee' || cmd.statut === 'recue' ? 0.65 : 1 }}>
             <div className="ha-stock-row">
               <PhotoArticle path={cmd.photo_path} size={44} />
@@ -204,8 +209,10 @@ export default function OngletAlertes({ cats, fournisseurs, lieux, unites, dotat
                 <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
                   Qté {Number(cmd.quantite)}
                   {cmd.fournisseur_nom ? ` · ${cmd.fournisseur_nom}` : ''}
+                  {materiel ? ' · matériel' : ' · consommable'}
                   {cmd.date_rappel ? ` · rappel ${cmd.date_rappel}` : ''}
                   {cmd.date_commande ? ` · commandé le ${cmd.date_commande}` : ''}
+                  {materiel && cmd.garantie_fin ? ` · garantie jusqu’au ${cmd.garantie_fin}` : ''}
                 </div>
                 {cmd.notes && <div style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{cmd.notes}</div>}
               </div>
@@ -218,9 +225,16 @@ export default function OngletAlertes({ cats, fournisseurs, lieux, unites, dotat
               {cmd.statut !== 'annulee' && cmd.statut !== 'recue' && (
                 <Btn kind="danger" onClick={() => statutCmd(cmd, 'annulee')} style={{ padding: '5px 10px' }}>Annuler</Btn>
               )}
+              <Btn kind="soft" onClick={() => setSuiviId(id => id === cmd.id ? null : cmd.id)} style={{ padding: '5px 10px' }}>
+                {suiviId === cmd.id ? 'Masquer le suivi' : 'Suivi et documents'}
+              </Btn>
             </div>
+            {suiviId === cmd.id && (
+              <CommandeSuivi cmd={cmd} materiel={materiel} onOk={m => { onOk?.(m); load() }} onErr={onErr} />
+            )}
           </Card>
-        ))}
+          )
+        })}
       </div>
 
       <div>
@@ -281,14 +295,18 @@ function FormCommande({ item, cats, fournisseurs, onDone, onOk, onErr }) {
     if (!(Number(f.quantite) > 0)) { onErr?.('Quantité invalide.'); return }
     setSaving(true)
     const { data: auth } = await supabase.auth.getUser()
+    const article = cats.find(c => c.id === f.catalogue_id)
     const payload = {
       catalogue_id: f.catalogue_id,
-      fournisseur_id: f.fournisseur_id || (cats.find(c => c.id === f.catalogue_id)?.fournisseur_id) || null,
+      fournisseur_id: f.fournisseur_id || article?.fournisseur_id || null,
       quantite: Number(f.quantite),
       statut: f.statut || 'a_commander',
       date_rappel: f.date_rappel || null,
       notes: f.notes?.trim() || null,
       par: auth?.user?.id || null,
+      garantie_debut: estMateriel(article) ? (f.garantie_debut || null) : null,
+      garantie_fin: estMateriel(article) ? (f.garantie_fin || null) : null,
+      garantie_notes: estMateriel(article) ? (f.garantie_notes?.trim() || null) : null,
     }
     const { error } = await supabase.from('stock_commandes').insert(payload)
     setSaving(false)
@@ -311,6 +329,15 @@ function FormCommande({ item, cats, fournisseurs, onDone, onOk, onErr }) {
         <F label="Date de rappel" type="date" value={f.date_rappel} set={v => setF(s => ({ ...s, date_rappel: v }))} />
       </div>
       <TA label="Notes" value={f.notes} set={v => setF(s => ({ ...s, notes: v }))} rows={2} placeholder="N° de commande, conditionnement…" />
+      {estMateriel(cats.find(c => c.id === f.catalogue_id)) && (
+        <>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>Garantie du matériel. Elle ne s’affiche pas pour un consommable.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <F label="Garantie — début" type="date" value={f.garantie_debut || ''} set={v => setF(s => ({ ...s, garantie_debut: v }))} />
+            <F label="Garantie — valide jusqu’au" type="date" value={f.garantie_fin || ''} set={v => setF(s => ({ ...s, garantie_fin: v }))} />
+          </div>
+        </>
+      )}
       <Btn onClick={save} disabled={saving} style={{ width: '100%' }}>{saving ? '…' : 'Enregistrer'}</Btn>
     </Card>
   )

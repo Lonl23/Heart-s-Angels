@@ -19,6 +19,22 @@ export const MODES = [
 ]
 export const lblMode = v => MODES.find(t => t.v === v)?.l || v
 
+export const NATURES = [
+  { v: 'consommable', l: 'Consommable' },
+  { v: 'materiel', l: 'Matériel' },
+]
+export const lblNature = v => NATURES.find(t => t.v === v)?.l || v
+
+/** Boîte = consommable. Durable et oxygène = matériel. Une pièce se choisit. */
+export function natureDepuisMode(mode, nature) {
+  if (nature === 'materiel' || nature === 'consommable') return nature
+  if (mode === 'durable' || mode === 'oxygene') return 'materiel'
+  return 'consommable'
+}
+export function estMateriel(article) {
+  return natureDepuisMode(article?.mode, article?.nature) === 'materiel'
+}
+
 export function nomTypeO2(volumeL) {
   const n = Number(volumeL)
   return Number.isFinite(n) && n > 0 ? `O2 B${n}L` : 'O2'
