@@ -10,6 +10,7 @@ export const DEPARTEMENTS = [
     icon: '👥',
     to: '/app/departement/rh',
     modules: [
+      { key: 'ma_fiche', to: '/app/profil', label: 'Ma fiche', icon: '🪪', desc: 'Compléter vos coordonnées' },
       { key: 'fiches', to: '/app/volontaires', label: 'Fiches volontaires', icon: '🗂️', desc: 'Invitations, membres et fiches' },
       { key: 'defraiements', to: '/app/defraiements', label: 'Défraiements', icon: '🧾', desc: 'Note de frais : forfait et km' },
       { key: 'annuaire', to: '/app/annuaire', label: 'Annuaire', icon: '📇', desc: 'Bénéficiaires, contacts rattachés, institutions' },
@@ -73,6 +74,7 @@ export const DEPARTEMENTS = [
 
 export function moduleAutorise(key, auth) {
   if (!auth?.can?.('staff')) return false
+  if (key === 'ma_fiche') return auth.can('staff') && !auth.peutGererFiches()
   if (key === 'fiches') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
   if (key === 'helpdesk') return auth.can('staff')

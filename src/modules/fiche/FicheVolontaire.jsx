@@ -24,6 +24,8 @@ export default function FicheVolontaire({ userId, onBack }) {
   const gestionRoles = peutGererFiches()    // rôles ASBL : accès total ou coord. bénévoles
   const peutChangerRoleCompte = ['admin', 'president'].includes(monRole)
   const maFiche = uid === user?.id
+  // Sans accès aux autres fiches : seulement ses coordonnées. Le reste est au staff.
+  const seulementCoordonnees = maFiche && !gestionQualif
   const pinEligible = maFiche && peutOuvrirArchives()
   const prefsNotif = maFiche && peutReglerNotifications()
   const [prof, setProf] = useState(null)
@@ -131,7 +133,7 @@ export default function FicheVolontaire({ userId, onBack }) {
 
   async function save() {
     if (!prof?.prenom || !prof?.nom) { setMsg({ t:'Prénom et nom requis.', ok:false }); return }
-    if (estAmbu && !f.ambulancier.visa_atnup.trim() && !f.compte_a_configurer) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier(ère).', ok:false }); return }
+    if (!seulementCoordonnees && estAmbu && !f.ambulancier.visa_atnup.trim() && !f.compte_a_configurer) { setMsg({ t:'Le visa ATNUP est obligatoire pour un ambulancier(ère).', ok:false }); return }
     let rolesAsbl = f.roles_asbl
     if (gestionRoles) {
       rolesAsbl = rolesAsblPourEnregistrement(roleParticulier, f.roles_asbl)
@@ -186,7 +188,11 @@ export default function FicheVolontaire({ userId, onBack }) {
   if (!prof) return <Page title="Fiche volontaire"><p style={{ color:'var(--text-muted)' }}>Chargement…</p></Page>
 
   return (
-    <Page title={userId ? `Fiche — ${prof.prenom} ${prof.nom}` : 'Ma fiche volontaire'} action={onBack && <Btn kind="soft" onClick={onBack}>← Retour</Btn>}>
+    <Page
+      title={userId ? `Fiche — ${prof.prenom} ${prof.nom}` : 'Ma fiche'}
+      subtitle={seulementCoordonnees ? 'Complétez vos coordonnées et vos contacts d’urgence. Les qualifications, les rôles et les documents sont encodés par l’équipe.' : undefined}
+      action={onBack && <Btn kind="soft" onClick={onBack}>← Retour</Btn>}
+    >
       {msg && <Card style={{ marginBottom:12, padding:'10px 14px', background: msg.ok?'#F0FAF0':'#FEF2F2', border:`1px solid ${msg.ok?'#C3E6C3':'#FCD5D5'}`, color: msg.ok?'#1E5C1E':'#991B1B' }}>{msg.t}</Card>}
       {(f.compte_a_configurer || !(prof.email || '').trim()) && (
         <Card style={{ marginBottom:12, padding:'10px 14px', background:'#FAEEDA', border:'1px solid #E8C98A', color:'#7A4E0B' }}>
@@ -194,6 +200,7 @@ export default function FicheVolontaire({ userId, onBack }) {
         </Card>
       )}
 
+      {!seulementCoordonnees && (
       <Tabs
         items={[
           { v: 'coordonnees', l: 'Coordonnées' },
@@ -204,6 +211,7 @@ export default function FicheVolontaire({ userId, onBack }) {
         value={onglet}
         onChange={setOnglet}
       />
+      )}
 
       <div>
       {onglet === 'coordonnees' && (
@@ -311,16 +319,16 @@ export default function FicheVolontaire({ userId, onBack }) {
         </Card>
       ) : null}
 
-      {onglet === 'it' && maFiche && <ReglageDeuxFacteurs />}
+      {(onglet === 'it' || seulementCoordonnees) && maFiche && <ReglageDeuxFacteurs />}
 
-      {onglet === 'it' && pinEligible && (
+      {(onglet === 'it' || seulementCoordonnees) && pinEligible && (
         <Card style={{ marginBottom:14 }}>
           <Sec>Code d’ouverture des dossiers verrouillés</Sec>
           <FormPinFiche aPin={aPin} onSauver={sauverPin} saving={savingPin} msg={pinMsg} />
         </Card>
       )}
 
-      {onglet === 'it' && prefsNotif && (
+      {(onglet === 'it' || seulementCoordonnees) && prefsNotif && (
         <Card style={{ marginBottom:14 }}>
           <Sec>Notifications reçues</Sec>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
@@ -385,7 +393,7 @@ export default function FicheVolontaire({ userId, onBack }) {
         <DocumentsRh
           uid={uid}
           fiche={f}
-          peutEcrire={maFiche || gestionQualif}
+          peutEcrire={gestionQualif}
           onFiche={nf => setF(nf)}
           onMsg={setMsg}
         />
@@ -393,7 +401,7 @@ export default function FicheVolontaire({ userId, onBack }) {
 
       </div>
       {onglet !== 'documents' && (
-        <Btn onClick={save} disabled={saving} style={{ width:'100%', marginTop:14 }}>{saving?'Enregistrement…':'✓ Enregistrer la fiche'}</Btn>
+        <Btn onClick={save} disabled={saving} style={{ width:'100%', marginTop:14 }}>{saving?'Enregistrement…':(seulementCoordonnees ? '✓ Enregistrer mes coordonnées' : '✓ Enregistrer la fiche')}</Btn>
       )}
     </Page>
   )
@@ -461,7 +469,7 @@ function DocumentsRh({ uid, fiche, peutEcrire, onFiche, onMsg }) {
     <Card style={{ marginBottom: 14 }}>
       <Sec>Documents du volontaire</Sec>
       <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.45 }}>
-        Carte d’identité, permis, visas, et tout autre document. PDF ou photo, 15 Mo maximum. Seuls le volontaire et la gestion RH peuvent les ouvrir.
+        Carte d’identité, permis, visas, et tout autre document. PDF ou photo, 15 Mo maximum. Ces pièces sont encodées par la gestion des fiches.
       </p>
       {!peutEcrire && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Consultation seule.</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
