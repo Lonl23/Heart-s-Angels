@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, Btn, F, Sel, TA, Loading } from '@/components/ui'
-import { resteLabel, lblCommande, estMateriel } from './stockSchema'
+import { resteLabel, lblCommande, estMateriel, lblEntretien } from './stockSchema'
 import CommandeSuivi from './CommandeSuivi'
 import { PhotoArticle } from './photoStock'
 import { sacsIncomplets } from './dotationStock'
@@ -66,9 +66,38 @@ export default function OngletAlertes({ cats, fournisseurs, lieux, unites, dotat
   const incomplets = sacsIncomplets(lieux, cats, dotations, unites)
   const j15 = a.proches_j15 || []
   const bouteilles = a.o2_bouteilles || []
+  const entretiens = a.entretiens || []
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <div style={{ fontWeight: 700, color: '#854F0B', marginBottom: 8 }}>
+          Entretiens du matériel ({entretiens.length})
+        </div>
+        {entretiens.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Aucun entretien dû dans les 30 jours.</div>
+        ) : entretiens.map((u, i) => (
+          <Card key={u.id || i} style={{ padding: '10px 14px', marginBottom: 6 }}>
+            <div className="ha-stock-row">
+              <PhotoArticle path={u.photo_path} size={44} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600 }}>{u.nom}{u.numero_serie ? ` · n° ${u.numero_serie}` : ''}</div>
+                <div style={{ fontSize: 12.5, color: u.en_retard ? '#A32D2D' : '#854F0B' }}>
+                  {lblEntretien(u.type)}
+                  {u.date_fait ? ` · fait le ${fmtDlc(u.date_fait)}` : ''}
+                  {u.date_prochain ? ` · prochain ${fmtDlc(u.date_prochain)}` : ''}
+                  {u.en_retard ? ' · en retard' : ' · dans les 30 jours'}
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                  {u.lieu_chemin || u.lieu_nom || 'sans lieu'}
+                  {u.lot ? ` · lot ${u.lot}` : ''}
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
       <div>
         <div style={{ fontWeight: 700, color: '#BA7517', marginBottom: 8 }}>
           Péremptions à J-15 ({j15.length})

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Pill, Empty, Loading, Flash, inp } from '@/components/ui'
-import { TYPES_LIEU, MODES, NATURES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, lblNature, natureDepuisMode, cheminLieux, enfantsDe, resteLabel, nomTypeO2 } from './stock/stockSchema'
+import { TYPES_LIEU, MODES, NATURES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, lblNature, natureDepuisMode, estMateriel, cheminLieux, enfantsDe, resteLabel, nomTypeO2 } from './stock/stockSchema'
+import EntretienPiece from './stock/EntretienPiece'
 import VueLots from './stock/VueLots'
 import { aggregerLots, fmtDlc, dlcPassee, dlcProche, qteLotLabel, lotCorrespond } from './stock/lotsStock'
 import { telechargerWord, telechargerCsv } from './stock/QrImg'
@@ -75,7 +76,7 @@ export default function Stock() {
   async function load(silencieux) {
     if (silencieux !== true) setLoading(true)
     const page = 1000
-    const selUnites = '*, stock_catalogue(nom,mode,unite,volume_l,photo_path,fournisseur_id), stock_lieux(nom)'
+    const selUnites = '*, stock_catalogue(nom,mode,nature,unite,volume_l,photo_path,fournisseur_id,entretien_mois), stock_lieux(nom), stock_unite_entretiens(date_fait,date_prochain,created_at)'
     const [a, b, c0, d, e] = await Promise.all([
       supabase.from('stock_lieux').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_catalogue').select('*').eq('actif', true).order('nom'),
@@ -95,15 +96,25 @@ export default function Stock() {
     }
     setLieux(a.data || [])
     setCats(b.data || [])
-    setUnites(unitesBrutes.map(u => ({
-      ...u,
-      nom: u.stock_catalogue?.nom,
-      mode: u.stock_catalogue?.mode,
-      unite: u.stock_catalogue?.unite,
-      volume_l: u.volume_l || u.stock_catalogue?.volume_l,
-      photo_path: u.photo_path || u.stock_catalogue?.photo_path,
-      lieu_nom: u.stock_lieux?.nom,
-    })))
+    setUnites(unitesBrutes.map(u => {
+      const ents = [...(u.stock_unite_entretiens || [])].sort((a, b) => {
+        const d = (b.date_fait || '').localeCompare(a.date_fait || '')
+        return d || (b.created_at || '').localeCompare(a.created_at || '')
+      })
+      return {
+        ...u,
+        nom: u.stock_catalogue?.nom,
+        mode: u.stock_catalogue?.mode,
+        nature: u.stock_catalogue?.nature,
+        unite: u.stock_catalogue?.unite,
+        volume_l: u.volume_l || u.stock_catalogue?.volume_l,
+        photo_path: u.photo_path || u.stock_catalogue?.photo_path,
+        lieu_nom: u.stock_lieux?.nom,
+        entretien_mois: u.stock_catalogue?.entretien_mois,
+        entretien_dernier: ents[0]?.date_fait || null,
+        entretien_prochain: ents[0]?.date_prochain || null,
+      }
+    }))
     setFournisseurs(d.error ? [] : (d.data || []))
     setDotations(e.error ? [] : (e.data || []))
     setLoading(false)
@@ -292,7 +303,7 @@ export default function Stock() {
                   <Btn kind="soft" onClick={() => setTab('o2')}>Oxygène</Btn>
                 )}
               </div>
-              <OngletUnites unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />
+              <OngletUnites unites={unites} lieux={lieux} onChange={load} onRefresh={() => load(true)} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />
             </>
           )}
           {tab === 'o2' && (
@@ -614,6 +625,7 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
                             ? ` · mini réserve ${Number(c.stock_minimal) || 0} · mini sacs ${Number(c.stock_minimal_sacs) || 0}`
                             : ''}
                           {` · ${lblNature(natureDepuisMode(c.mode, c.nature))}`}
+                          {estMateriel(c) && Number(c.entretien_mois) > 0 ? ` · entretien tous les ${Number(c.entretien_mois)} mois` : ''}
                           {c.fournisseur_id && fourById[c.fournisseur_id] ? ` · ${fourById[c.fournisseur_id].nom}` : ' · sans fournisseur'}
                           {c.ref_fournisseur ? ` · réf. ${c.ref_fournisseur}` : ''}
                         </div>
@@ -716,6 +728,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       stock_minimal_sacs: Number(f.stock_minimal_sacs) || 0,
       fournisseur_id: f.fournisseur_id || null,
       ref_fournisseur: f.ref_fournisseur?.trim() || null,
+      entretien_mois: estMateriel(f) && Number(f.entretien_mois) > 0 ? Number(f.entretien_mois) : null,
     }
     if (f.id) {
       const { error } = await supabase.from('stock_catalogue').update(payload).eq('id', f.id)
@@ -742,8 +755,11 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       <Sel label="Mode QR" value={f.mode} set={v=>setF(s=>({ ...s, mode:v, nature: v === 'boite' ? 'consommable' : (v === 'durable' || v === 'oxygene' ? 'materiel' : s.nature), ...(v==='oxygene' && !s.volume_l ? { volume_l:'5' } : {}) }))} options={MODES} />
       <Sel label="Nature" value={natureDepuisMode(f.mode, f.nature)} set={v=>setF(s=>({ ...s, nature:v }))} options={NATURES} />
       <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:-4, marginBottom:10 }}>
-        La garantie d’une commande concerne le matériel. Un consommable n’en a pas.
+        La garantie d’une commande et les dates d’entretien concernent le matériel. Un consommable n’en a pas.
       </div>
+      {estMateriel(f) && (
+        <F label="Entretien tous les (mois)" type="number" value={f.entretien_mois ?? ''} set={v=>setF(s=>({ ...s, entretien_mois:v }))} placeholder="12 pour une batterie, vide si aucun rythme" />
+      )}
       {f.mode === 'boite' && <F label="Nombre par défaut dans une boîte" type="number" value={f.qte_defaut} set={v=>setF(s=>({ ...s, qte_defaut:v }))} required />}
       {f.mode === 'oxygene' && (
         <Sel label="Volume de la bouteille" value={String(f.volume_l || '5')} set={v=>setF(s=>({ ...s, volume_l:v, nom: s.nom || nomTypeO2(v) }))} options={VOLUMES_O2} />
@@ -769,8 +785,9 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
   )
 }
 
-function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }) {
+function OngletUnites({ unites, lieux, onChange, onRefresh, onOk, onErr, onXfer, onSortie }) {
   const [etiq, setEtiq] = useState(null)
+  const [entretienId, setEntretienId] = useState(null)
   const [filtre, setFiltre] = useState('')
   const [lieuFiltre, setLieuFiltre] = useState('')
   const [vue, setVue] = useState('lots')
@@ -789,7 +806,7 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }
     const q = filtre.trim().toLowerCase()
     if (!q) return true
     const chemin = cheminLieux(lieux, u.lieu_id)
-    return [u.nom, u.lot, u.lieu_nom, chemin, u.qr_token, u.date_peremption].some(x => (x || '').toLowerCase().includes(q))
+    return [u.nom, u.lot, u.lieu_nom, chemin, u.qr_token, u.date_peremption, u.numero_serie].some(x => (x || '').toLowerCase().includes(q))
   })
   const lotsVis = (lots || []).filter(l => {
     if (lieuFiltre && !(l.lieux || []).some(x => x.lieu_id === lieuFiltre)) return false
@@ -844,13 +861,13 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }
       <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>
         {vue === 'lots'
           ? 'Un n° de lot = une DLC. Quantité restante et emplacements (où c’est rangé). Les QR restent une pièce / une boîte.'
-          : 'Chaque QR est une pièce ou une boîte. Transfert, sortie et péremption restent tracés dans Mouvements.'}
+          : 'Chaque QR est une pièce ou une boîte. Sur le matériel, le bouton Entretien renseigne le n° de série et les dates. Transfert, sortie et péremption restent tracés dans Mouvements.'}
       </p>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }} className="ha-stock-recv-lot">
         <div>
           <label className="ha-stock-search-lab" htmlFor="stock-recherche-lot">Rechercher</label>
           <input id="stock-recherche-lot" value={filtre} onChange={e=>setFiltre(e.target.value)}
-            placeholder="N° de lot, article ou lieu…" autoComplete="off" style={{ ...inp, marginBottom:0 }} />
+            placeholder="N° de lot, n° de série, article ou lieu…" autoComplete="off" style={{ ...inp, marginBottom:0 }} />
         </div>
         <Sel label="Emplacement" value={lieuFiltre} set={setLieuFiltre}
           options={[{ v:'', l:'Tous les emplacements' }, ...lieux.map(l => ({ v:l.id, l: cheminLieux(lieux, l.id) || l.nom }))]} />
@@ -873,14 +890,26 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr, onXfer, onSortie }
                       {resteLabel(u)}{u.lot ? ` · lot ${u.lot}` : ''} · {cheminLieux(lieux, u.lieu_id) || u.lieu_nom || 'sans lieu'}
                       {u.date_peremption ? ` · DLC ${fmtDlc(u.date_peremption)}` : ''}
                     </div>
+                    {estMateriel(u) && (
+                      <div style={{ fontSize:12.5, color: u.entretien_prochain && u.entretien_prochain < new Date().toISOString().slice(0,10) ? '#A32D2D' : 'var(--text-muted)', marginTop:2 }}>
+                        {u.numero_serie ? `n° ${u.numero_serie}` : 'sans n° de série'}
+                        {u.entretien_prochain ? ` · prochain entretien ${fmtDlc(u.entretien_prochain)}` : ' · entretien non renseigné'}
+                      </div>
+                    )}
                     {u.etat !== 'dispo' && <div style={{ marginTop:4 }}><Pill color="#A32D2D" bg="#FCEBEB">{u.etat}</Pill></div>}
                     <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
                       <Btn kind="soft" onClick={() => setEtiq(u)} style={{ padding:'5px 10px' }}>QR</Btn>
+                      {estMateriel(u) && (
+                        <Btn kind="soft" onClick={() => setEntretienId(entretienId === u.id ? null : u.id)} style={{ padding:'5px 10px' }}>Entretien</Btn>
+                      )}
                       {u.etat === 'dispo' && <Btn kind="soft" onClick={() => onXfer?.(u)} style={{ padding:'5px 10px' }}>Transférer</Btn>}
                       {u.etat === 'dispo' && <Btn kind="soft" onClick={() => onSortie?.(u)} style={{ padding:'5px 10px' }}>Sortie</Btn>}
                       {u.etat === 'dispo' && <Btn kind="danger" onClick={() => perime(u)} style={{ padding:'5px 10px' }}>Péremption</Btn>}
                       <Btn kind="danger" onClick={() => supprimer(u)} style={{ padding:'5px 10px' }}>Supprimer</Btn>
                     </div>
+                    {entretienId === u.id && estMateriel(u) && (
+                      <EntretienPiece unite={u} onOk={onOk} onErr={onErr} onChange={onRefresh || onChange} />
+                    )}
                   </div>
                 </div>
               </Card>

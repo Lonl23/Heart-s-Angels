@@ -48,6 +48,10 @@ export async function exporterStockExcel(data, lieux) {
     { h:'mode', w:12, v: r => r.mode },
     { h:'lot', w:14, v: r => r.lot },
     { h:'dlc', w:12, v: r => r.dlc },
+    { h:'numero_serie', w:18, v: r => r.numero_serie },
+    { h:'mise_en_service', w:16, v: r => r.mise_en_service },
+    { h:'entretien_dernier', w:18, v: r => r.entretien_dernier },
+    { h:'entretien_prochain', w:18, v: r => r.entretien_prochain },
     { h:'lieu', w:28, v: r => cheminLieux(lieux, r.lieu_id) || r.lieu || '' },
     { h:'etat', w:12, v: r => r.etat },
     { h:'qte_systeme', w:14, v: r => r.mode === 'oxygene' ? '' : r.qte_restante },
@@ -69,6 +73,7 @@ export async function exporterStockExcel(data, lieux) {
     { h:'volume_l', w:10, v: r => r.volume_l },
     { h:'fournisseur', w:22, v: r => r.fournisseur },
     { h:'ref_fournisseur', w:18, v: r => r.ref_fournisseur },
+    { h:'entretien_mois', w:16, v: r => r.entretien_mois },
   ]), 'Articles')
 
   XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.lieux, [
@@ -102,6 +107,18 @@ export async function exporterStockExcel(data, lieux) {
     { h:'garantie_fin', w:16, v: r => r.garantie_fin },
     { h:'garantie_notes', w:28, v: r => r.garantie_notes },
   ]), 'Commandes')
+
+  const LBL_ENT = { controle: 'Contrôle', remplacement: 'Remplacement', revision: 'Révision', etalonnage: 'Étalonnage', mise_en_service: 'Mise en service', autre: 'Autre' }
+  XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.entretiens, [
+    { h:'article', w:28, v: r => r.article },
+    { h:'numero_serie', w:18, v: r => r.numero_serie },
+    { h:'lot', w:14, v: r => r.lot },
+    { h:'date_fait', w:14, v: r => r.date_fait },
+    { h:'date_prochain', w:16, v: r => r.date_prochain },
+    { h:'type', w:16, v: r => LBL_ENT[r.type] || r.type },
+    { h:'notes', w:28, v: r => r.notes },
+    { h:'document', w:24, v: r => r.document },
+  ]), 'Entretiens')
 
   XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.mouvements, [
     { h:'quand', w:20, v: r => fmtQuand(r.quand) },

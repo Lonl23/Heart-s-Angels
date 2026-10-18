@@ -35,6 +35,31 @@ export function estMateriel(article) {
   return natureDepuisMode(article?.mode, article?.nature) === 'materiel'
 }
 
+export const TYPES_ENTRETIEN = [
+  { v: 'controle', l: 'Contrôle' },
+  { v: 'remplacement', l: 'Remplacement' },
+  { v: 'revision', l: 'Révision' },
+  { v: 'etalonnage', l: 'Étalonnage' },
+  { v: 'mise_en_service', l: 'Mise en service' },
+  { v: 'autre', l: 'Autre' },
+]
+export const lblEntretien = v => TYPES_ENTRETIEN.find(t => t.v === v)?.l || v || ''
+
+/** Ajoute des mois civils à une date AAAA-MM-JJ. Le 31 reste le dernier jour du mois visé. */
+export function ajouterMois(iso, mois) {
+  const n = Number(mois)
+  if (!iso || !Number.isFinite(n) || n <= 0) return ''
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return ''
+  const moisCible = m - 1 + n
+  const annee = y + Math.floor(moisCible / 12)
+  const moisIdx = ((moisCible % 12) + 12) % 12
+  const dernier = new Date(annee, moisIdx + 1, 0).getDate()
+  const jour = Math.min(d, dernier)
+  const p = x => String(x).padStart(2, '0')
+  return `${annee}-${p(moisIdx + 1)}-${p(jour)}`
+}
+
 export function nomTypeO2(volumeL) {
   const n = Number(volumeL)
   return Number.isFinite(n) && n > 0 ? `O2 B${n}L` : 'O2'
