@@ -222,12 +222,10 @@ export function AuthProvider({ children }) {
     const roles = profile?.fiche?.roles_asbl || []
     return roles.includes('recolteur_souhait')
   }
-  /** Président et responsable informatique : toutes les alertes, avec cases à cocher. */
+  /** Chaque membre du staff choisit les alertes qu’il reçoit. */
   function peutReglerNotifications() {
     if (!role || role === 'partenaire') return false
-    if (role === 'admin' || role === 'president') return true
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => r === 'president' || r === 'resp_informatique')
+    return true
   }
   /** Président, vice-président, responsable informatique (pas l’adjoint) et récolteurs : archives PIN. */
   function peutOuvrirArchives() {

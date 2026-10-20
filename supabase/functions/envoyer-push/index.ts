@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
 
   const { data: notifs } = await sb
     .from('notifications')
-    .select('id, destinataire_id, titre, message, lien, type')
+    .select('id, destinataire_id, titre, message, lien, type, payload')
     .in('id', ids)
   const rows = notifs || []
   if (!rows.length) return json({ ok: true, sent: 0 })
@@ -138,7 +138,10 @@ Deno.serve(async (req) => {
     const titre = n.titre || "Heart's Angels"
     const corps = String(n.message || '').slice(0, 240)
     const lien = n.lien || '/app'
-    const payload = JSON.stringify({ title: titre, body: corps, message: corps, lien, type: n.type, id: n.id })
+    const extra = n.payload && typeof n.payload === 'object' ? n.payload as { montre_actions?: unknown; montre_jetons?: unknown } : {}
+    const actions = Array.isArray(extra.montre_actions) ? extra.montre_actions : []
+    const jetons = extra.montre_jetons && typeof extra.montre_jetons === 'object' ? extra.montre_jetons : {}
+    const payload = JSON.stringify({ title: titre, body: corps, message: corps, lien, type: n.type, id: n.id, actions, jetons })
     for (const t of byUser.get(n.destinataire_id) || []) {
       try {
         if (t.plateforme === 'web' && t.abonnement && cfg?.ok) {

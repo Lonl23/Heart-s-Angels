@@ -25,7 +25,7 @@ function ilYA(iso) {
 export default function Dashboard() {
   const auth = useAuth()
   const { profile, canAccess, peutReglerNotifications } = auth
-  const { items, nonLues, marquerLues, pushEtat, demanderPush } = useNotifications()
+  const { items, nonLues, marquerLues, traiter, pushEtat, demanderPush } = useNotifications()
   const [missions, setMissions] = useState(null)
   const departements = useMemo(
     () => filtrerDepartements(DEPARTEMENTS, key => moduleAutorise(key, auth)),
@@ -63,17 +63,20 @@ export default function Dashboard() {
             </span>
           )}
           {alertes.map(n => (
-            <Link
+            <span
               key={n.id}
-              to={n.lien || '/app'}
               className={'ha-accueil-puce' + (n.priorite === 'haute' ? ' is-haute' : '')}
               title={n.titre}
-              onClick={() => { if (!n.lu) marquerLues([n.id]) }}
             >
-              <span aria-hidden>{iconTypeNotif(n.type)}</span>
-              <span className="ha-accueil-puce-txt">{n.titre}</span>
-              <span style={{ color: 'var(--text-faint)', fontWeight: 500 }}>{ilYA(n.created_at)}</span>
-            </Link>
+              <Link to={n.lien || '/app'} onClick={() => { if (!n.groupe_id && !n.lu) marquerLues([n.id]) }} style={{ display:'inline-flex', alignItems:'center', gap:6, minWidth:0, color:'inherit', textDecoration:'none' }}>
+                <span aria-hidden>{iconTypeNotif(n.type)}</span>
+                <span className="ha-accueil-puce-txt">{n.titre}</span>
+                <span style={{ color: 'var(--text-faint)', fontWeight: 500 }}>{ilYA(n.created_at)}</span>
+              </Link>
+              {n.groupe_id && (
+                <button type="button" onClick={() => traiter(n.id)} style={{ border:0, background:'transparent', color:'var(--accent)', fontWeight:700, fontSize:12, cursor:'pointer', padding:0 }}>Traitée</button>
+              )}
+            </span>
           ))}
           {nonLues.length > 0 && (
             <button type="button" onClick={() => marquerLues()} className="ha-accueil-puce" style={{ cursor: 'pointer', color: 'var(--accent)' }}>

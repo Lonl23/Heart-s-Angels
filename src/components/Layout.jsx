@@ -32,7 +32,7 @@ export default function Layout() {
   const [dark, setDark] = useState(() => (document.documentElement.getAttribute('data-theme') || 'light') === 'dark')
   const departements = useMemo(() => filtrerDepartements(DEPARTEMENTS, key => moduleAutorise(key, auth)), [auth])
   const courant = departementActif(loc.pathname, departements)
-  const { nonLues, nbNonLues, marquerLues } = useNotifications()
+  const { nonLues, nbNonLues, marquerLues, traiter } = useNotifications()
   const [cloche, setCloche] = useState(false)
   const clocheRef = useRef(null)
 
@@ -145,13 +145,18 @@ export default function Layout() {
                 </div>
                 {nonLues.length === 0 && <div style={{ fontSize:13, color:'var(--text-muted)' }}>Aucune alerte non lue.</div>}
                 {nonLues.slice(0, 8).map(n => (
-                  <Link key={n.id} to={n.lien || '/app'} onClick={() => { marquerLues([n.id]); setCloche(false) }} className="ha-notif-item">
-                    <span>{iconTypeNotif(n.type)}</span>
-                    <span>
-                      <span style={{ display:'block', fontWeight:600, color:'var(--text)' }}>{n.titre}</span>
-                      {n.message && <span style={{ display:'block', fontSize:12, color:'var(--text-muted)' }}>{String(n.message).split('\n')[0]}</span>}
-                    </span>
-                  </Link>
+                  <div key={n.id} className="ha-notif-item">
+                    <Link to={n.lien || '/app'} onClick={() => { if (!n.groupe_id) marquerLues([n.id]); setCloche(false) }} style={{ display:'flex', gap:10, flex:1, minWidth:0, textDecoration:'none', color:'inherit' }}>
+                      <span>{iconTypeNotif(n.type)}</span>
+                      <span style={{ minWidth:0 }}>
+                        <span style={{ display:'block', fontWeight:600, color:'var(--text)' }}>{n.titre}</span>
+                        {n.message && <span style={{ display:'block', fontSize:12, color:'var(--text-muted)' }}>{String(n.message).split('\n')[0]}</span>}
+                      </span>
+                    </Link>
+                    {n.groupe_id && (
+                      <button type="button" onClick={() => traiter(n.id)} style={{ flex:'none', border:'1px solid var(--border)', background:'var(--card)', color:'var(--accent)', borderRadius:8, padding:'4px 8px', fontSize:12, fontWeight:600, cursor:'pointer' }}>Traitée</button>
+                    )}
+                  </div>
                 ))}
                 <Link to="/app" onClick={() => setCloche(false)} style={{ display:'block', textAlign:'center', fontSize:12.5, fontWeight:600, color:'var(--accent)', marginTop:8 }}>Accueil ›</Link>
               </div>

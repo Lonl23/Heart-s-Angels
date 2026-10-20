@@ -20,7 +20,7 @@ export function NotificationsProvider({ children }) {
     setChargement(true)
     const { data } = await supabase
       .from('notifications')
-      .select('id, type, titre, message, lien, priorite, lu, created_at')
+      .select('id, type, titre, message, lien, priorite, lu, created_at, groupe_id')
       .eq('destinataire_id', uid)
       .order('created_at', { ascending: false })
       .limit(40)
@@ -51,6 +51,15 @@ export function NotificationsProvider({ children }) {
           setItems((cur) => cur.map(x => x.id === row.id ? { ...x, ...row } : x))
         },
       )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notifications', filter: `destinataire_id=eq.${uid}` },
+        (payload) => {
+          const id = payload.old?.id
+          if (!id) return
+          setItems((cur) => cur.filter(x => x.id !== id))
+        },
+      )
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [uid])
@@ -75,7 +84,17 @@ export function NotificationsProvider({ children }) {
     const liste = ids === undefined ? null : ids
     await supabase.rpc('marquer_notifications_lues', { p_ids: liste })
     const now = new Date().toISOString()
-    setItems(cur => cur.map(n => (liste === null || liste.includes(n.id) ? { ...n, lu: true, lu_a: now } : n)))
+    setItems(cur => cur.map(n => {
+      if (n.groupe_id) return n
+      if (liste === null || liste.includes(n.id)) return { ...n, lu: true, lu_a: now }
+      return n
+    }))
+  }
+
+  async function traiter(id) {
+    if (!id) return
+    await supabase.rpc('traiter_notification', { p_id: id })
+    setItems(cur => cur.filter(n => n.id !== id))
   }
 
   async function demanderPush() {
@@ -88,7 +107,7 @@ export function NotificationsProvider({ children }) {
 
   const value = useMemo(() => ({
     items, nonLues, nbNonLues, chargement, pushEtat,
-    charger, marquerLues, demanderPush,
+    charger, marquerLues, traiter, demanderPush,
   }), [items, chargement, pushEtat])
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>
