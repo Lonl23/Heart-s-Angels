@@ -14,7 +14,6 @@ as $$
   select exists (
     select 1 from public.souhaits s
     where s.id = p_id
-      and coalesce(s.fictif, false)
       and coalesce(s.mission->>'demo_cle', '') <> ''
   )
 $$;

@@ -24,6 +24,12 @@ create or replace function public.appliquer_fictif_depuis_partenaire()
 returns trigger language plpgsql as $$
 declare v boolean := false;
 begin
+  -- Le souhait de formation (demo_cle) reste fictif même sans partenaire.
+  if tg_table_name = 'souhaits'
+     and coalesce(new.mission->>'demo_cle', '') <> '' then
+    new.fictif := true;
+    return new;
+  end if;
   if new.partenaire_id is not null then
     select coalesce(p.fictif, false) into v
       from public.partenaires p where p.id = new.partenaire_id;
