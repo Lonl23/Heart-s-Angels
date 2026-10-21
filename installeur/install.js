@@ -145,6 +145,7 @@ async function main() {
     await client.query(lireSQL('106_rappel_dar.sql'))
     await client.query(lireSQL('107_grants_api.sql'))
     await client.query(lireSQL('108_dar_formation.sql'))
+    await client.query(lireSQL('109_contacts_coordination_titre.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

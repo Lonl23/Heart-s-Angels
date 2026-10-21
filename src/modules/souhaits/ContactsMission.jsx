@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { Btn, F, Loading, Flash, inp } from '@/components/ui'
 import { telephonesPluri, nomPluri, lblRolePluri } from './missionSchema'
 import { lblRoleMission } from '@/modules/fiche/ficheSchema'
+import { detailCoordinationMedicale } from './coordinationMedicale'
 import RappelAsbl from './RappelAsbl'
 
 function Tel({ n, equipage }) {
@@ -92,7 +93,7 @@ export default function ContactsMission({ souhaitId, individuel, onBack }) {
   const coords = (data?.coordinateurs || []).map(c => ({
     id: c.email || c.prenom,
     nom: [c.prenom, c.nom].filter(Boolean).join(' ') || 'Coordination médicale',
-    detail: 'Médecin coordinateur / coordination médicale',
+    detail: detailCoordinationMedicale(c),
     tel: c.telephone,
     email: c.email,
   }))

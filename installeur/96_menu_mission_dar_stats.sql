@@ -906,7 +906,8 @@ begin
     'prenom', p.prenom,
     'nom', p.nom,
     'telephone', coalesce(p.fiche->>'telephone', ''),
-    'email', coalesce(p.email, '')
+    'email', coalesce(p.email, ''),
+    'qualifications', coalesce(p.fiche->'qualifications', '[]'::jsonb)
   ) order by p.prenom), '[]'::jsonb)
     into coords
   from public.profiles p
