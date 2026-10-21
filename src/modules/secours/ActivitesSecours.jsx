@@ -8,6 +8,10 @@ import {
   libelleCompetence,
   libelleTypeActivite,
   TYPES_ACTIVITE,
+  DISPOSITIFS,
+  libelleDispositif,
+  publicAttenduOuNull,
+  selectionChauffeurEchue,
   competencesConnues,
   compterActivites,
   requiertMesCompetences,
@@ -24,6 +28,8 @@ const VIDE = {
   debut: '',
   fin: '',
   places: '1',
+  publicAttendu: '',
+  dispositif: '',
   competences: [],
 }
 
@@ -119,7 +125,7 @@ export default function ActivitesSecours() {
     if (!silencieux) setLoading(true)
     setErr(null)
     const [a, i] = await Promise.all([
-      supabase.from('activites_secours').select('id,numero,titre,type,lieu,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
+      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,public_attendu,lieu,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
       supabase.from('activites_secours_inscrits').select('id,activite_id,user_id'),
     ])
     if (a.error || i.error) {
@@ -171,6 +177,11 @@ export default function ActivitesSecours() {
     setBusy(a.id)
     setFlash(null)
     const deja = stats.miennes.has(a.id)
+    if (!deja && selectionChauffeurEchue(profile, a)) {
+      setFlash('Votre sélection médicale est échue. L’inscription n’est pas possible : cette activité demande un chauffeur.')
+      setBusy(null)
+      return
+    }
     const res = deja
       ? await supabase.from('activites_secours_inscrits').delete().eq('activite_id', a.id).eq('user_id', profile.id)
       : await supabase.from('activites_secours_inscrits').insert({ activite_id: a.id, user_id: profile.id })
@@ -193,6 +204,8 @@ export default function ActivitesSecours() {
       debut: versChamp(a.debut),
       fin: versChamp(a.fin),
       places: String(a.places ?? 1),
+      publicAttendu: a.public_attendu == null ? '' : String(a.public_attendu),
+      dispositif: DISPOSITIFS.some(d => d.v === a.dispositif) ? a.dispositif : '',
       competences: competencesConnues(a.competences),
     })
   }
@@ -220,11 +233,16 @@ export default function ActivitesSecours() {
     if (form.fin && !fin) { setFlash('La fin est illisible.'); return }
     if (fin && fin < debut) { setFlash('La fin est avant le début.'); return }
     if (!Number.isInteger(places) || places < 1 || places > 500) { setFlash('Le nombre de places doit être entre 1 et 500.'); return }
+    const publicAttendu = publicAttenduOuNull(form.publicAttendu)
+    if (publicAttendu === undefined) { setFlash('Le public attendu doit être un nombre entre 0 et 500 000, ou rester vide.'); return }
+    if (form.dispositif && !DISPOSITIFS.some(d => d.v === form.dispositif)) { setFlash('Le type de dispositif est inconnu.'); return }
     setSauve(true)
     setFlash(null)
     const payload = {
       titre,
       type: TYPES_ACTIVITE.some(t => t.v === form.type) ? form.type : 'activite',
+      dispositif: form.dispositif || null,
+      public_attendu: publicAttendu,
       lieu: form.lieu.trim() || null,
       debut,
       fin,
@@ -262,7 +280,7 @@ export default function ActivitesSecours() {
   return (
     <Page
       title="Activités"
-      subtitle="Département secours. Tout le personnel retrouve ici les activités et peut s’inscrire."
+      subtitle="Département secours. Une activité se dimensionne, s’arme, puis se rend en bilan."
       action={gerer ? <Btn onClick={ouvrirCreation}>+ Activité</Btn> : null}
     >
       <style>{CSS}</style>
@@ -329,7 +347,16 @@ export default function ActivitesSecours() {
               <F label="Début" type="datetime-local" value={form.debut} set={v => majForm({ debut: v })} required />
               <F label="Fin" type="datetime-local" value={form.fin} set={v => majForm({ fin: v })} />
               <F label="Places" type="number" value={form.places} set={v => majForm({ places: v })} required />
+              <F label="Public attendu" type="number" value={form.publicAttendu} set={v => majForm({ publicAttendu: v })} />
+              <label style={{ marginBottom: 10, display: 'block' }}>
+                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Dispositif</span>
+                <select value={form.dispositif} onChange={e => majForm({ dispositif: e.target.value })} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}>
+                  <option value="">—</option>
+                  {DISPOSITIFS.map(d => <option key={d.v} value={d.v}>{d.l}</option>)}
+                </select>
+              </label>
             </div>
+            <p className="ha-act-note">Le type de dispositif se choisit. Il n’est pas calculé à partir du public.</p>
             <div style={{ marginBottom: 8 }}>
               <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Compétences requises</span>
               <div className="ha-act-choix" role="group" aria-label="Compétences requises">
@@ -396,7 +423,10 @@ export default function ActivitesSecours() {
                     <td className="ha-act-id">{a.numero}</td>
                     <td>
                       <Link to={`/app/secours/activites/${a.id}`} className="ha-act-titre">{a.titre}</Link>
-                      <div className="ha-act-type">{libelleTypeActivite(a.type)}</div>
+                      <div className="ha-act-type">
+                        {libelleTypeActivite(a.type)}
+                        {a.dispositif ? ` · ${libelleDispositif(a.dispositif, true)}` : ''}
+                      </div>
                     </td>
                     <td className="ha-act-lieu">{a.lieu || '—'}</td>
                     <td>

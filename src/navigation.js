@@ -39,7 +39,7 @@ export const DEPARTEMENTS = [
     to: '/app/departement/secours',
     toujoursVisible: true,
     modules: [
-      { key: 'activites_secours', to: '/app/secours/activites', label: 'Activités', icon: '🩺', desc: 'Activités du département : tout le personnel peut s’inscrire' },
+      { key: 'activites_secours', to: '/app/secours/activites', label: 'Activités', icon: '🩺', desc: 'Dispositifs : dimensionner, armer, puis le bilan de fin' },
     ],
   },
   {

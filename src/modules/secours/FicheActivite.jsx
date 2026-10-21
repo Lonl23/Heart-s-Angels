@@ -9,11 +9,15 @@ import {
   COMPETENCES_ACTIVITE,
   libelleCompetence,
   libelleTypeActivite,
+  libelleDispositif,
   competencesDuProfil,
   statutActivite,
   libelleStatutActivite,
   dureeActivite,
   estAVenir,
+  selectionChauffeurEchue,
+  telechargerBilan,
+  ouvrirBilan,
 } from './activitesSecours'
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -49,6 +53,7 @@ export default function FicheActivite() {
   const [gens, setGens] = useState([])
   const [auteur, setAuteur] = useState(null)
   const [onglet, setOnglet] = useState('info')
+  const [temps, setTemps] = useState('dimensionner')
   const [loading, setLoading] = useState(true)
   const [absent, setAbsent] = useState(false)
   const [err, setErr] = useState(null)
@@ -65,7 +70,7 @@ export default function FicheActivite() {
     setAbsent(false)
     const a = await supabase
       .from('activites_secours')
-      .select('id,numero,titre,type,lieu,debut,fin,places,competences,created_by,created_at')
+      .select('id,numero,titre,type,dispositif,public_attendu,lieu,debut,fin,places,competences,created_by,created_at')
       .eq('id', id)
       .maybeSingle()
     if (a.error) {
@@ -151,10 +156,72 @@ export default function FicheActivite() {
       .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
   }, [inscriptions, gens, q, filtreComp, requises])
 
+  function aller(etape) {
+    setTemps(etape)
+    if (etape === 'dimensionner') setOnglet('info')
+    if (etape === 'armer') setOnglet('personnel')
+  }
+
+  function donneesBilan() {
+    const a = config.bases?.[0]?.adresse || {}
+    const adresse = [[a.rue, a.numero].filter(Boolean).join(' '), [a.cp, a.localite].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+    const equipe = inscriptions.map(ins => {
+      const g = gens.find(x => x.id === ins.user_id)
+      const fiche = g?.fiche || {}
+      const quals = Array.isArray(fiche.qualifications) ? fiche.qualifications : []
+      const personne = {
+        prenom: g?.prenom || '',
+        nom: g?.nom || '',
+        quals,
+        role: g?.role || '',
+      }
+      const couvre = requises.some(c => quals.includes(c) || mesCorrespond(c, g))
+      return {
+        prenom: personne.prenom,
+        nom: personne.nom,
+        fonction: fonctionDe(personne),
+        couverture: requises.length === 0 ? 'Aucune exigée' : (couvre ? 'Couvre au moins une compétence' : 'Aucune des compétences demandées'),
+      }
+    }).sort((x, y) => `${x.nom} ${x.prenom}`.localeCompare(`${y.nom} ${y.prenom}`, 'fr'))
+    return {
+      organisation: org,
+      adresse,
+      logo: `${window.location.origin}${config.organisation?.logoUrl || '/icons/ha-logo-512-v4.png'}`,
+      imprimePar: `${(profile?.nom || '').toUpperCase()} ${profile?.prenom || ''}`.trim(),
+      numero: activite.numero,
+      titre: activite.titre,
+      type: libelleTypeActivite(activite.type),
+      dispositif: libelleDispositif(activite.dispositif) || '',
+      publicAttendu: activite.public_attendu == null ? '' : String(activite.public_attendu),
+      debut: fmtQuand(activite.debut),
+      fin: activite.fin ? fmtQuand(activite.fin) : '',
+      duree: duree || '',
+      lieu: activite.lieu || '',
+      places,
+      competences: requises.map(libelleCompetence),
+      personnel: equipe,
+      statut: libelleStatutActivite(statut),
+      inscrits: n,
+    }
+  }
+
+  function recupererBilan() {
+    if (!telechargerBilan(donneesBilan())) setFlash('Le bilan n’a pas pu être téléchargé.')
+  }
+
+  function imprimerBilan() {
+    if (!ouvrirBilan(donneesBilan())) setFlash('Le navigateur a bloqué la fenêtre du bilan. Utilisez Récupérer.')
+  }
+
   async function inscrire() {
     if (!profile?.id || !activite || busy) return
     setBusy(true)
     setFlash(null)
+    if (!moi && selectionChauffeurEchue(profile, activite)) {
+      setFlash('Votre sélection médicale est échue. L’inscription n’est pas possible : cette activité demande un chauffeur.')
+      setBusy(false)
+      return
+    }
     const res = moi
       ? await supabase.from('activites_secours_inscrits').delete().eq('activite_id', activite.id).eq('user_id', profile.id)
       : await supabase.from('activites_secours_inscrits').insert({ activite_id: activite.id, user_id: profile.id })
@@ -221,14 +288,49 @@ export default function FicheActivite() {
           </div>
         </header>
 
-        <nav className="ha-afiche-onglets" aria-label="Fiche de l’activité">
-          <button type="button" className={onglet === 'info' ? 'is-on' : ''} onClick={() => setOnglet('info')}>Information</button>
-          <button type="button" className={onglet === 'personnel' ? 'is-on' : ''} onClick={() => setOnglet('personnel')}>
-            Personnel{n ? ` ${n}` : ''}
+        <nav className="ha-dps-temps" aria-label="Déroulement du dispositif">
+          <button type="button" className={temps === 'dimensionner' ? 'is-on' : ''} onClick={() => aller('dimensionner')}>
+            <span>1</span> Dimensionner
+          </button>
+          <button type="button" className={temps === 'armer' ? 'is-on' : ''} onClick={() => aller('armer')}>
+            <span>2</span> Armer
+          </button>
+          <button type="button" className={temps === 'rendre' ? 'is-on' : ''} onClick={() => aller('rendre')}>
+            <span>3</span> Rendre
           </button>
         </nav>
 
-        {onglet === 'info' && (
+        {temps !== 'rendre' && (
+        <nav className="ha-afiche-onglets" aria-label="Fiche de l’activité">
+          <button type="button" className={onglet === 'info' ? 'is-on' : ''} onClick={() => aller('dimensionner')}>Information</button>
+          <button type="button" className={onglet === 'personnel' ? 'is-on' : ''} onClick={() => aller('armer')}>
+            Personnel{n ? ` ${n}` : ''}
+          </button>
+        </nav>
+        )}
+
+        {temps === 'rendre' && (
+          <section className="ha-afiche-carte">
+            <h2>Bilan de fin</h2>
+            <p className="ha-afiche-vide" style={{ marginTop: 8 }}>
+              {statut === 'terminee'
+                ? 'Le dispositif est terminé. Le bilan reprend l’équipe inscrite, la durée et le dimensionnement.'
+                : 'Le dispositif n’est pas encore terminé. Le bilan reprend déjà ce qui est enregistré.'}
+            </p>
+            <div className="ha-afiche-kv" style={{ marginTop: 14 }}>
+              <Champ k="Dispositif" v={libelleDispositif(activite.dispositif) || '—'} />
+              <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
+              <Champ k="Équipe" v={`${n} / ${places}`} />
+              <Champ k="Durée" v={duree || '—'} />
+            </div>
+            <div className="ha-dps-actions">
+              <Btn onClick={recupererBilan}>Récupérer</Btn>
+              <Btn kind="soft" onClick={imprimerBilan}>Imprimer</Btn>
+            </div>
+          </section>
+        )}
+
+        {temps !== 'rendre' && onglet === 'info' && (
           <div className="ha-afiche-grille">
             <section className="ha-afiche-carte">
               <h2>Détails de l’activité</h2>
@@ -238,7 +340,10 @@ export default function FicheActivite() {
                 <Champ k="Statut" v={libelleStatutActivite(statut)} />
                 <Champ k="Type" v={libelleTypeActivite(activite.type)} />
                 <Champ k="Nom" v={activite.titre} />
+                <Champ k="Dispositif" v={libelleDispositif(activite.dispositif) || '—'} />
+                <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
               </div>
+              <p className="ha-afiche-vide">Le type de dispositif est choisi à la création. Il n’est pas déduit du public.</p>
               <p className="ha-afiche-sec">Organisation</p>
               <div className="ha-afiche-kv">
                 <Champ k="Organisée par" v={org} />
@@ -295,7 +400,7 @@ export default function FicheActivite() {
           </div>
         )}
 
-        {onglet === 'personnel' && (
+        {temps !== 'rendre' && onglet === 'personnel' && (
           <section className="ha-afiche-carte">
             <div className="ha-afiche-outils">
               <select aria-label="Compétence" value={filtreComp} onChange={e => setFiltreComp(e.target.value)}>
@@ -431,6 +536,19 @@ const CSS = `
   border-top: 1px solid var(--border);
 }
 .ha-afiche-nb { font-size: 1.35rem; font-weight: 700; color: var(--heading); font-variant-numeric: tabular-nums; }
+.ha-dps-temps { display: flex; gap: 8px; flex-wrap: wrap; }
+.ha-dps-temps button {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  border-radius: 999px; padding: 7px 12px; font: inherit; font-weight: 700; font-size: 13.5px; cursor: pointer;
+}
+.ha-dps-temps button span {
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--bg-alt); color: var(--heading); font-size: 12px;
+}
+.ha-dps-temps button.is-on { border-color: var(--accent); color: var(--heading); }
+.ha-dps-temps button.is-on span { background: var(--accent); color: #fff; }
+.ha-dps-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 .ha-afiche-onglets { display: flex; gap: 6px; border-bottom: 1px solid var(--border); }
 .ha-afiche-onglets button {
   border: none;
