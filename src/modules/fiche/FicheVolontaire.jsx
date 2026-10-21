@@ -1,14 +1,22 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, F, Sel, PhoneF, Tabs, inp, lbl } from '@/components/ui'
+import { Page, Card, Btn, F, Sel, PhoneF, lbl } from '@/components/ui'
+import config from '@/app.config'
 import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsAvecSelection, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, equipeAsblOuverteParDefaut, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
+import {
+  lignesCompetence, compterCompetences, manquesProfil, lignesActivites, lignesSouhaits,
+  fusionParticipations, dansPeriode, compterParticipations, grilleAnnees, totalHeures,
+  fmtDate, fmtHeures, ouvrirLivret, civiliteLibelle,
+} from './bilanFiche'
 import { TYPES_NOTIF, prefsDepuisFiche } from '@/lib/notifications'
 import { FormPinFiche } from '@/components/PinArchive'
 import { ReglageDeuxFacteurs } from '@/components/DeuxFacteurs'
 
 const vide = {
-  date_naissance:'', telephone:'', iban:'', type_benevole:'',
+  date_naissance:'', lieu_naissance:'', adresse:'', date_engagement:'', civilite:'',
+  telephone:'', iban:'', type_benevole:'',
   qualifications:[], roles_asbl:[],
   permis:{ B:false, C:false, E:false, selection_medicale:false, selection_validite:'' },
   ambulancier:{ visa_atnup:'', badge_112:'' },
@@ -18,7 +26,7 @@ const vide = {
 }
 
 export default function FicheVolontaire({ userId, onBack }) {
-  const { user, role: monRole, reload, peutGererFiches, peutOuvrirArchives, peutReglerNotifications } = useAuth()
+  const { user, profile: moi, role: monRole, reload, peutGererFiches, peutOuvrirArchives, peutReglerNotifications } = useAuth()
   const uid = userId || user?.id
   const gestionQualif = peutGererFiches()   // type + qualifications
   const gestionRoles = peutGererFiches()    // rôles ASBL : accès total ou coord. bénévoles
@@ -37,7 +45,12 @@ export default function FicheVolontaire({ userId, onBack }) {
   const [savingPin, setSavingPin] = useState(false)
   const [roleParticulier, setRoleParticulier] = useState(false)
   const [equipeOuverte, setEquipeOuverte] = useState(null)
-  const [onglet, setOnglet] = useState('coordonnees')
+  const [onglet, setOnglet] = useState('info')
+  const [panneau, setPanneau] = useState('profil')
+  const [voirManques, setVoirManques] = useState(false)
+  const [parts, setParts] = useState([])
+  const [periode, setPeriode] = useState('toutes')
+  const [qAct, setQAct] = useState('')
   const rolesAvantNon = useRef([])
   const fileRef = useRef()
 
@@ -78,6 +91,26 @@ export default function FicheVolontaire({ userId, onBack }) {
       setAPin(!!pin)
     }
   })() }, [uid, user?.id])
+
+  useEffect(() => {
+    if (!uid) return
+    let stop = false
+    ;(async () => {
+      const ins = await supabase.from('activites_secours_inscrits').select('activite_id').eq('user_id', uid)
+      const ids = [...new Set((ins.data || []).map(x => x.activite_id).filter(Boolean))]
+      const acts = ids.length
+        ? await supabase.from('activites_secours').select('id,titre,type,lieu,debut,fin').in('id', ids)
+        : { data: [] }
+      const pers = await supabase.from('souhait_personnel').select('souhait_id,role_mission').eq('user_id', uid)
+      const sids = [...new Set((pers.data || []).map(x => x.souhait_id).filter(Boolean))]
+      const souh = sids.length
+        ? await supabase.from('souhaits').select('id,beneficiaire_prenom,description,date_souhaitee,date_fin,statut,localisation,fictif').in('id', sids)
+        : { data: [] }
+      if (stop) return
+      setParts(fusionParticipations(lignesActivites(acts.data, ins.data), lignesSouhaits(souh.data, pers.data)))
+    })()
+    return () => { stop = true }
+  }, [uid])
 
   const set = (k,v) => setF(s => ({ ...s, [k]:v }))
   const setTypeBenevole = (v) => setF(s => ({
@@ -130,6 +163,23 @@ export default function FicheVolontaire({ userId, onBack }) {
 
   const estAmbu = f.qualifications.includes('ambulancier')
   const estInfi = f.qualifications.includes('infirmier')
+  const competences = useMemo(() => lignesCompetence(f), [f])
+  const comptesComp = compterCompetences(competences)
+  const manques = prof ? manquesProfil(prof, f) : []
+  const complet = manques.length ? Math.round(((8 - manques.length) / 8) * 100) : 100
+  const participations = useMemo(() => {
+    const fonction = fonctionDe(f)
+    return parts.map(p => (p.fonction ? p : { ...p, fonction }))
+  }, [parts, f])
+  const comptesAct = compterParticipations(participations)
+  const listeAct = useMemo(() => {
+    const texte = qAct.trim().toLowerCase()
+    return participations.filter(p => {
+      if (!dansPeriode(p, periode)) return false
+      if (!texte) return true
+      return `${p.famille} ${p.titre} ${p.lieu} ${p.fonction}`.toLowerCase().includes(texte)
+    })
+  }, [participations, periode, qAct])
 
   async function save() {
     if (!prof?.prenom || !prof?.nom) { setMsg({ t:'Prénom et nom requis.', ok:false }); return }
@@ -187,12 +237,46 @@ export default function FicheVolontaire({ userId, onBack }) {
 
   if (!prof) return <Page title="Fiche volontaire"><p style={{ color:'var(--text-muted)' }}>Chargement…</p></Page>
 
+  const onglets = [
+    { v: 'info', l: 'Information' },
+    { v: 'activite', l: 'Activité' },
+    { v: 'competence', l: 'Compétence' },
+    ...(!seulementCoordonnees ? [{ v: 'document', l: 'Document' }] : []),
+    { v: 'compte', l: 'Compte' },
+  ]
+  const rolePill = aRoleAsblParticulier(f.roles_asbl)
+    ? (libellesRolesAsblPropres(f.roles_asbl)[0] || 'Rôle dans l’ASBL')
+    : lblRoleCompte(prof.role)
+
+  function imprimer() {
+    const a = config.bases?.[0]?.adresse || {}
+    const adresse = [[a.rue, a.numero].filter(Boolean).join(' '), [a.cp, a.localite].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+    const ok = ouvrirLivret({
+      organisation: config.organisation?.nom || 'Heart’s Angels ASBL',
+      adresse,
+      logo: `${window.location.origin}${config.organisation?.logoUrl || '/icons/ha-logo-512-v4.png'}`,
+      imprimePar: `${(moi?.nom || '').toUpperCase()} ${moi?.prenom || ''}`.trim(),
+      civilite: civiliteLibelle(f.civilite),
+      nom: prof.nom,
+      prenom: prof.prenom,
+      photo: f.photo_url || '',
+      dateNaissance: f.date_naissance,
+      lieuNaissance: f.lieu_naissance,
+      adressePerso: f.adresse,
+      telephone: f.telephone,
+      email: prof.email,
+      dateEngagement: f.date_engagement,
+      competences,
+      operations: participations,
+      grille: grilleAnnees(participations),
+      heures: totalHeures(participations),
+    })
+    if (!ok) setMsg({ t: 'Le navigateur a bloqué la fenêtre du bilan.', ok: false })
+  }
+
   return (
-    <Page
-      title={userId ? `Fiche — ${prof.prenom} ${prof.nom}` : 'Ma fiche'}
-      subtitle={seulementCoordonnees ? 'Complétez vos coordonnées et vos contacts d’urgence. Les qualifications, les rôles et les documents sont encodés par l’équipe.' : undefined}
-      action={onBack && <Btn kind="soft" onClick={onBack}>← Retour</Btn>}
-    >
+    <Page>
+      <style>{CSS_FICHE}</style>
       {msg && <Card style={{ marginBottom:12, padding:'10px 14px', background: msg.ok?'#F0FAF0':'#FEF2F2', border:`1px solid ${msg.ok?'#C3E6C3':'#FCD5D5'}`, color: msg.ok?'#1E5C1E':'#991B1B' }}>{msg.t}</Card>}
       {(f.compte_a_configurer || !(prof.email || '').trim()) && (
         <Card style={{ marginBottom:12, padding:'10px 14px', background:'#FAEEDA', border:'1px solid #E8C98A', color:'#7A4E0B' }}>
@@ -200,47 +284,182 @@ export default function FicheVolontaire({ userId, onBack }) {
         </Card>
       )}
 
-      {!seulementCoordonnees && (
-      <Tabs
-        items={[
-          { v: 'coordonnees', l: 'Coordonnées' },
-          { v: 'qualifications', l: 'Qualifications' },
-          { v: 'it', l: 'IT' },
-          { v: 'documents', l: 'Documents' },
-        ]}
-        value={onglet}
-        onChange={setOnglet}
-      />
-      )}
-
-      <div>
-      {onglet === 'coordonnees' && (
-      <Card style={{ marginBottom:14 }}>
-        <Sec>Identité</Sec>
-        <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:12 }}>
-          <div style={{ width:76, height:76, borderRadius:99, overflow:'hidden', flexShrink:0, background:'var(--accent)', color:'#fff', display:'grid', placeItems:'center', fontSize:24, fontWeight:700 }}>
-            {f.photo_url ? <img src={f.photo_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : `${(prof.prenom||'').charAt(0)}${(prof.nom||'').charAt(0)}`.toUpperCase()}
-          </div>
+      <header className="ha-fiche-head">
+        <div className="ha-fiche-ident">
+          <span className="ha-fiche-avatar">
+            {f.photo_url ? <img src={f.photo_url} alt="" /> : `${(prof.prenom || '').charAt(0)}${(prof.nom || '').charAt(0)}`.toUpperCase()}
+          </span>
           <div>
-            <input ref={fileRef} type="file" accept="image/*" onChange={uploadPhoto} style={{ display:'none' }} />
-            <Btn kind="soft" onClick={()=>fileRef.current?.click()}>📷 {f.photo_url ? 'Changer la photo' : 'Ajouter une photo'}</Btn>
-            <div style={{ fontSize:11.5, color:'var(--text-faint)', marginTop:4 }}>JPG/PNG, max 5 Mo.</div>
+            {onBack && <button type="button" className="ha-fiche-retour" onClick={onBack}>Fiches</button>}
+            <h1><span>{(prof.nom || '').toUpperCase()}</span> {prof.prenom}</h1>
+            <div className="ha-fiche-pills">
+              <span className={'ha-fiche-pill' + ((f.compte_a_configurer || !(prof.email || '').trim()) ? ' is-attente' : ' is-ok')}>
+                {(f.compte_a_configurer || !(prof.email || '').trim()) ? 'Compte à configurer' : 'Actif'}
+              </span>
+              {f.type_benevole === 'medical' && <span className="ha-fiche-pill">Médical</span>}
+              {f.type_benevole === 'non_medical' && <span className="ha-fiche-pill">Non médical</span>}
+              {rolePill && <span className="ha-fiche-pill is-muted">{rolePill}</span>}
+            </div>
+            <button type="button" className="ha-fiche-complet" onClick={() => { setOnglet('info'); setVoirManques(v => !v) }}>
+              <span className="ha-fiche-barre"><i style={{ width: `${complet}%` }} /></span>
+              {complet} % du profil complété
+            </button>
+            {voirManques && (
+              manques.length
+                ? <ul className="ha-fiche-manques">{manques.map(m => <li key={m}>{m}</li>)}</ul>
+                : <p className="ha-fiche-vide">Les informations du bilan sont remplies.</p>
+            )}
           </div>
         </div>
+        <div className="ha-fiche-actions">
+          <button type="button" className="ha-fiche-livret" onClick={imprimer}>Bilan d’activité</button>
+          {(prof.email || '').trim() && <a className="ha-fiche-contact" href={`mailto:${prof.email}`}>Contacter</a>}
+        </div>
+      </header>
+
+      <nav className="ha-fiche-onglets" aria-label="Fiche">
+        {onglets.map(o => (
+          <button key={o.v} type="button" className={onglet === o.v ? 'is-on' : ''} onClick={() => setOnglet(o.v)}>{o.l}</button>
+        ))}
+      </nav>
+
+      <div>
+      {onglet === 'info' && (
+      <div className="ha-fiche-info">
+        <aside className="ha-fiche-nav">
+          <span className="ha-fiche-avatar is-lg">
+            {f.photo_url ? <img src={f.photo_url} alt="" /> : `${(prof.prenom || '').charAt(0)}${(prof.nom || '').charAt(0)}`.toUpperCase()}
+          </span>
+          <input ref={fileRef} type="file" accept="image/*" onChange={uploadPhoto} style={{ display:'none' }} />
+          <button type="button" className="ha-fiche-photo" onClick={() => fileRef.current?.click()}>{f.photo_url ? 'Changer la photo' : 'Ajouter une photo'}</button>
+          <button type="button" className={panneau === 'profil' ? 'is-on' : ''} onClick={() => setPanneau('profil')}>Profil</button>
+          <button type="button" className={panneau === 'prevenir' ? 'is-on' : ''} onClick={() => setPanneau('prevenir')}>Personne à prévenir</button>
+        </aside>
+        {panneau === 'profil' && (
+      <Card style={{ marginBottom:0 }}>
+        <Sec>Profil</Sec>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px' }}>
+          <Sel label="Civilité" value={f.civilite || ''} set={v => set('civilite', v)} options={[{ v:'', l:'—' }, { v:'madame', l:'Madame' }, { v:'monsieur', l:'Monsieur' }]} />
           <F label="Prénom" value={prof.prenom||''} set={v=>setProf(p=>({...p,prenom:v}))} required />
           <F label="Nom" value={prof.nom||''} set={v=>setProf(p=>({...p,nom:v}))} required />
           <F label="Date de naissance" type="date" value={f.date_naissance} set={v=>set('date_naissance',v)} />
+          <F label="Lieu de naissance" value={f.lieu_naissance || ''} set={v=>set('lieu_naissance', v)} />
+          <F label="Date d’engagement" type="date" value={f.date_engagement || ''} set={v=>set('date_engagement', v)} />
           <PhoneF label="Téléphone" value={f.telephone} set={v=>set('telephone',v)} />
           <F label="IBAN (défraiements)" value={f.iban||''} set={v=>set('iban', v.toUpperCase())} placeholder="BE00 0000 0000 0000" />
+          <F label="Adresse" value={f.adresse || ''} set={v=>set('adresse', v)} placeholder="Rue, code postal, ville" />
         </div>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>
           E-mail (connexion) : {(prof.email || '').trim() || 'pas encore de compte'} — l’IBAN sert aux notes de frais forfaitaires.
         </div>
       </Card>
       )}
+        {panneau === 'prevenir' && (
+      <Card style={{ marginBottom:0 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+          <Sec noMargin>Personne à prévenir</Sec>
+          <Btn kind="soft" onClick={()=>set('contacts_urgence',[...f.contacts_urgence,{ prenom:'', nom:'', affiliation:'', telephone:'' }])}>+ Ajouter</Btn>
+        </div>
+        {f.contacts_urgence.length===0 && <div style={{ fontSize:13, color:'var(--text-muted)' }}>Aucun contact.</div>}
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {f.contacts_urgence.map((c,i)=>(
+            <div key={i} style={{ border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'0 12px' }}>
+                <F label="Prénom" value={c.prenom} set={v=>set('contacts_urgence',f.contacts_urgence.map((x,j)=>j===i?{...x,prenom:v}:x))} />
+                <F label="Nom" value={c.nom} set={v=>set('contacts_urgence',f.contacts_urgence.map((x,j)=>j===i?{...x,nom:v}:x))} />
+                <F label="Affiliation (lien)" value={c.affiliation} set={v=>set('contacts_urgence',f.contacts_urgence.map((x,j)=>j===i?{...x,affiliation:v}:x))} />
+                <PhoneF label="Téléphone" value={c.telephone} set={v=>set('contacts_urgence',f.contacts_urgence.map((x,j)=>j===i?{...x,telephone:v}:x))} />
+              </div>
+              <Btn kind="danger" onClick={()=>set('contacts_urgence',f.contacts_urgence.filter((_,j)=>j!==i))} style={{ padding:'4px 10px', marginTop:6 }}>Retirer</Btn>
+            </div>
+          ))}
+        </div>
+      </Card>
+        )}
+      </div>
+      )}
 
-      {onglet === 'it' && (
+      {onglet === 'activite' && (
+        <section className="ha-fiche-bloc">
+          <div className="ha-fiche-stats">
+            <Stat label="Total" valeur={comptesAct.total} />
+            <Stat label="À venir" valeur={comptesAct.aVenir} />
+            <Stat label="Ce mois" valeur={comptesAct.mois} />
+            <Stat label="Cette année" valeur={comptesAct.annee} />
+          </div>
+          <div className="ha-fiche-outils">
+            <select aria-label="Période" value={periode} onChange={e => setPeriode(e.target.value)}>
+              <option value="toutes">Toutes les participations</option>
+              <option value="a_venir">À venir</option>
+              <option value="mois">Ce mois</option>
+              <option value="annee">Cette année</option>
+            </select>
+            <input type="search" placeholder="Rechercher" aria-label="Rechercher une participation" value={qAct} onChange={e => setQAct(e.target.value)} />
+          </div>
+          {listeAct.length === 0 ? (
+            <div className="ha-fiche-vide-carte">
+              <strong>Aucune participation</strong>
+              <p>{participations.length === 0 ? 'Aucune activité ni souhait n’est encore lié à cette fiche.' : 'Rien sur cette période.'}</p>
+              {periode !== 'toutes' && <button type="button" onClick={() => setPeriode('toutes')}>Tout afficher</button>}
+            </div>
+          ) : (
+            <div className="ha-fiche-table-wrap">
+              <table className="ha-fiche-table">
+                <thead>
+                  <tr><th>Date</th><th>Type</th><th>Description</th><th>Heures</th><th>Fonction</th></tr>
+                </thead>
+                <tbody>
+                  {listeAct.map(p => (
+                    <tr key={p.id}>
+                      <td>{fmtDate(p.date) || '—'}</td>
+                      <td>{p.famille}</td>
+                      <td>
+                        {p.lien ? <Link to={p.lien}>{p.titre}</Link> : p.titre}
+                        {p.lieu ? <span className="ha-fiche-lieu">{p.lieu}</span> : null}
+                      </td>
+                      <td>{fmtHeures(p.heures)}</td>
+                      <td>{p.fonction || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {onglet === 'competence' && (
+        <section className="ha-fiche-bloc">
+          <div className="ha-fiche-stats">
+            <Stat label="Compétences détenues" valeur={comptesComp.detenues} />
+            <Stat label="Bientôt expirées" valeur={comptesComp.bientot} />
+            <Stat label="Expirées" valeur={comptesComp.expirees} />
+          </div>
+          {competences.length === 0 ? (
+            <p className="ha-fiche-vide">Aucune compétence enregistrée.</p>
+          ) : (
+            <div className="ha-fiche-table-wrap">
+              <table className="ha-fiche-table">
+                <thead>
+                  <tr><th>Catégorie</th><th>Compétence</th><th>Statut</th><th>Expiration</th></tr>
+                </thead>
+                <tbody>
+                  {competences.map((c, i) => (
+                    <tr key={i}>
+                      <td>{c.categorie}</td>
+                      <td>{c.description}</td>
+                      <td><span className={'ha-fiche-statut is-' + c.statut}>{c.statut === 'expiree' ? 'Expirée' : c.statut === 'bientot' ? 'Bientôt expirée' : c.statut === 'secondaire' ? 'Secondaire' : 'Principale'}</span></td>
+                      <td>{c.expiration}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {onglet === 'compte' && (
       <Card style={{ marginBottom:14 }}>
         <Sec>Rôle de compte</Sec>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
@@ -256,7 +475,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       </Card>
       )}
 
-      {onglet === 'qualifications' && (
+      {onglet === 'competence' && gestionQualif && (
       <Card style={{ marginBottom:14 }}>
         <Sec>Type de bénévole & qualifications</Sec>
         {gestionQualif ? (
@@ -278,7 +497,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       {/* Ambulancier */}
-      {onglet === 'qualifications' && estAmbu && (
+      {onglet === 'competence' && gestionQualif && estAmbu && (
         <Card style={{ marginBottom:14 }}>
           <Sec>Ambulancier(ère)</Sec>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px' }}>
@@ -289,7 +508,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       {/* Infirmier */}
-      {onglet === 'qualifications' && estInfi && (
+      {onglet === 'competence' && gestionQualif && estInfi && (
         <Card style={{ marginBottom:14 }}>
           <Sec>Infirmier(ère)</Sec>
           <div style={{ maxWidth:280 }}>
@@ -301,7 +520,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       {/* Rôles ASBL : éditeur pour coord./accès total ; le simple volontaire ne voit rien. */}
-      {onglet === 'it' && gestionRoles ? (
+      {onglet === 'compte' && gestionRoles ? (
         <Card style={{ marginBottom:14 }}>
           <Sec>Rôle dans l'ASBL</Sec>
           <EditeurRolesAsbl
@@ -313,22 +532,22 @@ export default function FicheVolontaire({ userId, onBack }) {
             setEquipeOuverte={setEquipeOuverte}
           />
         </Card>
-      ) : onglet === 'it' && aRoleAsblParticulier(f.roles_asbl) ? (
+      ) : onglet === 'compte' && aRoleAsblParticulier(f.roles_asbl) ? (
         <Card style={{ marginBottom:14 }}>
           <RolesAsblLecture roles={f.roles_asbl} />
         </Card>
       ) : null}
 
-      {(onglet === 'it' || seulementCoordonnees) && maFiche && <ReglageDeuxFacteurs />}
+      {onglet === 'compte' && maFiche && <ReglageDeuxFacteurs />}
 
-      {(onglet === 'it' || seulementCoordonnees) && pinEligible && (
+      {onglet === 'compte' && pinEligible && (
         <Card style={{ marginBottom:14 }}>
           <Sec>Code d’ouverture des dossiers verrouillés</Sec>
           <FormPinFiche aPin={aPin} onSauver={sauverPin} saving={savingPin} msg={pinMsg} />
         </Card>
       )}
 
-      {(onglet === 'it' || seulementCoordonnees) && prefsNotif && (
+      {onglet === 'compte' && prefsNotif && (
         <Card style={{ marginBottom:14 }}>
           <Sec>Notifications reçues</Sec>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
@@ -348,7 +567,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       {/* Permis */}
-      {onglet === 'qualifications' && (
+      {onglet === 'competence' && gestionQualif && (
       <Card style={{ marginBottom:14 }}>
         <Sec>Permis de conduire</Sec>
         <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:10 }}>
@@ -366,30 +585,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       </Card>
       )}
 
-      {onglet === 'coordonnees' && (
-      <Card style={{ marginBottom:14 }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-          <Sec noMargin>Contacts en cas d'urgence</Sec>
-          <Btn kind="soft" onClick={()=>set('contacts_urgence',[...f.contacts_urgence,{ prenom:'', nom:'', affiliation:'', telephone:'' }])}>+ Ajouter</Btn>
-        </div>
-        {f.contacts_urgence.length===0 && <div style={{ fontSize:13, color:'var(--text-muted)' }}>Aucun contact.</div>}
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {f.contacts_urgence.map((c,i)=>(
-            <div key={i} style={{ border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px' }}>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'0 12px' }}>
-                <F label="Prénom" value={c.prenom} set={v=>set('contacts_urgence',f.contacts_urgence.map((x,j)=>j===i?{...x,prenom:v}:x))} />
-                <F label="Nom" value={c.nom} set={v=>set('contacts_urgence',f.contacts_urgence.map((x,j)=>j===i?{...x,nom:v}:x))} />
-                <F label="Affiliation (lien)" value={c.affiliation} set={v=>set('contacts_urgence',f.contacts_urgence.map((x,j)=>j===i?{...x,affiliation:v}:x))} />
-                <PhoneF label="Téléphone" value={c.telephone} set={v=>set('contacts_urgence',f.contacts_urgence.map((x,j)=>j===i?{...x,telephone:v}:x))} />
-              </div>
-              <Btn kind="danger" onClick={()=>set('contacts_urgence',f.contacts_urgence.filter((_,j)=>j!==i))} style={{ padding:'4px 10px', marginTop:6 }}>Retirer</Btn>
-            </div>
-          ))}
-        </div>
-      </Card>
-      )}
-
-      {onglet === 'documents' && (
+      {onglet === 'document' && (
         <DocumentsRh
           uid={uid}
           fiche={f}
@@ -400,7 +596,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       </div>
-      {onglet !== 'documents' && (
+      {(onglet === 'info' || onglet === 'compte' || (onglet === 'competence' && gestionQualif)) && (
         <Btn onClick={save} disabled={saving} style={{ width:'100%', marginTop:14 }}>{saving?'Enregistrement…':(seulementCoordonnees ? '✓ Enregistrer mes coordonnées' : '✓ Enregistrer la fiche')}</Btn>
       )}
     </Page>
@@ -479,14 +675,17 @@ function DocumentsRh({ uid, fiche, peutEcrire, onFiche, onMsg }) {
             <div key={type.v} style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
               <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--heading)', marginBottom: 8 }}>{type.l}</div>
               {lignes.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Aucun fichier.</div>}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {lignes.map(d => (
-                <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => ouvrir(d)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', textAlign: 'left' }}>
+                <div key={d.id} style={{ width: 160, border: '1px solid var(--border)', borderRadius: 12, padding: 10, background: 'var(--bg-alt)' }}>
+                  <button type="button" onClick={() => ouvrir(d)} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent-blue)', fontWeight: 700, fontSize: 13, cursor: 'pointer', textAlign: 'left' }}>
                     {d.nom || type.l}
                   </button>
-                  {peutEcrire && <Btn kind="danger" onClick={() => retirer(d)} disabled={busy} style={{ padding: '4px 10px' }}>Retirer</Btn>}
+                  <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>{type.l}</div>
+                  {peutEcrire && <Btn kind="danger" onClick={() => retirer(d)} disabled={busy} style={{ padding: '4px 10px', marginTop: 8 }}>Retirer</Btn>}
                 </div>
               ))}
+              </div>
               {peutEcrire && type.v === 'autre' && (
                 <F label="Nom du document" value={nomAutre} set={setNomAutre} placeholder="Attestation, diplôme…" />
               )}
@@ -608,3 +807,95 @@ function Toggle({ label, on, onClick }) {
   )
 }
 function Sec({ children, noMargin }) { return <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom: noMargin?0:10 }}>{children}</div> }
+
+function fonctionDe(f) {
+  const q = (f?.qualifications || []).find(c => c !== 'autre') || f?.qualifications?.[0]
+  return QUALIFS.find(x => x.v === q)?.l || ''
+}
+
+function Stat({ label, valeur }) {
+  return (
+    <div className="ha-fiche-stat">
+      <strong>{valeur}</strong>
+      <span>{label}</span>
+    </div>
+  )
+}
+
+const CSS_FICHE = `
+.ha-fiche-head, .ha-fiche-bloc, .ha-fiche-nav {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+.ha-fiche-head { display: flex; justify-content: space-between; gap: 16px; padding: 14px 16px; margin-bottom: 12px; align-items: flex-start; }
+.ha-fiche-ident { display: flex; gap: 14px; min-width: 0; }
+.ha-fiche-avatar {
+  width: 52px; height: 52px; border-radius: 50%; overflow: hidden; flex: none;
+  display: grid; place-items: center; background: var(--accent); color: #fff; font-weight: 700;
+}
+.ha-fiche-avatar.is-lg { width: 112px; height: 112px; font-size: 28px; margin: 0 auto 8px; }
+.ha-fiche-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ha-fiche-retour { border: none; background: none; padding: 0; color: var(--accent); font-weight: 700; cursor: pointer; font: inherit; font-size: 12.5px; }
+.ha-fiche-head h1 { margin: 2px 0 6px; font-size: 1.35rem; color: var(--heading); line-height: 1.15; }
+.ha-fiche-head h1 span { font-weight: 800; }
+.ha-fiche-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.ha-fiche-pill { border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 700; background: #E6F1FB; color: #185FA5; }
+.ha-fiche-pill.is-ok { background: #E7F6EE; color: #1E7A45; }
+.ha-fiche-pill.is-attente { background: #FFF4E8; color: #C26A12; }
+.ha-fiche-pill.is-muted { background: var(--bg-alt); color: var(--text-muted); }
+.ha-fiche-complet { display: flex; align-items: center; gap: 8px; margin-top: 8px; border: none; background: none; padding: 0; color: var(--text-muted); font: inherit; font-size: 12.5px; cursor: pointer; }
+.ha-fiche-barre { width: 120px; height: 6px; border-radius: 99px; background: var(--bg-alt); overflow: hidden; display: inline-block; }
+.ha-fiche-barre i { display: block; height: 100%; background: var(--accent); }
+.ha-fiche-manques { margin: 6px 0 0; padding-left: 18px; color: var(--text-2); font-size: 12.5px; }
+.ha-fiche-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ha-fiche-livret, .ha-fiche-contact, .ha-fiche-vide-carte button {
+  border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none;
+}
+.ha-fiche-livret, .ha-fiche-vide-carte button { border: 1px solid var(--border); background: var(--card); color: var(--heading); }
+.ha-fiche-contact { background: var(--accent); color: #fff; border: none; }
+.ha-fiche-onglets { display: flex; gap: 4px; overflow: auto; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.ha-fiche-onglets button { border: none; background: transparent; color: var(--text-muted); font: inherit; font-weight: 700; font-size: 14px; padding: 8px 12px 10px; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
+.ha-fiche-onglets button.is-on { color: var(--accent-blue); border-bottom-color: var(--accent); }
+.ha-fiche-info { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 12px; align-items: start; }
+.ha-fiche-nav { padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+.ha-fiche-nav button, .ha-fiche-photo { border: none; background: transparent; text-align: left; font: inherit; font-size: 13.5px; font-weight: 650; color: var(--text-2); padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.ha-fiche-nav button.is-on { background: #E6F1FB; color: #185FA5; }
+.ha-fiche-photo { text-align: center; color: var(--accent); margin-bottom: 6px; }
+.ha-fiche-bloc { padding: 14px; }
+.ha-fiche-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.ha-fiche-stat { background: var(--bg-alt); border-radius: 12px; padding: 12px 14px; }
+.ha-fiche-stat strong { display: block; font-size: 1.6rem; color: var(--heading); font-variant-numeric: tabular-nums; }
+.ha-fiche-stat span { color: var(--text-muted); font-size: 12.5px; }
+.ha-fiche-outils { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.ha-fiche-outils select, .ha-fiche-outils input { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font: inherit; font-size: 13px; padding: 7px 10px; }
+.ha-fiche-outils input { margin-left: auto; min-width: min(220px, 70vw); }
+.ha-fiche-table-wrap { overflow: auto; }
+.ha-fiche-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+.ha-fiche-table th { text-align: left; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.ha-fiche-table td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.ha-fiche-table a { color: var(--accent-blue); font-weight: 700; text-decoration: none; }
+.ha-fiche-lieu { display: block; color: var(--text-muted); font-size: 12px; font-weight: 500; }
+.ha-fiche-statut { border-radius: 999px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; }
+.ha-fiche-statut.is-principale { background: #E7F6EE; color: #1E7A45; }
+.ha-fiche-statut.is-secondaire { background: #F3E8FF; color: #6D28D9; }
+.ha-fiche-statut.is-bientot { background: #FFF4E8; color: #C26A12; }
+.ha-fiche-statut.is-expiree { background: #FDECEC; color: #A32D2D; }
+.ha-fiche-vide { margin: 0; color: var(--text-muted); font-size: 13px; }
+.ha-fiche-vide-carte { margin: 8px auto; max-width: 360px; text-align: center; padding: 28px 16px; }
+.ha-fiche-vide-carte strong { display: block; color: var(--heading); margin-bottom: 4px; }
+.ha-fiche-vide-carte p { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }
+[data-theme="dark"] .ha-fiche-pill, [data-theme="dark"] .ha-fiche-nav button.is-on { background: rgba(24,95,165,.28); color: #8EBFEE; }
+[data-theme="dark"] .ha-fiche-pill.is-ok, [data-theme="dark"] .ha-fiche-statut.is-principale { background: rgba(46,155,87,.22); color: #8ED7A8; }
+[data-theme="dark"] .ha-fiche-pill.is-attente, [data-theme="dark"] .ha-fiche-statut.is-bientot { background: rgba(186,117,23,.2); color: #F0C36A; }
+[data-theme="dark"] .ha-fiche-statut.is-secondaire { background: rgba(109,40,217,.22); color: #D6BCFA; }
+[data-theme="dark"] .ha-fiche-statut.is-expiree { background: rgba(163,45,45,.2); color: #F0A0A0; }
+[data-theme="dark"] .ha-fiche-onglets button.is-on, [data-theme="dark"] .ha-fiche-table a { color: var(--heading); }
+@media (max-width: 800px) {
+  .ha-fiche-head, .ha-fiche-info { display: block; }
+  .ha-fiche-stats { grid-template-columns: 1fr 1fr; }
+  .ha-fiche-actions { margin-top: 10px; }
+  .ha-fiche-nav { margin-bottom: 12px; }
+  .ha-fiche-outils input { margin-left: 0; width: 100%; }
+}
+`
