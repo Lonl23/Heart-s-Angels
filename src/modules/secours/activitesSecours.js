@@ -1,5 +1,17 @@
 import { QUALIFS, qualsImplicites } from '@/modules/fiche/ficheSchema'
 
+/** Nature de l’activité. Pas un rôle de compte. */
+export const TYPES_ACTIVITE = [
+  { v: 'activite', l: 'Activité' },
+  { v: 'garde', l: 'Garde' },
+  { v: 'manoeuvre', l: 'Manœuvre' },
+  { v: 'formation', l: 'Formation' },
+]
+
+export function libelleTypeActivite(v) {
+  return TYPES_ACTIVITE.find(t => t.v === v)?.l || 'Activité'
+}
+
 /** Qualifications de la fiche, plus le type médical / non médical. */
 export const COMPETENCES_ACTIVITE = [
   ...QUALIFS,
@@ -37,6 +49,39 @@ export function requiertMesCompetences(activite, mes) {
   const req = Array.isArray(activite?.competences) ? activite.competences : []
   if (!req.length || !mes || mes.size === 0) return false
   return req.some(c => mes.has(c))
+}
+
+/**
+ * a_venir : le début n’est pas encore passé.
+ * en_cours : le début est passé et la fin, s’il y en a une, non.
+ * terminee : la fin est passée, ou le début s’il n’y a pas de fin.
+ */
+export function statutActivite(activite, maintenant = new Date()) {
+  const debut = new Date(activite?.debut)
+  const fin = activite?.fin ? new Date(activite.fin) : null
+  const t = maintenant.getTime()
+  if (Number.isNaN(debut.getTime()) || t < debut.getTime()) return 'a_venir'
+  if (fin && !Number.isNaN(fin.getTime()) && t <= fin.getTime()) return 'en_cours'
+  return 'terminee'
+}
+
+export function libelleStatutActivite(statut) {
+  if (statut === 'en_cours') return 'En cours'
+  if (statut === 'terminee') return 'Terminée'
+  return 'À venir'
+}
+
+/** Durée entre le début et la fin, ou null s’il n’y a pas de fin. */
+export function dureeActivite(activite) {
+  if (!activite?.debut || !activite?.fin) return null
+  const ms = new Date(activite.fin).getTime() - new Date(activite.debut).getTime()
+  if (!(ms > 0)) return null
+  const min = Math.round(ms / 60000)
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  if (h && m) return `${h} h ${String(m).padStart(2, '0')}`
+  if (h) return `${h} h`
+  return `${m} min`
 }
 
 /** L’activité n’est pas terminée (la fin, ou le début s’il n’y a pas de fin). */

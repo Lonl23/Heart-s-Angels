@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Empty, Loading, Flash } from '@/components/ui'
 import {
   COMPETENCES_ACTIVITE,
   libelleCompetence,
+  libelleTypeActivite,
+  TYPES_ACTIVITE,
   competencesConnues,
   compterActivites,
   requiertMesCompetences,
@@ -16,6 +19,7 @@ import {
 const VIDE = {
   id: null,
   titre: '',
+  type: 'activite',
   lieu: '',
   debut: '',
   fin: '',
@@ -115,7 +119,7 @@ export default function ActivitesSecours() {
     if (!silencieux) setLoading(true)
     setErr(null)
     const [a, i] = await Promise.all([
-      supabase.from('activites_secours').select('id,numero,titre,lieu,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
+      supabase.from('activites_secours').select('id,numero,titre,type,lieu,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
       supabase.from('activites_secours_inscrits').select('id,activite_id,user_id'),
     ])
     if (a.error || i.error) {
@@ -184,6 +188,7 @@ export default function ActivitesSecours() {
     setForm({
       id: a.id,
       titre: a.titre || '',
+      type: TYPES_ACTIVITE.some(t => t.v === a.type) ? a.type : 'activite',
       lieu: a.lieu || '',
       debut: versChamp(a.debut),
       fin: versChamp(a.fin),
@@ -219,6 +224,7 @@ export default function ActivitesSecours() {
     setFlash(null)
     const payload = {
       titre,
+      type: TYPES_ACTIVITE.some(t => t.v === form.type) ? form.type : 'activite',
       lieu: form.lieu.trim() || null,
       debut,
       fin,
@@ -313,6 +319,12 @@ export default function ActivitesSecours() {
           <form onSubmit={enregistrer}>
             <div className="ha-act-form">
               <F label="Titre" value={form.titre} set={v => majForm({ titre: v })} required />
+              <label style={{ marginBottom: 10, display: 'block' }}>
+                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Type</span>
+                <select value={form.type} onChange={e => majForm({ type: e.target.value })} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}>
+                  {TYPES_ACTIVITE.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
+                </select>
+              </label>
               <F label="Lieu" value={form.lieu} set={v => majForm({ lieu: v })} />
               <F label="Début" type="datetime-local" value={form.debut} set={v => majForm({ debut: v })} required />
               <F label="Fin" type="datetime-local" value={form.fin} set={v => majForm({ fin: v })} />
@@ -383,7 +395,8 @@ export default function ActivitesSecours() {
                   <tr key={a.id}>
                     <td className="ha-act-id">{a.numero}</td>
                     <td>
-                      <div className="ha-act-titre">{a.titre}</div>
+                      <Link to={`/app/secours/activites/${a.id}`} className="ha-act-titre">{a.titre}</Link>
+                      <div className="ha-act-type">{libelleTypeActivite(a.type)}</div>
                     </td>
                     <td className="ha-act-lieu">{a.lieu || '—'}</td>
                     <td>
@@ -580,7 +593,9 @@ const CSS = `
 }
 .ha-act-table tr:last-child td { border-bottom: none; }
 .ha-act-id { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-2); width: 3.2rem; }
-.ha-act-titre { color: var(--accent-blue); font-weight: 700; }
+.ha-act-titre { color: var(--accent-blue); font-weight: 700; text-decoration: none; }
+.ha-act-titre:hover { text-decoration: underline; }
+.ha-act-type { margin-top: 2px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
 .ha-act-lieu { color: var(--text-2); max-width: 240px; }
 .ha-act-quand { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
 .ha-act-quand strong { font-weight: 700; color: var(--text); }
