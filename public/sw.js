@@ -42,16 +42,6 @@ self.addEventListener('message', event => {
   }
 })
 
-async function lireCleSupabase() {
-  if (lireCleSupabase.cache) return lireCleSupabase.cache
-  const txt = await (await fetch('/config.js', { cache: 'no-store' })).text()
-  const key = (txt.match(/anonKey:\s*"([^"]+)"/) || [])[1]
-  const url = (txt.match(/url:\s*"(https:\/\/[^"]+supabase\.co)"/) || [])[1]
-  if (!key || !url) return null
-  lireCleSupabase.cache = { key, url }
-  return lireCleSupabase.cache
-}
-
 self.addEventListener('push', event => {
   let data = {}
   try { data = event.data ? event.data.json() : {} } catch {
@@ -59,41 +49,19 @@ self.addEventListener('push', event => {
   }
   const titre = data.title || data.titre || "Heart's Angels"
   const corps = data.body || data.message || ''
-  const actions = Array.isArray(data.actions)
-    ? data.actions.slice(0, 2).filter(a => a && a.action && a.title)
-    : []
   event.waitUntil(
     self.registration.showNotification(titre, {
       body: corps,
       icon: '/icons/ha-logo-192-v4.png',
       badge: '/icons/ha-logo-192-v4.png',
       tag: data.id || undefined,
-      actions,
-      data: { lien: data.lien || '/app', jetons: data.jetons || {} },
+      data: { lien: data.lien || '/app' },
     })
   )
 })
 
 self.addEventListener('notificationclick', event => {
   event.notification.close()
-  const action = event.action
-  const jeton = action && event.notification.data?.jetons?.[action]
-  if (jeton) {
-    event.waitUntil((async () => {
-      const cfg = await lireCleSupabase()
-      if (!cfg) return
-      await fetch(cfg.url + '/rest/v1/rpc/montre_appliquer', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: cfg.key,
-          Authorization: 'Bearer ' + cfg.key,
-        },
-        body: JSON.stringify({ p_jeton: jeton }),
-      })
-    })())
-    return
-  }
   const lien = event.notification.data?.lien || '/app'
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {

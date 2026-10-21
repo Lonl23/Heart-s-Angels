@@ -1,5 +1,5 @@
--- Notifications : toutes les alertes, « Traitée » pour l’équipe,
--- et jetons pour les boutons de la montre (Android / Wear OS).
+-- Notifications : toutes les alertes, « Traitée » pour l’équipe (dans l’appli).
+-- La montre reçoit la même notification que le téléphone, sans bouton de statut.
 -- L’affectation reste personnelle, au moment où l’équipage est publié.
 
 alter table public.notifications
@@ -145,20 +145,11 @@ declare
   gid uuid;
   minutes int;
   sans boolean;
-  souh uuid;
-  j_route text;
-  j_place text;
-  j_traiter text;
 begin
   partage := public.notification_est_partagee(p_type);
   sans := coalesce((p_payload->>'sans_dedup')::boolean, false);
   minutes := coalesce((p_payload->>'dedup_minutes')::int, 7 * 24 * 60);
   if partage then gid := gen_random_uuid(); end if;
-  begin
-    souh := nullif(p_payload->>'souhait_id', '')::uuid;
-  exception when others then
-    souh := null;
-  end;
 
   for dest in select d.id from public.destinataires_notification(p_type, p_cibles) d
   loop
@@ -180,30 +171,6 @@ begin
     insert into public.notifications(destinataire_id, type, titre, message, lien, priorite, ref_id, payload, groupe_id)
       values (dest, p_type, p_titre, p_message, p_lien, p_priorite, p_ref, coalesce(p_payload, '{}'::jsonb), gid)
       returning id into nid;
-
-    if p_type in ('assignation_souhait', 'rappel_mission') and souh is not null then
-      j_route := public._poser_jeton_montre(dest, nid, souh, null, 'en_route');
-      j_place := public._poser_jeton_montre(dest, nid, souh, null, 'sur_place');
-      update public.notifications
-         set payload = coalesce(payload, '{}'::jsonb) || jsonb_build_object(
-           'montre_actions', jsonb_build_array(
-             jsonb_build_object('action', 'en_route', 'title', 'En route'),
-             jsonb_build_object('action', 'sur_place', 'title', 'Sur place')
-           ),
-           'montre_jetons', jsonb_build_object('en_route', j_route, 'sur_place', j_place)
-         )
-       where id = nid;
-    elsif partage then
-      j_traiter := public._poser_jeton_montre(dest, nid, souh, gid, 'traiter');
-      update public.notifications
-         set payload = coalesce(payload, '{}'::jsonb) || jsonb_build_object(
-           'montre_actions', jsonb_build_array(
-             jsonb_build_object('action', 'traiter', 'title', 'Traitée')
-           ),
-           'montre_jetons', jsonb_build_object('traiter', j_traiter)
-         )
-       where id = nid;
-    end if;
 
     ids := ids || nid;
     n := n + 1;
@@ -273,9 +240,6 @@ set search_path = public
 as $$
 declare
   j public.notification_jetons;
-  m jsonb;
-  iso text := to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"');
-  st text;
 begin
   if coalesce(trim(p_jeton), '') = '' then
     return json_build_object('ok', false, 'error', 'jeton vide');
@@ -290,6 +254,8 @@ begin
     return json_build_object('ok', false, 'error', 'jeton invalide');
   end if;
 
+  -- Ancien bouton « Traitée » encore en cache sur une montre : on retire l’alerte,
+  -- on ne touche jamais au statut de mission.
   if j.genre = 'traiter' then
     if j.groupe_id is not null then
       delete from public.notifications where groupe_id = j.groupe_id;
@@ -299,31 +265,7 @@ begin
     return json_build_object('ok', true, 'fait', 'traiter');
   end if;
 
-  if j.souhait_id is null or j.genre not in ('sur_place', 'en_route') then
-    return json_build_object('ok', false, 'error', 'action inconnue');
-  end if;
-  if public.est_souhait_demo(j.souhait_id) then
-    return json_build_object('ok', true, 'demo', true);
-  end if;
-  if not exists (
-    select 1 from public.souhait_personnel sp
-    where sp.souhait_id = j.souhait_id and sp.user_id = j.user_id
-      and coalesce(sp.publie, true)
-  ) then
-    return json_build_object('ok', false, 'error', 'non affecté');
-  end if;
-
-  st := case when j.genre = 'sur_place' then 'arrive' else 'en_route' end;
-  select coalesce(mission, '{}'::jsonb) into m from public.souhaits where id = j.souhait_id for update;
-  update public.souhait_personnel
-     set statut_base = st
-   where souhait_id = j.souhait_id and user_id = j.user_id;
-  m := public._jsonb_set_path(m, array['personnel_statuts', j.user_id::text], to_jsonb(st));
-  if st = 'arrive' and coalesce(m #>> array['personnel_heures', j.user_id::text], '') = '' then
-    m := public._jsonb_set_path(m, array['personnel_heures', j.user_id::text], to_jsonb(iso));
-  end if;
-  update public.souhaits set mission = m where id = j.souhait_id;
-  return json_build_object('ok', true, 'fait', st);
+  return json_build_object('ok', true, 'ignore', j.genre);
 end
 $$;
 
