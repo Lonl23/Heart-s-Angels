@@ -142,6 +142,7 @@ async function main() {
     await client.query(lireSQL('103_stock_fournisseurs_suivi.sql'))
     await client.query(lireSQL('104_stock_entretien.sql'))
     await client.query(lireSQL('105_notifications_equipes.sql'))
+    await client.query(lireSQL('106_rappel_dar.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

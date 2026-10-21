@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Btn, Loading, Flash } from '@/components/ui'
@@ -10,6 +11,7 @@ import DossierDar from './DossierDar'
 import MissionExecution from './MissionExecution'
 
 const ROLES_COORD = ['coord_medical', 'coord_medical_adjoint', 'coordinateur_medical']
+const VOLETS = ['recap', 'medical', 'contacts', 'statuts']
 const ONGLETS = [
   { v: 'recap', l: 'Récapitulatif' },
   { v: 'medical', l: 'Rapport médical' },
@@ -19,12 +21,18 @@ const ONGLETS = [
 
 export default function MenuMission({ souhaitId, onBack }) {
   const { user, profile } = useAuth()
+  const [params] = useSearchParams()
   const [meta, setMeta] = useState(null)
   const [meds, setMeds] = useState([])
   const [err, setErr] = useState(null)
-  const [onglet, setOnglet] = useState('recap')
+  const volet = params.get('volet')
+  const [onglet, setOnglet] = useState(VOLETS.includes(volet) ? volet : 'recap')
 
   useEffect(() => { charger() }, [souhaitId, user?.id])
+
+  useEffect(() => {
+    setOnglet(VOLETS.includes(volet) ? volet : 'recap')
+  }, [souhaitId, volet])
 
   async function charger() {
     setErr(null)

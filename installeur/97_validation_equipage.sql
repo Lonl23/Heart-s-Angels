@@ -33,7 +33,7 @@ begin
     'assignation_souhait',
     'Affectation à un souhait',
     public.fmt_dates_souhait(s) || ' · ' || lieu,
-    '/app/missions/' || new.souhait_id::text,
+    '/app/missions/' || new.souhait_id::text || '?volet=recap',
     'haute',
     array[new.user_id],
     new.id,

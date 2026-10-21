@@ -20,11 +20,11 @@ export function NotificationsProvider({ children }) {
     setChargement(true)
     const { data } = await supabase
       .from('notifications')
-      .select('id, type, titre, message, lien, priorite, lu, created_at, groupe_id')
+      .select('id, type, titre, message, lien, priorite, lu, created_at, groupe_id, dans_appli')
       .eq('destinataire_id', uid)
       .order('created_at', { ascending: false })
       .limit(40)
-    setItems(data || [])
+    setItems((data || []).filter(n => n.dans_appli !== false))
     setChargement(false)
   }
 
@@ -38,7 +38,7 @@ export function NotificationsProvider({ children }) {
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `destinataire_id=eq.${uid}` },
         (payload) => {
           const row = payload.new
-          if (!row?.id) return
+          if (!row?.id || row.dans_appli === false) return
           setItems((cur) => (cur.some(x => x.id === row.id) ? cur : [row, ...cur].slice(0, 40)))
         },
       )

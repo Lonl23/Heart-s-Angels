@@ -332,7 +332,7 @@ export default function FicheVolontaire({ userId, onBack }) {
         <Card style={{ marginBottom:14 }}>
           <Sec>Notifications reçues</Sec>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:10 }}>
-            Décochez les alertes que vous ne voulez plus recevoir. Une alerte d’équipe disparaît pour toute l’équipe dès qu’une personne la marque traitée.
+            Décochez les alertes que vous ne voulez plus recevoir. Une alerte d’équipe disparaît pour toute l’équipe dès qu’une personne la marque traitée. Le rappel de mission arrive sur le téléphone et la montre, la veille au matin et au soir, sans rester dans la cloche.
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {TYPES_NOTIF.map(t => (

@@ -1809,3 +1809,33 @@ img, svg, video, table { max-width: 100%; }
 }
 [data-theme="dark"] .ha-actu-brouillon { color: #e4c8f7; background: #3a2748; }
 
+.ha-dar-probleme {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  margin-top: 12px;
+}
+.ha-dar-entete h2 { margin: 0; font-size: 1.05rem; color: var(--heading); }
+.ha-dar-meta { margin: 6px 0 10px; font-size: 12.5px; color: var(--text-muted); }
+.ha-dar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.ha-dar-table th, .ha-dar-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  vertical-align: top;
+}
+.ha-dar-table th { width: 5.5rem; background: var(--bg-alt); text-align: center; }
+.ha-dar-lettre { display: block; font-size: 1.15rem; font-weight: 800; color: var(--heading); line-height: 1.1; }
+.ha-dar-mot { display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.ha-dar-table textarea {
+  width: 100%;
+  min-height: 4.2rem;
+  border: none;
+  resize: vertical;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  padding: 0;
+}
+.ha-dar-lecture { white-space: pre-wrap; min-height: 2.4rem; }
+

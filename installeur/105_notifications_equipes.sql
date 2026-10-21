@@ -5,11 +5,18 @@
 alter table public.notifications
   add column if not exists groupe_id uuid;
 
+alter table public.notifications
+  add column if not exists dans_appli boolean not null default true;
+
 create index if not exists notifications_groupe_idx
   on public.notifications (groupe_id)
   where groupe_id is not null;
 
 alter table public.notifications replica identity full;
+
+drop policy if exists notifications_select_own on public.notifications;
+create policy notifications_select_own on public.notifications for select to authenticated
+  using (destinataire_id = auth.uid() and public.is_staff() and dans_appli);
 
 create table if not exists public.notification_jetons (
   jeton text primary key,
@@ -40,6 +47,17 @@ as $$
     'echeance_staff'
   )
 $$;
+
+-- Rappels qui ne font que sonner : la cloche de l’application ne les liste pas.
+create or replace function public.notification_push_seulement(p_type text)
+returns boolean
+language sql
+immutable
+as $$
+  select coalesce(p_type, '') in ('rappel_mission')
+$$;
+
+revoke all on function public.notification_push_seulement(text) from public, anon, authenticated;
 
 create or replace function public.roles_equipe_notification(p_type text)
 returns text[]
@@ -163,13 +181,20 @@ begin
     if not sans and p_ref is not null and exists (
       select 1 from public.notifications x
       where x.destinataire_id = dest and x.type = p_type and x.ref_id = p_ref
+        and coalesce(x.payload->>'creneau', '') = coalesce(p_payload->>'creneau', '')
         and x.created_at > now() - make_interval(mins => minutes)
     ) then
       continue;
     end if;
 
-    insert into public.notifications(destinataire_id, type, titre, message, lien, priorite, ref_id, payload, groupe_id)
-      values (dest, p_type, p_titre, p_message, p_lien, p_priorite, p_ref, coalesce(p_payload, '{}'::jsonb), gid)
+    insert into public.notifications(destinataire_id, type, titre, message, lien, priorite, ref_id, payload, groupe_id, dans_appli)
+      values (
+        dest, p_type, p_titre, p_message, p_lien, p_priorite, p_ref, coalesce(p_payload, '{}'::jsonb), gid,
+        not (
+          public.notification_push_seulement(p_type)
+          or coalesce((p_payload->>'push_seulement')::boolean, false)
+        )
+      )
       returning id into nid;
 
     ids := ids || nid;
@@ -675,9 +700,9 @@ begin
 end
 $$;
 
--- ── Digest du matin : rappel, échéances, équipage, oxygène, entretien, commandes
-create or replace function public.notifier_digest_notifications()
-returns json
+-- ── Rappel la veille : matin (digest) et soir (tâche séparée). Push seul.
+create or replace function public.notifier_rappels_mission(p_creneau text default 'matin')
+returns int
 language plpgsql
 security definer
 set search_path = public
@@ -685,11 +710,8 @@ as $$
 declare
   s public.souhaits;
   cibles uuid[];
-  qui text;
-  lignes text;
+  creneau text := case when p_creneau = 'soir' then 'soir' else 'matin' end;
   n int := 0;
-  dsel date;
-  p record;
 begin
   for s in
     select so.*
@@ -706,18 +728,40 @@ begin
     perform public.notifier_evenement(
       'rappel_mission',
       'Mission demain',
-      trim(both ' · ' from public.fmt_dates_souhait(s)
-        || coalesce(' · ' || to_char(s.heure_depart, 'HH24:MI'), '')
-        || coalesce(' · ' || nullif(s.localisation, ''), '')
-        || coalesce(' · ' || nullif(s.beneficiaire_prenom, ''), '')),
-      '/app/missions/' || s.id::text,
+      trim(both ' ' from (case when creneau = 'soir' then 'Rappel du soir. ' else 'Rappel du matin. ' end)
+        || trim(both ' · ' from public.fmt_dates_souhait(s)
+          || coalesce(' · ' || to_char(s.heure_depart, 'HH24:MI'), '')
+          || coalesce(' · ' || nullif(s.localisation, ''), '')
+          || coalesce(' · ' || nullif(s.beneficiaire_prenom, ''), ''))),
+      '/app/missions/' || s.id::text || '?volet=recap',
       'normale',
       cibles,
       s.id,
-      jsonb_build_object('souhait_id', s.id, 'dedup_minutes', 1200)
+      jsonb_build_object('souhait_id', s.id, 'dedup_minutes', 1200, 'creneau', creneau, 'push_seulement', true)
     );
     n := n + 1;
   end loop;
+  return n;
+end
+$$;
+
+revoke all on function public.notifier_rappels_mission(text) from public, anon;
+grant execute on function public.notifier_rappels_mission(text) to service_role;
+
+-- ── Digest du matin : rappel, échéances, équipage, oxygène, entretien, commandes
+create or replace function public.notifier_digest_notifications()
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  s public.souhaits;
+  lignes text;
+  n int := 0;
+  p record;
+begin
+  n := n + public.notifier_rappels_mission('matin');
 
   for s in
     select so.*
@@ -872,6 +916,9 @@ begin
   end if;
 
   delete from public.notification_jetons where expire < now() - interval '2 days';
+  delete from public.notifications
+   where dans_appli = false
+     and created_at < now() - interval '3 days';
   return json_build_object('ok', true, 'passes', n);
 end
 $$;
@@ -889,6 +936,21 @@ end $$;
 do $$
 begin
   perform cron.schedule('ha-notifs-matin', '25 6 * * *', $c$select public.notifier_digest_notifications()$c$);
+exception when others then
+  null;
+end $$;
+
+do $$
+begin
+  perform cron.unschedule(j.jobid) from cron.job j where j.jobname = 'ha-notifs-soir';
+exception when others then
+  null;
+end $$;
+
+do $$
+begin
+  -- 17:00 UTC : 19 h en heure d’été, 18 h en heure d’hiver.
+  perform cron.schedule('ha-notifs-soir', '0 17 * * *', $c$select public.notifier_rappels_mission('soir')$c$);
 exception when others then
   null;
 end $$;

@@ -1,6 +1,6 @@
 export const TYPES_NOTIF = [
   { v: 'assignation_souhait', l: 'Affectation à un souhait', icon: '🚑' },
-  { v: 'rappel_mission', l: 'Rappel la veille de ma mission', icon: '🌅' },
+  { v: 'rappel_mission', l: 'Rappel la veille, le matin et le soir', icon: '🌅' },
   { v: 'changement_souhait', l: 'Changement de date, d’heure ou de lieu', icon: '🔄' },
   { v: 'liberation_souhait', l: 'Souhait annulé ou non réalisé', icon: '↩️' },
   { v: 'helpdesk_reponse', l: 'Réponse du helpdesk', icon: '💬' },
