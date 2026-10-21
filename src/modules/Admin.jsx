@@ -7,23 +7,19 @@ import { ACCES, EQUIPES_ACCES } from '@/modules/acces/accesSchema'
 import { CodeBox, FormInvit, FormOrg, Msg, genCode, tbl, th, td, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
 import { urlAccesPartenaire, copierTexte } from '@/lib/urls'
 import { emailPartenaireAutorise, EMAIL_PRO_AIDE } from '@/lib/emailPro'
-import Apparence from '@/modules/admin/Apparence'
-
 export default function Admin() {
   const { peutGererApp } = useAuth()
-  const [tab, setTab] = useState('apparence')
+  const [tab, setTab] = useState('partenaires')
   if (!peutGererApp()) return <Navigate to="/app" replace />
   return (
     <Page
       title="Administration"
-      subtitle="Partenaires, accès, et photos de fond. Les fiches volontaires sont dans l’onglet Volontaires."
+      subtitle="Partenaires et accès. Les photos de fond sont dans Personnalisation. Les fiches volontaires sont dans l’onglet Volontaires."
     >
       <Tabs value={tab} onChange={setTab} items={[
-        { v:'apparence', l:'Photos de fond' },
         { v:'partenaires', l:'Partenaires' },
         { v:'acces', l:'Accès' },
       ]} />
-      {tab === 'apparence' && <Apparence />}
       {tab === 'partenaires' && <Partenaires />}
       {tab === 'acces' && <AccesMatrice />}
     </Page>

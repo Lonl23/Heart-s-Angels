@@ -49,7 +49,8 @@ export const DEPARTEMENTS = [
     to: '/app/departement/it',
     modules: [
       { key: 'helpdesk', to: '/app/it/helpdesk', label: 'Helpdesk', icon: '🛠️', desc: 'Signaler un bug ou une suggestion' },
-      { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Photos de fond, partenaires et accès' },
+      { key: 'personnalisation', to: '/app/it/personnalisation', label: 'Personnalisation', icon: '🖼️', desc: 'Photos de fond de chaque page et de chaque module' },
+      { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Partenaires et accès' },
       { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
       { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
       { key: 'actualites_edition', to: '/app/it/actualites', label: 'Rédaction des actualités', icon: '📰', desc: 'Écrire, dater, publier' },
@@ -81,6 +82,7 @@ export function moduleAutorise(key, auth) {
   if (key === 'ma_fiche') return auth.can('staff') && !auth.peutGererFiches()
   if (key === 'fiches') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
+  if (key === 'personnalisation') return auth.peutPersonnaliser()
   if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')
   if (key === 'actualites') return true
   if (key === 'actualites_edition') return auth.peutPublierActualites()

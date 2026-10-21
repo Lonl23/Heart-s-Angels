@@ -32,6 +32,7 @@ const Tresorerie = lazy(() => import('@/modules/Tresorerie'))
 const Actualites = lazy(() => import('@/modules/actualites/Actualites'))
 const Statistiques = lazy(() => import('@/modules/it/Statistiques'))
 const Helpdesk = lazy(() => import('@/modules/it/Helpdesk'))
+const Personnalisation = lazy(() => import('@/modules/it/Personnalisation'))
 const ActivitesSecours = lazy(() => import('@/modules/secours/ActivitesSecours'))
 
 function EcranChargement() {
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="it/actualites/:id/editer" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
           <Route path="it/actualites" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
           <Route path="it/helpdesk" element={<RequireAcces feature="helpdesk"><Helpdesk /></RequireAcces>} />
+          <Route path="it/personnalisation" element={<RequireAcces feature="personnalisation"><Personnalisation /></RequireAcces>} />
           <Route path="it/statistiques" element={<RequireAcces feature="statistiques"><Statistiques /></RequireAcces>} />
           <Route path="statistiques" element={<Navigate to="/app/it/statistiques" replace />} />
           <Route path="evenements/nouveau" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />

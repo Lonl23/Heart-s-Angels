@@ -4,30 +4,31 @@ import { useAuth } from '@/hooks/useAuth'
 import { useNotifications } from '@/hooks/useNotifications'
 import { supabase } from '@/lib/supabase'
 import { Btn } from '@/components/ui'
-import { lblEtapeTerrain } from '@/modules/souhaits/missionSchema'
-import { fmtDatesSouhait } from '@/modules/souhaits/datesSouhait'
-import { iconTypeNotif } from '@/lib/notifications'
 import { libellesRolesAsblPropres, lblRoleCompte } from '@/modules/fiche/ficheSchema'
 import { DEPARTEMENTS, cheminDepartement, filtrerDepartements, moduleAutorise } from '@/navigation'
 import { VignettesActualites } from '@/modules/actualites/Vignettes'
 
-function ilYA(iso) {
-  if (!iso) return ''
-  const d = Date.now() - new Date(iso).getTime()
-  const min = Math.round(d / 60000)
-  if (min < 1) return 'à l’instant'
-  if (min < 60) return `il y a ${min} min`
-  const h = Math.round(min / 60)
-  if (h < 24) return `il y a ${h} h`
-  const j = Math.round(h / 24)
-  return `il y a ${j} j`
+function estNuit(d) {
+  const h = d.getHours()
+  return h >= 22 || h < 5
 }
 
-function salutation(d) {
+const NUITS = [
+  p => (p ? `${p}, ne serait-il pas temps d’aller dormir ?` : 'Ne serait-il pas temps d’aller dormir ?'),
+  p => (p ? `${p}, les souhaits attendront demain matin.` : 'Les souhaits attendront demain matin.'),
+  p => (p ? `Encore là, ${p} ? Le défibrillateur, lui, se repose.` : 'Encore là ? Le défibrillateur, lui, se repose.'),
+  p => (p ? `${p}, à cette heure même les anges dorment.` : 'À cette heure, même les anges dorment.'),
+  p => (p ? `Demain sera bien assez tôt, ${p}.` : 'Demain sera bien assez tôt.'),
+]
+
+function salutation(d, prenom) {
+  if (estNuit(d)) {
+    const i = (d.getFullYear() * 366 + d.getMonth() * 31 + d.getDate()) % NUITS.length
+    return NUITS[i](prenom)
+  }
   const h = d.getHours()
-  if (h >= 18) return 'Bonsoir'
-  if (h >= 12) return 'Bon après-midi'
-  return 'Bonjour'
+  const base = h >= 18 ? 'Bonsoir' : h >= 12 ? 'Bon après-midi' : 'Bonjour'
+  return prenom ? `${base}, ${prenom}` : base
 }
 
 function ymd(d) {
@@ -43,8 +44,8 @@ const STATUTS_FERMES = ['realise', 'non_realise', 'annule', 'demande_info_extern
 
 export default function Dashboard() {
   const auth = useAuth()
-  const { profile, canAccess, peutReglerNotifications } = auth
-  const { items, nonLues, chargement, marquerLues, traiter, pushEtat, demanderPush } = useNotifications()
+  const { profile, canAccess } = auth
+  const { nonLues, chargement, pushEtat, demanderPush } = useNotifications()
   const [missions, setMissions] = useState(null)
   const [dispos, setDispos] = useState(undefined)
   const departements = useMemo(
@@ -54,7 +55,6 @@ export default function Dashboard() {
   const maintenant = new Date()
   const dateLongue = maintenant.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const date = dateLongue.charAt(0).toUpperCase() + dateLongue.slice(1)
-  const alertes = (nonLues.length ? nonLues : items.filter(n => !n.lu)).slice(0, 6)
   const montrerPush = pushEtat === 'default' || pushEtat === 'denied' || pushEtat === 'absent'
 
   useEffect(() => {
@@ -98,16 +98,28 @@ export default function Dashboard() {
   const initiales = `${prenom.charAt(0)}${nom.charAt(0)}`.toUpperCase() || '?'
 
   const nbMissions = missions == null ? null : ouvertes.length
-  const nbAlertes = chargement && items.length === 0 ? null : nonLues.length
+  const nbAlertes = chargement && nonLues.length === 0 ? null : nonLues.length
   const nbDispos = dispos === false ? false : (dispos == null ? null : disposMois)
+  const premiereMission = ouvertes[0]
+  const detailMissions = nbMissions == null
+    ? 'Chargement'
+    : premiereMission
+      ? `${premiereMission.beneficiaire_prenom || 'Mission'} · ${missionsMois} ce mois`
+      : (missionsMois ? `${missionsMois} ce mois` : 'Aucune à réaliser')
+  const premiereAlerte = nonLues[0]
+  const detailAlertes = nbAlertes == null
+    ? 'Chargement'
+    : premiereAlerte
+      ? premiereAlerte.titre
+      : 'Aucune non lue'
 
   return (
     <div className="ha-accueil">
       <header className="ha-accueil-salut">
         <Avatar url={photo} initiales={initiales} />
         <div className="ha-accueil-salut-txt">
-          <h1>{salutation(maintenant)}{prenom ? `, ${prenom}` : ''}</h1>
-          <p>{date} · Voici un résumé de votre journée</p>
+          <h1>{salutation(maintenant, prenom)}</h1>
+          <p>{date}{estNuit(maintenant) ? '' : ' · Voici un résumé de votre journée'}</p>
         </div>
       </header>
 
@@ -118,14 +130,22 @@ export default function Dashboard() {
           ico="🎁"
           label="Missions"
           valeur={nbMissions}
-          detail={nbMissions == null ? 'Chargement' : `${missionsMois} ce mois`}
+          detail={detailMissions}
         />
         <Stat
           tone="alertes"
           ico="🔔"
           label="Alertes"
           valeur={nbAlertes}
-          detail={nbAlertes == null ? 'Chargement' : (nbAlertes ? 'Non lues' : 'Aucune non lue')}
+          detail={detailAlertes}
+          note={montrerPush ? (
+            <span className="ha-accueil-stat-note">
+              {pushEtat === 'denied'
+                ? 'Notifications bloquées sur ce navigateur.'
+                : 'Activez les notifications de ce téléphone.'}
+              {pushEtat !== 'denied' && <Btn onClick={demanderPush} style={{ padding: '3px 8px', fontSize: 12 }}>Activer</Btn>}
+            </span>
+          ) : null}
         />
         <Stat
           to={canAccess('disponibilites') ? '/app/disponibilites' : undefined}
@@ -148,74 +168,6 @@ export default function Dashboard() {
       </nav>
 
       <div className="ha-accueil-bas">
-        <section className="ha-accueil-carte" aria-label="Alertes">
-          <div className="ha-accueil-carte-titre">
-            <h2>Alertes</h2>
-            {nonLues.length > 0 && (
-              <button type="button" onClick={() => marquerLues()}>Tout marquer lu</button>
-            )}
-          </div>
-          {montrerPush && (
-            <p className="ha-accueil-note">
-              {pushEtat === 'denied'
-                ? 'Notifications bloquées sur ce navigateur.'
-                : 'Activez les notifications de ce téléphone.'}
-              {pushEtat !== 'denied' && <Btn onClick={demanderPush} style={{ padding: '3px 8px', fontSize: 12 }}>Activer</Btn>}
-            </p>
-          )}
-          {alertes.length === 0 && !montrerPush && (
-            <p className="ha-accueil-vide">Aucune alerte pour le moment.</p>
-          )}
-          <ul className="ha-accueil-liste">
-            {alertes.map(n => (
-              <li key={n.id} className={n.priorite === 'haute' ? 'is-haute' : undefined}>
-                <Link to={n.lien || '/app'} onClick={() => { if (!n.groupe_id && !n.lu) marquerLues([n.id]) }}>
-                  <span aria-hidden>{iconTypeNotif(n.type)}</span>
-                  <span className="ha-accueil-liste-txt">
-                    <strong>{n.titre}</strong>
-                    <span>{ilYA(n.created_at)}</span>
-                  </span>
-                </Link>
-                {n.groupe_id && (
-                  <button type="button" onClick={() => traiter(n.id)}>Traitée</button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {peutReglerNotifications() && alertes.length > 0 && (
-            <Link to="/app/profil" className="ha-accueil-suite">Régler les alertes</Link>
-          )}
-        </section>
-
-        <section className="ha-accueil-carte" aria-label="Missions">
-          <div className="ha-accueil-carte-titre">
-            <h2>Missions</h2>
-            {canAccess('missions') && <Link to="/app/missions">Voir tout</Link>}
-          </div>
-          {missions && ouvertes.length === 0 && (
-            <p className="ha-accueil-vide">Aucune mission à réaliser.</p>
-          )}
-          {missions == null && <p className="ha-accueil-vide">Chargement…</p>}
-          <ul className="ha-accueil-liste">
-            {ouvertes.slice(0, 4).map(m => (
-              <li key={m.souhait_id}>
-                <Link to={`/app/missions/${m.souhait_id}`}>
-                  <span aria-hidden>🎁</span>
-                  <span className="ha-accueil-liste-txt">
-                    <strong>{m.beneficiaire_prenom || 'Mission'}</strong>
-                    <span>
-                      {fmtDatesSouhait(m)}
-                      {m.vehicule ? ` · ${m.vehicule}` : ''}
-                      {m.etape_vehicule ? ` · ${lblEtapeTerrain(m.etape_vehicule, m.statut === 'realise' ? 'realise' : null)}` : ''}
-                      {m.fictif ? ' · fictif' : ''}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-
         <section className="ha-accueil-carte ha-accueil-profil" aria-label="Mon profil">
           <div className="ha-accueil-carte-titre">
             <h2>Mon profil</h2>
@@ -238,13 +190,14 @@ function chiffre(valeur, tiret) {
   return Number(valeur).toLocaleString('fr-BE')
 }
 
-function Stat({ to, tone, ico, label, valeur, detail, tiret }) {
+function Stat({ to, tone, ico, label, valeur, detail, tiret, note }) {
   const corps = (
     <>
       <span className="ha-accueil-stat-ico" aria-hidden>{ico}</span>
       <span className="ha-accueil-stat-label">{label}</span>
       <span className="ha-accueil-stat-nb">{chiffre(valeur, tiret)}</span>
       <span className="ha-accueil-stat-detail">{detail}</span>
+      {note}
     </>
   )
   if (to) return <Link to={to} className={`ha-accueil-stat is-${tone}`}>{corps}</Link>

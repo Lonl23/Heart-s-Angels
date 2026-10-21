@@ -72,10 +72,13 @@ export default function Apparence() {
   }
 
   async function assigner(page, fondId) {
-    const { error } = await supabase.from('app_fonds_pages').update({
+    const actuel = pages.find(p => p.page === page)
+    const { error } = await supabase.from('app_fonds_pages').upsert({
+      page,
       fond_id: fondId || null,
+      intensite: actuel?.intensite ?? 22,
       updated_at: new Date().toISOString(),
-    }).eq('page', page)
+    }, { onConflict: 'page' })
     if (error) { flash(error.message, false); return }
     invaliderFondsPages()
     await load()
@@ -96,9 +99,8 @@ export default function Apparence() {
     <div>
       {msg && <Flash kind={msg.ok ? 'ok' : 'err'}>{msg.t}</Flash>}
       <p style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.5, margin: '0 0 16px' }}>
-        Ajoutez des photos, puis choisissez sur quelles pages elles s’affichent.
-        Un voile de la couleur du thème garde les textes lisibles.
-        Les pages chargées (souhaits, missions, stock, annuaire) n’ont pas de fond.
+        Ajoutez des photos, puis choisissez la page ou le module qui les affiche.
+        Chaque écran peut en avoir une. Un voile de la couleur du thème garde les textes lisibles.
       </p>
 
       <Card style={{ marginBottom: 16 }}>
@@ -132,12 +134,17 @@ export default function Apparence() {
         </label>
       </Card>
 
-      {PAGES_FONDS.map(pg => {
+      {PAGES_FONDS.map((pg, i) => {
         const row = pages.find(p => p.page === pg.k) || { page: pg.k, fond_id: null, intensite: 22 }
         const img = images.find(i => i.id === row.fond_id)
         const url = img ? urlFondPublic(img.path) : ''
+        const titreGroupe = pg.groupe && PAGES_FONDS[i - 1]?.groupe !== pg.groupe
         return (
-          <Card key={pg.k} style={{ marginBottom: 12 }}>
+          <div key={pg.k}>
+          {titreGroupe && (
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--text-muted)', margin: '18px 0 8px' }}>{pg.groupe}</div>
+          )}
+          <Card style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
               <div>
                 <div style={{ fontWeight: 600, color: 'var(--heading)' }}>{pg.l}</div>
@@ -177,6 +184,7 @@ export default function Apparence() {
               </>
             )}
           </Card>
+          </div>
         )
       })}
     </div>

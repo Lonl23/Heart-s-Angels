@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Logo, PhoneF, AddressFields } from '@/components/ui'
+import { FondEcran } from '@/hooks/useFondPage'
 import { GenrePicker } from '@/modules/annuaire/genre'
 
 export default function DemandeSouhait() {
@@ -96,7 +97,11 @@ export default function DemandeSouhait() {
 }
 
 function Wrap({ children }) {
-  return <div style={{ minHeight:'100vh', background:'var(--bg)', padding:'24px 16px' }}><div style={{ maxWidth:640, margin:'0 auto', background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'26px 24px' }}>{children}</div></div>
+  return (
+    <FondEcran page="demande" style={{ minHeight:'100vh', padding:'24px 16px' }}>
+      <div style={{ maxWidth:640, margin:'0 auto', background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'26px 24px' }}>{children}</div>
+    </FondEcran>
+  )
 }
 function Section({ t, children }) {
   return <div><div style={{ fontSize:13, fontWeight:600, color:'var(--heading)', margin:'6px 0 10px' }}>{t}</div><div style={{ display:'flex', flexDirection:'column', gap:10 }}>{children}</div></div>

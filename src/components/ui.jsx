@@ -25,9 +25,9 @@ export function Page({ title, subtitle, action, children, fill }) {
 }
 export function Card({ children, style, clickable, onClick, className, ...rest }) {
   return (
-    <div className={[clickable ? 'ha-click' : '', className].filter(Boolean).join(' ') || undefined}
+    <div className={['ha-carte', clickable ? 'ha-click' : '', className].filter(Boolean).join(' ')}
       onClick={onClick} {...rest}
-      style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'16px 18px', ...style }}>
+      style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:16, padding:'16px 18px', ...style }}>
       {children}
     </div>
   )

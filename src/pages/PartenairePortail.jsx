@@ -9,6 +9,7 @@ import DossierDar from '@/modules/souhaits/DossierDar'
 import { GenrePicker } from '@/modules/annuaire/genre'
 import BadgeBeta from '@/components/BadgeBeta'
 import { ReglageDeuxFacteurs } from '@/components/DeuxFacteurs'
+import { FondEcran } from '@/hooks/useFondPage'
 
 const STATUT = {
   nouvelle:  { l:'Reçue',       c:'#BA7517', bg:'#FAEEDA' },
@@ -35,7 +36,7 @@ export default function PartenairePortail() {
   const fictif = !!org?.fictif
 
   return (
-    <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
+    <FondEcran page="partenaire" style={{ minHeight:'100vh' }}>
       <header style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'var(--surface)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:20 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <Logo size={40} />
@@ -70,7 +71,7 @@ export default function PartenairePortail() {
         )}
         <div style={{ fontSize:10.5, color:'var(--text-faint)', marginTop:24, textAlign:'center' }}>{COPYRIGHT}</div>
       </div>
-    </div>
+    </FondEcran>
   )
 }
 
