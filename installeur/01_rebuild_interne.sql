@@ -458,6 +458,8 @@ create table if not exists public.formulaires_config (
 -- rôle "authenticated" (jamais "anon", qui est la clé publique du bundle).
 -- Le RLS fin (dont l'isolation des partenaires et le seul accès anonyme —
 -- l'insertion du formulaire de demande externe) est posé dans "acces_partenaire.sql".
+-- Le 30 octobre 2026, Supabase n'accorde plus ces droits tout seul aux nouvelles
+-- tables. 107_grants_api.sql les réécrit une fois le schéma complet, sans ouvrir anon.
 grant usage on schema public to anon, authenticated, service_role;
 grant all on all tables in schema public to authenticated, service_role;
 grant all on all sequences in schema public to authenticated, service_role;
