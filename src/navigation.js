@@ -12,7 +12,7 @@ export const DEPARTEMENTS = [
     icon: '👥',
     to: '/app/departement/rh',
     modules: [
-      { key: 'ma_fiche', to: '/app/profil', label: 'Ma fiche', icon: '🪪', desc: 'Identité, compétences et bilan d’activité' },
+      { key: 'ma_fiche', to: '/app/profil', label: 'Ma fiche', icon: '🪪', desc: 'Identité, compétences, et le livret d’activité à récupérer' },
       { key: 'fiches', to: '/app/volontaires', label: 'Fiches volontaires', icon: '🗂️', desc: 'Invitations, membres et fiches' },
       { key: 'defraiements', to: '/app/defraiements', label: 'Défraiements', icon: '🧾', desc: 'Note de frais : forfait et km' },
       { key: 'annuaire', to: '/app/annuaire', label: 'Annuaire', icon: '📇', desc: 'Bénéficiaires, contacts rattachés, institutions' },

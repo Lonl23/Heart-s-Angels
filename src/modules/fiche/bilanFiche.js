@@ -256,6 +256,15 @@ const FAMILLES = [
   ['souhait', 'Souhait'],
 ]
 
+/** Participations déjà commencées. Le livret ne compte pas ce qui est encore à venir. */
+export function participationsDuLivret(lignes, maintenant = new Date()) {
+  const finJour = new Date(maintenant.getFullYear(), maintenant.getMonth(), maintenant.getDate(), 23, 59, 59, 999)
+  return (lignes || []).filter(l => {
+    const d = asDate(l.date)
+    return d && d.getTime() <= finJour.getTime()
+  })
+}
+
 /** Nombre de participations par famille et par année. Les zéros sont de vrais zéros. */
 export function grilleAnnees(lignes, maintenant = new Date()) {
   const annees = anneesBilan(maintenant)
@@ -281,6 +290,24 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 }
 
+function lignesTableau(lignes, vide) {
+  if (!lignes.length) return `<tr><td colspan="5">${esc(vide)}</td></tr>`
+  return lignes.map(o => (
+    `<tr><td>${esc(fmtDate(o.date) || '—')}</td><td>${esc(o.famille)}</td><td>${esc(o.titre)}${o.lieu ? ' · ' + esc(o.lieu) : ''}</td><td class="num">${esc(fmtHeures(o.heures))}</td><td>${esc(o.fonction || '—')}</td></tr>`
+  )).join('')
+}
+
+/** Nom du fichier que le volontaire récupère. */
+export function nomFichierLivret(nom, prenom) {
+  const base = `bilan-activite-${nom || ''}-${prenom || ''}`
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+  return `${base || 'bilan-activite'}.html`
+}
+
 export function htmlLivret({
   organisation,
   adresse,
@@ -296,23 +323,29 @@ export function htmlLivret({
   telephone,
   email,
   dateEngagement,
-  competences,
-  operations,
-  grille,
-  heures,
+  competences = [],
+  operations = [],
 }) {
+  const retenues = participationsDuLivret(operations)
+  const secours = retenues.filter(o => o.cle !== 'souhait')
+  const souhaits = retenues.filter(o => o.cle === 'souhait')
+  const grille = grilleAnnees(retenues)
+  const heuresSecours = totalHeures(secours)
   const titre = `${civilite ? civilite + ' ' : ''}${(nom || '').toUpperCase()} ${prenom || ''}`.trim()
   const quand = new Date()
-  const imprime = `imprimé par ${imprimePar || 'Heart’s Angels'} le ${fmtDate(quand.toISOString())} à ${pad(quand.getHours())}:${pad(quand.getMinutes())}`
+  const jour = fmtDate(`${quand.getFullYear()}-${pad(quand.getMonth() + 1)}-${pad(quand.getDate())}`)
+  const imprime = `imprimé par ${imprimePar || 'Heart’s Angels'} le ${jour} à ${pad(quand.getHours())}:${pad(quand.getMinutes())}`
   const compRows = competences.length
     ? competences.map(c => `<tr><td>${esc(c.categorie)}</td><td>${esc(c.type)}</td><td>${esc(c.description)}</td><td>${esc(c.expiration)}</td></tr>`).join('')
     : '<tr><td colspan="4">Aucune compétence enregistrée.</td></tr>'
-  const opRows = operations.length
-    ? operations.map(o => `<tr><td>${esc(fmtDate(o.date) || '—')}</td><td>${esc(o.famille)}</td><td>${esc(o.titre)}${o.lieu ? ' · ' + esc(o.lieu) : ''}</td><td class="num">${esc(fmtHeures(o.heures))}</td><td>${esc(o.fonction || '—')}</td></tr>`).join('')
-    : '<tr><td colspan="5">Aucune participation enregistrée.</td></tr>'
-  const headAns = grille.annees.map(a => `<th>${a}</th>`).join('')
+  const headAns = grille.annees.map(a => `<th class="num">${a}</th>`).join('')
   const bodyAns = grille.lignes.map(l => `<tr><td>${esc(l.label)}</td>${l.cellules.map(n => `<td class="num">${n}</td>`).join('')}</tr>`).join('')
-  const heuresAns = grille.heures.map(h => `<td class="num">${esc(fmtHeures(h))}${h ? ' h' : ''}</td>`).join('')
+  const heuresAns = grille.heures.map(h => `<td class="num">${esc(fmtHeures(h))} h</td>`).join('')
+  const blocSouhaits = souhaits.length
+    ? `<h3>Souhaits</h3>
+<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Heures</th><th>Fonction</th></tr></thead><tbody>${lignesTableau(souhaits, '')}</tbody></table>
+<p class="note">Les souhaits n’ont pas d’heure tant qu’un début et une fin ne sont pas encodés.</p>`
+    : ''
   return `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><title>Bilan d’activité — ${esc(titre)}</title>
 <style>
@@ -321,8 +354,8 @@ export function htmlLivret({
   header img { width: 64px; height: 64px; object-fit: contain; }
   header h1 { margin: 0; font-size: 16px; color: #0E4A5A; text-align: right; }
   header p { margin: 2px 0 0; text-align: right; color: #5c564f; }
-  h2 { margin: 22px 0 8px; color: #0E4A5A; font-size: 22px; border-bottom: 3px solid #0E4A5A; display: flex; justify-content: space-between; align-items: baseline; }
-  h2 span { font-size: 11px; font-weight: 500; color: #5c564f; }
+  h2 { margin: 22px 0 8px; color: #0E4A5A; font-size: 22px; border-bottom: 3px solid #0E4A5A; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  h2 span { font-size: 11px; font-weight: 500; color: #5c564f; text-align: right; }
   h3 { margin: 18px 0 8px; color: #0E4A5A; font-size: 15px; border-left: 4px solid #1BB0CE; padding-left: 8px; }
   .identite { display: flex; gap: 14px; background: #f4f7fb; border-radius: 8px; padding: 12px; }
   .identite img, .identite .ph { width: 92px; height: 110px; object-fit: cover; border-radius: 4px; background: #1BB0CE; color: #fff; display: grid; place-items: center; font-weight: 700; }
@@ -333,11 +366,13 @@ export function htmlLivret({
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th { background: #0E4A5A; color: #fff; text-align: left; padding: 6px 8px; }
   td { padding: 5px 8px; border-bottom: 1px solid #e3eaf3; }
-  tr:nth-child(even) td { background: #f7fafc; }
+  tbody tr:nth-child(even) td { background: #f7fafc; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .total { text-align: right; margin-top: 6px; font-size: 12px; }
+  .total { text-align: right; margin: 6px 0 0; font-size: 12px; }
+  .note { margin: 6px 0 0; color: #5c564f; font-size: 11.5px; }
+  tr.somme td { font-weight: 700; background: #eef3f8; }
   footer { margin-top: 28px; border-top: 1px solid #d5dee8; padding-top: 8px; display: flex; justify-content: space-between; color: #7A7470; font-size: 11px; }
-  @media print { body { margin: 12mm; } }
+  @media print { body { margin: 12mm; } thead { display: table-header-group; } }
 </style></head><body>
 <header>
   ${logo ? `<img src="${esc(logo)}" alt="">` : '<div></div>'}
@@ -360,27 +395,54 @@ export function htmlLivret({
     </dl>
   </div>
 </section>
-<h3>Compétences au ${esc(fmtDate(quand.toISOString()))}</h3>
+<h3>Compétences valides au ${esc(jour)}</h3>
 <table><thead><tr><th>Catégorie</th><th>Type</th><th>Description</th><th>Expiration</th></tr></thead><tbody>${compRows}</tbody></table>
-<h3>Participations</h3>
-<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Heures</th><th>Fonction</th></tr></thead><tbody>${opRows}</tbody></table>
-<p class="total">Heures connues, quand le début et la fin sont encodés : ${esc(fmtHeures(heures))} h</p>
-<h3>Participations sur 5 ans</h3>
-<table><thead><tr><th>Type</th>${headAns}</tr></thead><tbody>
+<h3>Opérations de secours</h3>
+<table><thead><tr><th>Date</th><th>Activité</th><th>Description</th><th>Heures</th><th>Fonction</th></tr></thead><tbody>${lignesTableau(secours, 'Aucune opération de secours enregistrée.')}</tbody></table>
+<p class="total">Total des heures de participation — opérations de secours : ${esc(fmtHeures(heuresSecours))} h</p>
+${blocSouhaits}
+<h3>Bilan des participations sur 5 ans</h3>
+<table><thead><tr><th>Activité</th>${headAns}</tr></thead><tbody>
 ${bodyAns}
-<tr><td>Heures connues</td>${heuresAns}</tr>
+<tr class="somme"><td>TOTAL</td>${heuresAns}</tr>
 </tbody></table>
+<p class="note">Document généré automatiquement. Les heures n’apparaissent que lorsque le début et la fin sont connus. Les activités à venir n’y figurent pas.</p>
 <footer><span>${esc(organisation)}${adresse ? ' · ' + esc(adresse) : ''}</span><span>Bilan d’activité</span></footer>
 </body></html>`
 }
 
+function blobLivret(donnees) {
+  return new Blob([htmlLivret(donnees)], { type: 'text/html;charset=utf-8' })
+}
+
+/** Télécharge le récapitulatif. Le volontaire l’ouvre puis l’enregistre en PDF s’il le souhaite. */
+export function telechargerLivret(donnees) {
+  if (typeof document === 'undefined') return false
+  const url = URL.createObjectURL(blobLivret(donnees))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nomFichierLivret(donnees.nom, donnees.prenom)
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1500)
+  return true
+}
+
 export function ouvrirLivret(donnees) {
-  const w = window.open('', '_blank', 'noopener,noreferrer')
-  if (!w) return false
-  w.document.open()
-  w.document.write(htmlLivret(donnees))
-  w.document.close()
-  w.addEventListener('load', () => w.print())
+  if (typeof window === 'undefined') return false
+  const url = URL.createObjectURL(blobLivret(donnees))
+  const w = window.open(url, '_blank')
+  if (!w) {
+    URL.revokeObjectURL(url)
+    return false
+  }
+  const tenter = () => {
+    try { w.focus(); w.print() } catch { /* la fenêtre reste ouverte, le fichier est lisible */ }
+  }
+  w.addEventListener('load', tenter)
+  setTimeout(tenter, 400)
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
   return true
 }
 

@@ -7,8 +7,8 @@ import config from '@/app.config'
 import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsAvecSelection, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, equipeAsblOuverteParDefaut, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
 import {
   lignesCompetence, compterCompetences, manquesProfil, lignesActivites, lignesSouhaits,
-  fusionParticipations, dansPeriode, compterParticipations, grilleAnnees, totalHeures,
-  fmtDate, fmtHeures, ouvrirLivret, civiliteLibelle,
+  fusionParticipations, dansPeriode, compterParticipations,
+  fmtDate, fmtHeures, ouvrirLivret, telechargerLivret, civiliteLibelle,
 } from './bilanFiche'
 import { TYPES_NOTIF, prefsDepuisFiche } from '@/lib/notifications'
 import { FormPinFiche } from '@/components/PinArchive'
@@ -241,17 +241,17 @@ export default function FicheVolontaire({ userId, onBack }) {
     { v: 'info', l: 'Information' },
     { v: 'activite', l: 'Activité' },
     { v: 'competence', l: 'Compétence' },
-    ...(!seulementCoordonnees ? [{ v: 'document', l: 'Document' }] : []),
+    { v: 'document', l: 'Document' },
     { v: 'compte', l: 'Compte' },
   ]
   const rolePill = aRoleAsblParticulier(f.roles_asbl)
     ? (libellesRolesAsblPropres(f.roles_asbl)[0] || 'Rôle dans l’ASBL')
     : lblRoleCompte(prof.role)
 
-  function imprimer() {
+  function donneesLivret() {
     const a = config.bases?.[0]?.adresse || {}
     const adresse = [[a.rue, a.numero].filter(Boolean).join(' '), [a.cp, a.localite].filter(Boolean).join(' ')].filter(Boolean).join(', ')
-    const ok = ouvrirLivret({
+    return {
       organisation: config.organisation?.nom || 'Heart’s Angels ASBL',
       adresse,
       logo: `${window.location.origin}${config.organisation?.logoUrl || '/icons/ha-logo-512-v4.png'}`,
@@ -268,10 +268,20 @@ export default function FicheVolontaire({ userId, onBack }) {
       dateEngagement: f.date_engagement,
       competences,
       operations: participations,
-      grille: grilleAnnees(participations),
-      heures: totalHeures(participations),
-    })
-    if (!ok) setMsg({ t: 'Le navigateur a bloqué la fenêtre du bilan.', ok: false })
+    }
+  }
+
+  function recupererLivret() {
+    if (!telechargerLivret(donneesLivret())) {
+      setMsg({ t: 'Le livret n’a pas pu être téléchargé.', ok: false })
+      return
+    }
+    setMsg({ t: 'Livret téléchargé. Ouvrez le fichier pour le lire, l’imprimer ou l’enregistrer en PDF.', ok: true })
+    setTimeout(() => setMsg(null), 4000)
+  }
+
+  function imprimerLivret() {
+    if (!ouvrirLivret(donneesLivret())) setMsg({ t: 'Le navigateur a bloqué la fenêtre du livret. Utilisez Récupérer.', ok: false })
   }
 
   return (
@@ -312,7 +322,6 @@ export default function FicheVolontaire({ userId, onBack }) {
           </div>
         </div>
         <div className="ha-fiche-actions">
-          <button type="button" className="ha-fiche-livret" onClick={imprimer}>Bilan d’activité</button>
           {(prof.email || '').trim() && <a className="ha-fiche-contact" href={`mailto:${prof.email}`}>Contacter</a>}
         </div>
       </header>
@@ -381,6 +390,7 @@ export default function FicheVolontaire({ userId, onBack }) {
 
       {onglet === 'activite' && (
         <section className="ha-fiche-bloc">
+          <LivretCarte maFiche={maFiche} onRecuperer={recupererLivret} onImprimer={imprimerLivret} />
           <div className="ha-fiche-stats">
             <Stat label="Total" valeur={comptesAct.total} />
             <Stat label="À venir" valeur={comptesAct.aVenir} />
@@ -586,13 +596,18 @@ export default function FicheVolontaire({ userId, onBack }) {
       )}
 
       {onglet === 'document' && (
-        <DocumentsRh
-          uid={uid}
-          fiche={f}
-          peutEcrire={gestionQualif}
-          onFiche={nf => setF(nf)}
-          onMsg={setMsg}
-        />
+        <>
+          <LivretCarte maFiche={maFiche} onRecuperer={recupererLivret} onImprimer={imprimerLivret} />
+          {gestionQualif && (
+            <DocumentsRh
+              uid={uid}
+              fiche={f}
+              peutEcrire={gestionQualif}
+              onFiche={nf => setF(nf)}
+              onMsg={setMsg}
+            />
+          )}
+        </>
       )}
 
       </div>
@@ -600,6 +615,32 @@ export default function FicheVolontaire({ userId, onBack }) {
         <Btn onClick={save} disabled={saving} style={{ width:'100%', marginTop:14 }}>{saving?'Enregistrement…':(seulementCoordonnees ? '✓ Enregistrer mes coordonnées' : '✓ Enregistrer la fiche')}</Btn>
       )}
     </Page>
+  )
+}
+
+function LivretCarte({ maFiche, onRecuperer, onImprimer }) {
+  return (
+    <article className="ha-fiche-auto">
+      <div className="ha-fiche-auto-feuille" aria-hidden="true">
+        <span>Bilan</span>
+        <b>d’activité</b>
+      </div>
+      <div>
+        <div className="ha-fiche-auto-titre">
+          <strong>Bilan d’activité</strong>
+          <span className="ha-fiche-pill">Auto</span>
+        </div>
+        <p>
+          {maFiche
+            ? 'Votre récapitulatif d’activité, calculé tout seul à partir des activités de secours et des souhaits déjà passés.'
+            : 'Récapitulatif d’activité du volontaire, calculé tout seul. Il le récupère aussi sur sa propre fiche.'}
+        </p>
+        <div className="ha-fiche-actions">
+          <button type="button" className="ha-fiche-contact" onClick={onRecuperer}>Récupérer</button>
+          <button type="button" className="ha-fiche-livret" onClick={onImprimer}>Imprimer</button>
+        </div>
+      </div>
+    </article>
   )
 }
 
@@ -848,6 +889,13 @@ const CSS_FICHE = `
 .ha-fiche-barre { width: 120px; height: 6px; border-radius: 99px; background: var(--bg-alt); overflow: hidden; display: inline-block; }
 .ha-fiche-barre i { display: block; height: 100%; background: var(--accent); }
 .ha-fiche-manques { margin: 6px 0 0; padding-left: 18px; color: var(--text-2); font-size: 12.5px; }
+.ha-fiche-auto { display: flex; gap: 14px; align-items: center; padding: 12px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-alt); }
+.ha-fiche-auto-feuille { width: 72px; height: 92px; flex: none; border-radius: 6px; background: #fff; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(14,74,90,.08); display: flex; flex-direction: column; justify-content: flex-end; padding: 8px; color: #0E4A5A; }
+.ha-fiche-auto-feuille span { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.ha-fiche-auto-feuille b { font-size: 12px; line-height: 1.15; }
+.ha-fiche-auto-titre { display: flex; align-items: center; gap: 8px; }
+.ha-fiche-auto-titre strong { color: var(--heading); font-size: 15px; }
+.ha-fiche-auto p { margin: 4px 0 8px; color: var(--text-muted); font-size: 13px; line-height: 1.4; }
 .ha-fiche-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .ha-fiche-livret, .ha-fiche-contact, .ha-fiche-vide-carte button {
   border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; text-decoration: none;
@@ -885,6 +933,7 @@ const CSS_FICHE = `
 .ha-fiche-vide-carte { margin: 8px auto; max-width: 360px; text-align: center; padding: 28px 16px; }
 .ha-fiche-vide-carte strong { display: block; color: var(--heading); margin-bottom: 4px; }
 .ha-fiche-vide-carte p { margin: 0 0 12px; color: var(--text-muted); font-size: 13px; }
+[data-theme="dark"] .ha-fiche-auto-feuille { background: var(--card); color: var(--heading); }
 [data-theme="dark"] .ha-fiche-pill, [data-theme="dark"] .ha-fiche-nav button.is-on { background: rgba(24,95,165,.28); color: #8EBFEE; }
 [data-theme="dark"] .ha-fiche-pill.is-ok, [data-theme="dark"] .ha-fiche-statut.is-principale { background: rgba(46,155,87,.22); color: #8ED7A8; }
 [data-theme="dark"] .ha-fiche-pill.is-attente, [data-theme="dark"] .ha-fiche-statut.is-bientot { background: rgba(186,117,23,.2); color: #F0C36A; }
@@ -895,6 +944,7 @@ const CSS_FICHE = `
   .ha-fiche-head, .ha-fiche-info { display: block; }
   .ha-fiche-stats { grid-template-columns: 1fr 1fr; }
   .ha-fiche-actions { margin-top: 10px; }
+  .ha-fiche-auto { align-items: flex-start; }
   .ha-fiche-nav { margin-bottom: 12px; }
   .ha-fiche-outils input { margin-left: 0; width: 100%; }
 }
