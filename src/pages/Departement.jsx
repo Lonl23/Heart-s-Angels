@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { Empty, Page } from '@/components/ui'
 import { DEPARTEMENTS, filtrerDepartements, moduleAutorise } from '@/navigation'
@@ -14,17 +14,24 @@ export default function Departement() {
 
   if (!departement) return <Navigate to="/app" replace />
 
-  // Le module s'affiche tout de suite. Les onglets du département restent
-  // au-dessus (Layout) : un seul module n'ajoute pas un clic de plus.
-  const premier = departement.modules[0]
-  if (premier) return <Navigate to={premier.to} replace />
-
   return (
     <Page title={`${departement.icon} ${departement.label}`}>
-      <Empty
-        title="Aucun module pour le moment"
-        hint="Ce département n’a pas encore de module. Il apparaîtra ici dès qu’il sera disponible."
-      />
+      {departement.modules.length === 0 ? (
+        <Empty
+          title="Aucun module pour le moment"
+          hint="Ce département n’a pas encore de module. Il apparaîtra ici dès qu’il sera disponible."
+        />
+      ) : (
+        <nav className="ha-garde" aria-label={departement.label}>
+          {departement.modules.map(m => (
+            <Link key={m.key} to={m.to} className="ha-garde-tuile">
+              <span className="ha-garde-ico" aria-hidden>{m.icon}</span>
+              <span className="ha-garde-nom">{m.label}</span>
+              {m.desc && <span className="ha-garde-desc">{m.desc}</span>}
+            </Link>
+          ))}
+        </nav>
+      )}
     </Page>
   )
 }
