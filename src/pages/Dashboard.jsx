@@ -7,7 +7,7 @@ import { Btn } from '@/components/ui'
 import { lblEtapeTerrain } from '@/modules/souhaits/missionSchema'
 import { fmtDatesSouhait } from '@/modules/souhaits/datesSouhait'
 import { iconTypeNotif } from '@/lib/notifications'
-import { DEPARTEMENTS, cheminDepartement, filtrerDepartements, moduleAutorise } from '@/navigation'
+import { DEPARTEMENTS, filtrerDepartements, moduleAutorise } from '@/navigation'
 import { VignettesActualites } from '@/modules/actualites/Vignettes'
 
 function ilYA(iso) {
@@ -105,28 +105,28 @@ export default function Dashboard() {
 
       <div className="ha-accueil-corps">
         <VignettesActualites accueil />
-        <div className="ha-accueil-choix">
+        <nav className="ha-accueil-choix" aria-label="Menus">
           {departements.map(d => (
-            <div key={d.id} className="ha-accueil-dept">
-              <h2>
+            <section key={d.id} className="ha-accueil-dept" aria-labelledby={`accueil-dept-${d.id}`}>
+              <h2 id={`accueil-dept-${d.id}`}>
                 <span aria-hidden>{d.icon}</span>
-                <Link to={cheminDepartement(d)} style={{ color: 'inherit', textDecoration: 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.label}</Link>
+                <span>{d.label}</span>
               </h2>
               {d.modules.length === 0 ? (
-                <div className="ha-accueil-vide">Aucun module pour le moment</div>
+                <p className="ha-accueil-vide">Aucun module pour le moment</p>
               ) : (
                 <div className="ha-accueil-mods">
                   {d.modules.map(m => (
-                    <Link key={m.key} to={m.to} className="ha-accueil-mod" title={m.desc || m.label}>
-                      <span aria-hidden>{m.icon}</span>
-                      <span>{m.label}</span>
+                    <Link key={m.key} to={m.to} className="ha-accueil-tuile" title={m.desc || m.label}>
+                      <span className="ha-accueil-tuile-ico" aria-hidden>{m.icon}</span>
+                      <span className="ha-accueil-tuile-nom">{m.label}</span>
                     </Link>
                   ))}
                 </div>
               )}
-            </div>
+            </section>
           ))}
-        </div>
+        </nav>
       </div>
     </div>
   )
