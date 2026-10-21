@@ -3,8 +3,7 @@
 // IT, logistique, trésorerie. Un module sans droit n'est pas listé.
 // Un département disparaît si le volontaire ne peut ouvrir aucun de ses
 // modules, sauf s'il est marqué toujoursVisible : le département secours
-// reste proposé, même vide. L'accueil et le menu ouvrent la page de garde
-// du département. Les modules sont les vignettes de cette page.
+// reste proposé, même vide. Ses modules s'ouvrent en onglets, pas sur l'accueil.
 
 export const DEPARTEMENTS = [
   {

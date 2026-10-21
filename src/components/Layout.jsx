@@ -32,7 +32,6 @@ export default function Layout() {
   const [dark, setDark] = useState(() => (document.documentElement.getAttribute('data-theme') || 'light') === 'dark')
   const departements = useMemo(() => filtrerDepartements(DEPARTEMENTS, key => moduleAutorise(key, auth)), [auth])
   const courant = departementActif(loc.pathname, departements)
-  const surGarde = !!courant && loc.pathname === cheminDepartement(courant)
   const { nonLues, nbNonLues, marquerLues, traiter } = useNotifications()
   const [cloche, setCloche] = useState(false)
   const clocheRef = useRef(null)
@@ -168,7 +167,7 @@ export default function Layout() {
           className={fond.actif ? 'ha-main-fond' : undefined}
           style={{ flex:1, minWidth:0, width:'100%', overflow:'hidden', minHeight:0, display:'flex', flexDirection:'column', ...fond.style }}
         >
-          {courant && courant.modules.length > 0 && !surGarde && (
+          {courant && courant.modules.length > 0 && (
             <nav className="ha-dept-onglets" aria-label={courant.label}>
               {courant.modules.map(m => (
                 <NavLink
