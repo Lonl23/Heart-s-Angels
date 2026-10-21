@@ -38,7 +38,9 @@ export const DEPARTEMENTS = [
     icon: '🩺',
     to: '/app/departement/secours',
     toujoursVisible: true,
-    modules: [],
+    modules: [
+      { key: 'activites_secours', to: '/app/secours/activites', label: 'Activités', icon: '🩺', desc: 'Activités du département : tout le personnel peut s’inscrire' },
+    ],
   },
   {
     id: 'it',
@@ -79,7 +81,7 @@ export function moduleAutorise(key, auth) {
   if (key === 'ma_fiche') return auth.can('staff') && !auth.peutGererFiches()
   if (key === 'fiches') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
-  if (key === 'helpdesk') return auth.can('staff')
+  if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')
   if (key === 'actualites') return true
   if (key === 'actualites_edition') return auth.peutPublierActualites()
   if (key === 'organigramme') return true
