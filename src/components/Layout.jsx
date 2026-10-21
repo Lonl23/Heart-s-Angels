@@ -166,7 +166,24 @@ export default function Layout() {
         <main
           className={fond.actif ? 'ha-main-fond' : undefined}
           style={{ flex:1, minWidth:0, width:'100%', overflow:'hidden', minHeight:0, display:'flex', flexDirection:'column', ...fond.style }}
-        ><SortieFondu /></main>
+        >
+          {courant && courant.modules.length > 0 && (
+            <nav className="ha-dept-onglets" aria-label={courant.label}>
+              {courant.modules.map(m => (
+                <NavLink
+                  key={m.key}
+                  to={m.to}
+                  className={() => 'ha-tab' + (cheminActif(loc.pathname, m.to) ? ' is-on' : '')}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <span aria-hidden>{m.icon}</span>
+                  <span>{m.label}</span>
+                </NavLink>
+              ))}
+            </nav>
+          )}
+          <SortieFondu />
+        </main>
       </div>
 
       <style>{`

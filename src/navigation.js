@@ -1,7 +1,9 @@
 // Menus de l'espace interne, posés sur les modules déjà en ligne.
-// Un module sans droit n'est pas listé. Un département disparaît si le
-// volontaire ne peut ouvrir aucun de ses modules, sauf s'il est marqué
-// toujoursVisible : le département secours reste proposé, même vide.
+// L'ordre est celui des vignettes d'accueil : RH, souhaits, secours,
+// IT, logistique, trésorerie. Un module sans droit n'est pas listé.
+// Un département disparaît si le volontaire ne peut ouvrir aucun de ses
+// modules, sauf s'il est marqué toujoursVisible : le département secours
+// reste proposé, même vide. Ses modules s'ouvrent en onglets, pas sur l'accueil.
 
 export const DEPARTEMENTS = [
   {
@@ -31,30 +33,12 @@ export const DEPARTEMENTS = [
     ],
   },
   {
-    id: 'logistique',
-    label: 'Département logistique',
-    icon: '📦',
-    to: '/app/departement/logistique',
-    modules: [
-      { key: 'stock', to: '/app/stock', label: 'Stock', icon: '📦', desc: 'Matériel, lieux et mouvements' },
-    ],
-  },
-  {
     id: 'secours',
     label: 'Département secours',
     icon: '🩺',
     to: '/app/departement/secours',
     toujoursVisible: true,
     modules: [],
-  },
-  {
-    id: 'tresorerie',
-    label: 'Trésorerie',
-    icon: '💶',
-    to: '/app/departement/tresorerie',
-    modules: [
-      { key: 'tresorerie', to: '/app/tresorerie', label: 'Suivi des notes', icon: '💶', desc: 'Notes demandées, autorisées et payées' },
-    ],
   },
   {
     id: 'it',
@@ -68,6 +52,24 @@ export const DEPARTEMENTS = [
       { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
       { key: 'actualites_edition', to: '/app/it/actualites', label: 'Rédaction des actualités', icon: '📰', desc: 'Écrire, dater, publier' },
       { key: 'statistiques', to: '/app/it/statistiques', label: 'Statistiques', icon: '📊', desc: 'Tous les souhaits, graphiques et export Excel' },
+    ],
+  },
+  {
+    id: 'logistique',
+    label: 'Département logistique',
+    icon: '📦',
+    to: '/app/departement/logistique',
+    modules: [
+      { key: 'stock', to: '/app/stock', label: 'Stock', icon: '📦', desc: 'Matériel, lieux et mouvements' },
+    ],
+  },
+  {
+    id: 'tresorerie',
+    label: 'Trésorerie',
+    icon: '💶',
+    to: '/app/departement/tresorerie',
+    modules: [
+      { key: 'tresorerie', to: '/app/tresorerie', label: 'Suivi des notes', icon: '💶', desc: 'Notes demandées, autorisées et payées' },
     ],
   },
 ]
