@@ -36,6 +36,7 @@ const Personnalisation = lazy(() => import('@/modules/it/Personnalisation'))
 const ActivitesSecours = lazy(() => import('@/modules/secours/ActivitesSecours'))
 const FicheActivite = lazy(() => import('@/modules/secours/FicheActivite'))
 const Vehicules = lazy(() => import('@/modules/logistique/Vehicules'))
+const Synthese = lazy(() => import('@/modules/logistique/Synthese'))
 
 function EcranChargement() {
   return (
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="evenements"     element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="secours/activites/:id" element={<RequireAcces feature="activites_secours"><FicheActivite /></RequireAcces>} />
           <Route path="secours/activites" element={<RequireAcces feature="activites_secours"><ActivitesSecours /></RequireAcces>} />
+          <Route path="logistique/synthese" element={<RequireAcces feature="synthese_logistique"><Synthese /></RequireAcces>} />
           <Route path="logistique/vehicules/:id" element={<RequireAcces feature="vehicules"><Vehicules /></RequireAcces>} />
           <Route path="logistique/vehicules" element={<RequireAcces feature="vehicules"><Vehicules /></RequireAcces>} />
           <Route path="stock"          element={<RequireAcces feature="stock"><Stock /></RequireAcces>} />
