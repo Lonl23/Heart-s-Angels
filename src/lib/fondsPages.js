@@ -32,6 +32,7 @@ export const PAGES_FONDS = [
   { k: 'config_souhaits', l: 'Configuration souhaits', hint: 'Bases, institutions, matériel', groupe: 'Modules' },
   { k: 'actualites_edition', l: 'Rédaction des actualités', hint: 'IT', groupe: 'Modules' },
   { k: 'statistiques', l: 'Statistiques', hint: 'Graphiques', groupe: 'Modules' },
+  { k: 'vehicules', l: 'Véhicules', hint: 'Check qui reste sur le véhicule', groupe: 'Modules' },
   { k: 'stock', l: 'Stock', hint: 'Matériel et mouvements', groupe: 'Modules' },
   { k: 'tresorerie', l: 'Suivi des notes', hint: 'Trésorerie', groupe: 'Modules' },
 ]
@@ -63,6 +64,7 @@ export function pageFondDepuisChemin(path) {
   if (p.startsWith('/app/profil')) return 'profil'
   if (p.startsWith('/app/volontaires')) return 'volontaires'
   if (p.startsWith('/app/annuaire')) return 'annuaire'
+  if (p.startsWith('/app/logistique/vehicules')) return 'vehicules'
   if (p.startsWith('/app/stock')) return 'stock'
   if (p.startsWith('/app/tresorerie')) return 'tresorerie'
   if (p.startsWith('/partenaire')) return 'partenaire'

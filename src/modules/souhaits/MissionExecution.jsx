@@ -21,6 +21,7 @@ import { PopupDetresse } from './ProtocoleDetresse'
 import { BandeauMedecin } from './EquipePluri'
 import { fusionMissionDemo, fusionRpcDemo } from './formationSession'
 import RappelAsbl from './RappelAsbl'
+import EtatVehicule from '@/modules/logistique/EtatVehicule'
 
 const fmtDt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }) : '—'
 
@@ -647,6 +648,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
       {vecteur && (
         <>
+          <EtatVehicule plaque={vecteur.plaque} />
           {aLaBase && (
             <>
               <Section titre="Vous">

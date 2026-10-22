@@ -63,6 +63,7 @@ export const DEPARTEMENTS = [
     icon: '📦',
     to: '/app/departement/logistique',
     modules: [
+      { key: 'vehicules', to: '/app/logistique/vehicules', label: 'Véhicules', icon: '🚑', desc: 'Check : hygiène, matériel, mécanique. L’état reste pour l’équipe suivante' },
       { key: 'stock', to: '/app/stock', label: 'Stock', icon: '📦', desc: 'Matériel, lieux et mouvements' },
     ],
   },
@@ -83,7 +84,7 @@ export function moduleAutorise(key, auth) {
   if (key === 'fiches') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
   if (key === 'personnalisation') return auth.peutPersonnaliser()
-  if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')
+  if (key === 'helpdesk' || key === 'activites_secours' || key === 'vehicules') return auth.can('staff')
   if (key === 'actualites') return true
   if (key === 'actualites_edition') return auth.peutPublierActualites()
   if (key === 'organigramme') return true

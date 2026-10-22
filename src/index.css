@@ -569,6 +569,46 @@ main:has(.ha-dept-onglets) > .ha-fondu-page {
   border-color: #3B6D11; background: #3B6D11; color: #fff;
 }
 
+.ha-veh-liste, .ha-veh-cats, .ha-veh-points { display: flex; flex-direction: column; gap: 10px; }
+.ha-veh-ligne, .ha-veh-apercu {
+  display: flex; flex-direction: column; gap: 8px; text-decoration: none; color: inherit;
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px;
+}
+.ha-veh-nom { display: block; font-weight: 750; font-size: 16px; color: var(--heading); }
+.ha-veh-plaque, .ha-veh-note, .ha-veh-apercu-suite { color: var(--text-muted); font-size: 13px; }
+.ha-veh-note { margin: 8px 0; }
+.ha-veh-apercu-titre { font-weight: 750; color: var(--heading); }
+.ha-veh-apercu-pts { display: flex; flex-wrap: wrap; gap: 6px; }
+.ha-veh-apercu-pts span {
+  font-size: 12.5px; font-weight: 700; border-radius: 999px; padding: 3px 8px;
+  border: 1.5px solid var(--border);
+}
+.ha-veh-apercu-pts span.is-ok { color: #3B6D11; border-color: #3B6D11; }
+.ha-veh-apercu-pts span.is-alerte { color: #A32D2D; border-color: #C8435A; background: #FCEBEB; }
+[data-theme="dark"] .ha-veh-apercu-pts span.is-ok { color: #C5E3A8; border-color: #5A9A2A; }
+[data-theme="dark"] .ha-veh-apercu-pts span.is-alerte { color: #F0A0A0; border-color: #C8435A; background: rgba(163,45,45,.2); }
+.ha-veh-cat {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px;
+  padding: 14px 16px; border-radius: 16px; border: 1.5px solid var(--border);
+  background: var(--card); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.ha-veh-cat strong { font-size: 17px; }
+.ha-veh-badge {
+  margin-left: auto; min-width: 32px; height: 32px; padding: 0 8px; border-radius: 999px;
+  display: grid; place-items: center; font-weight: 750; font-size: 14px;
+}
+.ha-veh-cat.is-ok { border-color: #3B6D11; }
+.ha-veh-cat.is-ok .ha-veh-badge { background: #3B6D11; color: #fff; }
+.ha-veh-cat.is-alerte { border-color: #C8435A; }
+.ha-veh-cat.is-alerte .ha-veh-badge { background: #C8435A; color: #fff; }
+.ha-veh-retour { color: var(--accent); font-weight: 650; font-size: 13.5px; background: none; border: none; padding: 0; cursor: pointer; text-decoration: none; }
+.ha-veh-cat-titre { margin: 12px 0; font-size: 1.25rem; color: var(--heading); }
+.ha-veh-ok {
+  width: 52px; height: 52px; margin: 0 auto 8px; border-radius: 999px;
+  display: grid; place-items: center; background: #3B6D11; color: #fff; font-size: 26px; font-weight: 750;
+}
+.ha-veh-ferme { padding: 8px 0; border-bottom: 1px solid var(--border); color: var(--text-muted); text-decoration: line-through; }
+
 .ha-terrain-bar {
   position: sticky; bottom: 0; z-index: 20;
   margin: 18px -14px -12px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
