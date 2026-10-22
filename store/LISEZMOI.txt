@@ -1,13 +1,12 @@
 Paquet Microsoft Store — version officielle en ligne
 ====================================================
 
-L'application ouvre le site officiel déjà en ligne :
-https://heart-s-angels.web.app
+L'application ouvre le site officiel :
+https://app.heartsangels.be
 
-C'est le déploiement Firebase du 15 octobre 2026, 9 h 20 (heure de Bruxelles).
+C'est le site en ligne du 15 octobre 2026, 20 h 50 (heure de Bruxelles).
 Ce n'est pas la bêta https://appbetaapp.heartsangels.be.
-Le code du dépôt Git est en retard sur ce site : le paquet reprend donc
-l'adresse en ligne, pas une nouvelle compilation.
+Le paquet Windows classique ouvre directement https://app.heartsangels.be/app.
 
 Dans le zip, déposer ces deux fichiers dans Partner Center, page Packages :
 - Heart's Angels.msixbundle          (Windows 10 mai 2020 et plus récent)
@@ -32,5 +31,5 @@ S'il est différent de CN=HeartsAngelsASBL, le Store refusera le paquet :
 renvoyer les trois valeurs pour régénérer le fichier.
 
 L'application charge le site à chaque ouverture. Une mise à jour publiée
-sur heart-s-angels.web.app apparaît dans l'app sans nouveau paquet.
+sur app.heartsangels.be apparaît dans l'app sans nouveau paquet.
 La version bêta sera un autre paquet, plus tard.
