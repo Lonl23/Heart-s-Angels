@@ -1,0 +1,29 @@
+Paquet Microsoft Store — version officielle en ligne
+====================================================
+
+L'application ouvre le site officiel :
+https://app.heartsangels.be
+
+C'est le site en ligne du 15 octobre 2026, 20 h 50 (heure de Bruxelles).
+Ce n'est pas la bêta https://appbetaapp.heartsangels.be.
+Le paquet Windows classique ouvre directement https://app.heartsangels.be/app.
+
+Partner Center n'accepte pas le zip. Pour la nouvelle soumission, déposer
+uniquement :
+- Hearts-Angels-ASBL-1.0.2.msixbundle
+
+Ne pas renvoyer le paquet classic en 32 bits : la certification du
+22 octobre 2026 l'a refusé (politique 10.3.4, installation impossible).
+Ne pas déposer le zip, ni le fichier sideload.
+
+Identité écrite dans le paquet, celle réservée dans Partner Center
+- Nom affiché : Heart's Angels ASBL
+- Package ID : HeartsAngelsASBL.HeartsAngelsASBL
+- Éditeur : CN=C9CB2B99-B7D1-47F9-B4C7-BD198D017592
+- Nom d'éditeur affiché : Heart's Angels ASBL
+- Version : 1.0.2
+- Langue : fr-BE
+
+L'application charge le site à chaque ouverture. Une mise à jour publiée
+sur app.heartsangels.be apparaît dans l'app sans nouveau paquet.
+La version bêta sera un autre paquet, plus tard.
