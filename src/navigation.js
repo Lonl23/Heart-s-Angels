@@ -28,7 +28,7 @@ export const DEPARTEMENTS = [
     to: '/app/departement/souhaits',
     modules: [
       { key: 'souhaits', to: '/app/souhaits', label: 'Préparation souhait', icon: '📝', desc: 'Encoder et préparer les dossiers' },
-      { key: 'missions', to: '/app/missions', label: 'Mes souhaits', icon: '🎁', desc: 'Terrain : checklists, démarrer, terminer' },
+      { key: 'missions', to: '/app/missions', label: 'Mes souhaits', icon: '🎁', desc: 'Terrain : les statuts d’un côté, le check du véhicule de l’autre' },
       { key: 'disponibilites', to: '/app/disponibilites', label: 'Disponibilités', icon: '📅', desc: 'Agenda : vos jours et les missions' },
     ],
   },
