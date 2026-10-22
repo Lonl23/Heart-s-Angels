@@ -14,20 +14,13 @@ Partner Center n'accepte pas le zip. Déposer ces deux fichiers, page Packages :
 
 Ne pas déposer le zip, ni Heart's Angels.sideload.msix.
 
-Identité écrite dans le paquet
-- Nom affiché : Heart's Angels
-- Package ID : HeartsAngelsASBL.HeartsAngels
-- Éditeur : CN=HeartsAngelsASBL
+Identité écrite dans le paquet, celle réservée dans Partner Center
+- Nom affiché : Heart's Angels ASBL
+- Package ID : HeartsAngelsASBL.HeartsAngelsASBL
+- Éditeur : CN=C9CB2B99-B7D1-47F9-B4C7-BD198D017592
 - Nom d'éditeur affiché : Heart's Angels ASBL
 - Version : 1.0.1 (classique : 1.0.0)
 - Langue : fr-BE
-
-Ces trois valeurs doivent être exactement celles de
-Partner Center > Gestion du produit > Identité du produit
-(Package ID, Publisher ID, Publisher display name).
-Le Publisher ID du Store est en général CN= suivi d'un identifiant.
-S'il est différent de CN=HeartsAngelsASBL, le Store refusera le paquet :
-renvoyer les trois valeurs pour régénérer le fichier.
 
 L'application charge le site à chaque ouverture. Une mise à jour publiée
 sur app.heartsangels.be apparaît dans l'app sans nouveau paquet.
