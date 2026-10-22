@@ -64,7 +64,7 @@ export const DEPARTEMENTS = [
     to: '/app/departement/logistique',
     modules: [
       { key: 'synthese_logistique', to: '/app/logistique/synthese', label: 'Synthèse', icon: '📊', desc: 'Le parc en un coup d’œil, avec les points qui restent ouverts' },
-      { key: 'vehicules', to: '/app/logistique/vehicules', label: 'Véhicules', icon: '🚑', desc: 'Check : hygiène, matériel, mécanique. L’état reste pour l’équipe suivante' },
+      { key: 'vehicules', to: '/app/logistique/vehicules', label: 'Véhicules', icon: '🚑', desc: 'Vérifier un sac ou un appareil, puis l’état qui reste' },
       { key: 'stock', to: '/app/stock', label: 'Stock', icon: '📦', desc: 'Matériel, lieux et mouvements' },
     ],
   },
