@@ -11,13 +11,12 @@ import DossierDar from './DossierDar'
 import MissionExecution from './MissionExecution'
 
 const ROLES_COORD = ['coord_medical', 'coord_medical_adjoint', 'coordinateur_medical']
-const VOLETS = ['recap', 'medical', 'contacts', 'statuts', 'vehicule']
+const VOLETS = ['recap', 'medical', 'contacts', 'statuts']
 const ONGLETS = [
   { v: 'recap', l: 'Récapitulatif' },
   { v: 'medical', l: 'Rapport médical' },
   { v: 'contacts', l: 'Contacts' },
   { v: 'statuts', l: 'Statuts' },
-  { v: 'vehicule', l: 'Check véhicule' },
 ]
 
 export default function MenuMission({ souhaitId, onBack }) {
@@ -104,16 +103,9 @@ export default function MenuMission({ souhaitId, onBack }) {
         />
       )}
       {onglet === 'contacts' && <ContactsMission souhaitId={souhaitId} individuel={jouette} />}
-      {(onglet === 'statuts' || onglet === 'vehicule') && (
+      {onglet === 'statuts' && (
         fenetre.ouvert
-          ? (
-            <MissionExecution
-              souhaitId={souhaitId}
-              partie={onglet === 'vehicule' ? 'vehicule' : 'statuts'}
-              onOuvrirCheck={() => setOnglet('vehicule')}
-              onBack={() => setOnglet('recap')}
-            />
-          )
+          ? <MissionExecution souhaitId={souhaitId} onBack={() => setOnglet('recap')} />
           : (
             <div style={{ padding: 16 }}>
               <Flash kind="warn">{fenetre.raison}</Flash>

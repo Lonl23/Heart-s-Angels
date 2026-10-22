@@ -150,8 +150,6 @@ async function main() {
     await client.query(lireSQL('111_fonds_partout.sql'))
     await client.query(lireSQL('112_activites_secours_type.sql'))
     await client.query(lireSQL('113_activites_secours_dispositif.sql'))
-    await client.query(lireSQL('114_vehicule_constats.sql'))
-    await client.query(lireSQL('115_vehicule_verifications.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

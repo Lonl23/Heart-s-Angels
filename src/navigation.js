@@ -28,7 +28,7 @@ export const DEPARTEMENTS = [
     to: '/app/departement/souhaits',
     modules: [
       { key: 'souhaits', to: '/app/souhaits', label: 'Préparation souhait', icon: '📝', desc: 'Encoder et préparer les dossiers' },
-      { key: 'missions', to: '/app/missions', label: 'Mes souhaits', icon: '🎁', desc: 'Terrain : les statuts d’un côté, le check du véhicule de l’autre' },
+      { key: 'missions', to: '/app/missions', label: 'Mes souhaits', icon: '🎁', desc: 'Terrain : checklists, démarrer, terminer' },
       { key: 'disponibilites', to: '/app/disponibilites', label: 'Disponibilités', icon: '📅', desc: 'Agenda : vos jours et les missions' },
     ],
   },
@@ -63,8 +63,6 @@ export const DEPARTEMENTS = [
     icon: '📦',
     to: '/app/departement/logistique',
     modules: [
-      { key: 'synthese_logistique', to: '/app/logistique/synthese', label: 'Synthèse', icon: '📊', desc: 'Le parc en un coup d’œil, avec les points qui restent ouverts' },
-      { key: 'vehicules', to: '/app/logistique/vehicules', label: 'Véhicules', icon: '🚑', desc: 'Vérifier un sac ou un appareil, puis l’état qui reste' },
       { key: 'stock', to: '/app/stock', label: 'Stock', icon: '📦', desc: 'Matériel, lieux et mouvements' },
     ],
   },
@@ -85,7 +83,7 @@ export function moduleAutorise(key, auth) {
   if (key === 'fiches') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
   if (key === 'personnalisation') return auth.peutPersonnaliser()
-  if (key === 'helpdesk' || key === 'activites_secours' || key === 'vehicules' || key === 'synthese_logistique') return auth.can('staff')
+  if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')
   if (key === 'actualites') return true
   if (key === 'actualites_edition') return auth.peutPublierActualites()
   if (key === 'organigramme') return true

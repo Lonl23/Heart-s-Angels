@@ -18,7 +18,7 @@ export function jourBruxelles(date = new Date()) {
   }).format(date)
 }
 
-/** Statuts et check véhicule : pendant le souhait et le jour qui suit. */
+/** Les statuts et checklists ne s’ouvrent que pendant le souhait et le jour qui suit. */
 export function fenetreStatuts(souhait, aujourdHui = jourBruxelles()) {
   const periodes = normaliserPeriodes(periodesDepuisSouhait(souhait)).filter(p => p.debut)
   if (!periodes.length) {
@@ -27,7 +27,7 @@ export function fenetreStatuts(souhait, aujourdHui = jourBruxelles()) {
       debut: null,
       fin: null,
       limite: null,
-      raison: 'Les statuts et le check véhicule s’ouvriront pendant les dates du souhait, et le jour qui suit.',
+      raison: 'Les statuts s’ouvriront pendant les dates du souhait, et le jour qui suit.',
     }
   }
   const debut = periodes.reduce((acc, p) => (p.debut < acc ? p.debut : acc), periodes[0].debut)
@@ -41,7 +41,7 @@ export function fenetreStatuts(souhait, aujourdHui = jourBruxelles()) {
     limite,
     raison: ouvert
       ? ''
-      : `Les statuts et le check véhicule sont ouverts du ${fmtCourt(debut)} au ${fmtCourt(limite)} (jour du souhait et lendemain).`,
+      : `Les statuts sont ouverts du ${fmtCourt(debut)} au ${fmtCourt(limite)} (jour du souhait et lendemain).`,
   }
 }
 
