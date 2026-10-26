@@ -1,3 +1,4 @@
+import { lireFichierTableau, telechargerClasseur } from '@/lib/classeur'
 import { cheminLieux, lblLieu, lblMode, lblMouv, lblCommande, fmtQuand, tableauxLieuxParSac } from './stockSchema'
 
 function slugDate() {
@@ -6,15 +7,13 @@ function slugDate() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-function feuille(XLSX, rows, cols) {
+function tableau(rows, cols) {
   const header = cols.map(c => c.h)
   const body = (rows || []).map(r => cols.map(c => {
     const v = c.v(r)
     return v == null ? '' : v
   }))
-  const ws = XLSX.utils.aoa_to_sheet([header, ...body])
-  ws['!cols'] = cols.map(c => ({ wch: c.w || 18 }))
-  return ws
+  return [header, ...body]
 }
 
 const LIRE_MOI = [
@@ -35,13 +34,8 @@ const LIRE_MOI = [
 ]
 
 export async function exporterStockExcel(data, lieux) {
-  const XLSX = await import('xlsx')
-  const wb = XLSX.utils.book_new()
-  const wsHelp = XLSX.utils.aoa_to_sheet(LIRE_MOI)
-  wsHelp['!cols'] = [{ wch: 90 }]
-  XLSX.utils.book_append_sheet(wb, wsHelp, 'Lire-moi')
-
-  XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.unites, [
+  const feuilles = [{ nom: 'Lire-moi', lignes: LIRE_MOI }]
+  feuilles.push({ nom: 'Inventaire', lignes: tableau(data.unites, [
     { h:'id', w:38, v: r => r.id },
     { h:'qr', w:36, v: r => r.qr },
     { h:'article', w:28, v: r => r.article },
@@ -58,9 +52,9 @@ export async function exporterStockExcel(data, lieux) {
     { h:'qte_comptee', w:16, v: () => '' },
     { h:'pression_systeme', w:16, v: r => r.mode === 'oxygene' ? r.pression_bar : '' },
     { h:'pression_comptee', w:18, v: () => '' },
-  ]), 'Inventaire')
+  ]) })
 
-  XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.articles, [
+  feuilles.push({ nom: 'Articles', lignes: tableau(data.articles, [
     { h:'id', w:38, v: r => r.id },
     { h:'nom', w:28, v: r => r.nom },
     { h:'mode', w:12, v: r => r.mode },
@@ -74,17 +68,17 @@ export async function exporterStockExcel(data, lieux) {
     { h:'fournisseur', w:22, v: r => r.fournisseur },
     { h:'ref_fournisseur', w:18, v: r => r.ref_fournisseur },
     { h:'entretien_mois', w:16, v: r => r.entretien_mois },
-  ]), 'Articles')
+  ]) })
 
-  XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.lieux, [
+  feuilles.push({ nom: 'Lieux', lignes: tableau(data.lieux, [
     { h:'id', w:38, v: r => r.id },
     { h:'nom', w:24, v: r => r.nom },
     { h:'type', w:18, v: r => lblLieu(r.type) },
     { h:'chemin', w:36, v: r => cheminLieux(lieux, r.id) },
     { h:'qr', w:36, v: r => r.qr },
-  ]), 'Lieux')
+  ]) })
 
-  XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.fournisseurs, [
+  feuilles.push({ nom: 'Fournisseurs', lignes: tableau(data.fournisseurs, [
     { h:'id', w:38, v: r => r.id },
     { h:'nom', w:24, v: r => r.nom },
     { h:'contact', w:18, v: r => r.contact },
@@ -93,9 +87,9 @@ export async function exporterStockExcel(data, lieux) {
     { h:'adresse', w:32, v: r => r.adresse },
     { h:'notes', w:28, v: r => r.notes },
     { h:'contacts', w:40, v: r => r.contacts },
-  ]), 'Fournisseurs')
+  ]) })
 
-  XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.commandes, [
+  feuilles.push({ nom: 'Commandes', lignes: tableau(data.commandes, [
     { h:'article', w:28, v: r => r.article },
     { h:'fournisseur', w:22, v: r => r.fournisseur },
     { h:'quantite', w:12, v: r => r.quantite },
@@ -106,10 +100,10 @@ export async function exporterStockExcel(data, lieux) {
     { h:'garantie_debut', w:16, v: r => r.garantie_debut },
     { h:'garantie_fin', w:16, v: r => r.garantie_fin },
     { h:'garantie_notes', w:28, v: r => r.garantie_notes },
-  ]), 'Commandes')
+  ]) })
 
   const LBL_ENT = { controle: 'Contrôle', remplacement: 'Remplacement', revision: 'Révision', etalonnage: 'Étalonnage', mise_en_service: 'Mise en service', autre: 'Autre' }
-  XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.entretiens, [
+  feuilles.push({ nom: 'Entretiens', lignes: tableau(data.entretiens, [
     { h:'article', w:28, v: r => r.article },
     { h:'numero_serie', w:18, v: r => r.numero_serie },
     { h:'lot', w:14, v: r => r.lot },
@@ -118,9 +112,9 @@ export async function exporterStockExcel(data, lieux) {
     { h:'type', w:16, v: r => LBL_ENT[r.type] || r.type },
     { h:'notes', w:28, v: r => r.notes },
     { h:'document', w:24, v: r => r.document },
-  ]), 'Entretiens')
+  ]) })
 
-  XLSX.utils.book_append_sheet(wb, feuille(XLSX, data.mouvements, [
+  feuilles.push({ nom: 'Mouvements', lignes: tableau(data.mouvements, [
     { h:'quand', w:20, v: r => fmtQuand(r.quand) },
     { h:'type', w:18, v: r => lblMouv(r.type) },
     { h:'article', w:28, v: r => r.article },
@@ -130,10 +124,10 @@ export async function exporterStockExcel(data, lieux) {
     { h:'vers', w:22, v: r => r.lieu },
     { h:'motif', w:24, v: r => r.motif },
     { h:'par', w:18, v: r => r.par },
-  ]), 'Mouvements')
+  ]) })
 
   const nom = `stock-hearts-angels-${slugDate()}.xlsx`
-  XLSX.writeFile(wb, nom)
+  telechargerClasseur(feuilles, nom)
   return nom
 }
 
@@ -169,11 +163,6 @@ export function exporterMouvementsCsv(items, nomFichier = `rapport-sortie-${slug
   return nomFichier
 }
 
-function nomFeuille(s) {
-  const t = String(s || 'Sac').replace(/[:\\/?*\[\]]/g, ' ').trim()
-  return (t || 'Sac').slice(0, 31)
-}
-
 function slugFichier(s) {
   return String(s || 'sac').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'sac'
@@ -181,23 +170,15 @@ function slugFichier(s) {
 
 /** Un fichier Excel : un onglet par sac, colonnes nom / lot / qr (lot vide pour les emplacements). */
 export async function exporterLieuxParSacExcel(lieux) {
-  const XLSX = await import('xlsx')
-  const wb = XLSX.utils.book_new()
-  const used = new Set()
+  const feuilles = []
   for (const t of tableauxLieuxParSac(lieux)) {
-    let name = nomFeuille(t.titre)
-    let n = 2
-    while (used.has(name.toLowerCase())) {
-      name = nomFeuille(`${t.titre} ${n++}`)
-    }
-    used.add(name.toLowerCase())
-    const aoa = [['nom', 'lot', 'qr'], ...t.lignes.map(l => [l.nom || '', '', l.qr_token || ''])]
-    const ws = XLSX.utils.aoa_to_sheet(aoa)
-    ws['!cols'] = [{ wch: 36 }, { wch: 8 }, { wch: 44 }]
-    XLSX.utils.book_append_sheet(wb, ws, name)
+    feuilles.push({
+      nom: t.titre,
+      lignes: [['nom', 'lot', 'qr'], ...t.lignes.map(l => [l.nom || '', '', l.qr_token || ''])],
+    })
   }
   const nom = `etiquettes-lieux-par-sac.xlsx`
-  XLSX.writeFile(wb, nom)
+  telechargerClasseur(feuilles, nom)
   return nom
 }
 
@@ -298,12 +279,10 @@ function col(map, key) {
 }
 
 export async function lireInventaireExcel(file) {
-  const XLSX = await import('xlsx')
-  const buf = await file.arrayBuffer()
-  const wb = XLSX.read(buf, { type: 'array' })
-  const name = wb.SheetNames.find(n => /^inventaire$/i.test(n)) || wb.SheetNames.find(n => /invent/i.test(n)) || wb.SheetNames[0]
+  const lu = await lireFichierTableau(file, nom => /invent/i.test(nom))
+  const name = lu.feuille
+  const rows = lu.rows
   if (!name) throw new Error('Aucune feuille dans le fichier.')
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '', raw: false })
   if (!rows.length) throw new Error('La feuille « Inventaire » est vide.')
 
   const sample = rows[0]
