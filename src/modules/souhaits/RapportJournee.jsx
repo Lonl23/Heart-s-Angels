@@ -386,7 +386,6 @@ export default function RapportJournee({ s, souhaitId, flash, onMission }) {
                   {it.nom}
                   {it.mode === 'oxygene' && it.pression_bar != null ? ` · ${it.pression_bar} bar` : ''}
                   {it.quantite != null && it.mode !== 'oxygene' ? ` · qté ${it.quantite}` : ''}
-                  {it.lot ? ` · lot ${it.lot}` : ''}
                 </div>
               ))}
             </Card>

@@ -151,6 +151,7 @@ async function main() {
     await client.query(lireSQL('112_activites_secours_type.sql'))
     await client.query(lireSQL('113_activites_secours_dispositif.sql'))
     await client.query(lireSQL('114_stock_kit_usage.sql'))
+    await client.query(lireSQL('115_stock_usage_sans_date.sql'))
     console.log('   ✓ Schéma, fonctions et RLS appliqués.')
   } finally {
     await client.end()

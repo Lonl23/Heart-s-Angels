@@ -16,6 +16,7 @@ import OngletRapportSortie from './stock/OngletRapportSortie'
 import OngletTransferts, { FormReceptionGuide, FormSortieGuide, FormO2 } from './stock/OngletTransferts'
 import { etiqLieu, etiqUnite, CarteQr, FormReception, FormTransfert, FormSortie } from './stock/formsStock'
 import { exporterStockExcel, lireInventaireExcel, resumeImport, exporterLieuxParSacExcel, telechargerCsvLieuxParSac } from './stock/excelStock'
+import ARefaire from './stock/ARefaire'
 
 const ACCUEIL = [
   { v: 'unites', l: 'Inventaires' },
@@ -252,6 +253,7 @@ export default function Stock() {
         <>
           {tab === 'accueil' && (
             <div>
+              <ARefaire onOk={ok} onErr={setErr} />
               <div className="ha-stock-home">
                 {ACCUEIL.map(o => (
                   <button key={o.v} type="button" className="ha-xfer-opt" onClick={() => aller(o.v)}>

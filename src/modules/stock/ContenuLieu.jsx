@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Btn, inp } from '@/components/ui'
 import { lblLieu } from './stockSchema'
-import { bornerQte, dateFr, lignesUsage } from './usageLieu'
+import { bornerQte, lignesUsage } from './usageLieu'
 
 export default function ContenuLieu({ lieu, items, busy, onValider, onAnnuler }) {
   const [coches, setCoches] = useState({})
@@ -9,7 +9,6 @@ export default function ContenuLieu({ lieu, items, busy, onValider, onAnnuler })
   const choisis = lignesUsage(coches)
 
   function basculer(it) {
-    if (it.perime) return
     setCoches(s => {
       if (s[it.id] != null) {
         const next = { ...s }
@@ -25,8 +24,8 @@ export default function ContenuLieu({ lieu, items, busy, onValider, onAnnuler })
   }
 
   const intro = lieu?.type === 'sac'
-    ? 'Seulement le matériel en vrac dans ce sac. Les pochettes et les kits restent fermés : scannez leur QR pour voir ce qu’ils contiennent.'
-    : `Seulement ce qui est dans ${lieu?.type === 'kit' ? 'ce kit' : 'cette pochette'}.`
+    ? 'Seulement le matériel en vrac dans ce sac. Cochez ce qui a été utilisé. Les dates restent à la logistique.'
+    : 'Cochez ce qui a été utilisé. La logistique refera ensuite cette ' + (lieu?.type === 'kit' ? 'kit' : 'pochette') + '.'
 
   return (
     <div style={{ marginBottom: 12 }}>
@@ -42,16 +41,11 @@ export default function ContenuLieu({ lieu, items, busy, onValider, onAnnuler })
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {lignes.map(it => {
             const on = coches[it.id] != null
-            const detail = [
-              it.lot ? `lot ${it.lot}` : 'sans n° de lot',
-              it.date_peremption ? `péremption ${dateFr(it.date_peremption)}` : 'sans date',
-              `${Number(it.qte_restante)} ${it.unite || ''}`.trim(),
-            ].join(' · ')
             return (
               <div key={it.id}>
                 <button
                   type="button"
-                  disabled={busy || it.perime}
+                  disabled={busy}
                   className={'ha-check-btn' + (on ? ' is-on' : '')}
                   onClick={() => basculer(it)}
                 >
@@ -59,13 +53,13 @@ export default function ContenuLieu({ lieu, items, busy, onValider, onAnnuler })
                   <span>
                     <span style={{ display: 'block' }}>{it.nom}</span>
                     <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: 'var(--text-muted)' }}>
-                      {it.perime ? 'Périmé — ne pas utiliser' : detail}
+                      {Number(it.qte_restante)} {it.unite || 'en place'}
                     </span>
                   </span>
                 </button>
                 {on && it.mode !== 'durable' && (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0 0 36px', fontSize: 13 }}>
-                    Quantité
+                    Quantité utilisée
                     <input
                       type="number"
                       min="1"

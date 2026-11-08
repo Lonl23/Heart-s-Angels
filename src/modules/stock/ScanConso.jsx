@@ -163,7 +163,7 @@ export default function ScanConso({ souhaitId, locked, onFlash, onErr, optionnel
               <li key={i} style={{ marginBottom:4 }}>
                 {it.mode === 'oxygene' || it.type_mouv === 'releve_o2'
                   ? `${it.nom}${it.volume_l ? ` ${Number(it.volume_l)} L` : ''} · ${it.motif || (it.pression_bar != null ? `${Number(it.pression_bar)} bar` : '')}`
-                  : `${it.nom} −${Number(it.quantite)}${it.mode === 'boite' ? ` · reste ${Number(it.reste)}/${Number(it.initiale)}` : ''}${it.lot ? ` · lot ${it.lot}` : ''}${it.type_mouv === 'usage' ? ' (durable, toujours en place)' : ''}`}
+                  : `${it.nom} −${Number(it.quantite)}`}
               </li>
             ))}
           </ul>

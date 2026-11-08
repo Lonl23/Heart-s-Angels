@@ -1,3 +1,11 @@
+export function jourFr(iso) {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return dateFr(iso)
+  return new Intl.DateTimeFormat('fr-BE', {
+    timeZone: 'Europe/Brussels', day: '2-digit', month: '2-digit', year: 'numeric',
+  }).format(d)
+}
+
 export function dateFr(iso) {
   if (!iso) return ''
   const [y, m, d] = String(iso).slice(0, 10).split('-')
@@ -16,5 +24,5 @@ export function bornerQte(saisie, max) {
 export function lignesUsage(coches) {
   return Object.entries(coches || {})
     .filter(([, q]) => Number(q) > 0)
-    .map(([unite_id, qte]) => ({ unite_id, qte: Number(qte) }))
+    .map(([catalogue_id, qte]) => ({ catalogue_id, qte: Number(qte) }))
 }

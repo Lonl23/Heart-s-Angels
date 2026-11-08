@@ -247,7 +247,7 @@ export async function htmlRapportAsbl({ s, m, equipe, meds, conso, images, medic
   if ((conso || []).length) {
     body += sec('Matériel utilisé', conso.map(it => {
       const extra = it.mode === 'oxygene' && it.pression_bar != null ? ` · ${it.pression_bar} bar` : (it.quantite != null && it.mode !== 'oxygene' ? ` · qté ${it.quantite}` : '')
-      return `<div>${escHtml(it.nom || '')}${escHtml(extra)}${it.lot ? escHtml(` · lot ${it.lot}`) : ''}</div>`
+      return `<div>${escHtml(it.nom || '')}${escHtml(extra)}</div>`
     }).join(''))
   }
 
