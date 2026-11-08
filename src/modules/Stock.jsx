@@ -374,7 +374,7 @@ function OngletLieux({ lieux, unites, cats, dotations, onChange, onOk, onErr }) 
         <Btn kind="soft" onClick={() => exporterLieuxParSacExcel(lieux)} disabled={!lieux.length}>Excel par sac</Btn>
       </div>
       <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>
-        Pour chaque pochette : le contenu prévu (modifiable) et ce qui est réellement rangé. CSV / Excel : un tableau par sac. Étiquette 90,3 × 29 mm : QR en haut, nom en bas.
+        Un sac contient des pochettes et des kits. Le QR est sur le sac, la pochette ou le kit, pas sur chaque consommable. CSV / Excel : un tableau par sac. Étiquette 90,3 × 29 mm : QR en haut, nom en bas.
       </p>
       <label className="ha-stock-search-lab" htmlFor="stock-recherche-lieu">Rechercher un emplacement</label>
       <input id="stock-recherche-lieu" className="ha-search" value={q} onChange={e=>setQ(e.target.value)}
@@ -438,7 +438,14 @@ function NoeudLieu({ n, lieux, cats, dotations, unites, keep, onEdit, onQr, onDe
             <Btn kind="soft" onClick={() => onQr(n)} style={{ padding:'5px 10px' }}>QR</Btn>
             <Btn kind="soft" onClick={() => onDot(n)} style={{ padding:'5px 10px' }}>Contenu prévu</Btn>
             <Btn kind="soft" onClick={() => onEdit(n)} style={{ padding:'5px 10px' }}>Modifier</Btn>
-            <Btn kind="soft" onClick={() => onEdit({ nom:'', type: n.type === 'sac' ? 'pochette' : 'armoire', parent_id: n.id })} style={{ padding:'5px 10px' }}>+ Dedans</Btn>
+            {n.type === 'sac' ? (
+              <>
+                <Btn kind="soft" onClick={() => onEdit({ nom:'', type: 'pochette', parent_id: n.id })} style={{ padding:'5px 10px' }}>+ Pochette</Btn>
+                <Btn kind="soft" onClick={() => onEdit({ nom:'', type: 'kit', parent_id: n.id })} style={{ padding:'5px 10px' }}>+ Kit</Btn>
+              </>
+            ) : (
+              <Btn kind="soft" onClick={() => onEdit({ nom:'', type: 'armoire', parent_id: n.id })} style={{ padding:'5px 10px' }}>+ Dedans</Btn>
+            )}
             <Btn kind="danger" onClick={() => onDel(n)} style={{ padding:'5px 10px' }}>Supprimer</Btn>
           </div>
         </div>

@@ -3,11 +3,12 @@ export const TYPES_LIEU = [
   { v:'armoire', l:'Armoire' },
   { v:'sac', l:'Sac' },
   { v:'pochette', l:'Pochette' },
+  { v:'kit', l:'Kit' },
   { v:'vehicule', l:'Véhicule / ambulance' },
   { v:'armoire_vehicule', l:'Armoire dans un véhicule' },
   { v:'autre', l:'Autre' },
 ]
-export const TYPES_LIEU_SACS = ['sac', 'pochette', 'vehicule', 'armoire_vehicule']
+export const TYPES_LIEU_SACS = ['sac', 'pochette', 'kit', 'vehicule', 'armoire_vehicule']
 export const lblLieu = v => TYPES_LIEU.find(t => t.v === v)?.l || v
 export const estLieuSac = type => TYPES_LIEU_SACS.includes(type)
 

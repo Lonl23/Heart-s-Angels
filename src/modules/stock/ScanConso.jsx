@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, Flash, inp, F, Card } from '@/components/ui'
+import { Btn, Flash, F, Card } from '@/components/ui'
 import Scanner from './Scanner'
-import { resteLabel, capaciteO2, PRESSION_ALERTE } from './stockSchema'
+import ContenuLieu from './ContenuLieu'
+import { resteLabel, capaciteO2, PRESSION_ALERTE, lblLieu } from './stockSchema'
 
 export default function ScanConso({ souhaitId, locked, onFlash, onErr, optionnel=false }) {
   const [open, setOpen] = useState(false)
-  const [qte, setQte] = useState('1')
   const [last, setLast] = useState(null)
   const [liste, setListe] = useState([])
   const [busy, setBusy] = useState(false)
   const [o2, setO2] = useState(null)
   const [pression, setPression] = useState('')
+  const [feuille, setFeuille] = useState(null)
 
   useEffect(() => { charger() }, [souhaitId])
   async function charger() {
@@ -22,35 +23,72 @@ export default function ScanConso({ souhaitId, locked, onFlash, onErr, optionnel
   async function onCode(token) {
     if (locked || busy) return
     setBusy(true)
+    const { data: lieu, error: errLieu } = await supabase.rpc('stock_contenu_direct', { p_token: token })
+    if (errLieu) {
+      setBusy(false)
+      onErr?.(errLieu.message)
+      setLast({ ok: false, msg: errLieu.message })
+      return
+    }
+    if (lieu?.ok) {
+      setBusy(false)
+      setOpen(false)
+      if (!['sac', 'pochette', 'kit'].includes(lieu.lieu?.type)) {
+        const msg = 'Ce QR n’est pas un sac, une pochette ou un kit.'
+        onErr?.(msg)
+        setLast({ ok: false, msg })
+        return
+      }
+      setO2(null)
+      setFeuille(lieu)
+      return
+    }
+    if (lieu?.error && lieu.error !== 'pas_un_lieu') {
+      setBusy(false)
+      onErr?.(lieu.error)
+      setLast({ ok: false, msg: lieu.error })
+      return
+    }
     const { data, error } = await supabase.rpc('stock_scan', {
       p_token: token, p_action: 'lire', p_qte: 1, p_souhait: null, p_lieu: null,
     })
+    setBusy(false)
     if (error || data?.ok === false) {
-      setBusy(false)
       onErr?.(error?.message || data?.error || 'Scan refusé')
       setLast({ ok: false, msg: error?.message || data?.error })
       return
     }
     if (data.kind === 'unite' && data.unite?.mode === 'oxygene') {
-      setBusy(false)
       setOpen(false)
+      setFeuille(null)
       setO2(data.unite)
       setPression(data.unite.pression_bar == null ? '' : String(data.unite.pression_bar))
       return
     }
-    const n = Math.max(1, Number(qte) || 1)
-    const { data: conso, error: err2 } = await supabase.rpc('stock_scan', {
-      p_token: token, p_action: 'consommer', p_qte: n, p_souhait: souhaitId, p_lieu: null,
+    const msg = data.kind === 'lieu'
+      ? `Scannez un sac, une pochette ou un kit${data.lieu?.type ? ` (${lblLieu(data.lieu.type)} ignoré)` : ''}.`
+      : 'Les consommables n’ont pas de QR. Scannez le sac, la pochette ou le kit, puis cochez ce qui a été utilisé.'
+    onErr?.(msg)
+    setLast({ ok: false, msg })
+  }
+
+  async function validerLieu(lignes) {
+    if (!feuille || busy || locked) return
+    setBusy(true)
+    const { data, error } = await supabase.rpc('stock_utiliser_emplacement', {
+      p_token: feuille.lieu.qr_token,
+      p_souhait: souhaitId,
+      p_lignes: lignes,
     })
     setBusy(false)
-    if (err2 || conso?.ok === false) {
-      onErr?.(err2?.message || conso?.error || 'Scan refusé')
-      setLast({ ok: false, msg: err2?.message || conso?.error })
+    if (error || data?.ok === false) {
+      onErr?.(error?.message || data?.error || 'Enregistrement refusé')
+      setLast({ ok: false, msg: error?.message || data?.error })
       return
     }
-    setLast({ ok: true, msg: conso.message, unite: conso.unite })
+    setLast({ ok: true, msg: data.message })
+    setFeuille(null)
     onFlash?.()
-    setOpen(false)
     charger()
   }
 
@@ -79,21 +117,23 @@ export default function ScanConso({ souhaitId, locked, onFlash, onErr, optionnel
       <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap', marginBottom:10 }}>
         <div>
           <div style={{ fontWeight:600, color:'var(--heading)' }}>Matériel utilisé</div>
-          {optionnel && (
-            <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
-              Sur un vrai souhait vous scannerez ici le matériel consommé. Ici ce n’est pas obligatoire.
-            </div>
-          )}
-        </div>
-        {!locked && (
-          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <label style={{ fontSize:12.5, color:'var(--text-muted)' }}>Qté (boîte / pièce)</label>
-            <input type="number" min="1" value={qte} onChange={e=>setQte(e.target.value)}
-              style={{ ...inp, width:64, margin:0 }} />
-            <Btn onClick={()=>setOpen(true)}>Scanner</Btn>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
+            {optionnel
+              ? 'Sur un vrai souhait : scannez le sac, la pochette ou le kit, puis cochez ce qui a été utilisé. Ici ce n’est pas obligatoire.'
+              : 'Scannez le sac pour le vrac, ou le QR de la pochette ou du kit. La quantité ne peut pas dépasser ce qu’il y a à cet endroit.'}
           </div>
-        )}
+        </div>
+        {!locked && <Btn onClick={()=>setOpen(true)}>Scanner</Btn>}
       </div>
+      {feuille && (
+        <ContenuLieu
+          lieu={feuille.lieu}
+          items={feuille.items}
+          busy={busy}
+          onValider={validerLieu}
+          onAnnuler={() => setFeuille(null)}
+        />
+      )}
       {o2 && (
         <Card style={{ marginBottom:12, borderColor:'var(--accent)' }}>
           <div style={{ fontWeight:700, marginBottom:4 }}>{o2.nom}</div>
@@ -116,7 +156,7 @@ export default function ScanConso({ souhaitId, locked, onFlash, onErr, optionnel
         <Flash kind={last.ok ? 'ok' : 'err'}>{last.msg}{last.unite?.mode === 'boite' ? ` (${resteLabel(last.unite)})` : ''}</Flash>
       )}
       {liste.length === 0
-        ? <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Rien de scanné pour l’instant. Scannez chaque pièce, boîte ou bouteille d’O₂.</div>
+        ? <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Rien d’enregistré pour l’instant. Les bouteilles d’O₂ se scannent encore une à une.</div>
         : (
           <ul style={{ margin:0, paddingLeft:18, fontSize:14, color:'var(--text)' }}>
             {liste.map((it, i) => (
@@ -128,7 +168,7 @@ export default function ScanConso({ souhaitId, locked, onFlash, onErr, optionnel
             ))}
           </ul>
         )}
-      {open && <Scanner titre="Scanner le matériel utilisé" onCode={onCode} onClose={()=>setOpen(false)} />}
+      {open && <Scanner titre="Scanner le sac, la pochette ou le kit" onCode={onCode} onClose={()=>setOpen(false)} />}
     </div>
   )
 }
