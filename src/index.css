@@ -504,15 +504,39 @@ main:has(.ha-dept-onglets) > .ha-fondu-page {
   transition: border-color var(--ease), background var(--ease);
 }
 @media (max-width: 699px) {
+  /* Le tableau est une liste de colonnes : la page doit défiler.
+     Le verrou « hauteur d’écran » (accueil, grand écran) ne s’applique pas ici. */
+  .ha-fondu-calque:has(.ha-page-fill) {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+  .ha-fondu-calque:has(.ha-page-fill) > * {
+    flex: none;
+    height: auto;
+    min-height: min-content;
+  }
   .ha-page-fill { height: auto; overflow: visible; }
+  .ha-page-fill > .ha-page-scroll {
+    flex: none;
+    min-height: auto;
+    overflow: visible;
+  }
   .ha-kanban-page { flex: none; }
   .ha-kanban-board {
     flex-direction: column; overflow: visible; height: auto;
+    padding-bottom: 28px;
   }
   .ha-kanban-col {
     flex: none; min-width: 0; max-width: none; width: 100%;
   }
-  .ha-kanban-drop { max-height: min(62vh, 520px); }
+  .ha-kanban-drop {
+    flex: none;
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
+  }
 }
 .ha-kanban-drop.is-over {
   border-color: var(--accent);
