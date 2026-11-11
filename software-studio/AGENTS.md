@@ -1,7 +1,8 @@
 # software-studio
 
-Studio logiciel Agent SDK (`@grok/agent-sdk`) : CEO + 14 spécialistes
-pour créer et améliorer les applis (NexOS, Supabase, terrain AMU/ATNUP).
+Studio logiciel Agent SDK (`@grok/agent-sdk`) : CEO + 17 spécialistes
+pour créer et améliorer les applis (NexOS, Supabase, terrain AMU/ATNUP),
+dont codage métier **RH**, **logistique** et **finance**.
 
 Le prompt servi est `bot/instructions.md` (CEO). Les spécialistes sont
 sous `bot/subagents/<id>/`.

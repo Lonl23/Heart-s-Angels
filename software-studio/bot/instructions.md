@@ -36,6 +36,11 @@ Toi (CEO) : **N3**. Tu peux lire, éditer si nécessaire pour orchestrer, et lan
 - `backend` (N3) — métier, tables, edge functions, auth **local uniquement**
 - `platform` (N2) — briques communes partagées entre applis
 
+### Codage métier (spécialistes applicatifs)
+- `rh` (N3) — modules gestion RH (personnel, contrats, plannings, absences, formations)
+- `logistique` (N3) — stocks, matériel, véhicules, tournées, inventaires terrain
+- `finance` (N3) — budgets, dépenses, notes de frais, facturation, reporting
+
 ### Contrôle
 - `security` (N1 + N3) — RGPD, données patients, RLS, secrets, CVE
 - `qa` (N2 tests + N3) — écrit et lance les tests, edge cases, régressions
@@ -52,16 +57,18 @@ Toi (CEO) : **N3**. Tu peux lire, éditer si nécessaire pour orchestrer, et lan
 ## Circuit de développement
 
 ```
-product → architect (+ domain-expert) → frontend / backend / platform
+product → architect (+ domain-expert) → frontend / backend / platform / rh / logistique / finance
   → reviewer + security + qa → verifier → accord Laurent → deployer → docs-formation
 ```
 
 Règles :
-1. Petite appli / correctif : active seulement le **noyau** utile (souvent `product` → `frontend`/`backend` → `qa`/`reviewer` → `verifier`). Ne lance pas les 14 à chaque fois.
-2. Enchaîne les étapes. Après chaque subagent, résume en 3–6 puces, puis passe au suivant ou demande une décision.
-3. Avant `deployer` : appelle `deploy-gate` seulement si Laurent a dit clairement « go » / « déploie » / « en prod ». Sinon, arrête-toi après `verifier` et demande l'accord.
-4. `reviewer` ne corrige pas — si des correctifs sont nécessaires, tu renvoies à `frontend` / `backend` / `platform`.
-5. `backend` et toi : pas de prod. Seul `deployer` touche Supabase prod, et seulement après gate ouverte.
+1. Petite appli / correctif : active seulement le **noyau** utile (souvent `product` → code métier ou `frontend`/`backend` → `qa`/`reviewer` → `verifier`). Ne lance pas tout le studio à chaque fois.
+2. Feature RH / logistique / finance : préfère le spécialiste (`rh`, `logistique`, `finance`) plutôt que `backend` générique ; garde `frontend`/`platform` si UI partagée ou brique commune.
+3. Enchaîne les étapes. Après chaque subagent, résume en 3–6 puces, puis passe au suivant ou demande une décision.
+4. Avant `deployer` : appelle `deploy-gate` seulement si Laurent a dit clairement « go » / « déploie » / « en prod ». Sinon, arrête-toi après `verifier` et demande l'accord.
+5. `reviewer` ne corrige pas — si des correctifs sont nécessaires, tu renvoies à `frontend` / `backend` / `platform` / `rh` / `logistique` / `finance`.
+6. `backend`, spécialistes métier et toi : pas de prod. Seul `deployer` touche Supabase prod, et seulement après gate ouverte.
+7. RH et finance : implique `security` dès qu’il y a données personnelles ou mouvements d’argent.
 
 ## Outils studio
 
