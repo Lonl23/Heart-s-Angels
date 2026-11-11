@@ -18,8 +18,9 @@ import {
   estAVenir,
   dansLes30Jours,
   peutCreerActiviteSecours,
-  suggestionDepuisDispositif,
-  equipeDuDispositif,
+  suggestionDepuisDispositifs,
+  dispositifsDeActivite,
+  DISPOSITIFS_CONNUS,
 } from './activitesSecours'
 
 const VIDE = {
@@ -31,7 +32,7 @@ const VIDE = {
   fin: '',
   places: '1',
   publicAttendu: '',
-  dispositif: '',
+  dispositifs: [],
   competences: [],
 }
 
@@ -127,7 +128,7 @@ export default function ActivitesSecours() {
     if (!silencieux) setLoading(true)
     setErr(null)
     const [a, i] = await Promise.all([
-      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,public_attendu,lieu,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
+      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
       supabase.from('activites_secours_inscrits').select('id,activite_id,user_id'),
     ])
     if (a.error || i.error) {
@@ -198,6 +199,7 @@ export default function ActivitesSecours() {
   }
 
   function ouvrirEdition(a) {
+    const equipes = dispositifsDeActivite(a)
     setForm({
       id: a.id,
       titre: a.titre || '',
@@ -207,7 +209,7 @@ export default function ActivitesSecours() {
       fin: versChamp(a.fin),
       places: String(a.places ?? 1),
       publicAttendu: a.public_attendu == null ? '' : String(a.public_attendu),
-      dispositif: DISPOSITIFS.some(d => d.v === a.dispositif) ? a.dispositif : '',
+      dispositifs: equipes,
       competences: competencesConnues(a.competences),
     })
   }
@@ -216,16 +218,18 @@ export default function ActivitesSecours() {
     setForm(f => ({ ...f, ...patch }))
   }
 
-  function choisirDispositif(v) {
-    const sug = suggestionDepuisDispositif(v)
-    if (!sug) {
-      majForm({ dispositif: v })
-      return
-    }
-    majForm({
-      dispositif: v,
-      places: sug.places,
-      competences: competencesConnues(sug.competences),
+  function basculerEquipe(v) {
+    if (!DISPOSITIFS_CONNUS.has(v)) return
+    setForm(f => {
+      const has = f.dispositifs.includes(v)
+      const dispositifs = has ? f.dispositifs.filter(x => x !== v) : [...f.dispositifs, v]
+      const sug = suggestionDepuisDispositifs(dispositifs)
+      return {
+        ...f,
+        dispositifs,
+        places: sug ? sug.places : f.places,
+        competences: sug ? competencesConnues(sug.competences) : f.competences,
+      }
     })
   }
 
@@ -250,13 +254,17 @@ export default function ActivitesSecours() {
     if (!Number.isInteger(places) || places < 1 || places > 500) { setFlash('Le nombre de places doit être entre 1 et 500.'); return }
     const publicAttendu = publicAttenduOuNull(form.publicAttendu)
     if (publicAttendu === undefined) { setFlash('Le public attendu doit être un nombre entre 0 et 500 000, ou rester vide.'); return }
-    if (form.dispositif && !DISPOSITIFS.some(d => d.v === form.dispositif)) { setFlash('Le type de dispositif est inconnu.'); return }
+    const equipes = dispositifsDeActivite(form.dispositifs)
+    if ((form.dispositifs || []).some(d => !DISPOSITIFS_CONNUS.has(d))) {
+      setFlash('Une des équipes est inconnue.'); return
+    }
     setSauve(true)
     setFlash(null)
     const payload = {
       titre,
       type: TYPES_ACTIVITE.some(t => t.v === form.type) ? form.type : 'activite',
-      dispositif: form.dispositif || null,
+      dispositifs: equipes,
+      dispositif: equipes[0] || null,
       public_attendu: publicAttendu,
       lieu: form.lieu.trim() || null,
       debut,
@@ -363,20 +371,29 @@ export default function ActivitesSecours() {
               <F label="Fin" type="datetime-local" value={form.fin} set={v => majForm({ fin: v })} />
               <F label="Places" type="number" value={form.places} set={v => majForm({ places: v })} required />
               <F label="Public attendu" type="number" value={form.publicAttendu} set={v => majForm({ publicAttendu: v })} />
-              <label style={{ marginBottom: 10, display: 'block' }}>
-                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Équipe / dispositif</span>
-                <select value={form.dispositif} onChange={e => choisirDispositif(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}>
-                  <option value="">—</option>
-                  {DISPOSITIFS.map(d => <option key={d.v} value={d.v}>{d.l}</option>)}
-                </select>
-              </label>
+              <div style={{ marginBottom: 10 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Équipes / dispositifs</span>
+                <div className="ha-act-choix" role="group" aria-label="Équipes du préventif">
+                  {DISPOSITIFS.map(d => (
+                    <button
+                      key={d.v}
+                      type="button"
+                      className={'ha-act-choix-btn' + (form.dispositifs.includes(d.v) ? ' is-on' : '')}
+                      aria-pressed={form.dispositifs.includes(d.v)}
+                      onClick={() => basculerEquipe(d.v)}
+                    >
+                      {d.court}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            {form.dispositif && equipeDuDispositif(form.dispositif) && (
+            {form.dispositifs.length > 0 && suggestionDepuisDispositifs(form.dispositifs) && (
               <p className="ha-act-note" style={{ color: 'var(--heading)' }}>
-                Effectif minimum : {equipeDuDispositif(form.dispositif).resume}. Places et compétences sont préremplies — vous pouvez encore les ajuster.
+                Effectif minimum : {suggestionDepuisDispositifs(form.dispositifs).resume}. Places et compétences sont préremplies — vous pouvez encore les ajuster.
               </p>
             )}
-            <p className="ha-act-note">Le type d’équipe se choisit. Il n’est pas calculé à partir du public. Ces matrices concernent uniquement le département secours (pas les souhaits).</p>
+            <p className="ha-act-note">Un préventif peut combiner plusieurs équipes (AMBU, PMA, PAPS, Écho…). Le type n’est pas calculé à partir du public. Matrices = département secours uniquement (pas les souhaits). « Secouriste minimum » suit l’ordre des qualifications (1→7).</p>
             <div style={{ marginBottom: 8 }}>
               <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Compétences requises</span>
               <div className="ha-act-choix" role="group" aria-label="Compétences requises">
@@ -445,7 +462,9 @@ export default function ActivitesSecours() {
                       <Link to={`/app/secours/activites/${a.id}`} className="ha-act-titre">{a.titre}</Link>
                       <div className="ha-act-type">
                         {libelleTypeActivite(a.type)}
-                        {a.dispositif ? ` · ${libelleDispositif(a.dispositif, true)}` : ''}
+                        {dispositifsDeActivite(a).length
+                          ? ` · ${dispositifsDeActivite(a).map(v => libelleDispositif(v, true)).join(' + ')}`
+                          : ''}
                       </div>
                     </td>
                     <td className="ha-act-lieu">{a.lieu || '—'}</td>

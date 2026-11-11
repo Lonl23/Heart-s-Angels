@@ -14,13 +14,17 @@ export function libelleTypeActivite(v) {
 
 /**
  * Équipes / dispositifs du département secours (pas les souhaits).
- * Minimums validés avec Laurent — suggestions à la création, contrôle à l’armement.
- * AMU / ATNUP = qualification ambulancier sur la fiche.
- * Infirmier SIAMU = infirmier + spécialisation siamu.
+ * Un préventif peut porter plusieurs équipes (AMBU + PMA + PAPS…).
+ *
+ * Hiérarchie des qualifications (1 = plus faible, 7 = plus fort) :
+ * 1 secouriste · 2 ambulancier ATNUP · 3 ambulancier AMU · 4 infirmier ·
+ * 5 infirmier SIAMU · 6 médecin · 7 médecin urgentiste
+ * « Secouriste minimum » = rang ≥ 1 (un rang plus fort peut couvrir un poste plus faible).
  */
 export const DISPOSITIFS = [
   { v: 'paps', l: 'PAPS — Point d’alerte et de premiers secours', court: 'PAPS' },
   { v: 'ps', l: 'PS — Poste de secours', court: 'PS' },
+  { v: 'echo', l: 'Écho', court: 'Écho' },
   { v: 'pma_cat2', l: 'PMA catégorie 2', court: 'PMA CAT 2' },
   { v: 'pma_cat1', l: 'PMA catégorie 1', court: 'PMA CAT 1' },
   { v: 'pma_cat0', l: 'PMA catégorie 0', court: 'PMA CAT 0' },
@@ -28,18 +32,30 @@ export const DISPOSITIFS = [
   { v: 'ambu', l: 'Ambulance (ATNUP)', court: 'AMBU' },
 ]
 
-/** Rôles d’effectif pour le dimensionnement secours. */
+export const RANGS_QUALIF = {
+  secouriste: 1,
+  ambulancier_atnup: 2,
+  ambulancier_amu: 3,
+  infirmier: 4,
+  infirmier_siamu: 5,
+  medecin: 6,
+  medecin_urgentiste: 7,
+}
+
+/** Rôles d’effectif (clés = rangs). */
 export const ROLES_EQUIPE = [
-  { v: 'secouriste', l: 'Secouriste' },
-  { v: 'ambulancier', l: 'AMU / ATNUP (ambulancier)' },
-  { v: 'infirmier', l: 'Infirmier(ère)' },
-  { v: 'infirmier_siamu', l: 'Infirmier(ère) SIAMU' },
-  { v: 'medecin', l: 'Médecin' },
+  { v: 'secouriste', l: 'Secouriste (≥1)' },
+  { v: 'ambulancier_atnup', l: 'Ambulancier ATNUP (≥2)' },
+  { v: 'ambulancier_amu', l: 'Ambulancier AMU (≥3)' },
+  { v: 'infirmier', l: 'Infirmier(ère) (≥4)' },
+  { v: 'infirmier_siamu', l: 'Infirmier(ère) SIAMU (≥5)' },
+  { v: 'medecin', l: 'Médecin (≥6)' },
+  { v: 'medecin_urgentiste', l: 'Médecin urgentiste (≥7)' },
 ]
 
 /**
  * Matrices d’équipes. `alternatives` = au moins une composition complète.
- * Sinon `besoins` unique.
+ * Les rôles sont des rangs minimums (un rang supérieur peut remplir un poste inférieur).
  */
 export const EQUIPES_DISPOSITIF = {
   paps: {
@@ -52,7 +68,15 @@ export const EQUIPES_DISPOSITIF = {
     resume: '2 secouristes + 1 AMU/ATNUP',
     alternatives: [[
       { role: 'secouriste', n: 2 },
-      { role: 'ambulancier', n: 1 },
+      { role: 'ambulancier_atnup', n: 1 },
+    ]],
+  },
+  echo: {
+    placesMin: 5,
+    resume: '4 secouristes + 1 AMU/ATNUP (5 personnes)',
+    alternatives: [[
+      { role: 'secouriste', n: 4 },
+      { role: 'ambulancier_atnup', n: 1 },
     ]],
   },
   pma_cat2: {
@@ -60,7 +84,7 @@ export const EQUIPES_DISPOSITIF = {
     resume: '2 secouristes + 1 AMU + 1 infirmier',
     alternatives: [[
       { role: 'secouriste', n: 2 },
-      { role: 'ambulancier', n: 1 },
+      { role: 'ambulancier_amu', n: 1 },
       { role: 'infirmier', n: 1 },
     ]],
   },
@@ -69,7 +93,7 @@ export const EQUIPES_DISPOSITIF = {
     resume: '2 secouristes + 1 AMU + 1 infirmier SIAMU',
     alternatives: [[
       { role: 'secouriste', n: 2 },
-      { role: 'ambulancier', n: 1 },
+      { role: 'ambulancier_amu', n: 1 },
       { role: 'infirmier_siamu', n: 1 },
     ]],
   },
@@ -78,7 +102,7 @@ export const EQUIPES_DISPOSITIF = {
     resume: '2 secouristes + 1 AMU + 1 infirmier SIAMU + 1 médecin',
     alternatives: [[
       { role: 'secouriste', n: 2 },
-      { role: 'ambulancier', n: 1 },
+      { role: 'ambulancier_amu', n: 1 },
       { role: 'infirmier_siamu', n: 1 },
       { role: 'medecin', n: 1 },
     ]],
@@ -87,9 +111,9 @@ export const EQUIPES_DISPOSITIF = {
     placesMin: 2,
     resume: '2 AMU, ou 1 AMU + 1 infirmier SIAMU',
     alternatives: [
-      [{ role: 'ambulancier', n: 2 }],
+      [{ role: 'ambulancier_amu', n: 2 }],
       [
-        { role: 'ambulancier', n: 1 },
+        { role: 'ambulancier_amu', n: 1 },
         { role: 'infirmier_siamu', n: 1 },
       ],
     ],
@@ -97,7 +121,7 @@ export const EQUIPES_DISPOSITIF = {
   ambu: {
     placesMin: 2,
     resume: '2 ATNUP (ambulanciers) minimum',
-    alternatives: [[{ role: 'ambulancier', n: 2 }]],
+    alternatives: [[{ role: 'ambulancier_atnup', n: 2 }]],
   },
 }
 
@@ -105,12 +129,15 @@ export const EQUIPES_DISPOSITIF = {
 export const CHECKLIST_ARMEMENT = {
   paps: ['Trousse premiers secours', 'Radio / téléphone', 'Gilet haute visibilité'],
   ps: ['Matériel poste de secours', 'O₂ / insufflateur', 'Radio / téléphone', 'Véhicule si prévu'],
+  echo: ['Matériel écho', 'Radio / téléphone', 'Véhicule si prévu'],
   pma_cat2: ['Lot PMA', 'O₂', 'Brancard / chaise', 'Radio', 'Véhicule'],
   pma_cat1: ['Lot PMA CAT 1', 'O₂ / monitorage', 'Brancard', 'Radio', 'Véhicule'],
   pma_cat0: ['Lot PMA CAT 0', 'O₂ / monitorage', 'Brancard', 'Radio', 'Véhicule médecin'],
   ambu_112: ['Ambulance équipée 112', 'O₂', 'Brancard', 'Radio 112'],
   ambu: ['Ambulance ATNUP', 'O₂', 'Brancard', 'Radio'],
 }
+
+export const DISPOSITIFS_CONNUS = new Set(DISPOSITIFS.map(d => d.v))
 
 export function libelleDispositif(v, court = false) {
   const d = DISPOSITIFS.find(x => x.v === v)
@@ -126,27 +153,67 @@ export function equipeDuDispositif(v) {
   return EQUIPES_DISPOSITIF[v] || null
 }
 
-/** Places + compétences suggérées quand on choisit un dispositif. */
-export function suggestionDepuisDispositif(v) {
-  const eq = equipeDuDispositif(v)
-  if (!eq) return null
+/** Normalise 1..n équipes depuis dispositif / dispositifs. */
+export function dispositifsDeActivite(activiteOuListe) {
+  if (Array.isArray(activiteOuListe)) {
+    return [...new Set(activiteOuListe.filter(v => DISPOSITIFS_CONNUS.has(v)))]
+  }
+  const a = activiteOuListe || {}
+  const fromArr = Array.isArray(a.dispositifs) ? a.dispositifs : []
+  const list = fromArr.length ? fromArr : (a.dispositif ? [a.dispositif] : [])
+  return [...new Set(list.filter(v => DISPOSITIFS_CONNUS.has(v)))]
+}
+
+/** Compétence affichée pour un rôle d’équipe (pastilles). */
+function competencePourRole(role) {
+  if (role === 'ambulancier_atnup' || role === 'ambulancier_amu') return role
+  return role
+}
+
+/** Places + compétences suggérées pour une ou plusieurs équipes. */
+export function suggestionDepuisDispositifs(liste) {
+  const ids = dispositifsDeActivite(liste)
+  if (!ids.length) return null
   const roles = new Set()
-  for (const alt of eq.alternatives) {
-    for (const b of alt) roles.add(b.role === 'infirmier_siamu' ? 'infirmier' : b.role)
+  let places = 0
+  const resumes = []
+  for (const id of ids) {
+    const eq = equipeDuDispositif(id)
+    if (!eq) continue
+    places += eq.placesMin
+    resumes.push(`${libelleDispositif(id, true)} : ${eq.resume}`)
+    for (const alt of eq.alternatives) {
+      for (const b of alt) roles.add(competencePourRole(b.role))
+    }
   }
   return {
-    places: String(eq.placesMin),
+    places: String(Math.max(places, 1)),
     competences: [...roles],
-    resume: eq.resume,
+    resume: resumes.join(' · '),
+    dispositifs: ids,
   }
 }
 
-export function checklistArmementDefaut(dispositif) {
-  const labels = CHECKLIST_ARMEMENT[dispositif] || ['Matériel de base', 'Radio / téléphone', 'Véhicule si prévu']
+/** @deprecated préfère suggestionDepuisDispositifs */
+export function suggestionDepuisDispositif(v) {
+  return suggestionDepuisDispositifs(v ? [v] : [])
+}
+
+export function checklistArmementDefaut(dispositifOuListe) {
+  const ids = dispositifsDeActivite(dispositifOuListe)
+  const labels = []
+  const vus = new Set()
+  for (const id of (ids.length ? ids : [null])) {
+    for (const label of (CHECKLIST_ARMEMENT[id] || ['Matériel de base', 'Radio / téléphone', 'Véhicule si prévu'])) {
+      if (vus.has(label)) continue
+      vus.add(label)
+      labels.push(label)
+    }
+  }
   return labels.map((label, i) => ({ id: `c${i + 1}`, label, ok: false }))
 }
 
-export function normaliserArmement(raw, dispositif) {
+export function normaliserArmement(raw, dispositifOuListe) {
   const a = raw && typeof raw === 'object' ? raw : {}
   const items = Array.isArray(a.items) && a.items.length
     ? a.items.map((it, i) => ({
@@ -154,7 +221,7 @@ export function normaliserArmement(raw, dispositif) {
       label: String(it?.label || `Point ${i + 1}`),
       ok: !!it?.ok,
     }))
-    : checklistArmementDefaut(dispositif)
+    : checklistArmementDefaut(dispositifOuListe)
   return {
     plaque: String(a.plaque || ''),
     note: String(a.note || ''),
@@ -187,10 +254,20 @@ export function selectionChauffeurEchue(profile, activite, maintenant = new Date
   return maintenant.getTime() > fin.getTime()
 }
 
-/** Qualifications de la fiche, plus type médical / non médical et SIAMU. */
+/** Qualifications / rangs affichés sur l’activité (+ types). */
 export const COMPETENCES_ACTIVITE = [
-  ...QUALIFS,
+  { v: 'secouriste', l: 'Secouriste' },
+  { v: 'ambulancier_atnup', l: 'Ambulancier ATNUP' },
+  { v: 'ambulancier_amu', l: 'Ambulancier AMU' },
+  { v: 'ambulancier', l: 'Ambulancier(ère)' },
+  { v: 'infirmier', l: 'Infirmier(ère)' },
   { v: 'infirmier_siamu', l: 'Infirmier(ère) SIAMU' },
+  { v: 'medecin', l: 'Médecin' },
+  { v: 'medecin_urgentiste', l: 'Médecin urgentiste' },
+  { v: 'kine', l: 'Kiné' },
+  { v: 'psychologue', l: 'Psychologue' },
+  { v: 'chauffeur', l: 'Chauffeur' },
+  { v: 'autre', l: 'Autre' },
   { v: 'medical', l: 'Type médical' },
   { v: 'non_medical', l: 'Type non médical' },
 ]
@@ -219,52 +296,79 @@ function aSpecialisationSiamu(fiche) {
   return Array.isArray(specs) && specs.includes('siamu')
 }
 
-/** Ce que la fiche couvre vraiment : qualifications (et celles que l’app en déduit) et le type. */
+function estMedecinUrgentiste(fiche) {
+  return !!(fiche?.medecin?.urgentiste || fiche?.medecin?.specialite === 'urgentiste')
+}
+
+function aBadge112(fiche) {
+  return !!(fiche?.ambulancier?.badge_112 && String(fiche.ambulancier.badge_112).trim())
+}
+
+/**
+ * Rang max 1–7 d’après la fiche.
+ * ATNUP = ambulancier sans badge 112 · AMU = ambulancier avec badge 112.
+ */
+export function rangQualifDuProfil(profile) {
+  const fiche = profile?.fiche || {}
+  const comps = new Set(qualsImplicites(profile?.role, fiche))
+  let rang = 0
+  if (comps.has('secouriste') || comps.has('volontaire_non_medical') || fiche.type_benevole === 'non_medical') {
+    rang = Math.max(rang, RANGS_QUALIF.secouriste)
+  }
+  if (comps.has('ambulancier')) {
+    rang = Math.max(rang, aBadge112(fiche) ? RANGS_QUALIF.ambulancier_amu : RANGS_QUALIF.ambulancier_atnup)
+  }
+  if (comps.has('infirmier')) {
+    rang = Math.max(rang, aSpecialisationSiamu(fiche) ? RANGS_QUALIF.infirmier_siamu : RANGS_QUALIF.infirmier)
+  }
+  if (comps.has('medecin')) {
+    rang = Math.max(rang, estMedecinUrgentiste(fiche) ? RANGS_QUALIF.medecin_urgentiste : RANGS_QUALIF.medecin)
+  }
+  return rang
+}
+
+/** Ce que la fiche couvre vraiment : qualifications dérivées + type. */
 export function competencesDuProfil(profile) {
   const fiche = profile?.fiche || {}
   const set = new Set(qualsImplicites(profile?.role, fiche))
   if (fiche.type_benevole === 'medical' || profile?.role === 'volontaire_medical') set.add('medical')
   if (fiche.type_benevole === 'non_medical' || profile?.role === 'volontaire_non_medical') set.add('non_medical')
+  if (set.has('ambulancier')) {
+    set.add(aBadge112(fiche) ? 'ambulancier_amu' : 'ambulancier_atnup')
+  }
   if (set.has('infirmier') && aSpecialisationSiamu(fiche)) set.add('infirmier_siamu')
+  if (set.has('medecin') && estMedecinUrgentiste(fiche)) set.add('medecin_urgentiste')
   return set
 }
 
-/**
- * Rôles d’équipe qu’une personne peut couvrir (un volontaire peut en couvrir plusieurs,
- * mais chaque inscription ne compte qu’une fois par rôle dans l’affectation greedy).
- */
 export function rolesEquipeDuProfil(profile) {
-  const comps = competencesDuProfil(profile)
-  const roles = []
-  if (comps.has('secouriste') || comps.has('volontaire_non_medical')) roles.push('secouriste')
-  if (comps.has('ambulancier')) roles.push('ambulancier')
-  if (comps.has('infirmier_siamu')) roles.push('infirmier_siamu')
-  if (comps.has('infirmier')) roles.push('infirmier')
-  if (comps.has('medecin')) roles.push('medecin')
-  return roles
+  const rang = rangQualifDuProfil(profile)
+  return ROLES_EQUIPE.filter(r => rang >= RANGS_QUALIF[r.v]).map(r => r.v)
 }
 
-const ORDRE_RARTE = ['medecin', 'infirmier_siamu', 'ambulancier', 'infirmier', 'secouriste']
-
-function peutCouvrirRole(roles, role) {
-  if (roles.has(role)) return true
-  if (role === 'infirmier' && roles.has('infirmier_siamu')) return true
-  return false
+function rangRequisPourRole(role) {
+  return RANGS_QUALIF[role] || 99
 }
 
-/** Une personne = un poste. On assigne d’abord les rôles les plus rares. */
+/** Une personne = un poste. Poste = rang minimum. On assigne d’abord les rangs les plus hauts. */
 function compositionSatisfaite(profils, besoins) {
   const slots = besoins
     .flatMap(b => Array.from({ length: b.n }, () => b.role))
-    .sort((a, b) => ORDRE_RARTE.indexOf(a) - ORDRE_RARTE.indexOf(b))
+    .sort((a, b) => rangRequisPourRole(b) - rangRequisPourRole(a))
   const pool = (profils || []).map(p => ({
-    roles: new Set(rolesEquipeDuProfil(p)),
+    rang: rangQualifDuProfil(p),
     used: false,
   }))
   const manqueParRole = {}
   for (const role of slots) {
-    const cand = pool.find(p => !p.used && peutCouvrirRole(p.roles, role))
-    if (cand) cand.used = true
+    const besoin = rangRequisPourRole(role)
+    // Préférer la personne « juste assez » (rang le plus bas qui convient) pour garder les plus forts.
+    const candidats = pool
+      .map((p, i) => ({ ...p, i }))
+      .filter(p => !p.used && p.rang >= besoin)
+      .sort((a, b) => a.rang - b.rang)
+    const cand = candidats[0]
+    if (cand) pool[cand.i].used = true
     else manqueParRole[role] = (manqueParRole[role] || 0) + 1
   }
   const manques = Object.entries(manqueParRole).map(([role, manque]) => {
@@ -274,21 +378,20 @@ function compositionSatisfaite(profils, besoins) {
   return { ok: manques.length === 0, manques }
 }
 
-/** Évalue l’équipe inscrite face à la matrice du dispositif. */
-export function evaluerEquipeDispositif(dispositif, profilsInscrits) {
+function evaluerUneEquipe(dispositif, profilsInscrits) {
   const eq = equipeDuDispositif(dispositif)
   if (!eq) {
-    return { ok: true, resume: '', manques: [], alternativeOk: null, placesMin: 0 }
+    return { ok: true, resume: '', manques: [], alternativeOk: null, placesMin: 0, dispositif }
   }
   let meilleure = null
   for (let i = 0; i < eq.alternatives.length; i++) {
     const r = compositionSatisfaite(profilsInscrits, eq.alternatives[i])
     if (r.ok) {
-      return { ok: true, resume: eq.resume, manques: [], alternativeOk: i, placesMin: eq.placesMin }
+      return { ok: true, resume: eq.resume, manques: [], alternativeOk: i, placesMin: eq.placesMin, dispositif }
     }
     const score = r.manques.reduce((s, m) => s + m.manque, 0)
     if (!meilleure || score < meilleure.score) {
-      meilleure = { ...r, score }
+      meilleure = { ...r, score, alternativeOk: null }
     }
   }
   return {
@@ -297,6 +400,67 @@ export function evaluerEquipeDispositif(dispositif, profilsInscrits) {
     manques: meilleure?.manques || [],
     alternativeOk: null,
     placesMin: eq.placesMin,
+    dispositif,
+  }
+}
+
+/** Évalue une ou plusieurs équipes (préventif multi-équipes) contre les inscrits. */
+export function evaluerEquipeDispositif(dispositifOuActivite, profilsInscrits) {
+  const ids = typeof dispositifOuActivite === 'string' || Array.isArray(dispositifOuActivite)
+    ? dispositifsDeActivite(dispositifOuActivite)
+    : dispositifsDeActivite(dispositifOuActivite)
+  if (!ids.length) {
+    return { ok: true, resume: '', manques: [], alternativeOk: null, placesMin: 0, parEquipe: [] }
+  }
+  // Pool partagé : on consomme les personnes équipe par équipe (rangs les plus exigeants d’abord).
+  const ordre = [...ids].sort((a, b) => {
+    const ra = Math.max(...(equipeDuDispositif(a)?.alternatives?.[0] || []).map(x => rangRequisPourRole(x.role)), 0)
+    const rb = Math.max(...(equipeDuDispositif(b)?.alternatives?.[0] || []).map(x => rangRequisPourRole(x.role)), 0)
+    return rb - ra
+  })
+  let restants = [...(profilsInscrits || [])]
+  const parEquipe = []
+  const manques = []
+  let placesMin = 0
+  const resumes = []
+  for (const id of ordre) {
+    const ev = evaluerUneEquipe(id, restants)
+    parEquipe.push(ev)
+    placesMin += ev.placesMin || 0
+    if (ev.resume) resumes.push(`${libelleDispositif(id, true)} : ${ev.resume}`)
+    if (!ev.ok) {
+      for (const m of ev.manques) {
+        manques.push({ ...m, dispositif: id })
+      }
+      continue
+    }
+    // Retirer du pool les personnes assignées à cette équipe (approximation : consommer n placesMin meilleurs rangs requis).
+    const eq = equipeDuDispositif(id)
+    const alt = eq?.alternatives?.[ev.alternativeOk ?? 0] || []
+    const slots = alt
+      .flatMap(b => Array.from({ length: b.n }, () => b.role))
+      .sort((a, b) => rangRequisPourRole(b) - rangRequisPourRole(a))
+    const usedIdx = new Set()
+    for (const role of slots) {
+      const besoin = rangRequisPourRole(role)
+      let best = -1
+      let bestRang = Infinity
+      restants.forEach((p, i) => {
+        if (usedIdx.has(i)) return
+        const r = rangQualifDuProfil(p)
+        if (r >= besoin && r < bestRang) { best = i; bestRang = r }
+      })
+      if (best >= 0) usedIdx.add(best)
+    }
+    restants = restants.filter((_, i) => !usedIdx.has(i))
+  }
+  return {
+    ok: manques.length === 0,
+    resume: resumes.join(' · '),
+    manques,
+    alternativeOk: null,
+    placesMin,
+    parEquipe,
   }
 }
 
@@ -304,7 +468,10 @@ export function texteManquesEquipe(evalEq) {
   if (!evalEq || evalEq.ok) return ''
   if (!evalEq.manques?.length) return `Équipe incomplète (min. ${evalEq.placesMin}).`
   return evalEq.manques
-    .map(m => `${m.manque}× ${libelleRoleEquipe(m.role)}`)
+    .map(m => {
+      const prefix = m.dispositif ? `${libelleDispositif(m.dispositif, true)} · ` : ''
+      return `${prefix}${m.manque}× ${libelleRoleEquipe(m.role)}`
+    })
     .join(', ')
 }
 

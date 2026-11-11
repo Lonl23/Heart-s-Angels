@@ -21,6 +21,7 @@ const vide = {
   permis:{ B:false, C:false, E:false, selection_medicale:false, selection_validite:'' },
   ambulancier:{ visa_atnup:'', badge_112:'', atnup_validite:'', badge_112_validite:'' },
   infirmier:{ visa:'', visa_validite:'', specialisations:[] },
+  medecin:{ urgentiste:false },
   contacts_urgence:[],
   notif_prefs: prefsDepuisFiche(null),
 }
@@ -78,6 +79,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       permis: permisCharge,
       ambulancier:{ ...vide.ambulancier, ...((data?.fiche||{}).ambulancier||{}) },
       infirmier:{ ...vide.infirmier, ...((data?.fiche||{}).infirmier||{}) },
+      medecin:{ ...vide.medecin, ...((data?.fiche||{}).medecin||{}) },
       documents: Array.isArray(data?.fiche?.documents) ? data.fiche.documents : [],
       qualifications: qualificationsAvecSelection((data?.fiche||{}).qualifications||[], permisCharge),
       roles_asbl:(data?.fiche||{}).roles_asbl||[],
@@ -163,6 +165,7 @@ export default function FicheVolontaire({ userId, onBack }) {
 
   const estAmbu = f.qualifications.includes('ambulancier')
   const estInfi = f.qualifications.includes('infirmier')
+  const estMed = f.qualifications.includes('medecin')
   const competences = useMemo(() => lignesCompetence(f), [f])
   const comptesComp = compterCompetences(competences)
   const manques = prof ? manquesProfil(prof, f) : []
@@ -212,6 +215,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       permis:{ ...vide.permis, ...((data[0].fiche||{}).permis||{}) },
       ambulancier:{ ...vide.ambulancier, ...((data[0].fiche||{}).ambulancier||{}) },
       infirmier:{ ...vide.infirmier, ...((data[0].fiche||{}).infirmier||{}) },
+      medecin:{ ...vide.medecin, ...((data[0].fiche||{}).medecin||{}) },
       documents: Array.isArray(data[0].fiche?.documents) ? data[0].fiche.documents : [],
       qualifications: qualificationsAvecSelection((data[0].fiche||{}).qualifications||[], (data[0].fiche||{}).permis || {}),
       roles_asbl:(data[0].fiche||{}).roles_asbl||[],
@@ -516,6 +520,9 @@ export default function FicheVolontaire({ userId, onBack }) {
             <F label="N° badge 112 (optionnel)" value={f.ambulancier.badge_112} set={v=>setIn('ambulancier','badge_112',v)} />
             <F label="Badge 112 — valide jusqu’au" type="date" value={f.ambulancier.badge_112_validite || ''} set={v=>setIn('ambulancier','badge_112_validite',v)} />
           </div>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:8 }}>
+            Secours : sans badge 112 = rang ATNUP (2) ; avec badge 112 = rang AMU (3).
+          </div>
         </Card>
       )}
 
@@ -529,6 +536,23 @@ export default function FicheVolontaire({ userId, onBack }) {
           </div>
           <label style={lbl}>Spécialisation(s)</label>
           <Chips options={SPECIALISATIONS_INF} selected={f.infirmier.specialisations} onToggle={toggleSpec} />
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:8 }}>
+            Spécialisation SIAMU = rang 5 (requis pour PMA CAT 1 et CAT 0).
+          </div>
+        </Card>
+      )}
+
+      {onglet === 'competence' && gestionQualif && estMed && (
+        <Card style={{ marginBottom:14 }}>
+          <Sec>Médecin</Sec>
+          <Toggle
+            label="Médecin urgentiste (rang 7 secours)"
+            on={!!f.medecin?.urgentiste}
+            onClick={() => setIn('medecin', 'urgentiste', !f.medecin?.urgentiste)}
+          />
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:8 }}>
+            Sans cette case : rang médecin (6).
+          </div>
         </Card>
       )}
 

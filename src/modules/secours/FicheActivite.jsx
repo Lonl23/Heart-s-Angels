@@ -24,6 +24,8 @@ import {
   libelleRoleEquipe,
   normaliserArmement,
   armementComplet,
+  dispositifsDeActivite,
+  suggestionDepuisDispositifs,
 } from './activitesSecours'
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -79,7 +81,7 @@ export default function FicheActivite() {
     setAbsent(false)
     const a = await supabase
       .from('activites_secours')
-      .select('id,numero,titre,type,dispositif,public_attendu,lieu,debut,fin,places,competences,armement,created_by,created_at')
+      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,debut,fin,places,competences,armement,created_by,created_at')
       .eq('id', id)
       .maybeSingle()
     if (a.error) {
@@ -120,7 +122,7 @@ export default function FicheActivite() {
       if (!c.error) qui = c.data
     }
     setActivite(a.data)
-    setArmement(normaliserArmement(a.data.armement, a.data.dispositif))
+    setArmement(normaliserArmement(a.data.armement, a.data))
     setInscriptions(lignes)
     setGens(profils)
     setAuteur(qui)
@@ -139,11 +141,12 @@ export default function FicheActivite() {
   const requises = Array.isArray(activite?.competences) ? activite.competences : []
   const duree = activite ? dureeActivite(activite) : null
   const memeJour = activite && jourLocal(activite.debut) === jourLocal(activite.fin || activite.debut)
+  const equipesIds = useMemo(() => dispositifsDeActivite(activite), [activite])
   const evalEquipe = useMemo(
-    () => evaluerEquipeDispositif(activite?.dispositif, gens),
-    [activite?.dispositif, gens],
+    () => evaluerEquipeDispositif(activite, gens),
+    [activite, gens],
   )
-  const equipeDef = activite?.dispositif ? equipeDuDispositif(activite.dispositif) : null
+  const sugEquipes = useMemo(() => suggestionDepuisDispositifs(equipesIds), [equipesIds])
 
   const personnel = useMemo(() => {
     const parId = new Map(gens.map(g => [g.id, g]))
@@ -181,12 +184,12 @@ export default function FicheActivite() {
   }
 
   function majArmement(patch) {
-    setArmement(a => ({ ...(a || normaliserArmement(null, activite?.dispositif)), ...patch }))
+    setArmement(a => ({ ...(a || normaliserArmement(null, activite)), ...patch }))
   }
 
   function toggleItemArme(idItem) {
     setArmement(a => {
-      const base = a || normaliserArmement(null, activite?.dispositif)
+      const base = a || normaliserArmement(null, activite)
       return {
         ...base,
         items: base.items.map(it => it.id === idItem ? { ...it, ok: !it.ok } : it),
@@ -368,9 +371,9 @@ export default function FicheActivite() {
                 : 'Le dispositif n’est pas encore terminé. Le bilan reprend déjà ce qui est enregistré.'}
             </p>
             <div className="ha-afiche-kv" style={{ marginTop: 14 }}>
-              <Champ k="Dispositif" v={libelleDispositif(activite.dispositif) || '—'} />
+              <Champ k="Équipes" v={equipesIds.length ? equipesIds.map(v => libelleDispositif(v, true)).join(' + ') : '—'} />
               <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
-              <Champ k="Équipe" v={`${n} / ${places}`} />
+              <Champ k="Personnel" v={`${n} / ${places}`} />
               <Champ k="Durée" v={duree || '—'} />
             </div>
             <div className="ha-dps-actions">
@@ -390,15 +393,15 @@ export default function FicheActivite() {
                 <Champ k="Statut" v={libelleStatutActivite(statut)} />
                 <Champ k="Type" v={libelleTypeActivite(activite.type)} />
                 <Champ k="Nom" v={activite.titre} />
-                <Champ k="Dispositif" v={libelleDispositif(activite.dispositif) || '—'} />
-                <Champ k="Effectif min." v={equipeDef?.resume || '—'} />
+                <Champ k="Équipes" v={equipesIds.length ? equipesIds.map(v => libelleDispositif(v, true)).join(' + ') : '—'} />
+                <Champ k="Effectif min." v={sugEquipes?.resume || '—'} />
                 <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
               </div>
-              <p className="ha-afiche-vide">Le type d’équipe se choisit à la création. Il n’est pas déduit du public (département secours uniquement).</p>
-              {equipeDef && (
+              <p className="ha-afiche-vide">Les équipes se choisissent à la création (plusieurs possibles). Pas de calcul depuis le public. « Minimum » = ordre des qualifications 1→7.</p>
+              {sugEquipes && (
                 <p className={'ha-afiche-vide'} style={{ color: evalEquipe.ok ? 'var(--heading)' : '#A32D2D', marginTop: 8 }}>
                   {evalEquipe.ok
-                    ? 'Équipe inscrite : effectif minimum atteint.'
+                    ? 'Équipes inscrites : effectifs minimum atteints.'
                     : `Équipe incomplète — manque : ${texteManquesEquipe(evalEquipe)}.`}
                 </p>
               )}
@@ -462,22 +465,28 @@ export default function FicheActivite() {
           <>
           <section className="ha-afiche-carte">
             <h2>Effectif requis</h2>
-            {equipeDef ? (
+            {equipesIds.length ? (
               <>
-                <p className="ha-afiche-vide" style={{ marginTop: 6 }}>{equipeDef.resume}</p>
+                <p className="ha-afiche-vide" style={{ marginTop: 6 }}>{sugEquipes?.resume}</p>
                 <p style={{ marginTop: 10, fontWeight: 650, color: evalEquipe.ok ? 'var(--heading)' : '#A32D2D' }}>
                   {evalEquipe.ok ? 'Minimum atteint avec les inscrits.' : `Manque : ${texteManquesEquipe(evalEquipe)}`}
                 </p>
-                {equipeDef.alternatives?.length > 1 && (
-                  <p className="ha-afiche-vide" style={{ marginTop: 8 }}>
-                    Compositions acceptées : {equipeDef.alternatives.map((alt, i) => (
-                      <span key={i}>{i ? ' · ou · ' : ''}{alt.map(b => `${b.n} ${libelleRoleEquipe(b.role)}`).join(' + ')}</span>
-                    ))}
-                  </p>
-                )}
+                {equipesIds.map(id => {
+                  const eq = equipeDuDispositif(id)
+                  if (!eq?.alternatives?.length) return null
+                  return (
+                    <p key={id} className="ha-afiche-vide" style={{ marginTop: 8 }}>
+                      <strong>{libelleDispositif(id, true)}</strong>
+                      {eq.alternatives.length > 1 ? ' — compositions : ' : ' — '}
+                      {eq.alternatives.map((alt, i) => (
+                        <span key={i}>{i ? ' · ou · ' : ''}{alt.map(b => `${b.n} ${libelleRoleEquipe(b.role)}`).join(' + ')}</span>
+                      ))}
+                    </p>
+                  )
+                })}
               </>
             ) : (
-              <p className="ha-afiche-vide" style={{ marginTop: 6 }}>Aucun type d’équipe choisi à la création.</p>
+              <p className="ha-afiche-vide" style={{ marginTop: 6 }}>Aucune équipe choisie à la création.</p>
             )}
           </section>
 
