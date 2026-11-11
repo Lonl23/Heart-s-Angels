@@ -13,7 +13,7 @@
 
 1. Publier le contenu de `dist/` sur **https://appbetaapp.heartsangels.be** (remplacer l’ancien site).
 2. Garder / éditer `config.js` sur le serveur si besoin (Supabase URL / anon key). Le build embarque déjà `domaine: https://appbetaapp.heartsangels.be`.
-3. Appliquer en SQL Supabase (SQL Editor) : `installeur/22_erp_rh_logistique.sql`  
-   → active la colonne `stock_lieux.plaque` et les policies RLS `defraiements`.
-
-Sans le SQL 22 : l’app marche, mais plaques flotte non persistées et défraiements peuvent être bloqués par RLS.
+3. ~~Appliquer SQL 22~~ **Déjà appliqué** sur le projet Supabase `Heart's Angels` (`vppmvjqbzdeftrhdoert`) :
+   - colonne `stock_lieux.plaque`
+   - RLS + policies `defraiements`
+   - fonctions `peut_valider_defraiement_n1/n2`
