@@ -19,9 +19,15 @@ import {
   dansLes30Jours,
   peutCreerActiviteSecours,
   suggestionDepuisDispositifs,
-  dispositifsDeActivite,
+  comptesEquipesDe,
+  dispositifsDepuisComptes,
+  libelleComptesEquipes,
   DISPOSITIFS_CONNUS,
 } from './activitesSecours'
+
+function equipesVides() {
+  return Object.fromEntries(DISPOSITIFS.map(d => [d.v, 0]))
+}
 
 const VIDE = {
   id: null,
@@ -32,7 +38,7 @@ const VIDE = {
   fin: '',
   places: '1',
   publicAttendu: '',
-  dispositifs: [],
+  equipes: equipesVides(),
   competences: [],
 }
 
@@ -195,11 +201,10 @@ export default function ActivitesSecours() {
 
   function ouvrirCreation() {
     setErr(null)
-    setForm({ ...VIDE, competences: [] })
+    setForm({ ...VIDE, equipes: equipesVides(), competences: [] })
   }
 
   function ouvrirEdition(a) {
-    const equipes = dispositifsDeActivite(a)
     setForm({
       id: a.id,
       titre: a.titre || '',
@@ -209,7 +214,7 @@ export default function ActivitesSecours() {
       fin: versChamp(a.fin),
       places: String(a.places ?? 1),
       publicAttendu: a.public_attendu == null ? '' : String(a.public_attendu),
-      dispositifs: equipes,
+      equipes: { ...equipesVides(), ...comptesEquipesDe(a) },
       competences: competencesConnues(a.competences),
     })
   }
@@ -218,17 +223,20 @@ export default function ActivitesSecours() {
     setForm(f => ({ ...f, ...patch }))
   }
 
-  function basculerEquipe(v) {
+  function fixerQuantiteEquipe(v, deltaOuValeur, absolu = false) {
     if (!DISPOSITIFS_CONNUS.has(v)) return
     setForm(f => {
-      const has = f.dispositifs.includes(v)
-      const dispositifs = has ? f.dispositifs.filter(x => x !== v) : [...f.dispositifs, v]
-      const sug = suggestionDepuisDispositifs(dispositifs)
+      const actuel = Number(f.equipes?.[v] || 0)
+      let n = absolu ? Number(deltaOuValeur) : actuel + Number(deltaOuValeur)
+      if (!Number.isFinite(n) || n < 0) n = 0
+      n = Math.min(20, Math.floor(n))
+      const equipes = { ...f.equipes, [v]: n }
+      const sug = suggestionDepuisDispositifs(equipes)
       return {
         ...f,
-        dispositifs,
+        equipes,
         places: sug ? sug.places : f.places,
-        competences: sug ? competencesConnues(sug.competences) : f.competences,
+        competences: sug ? competencesConnues(sug.competences) : [],
       }
     })
   }
@@ -254,8 +262,8 @@ export default function ActivitesSecours() {
     if (!Number.isInteger(places) || places < 1 || places > 500) { setFlash('Le nombre de places doit être entre 1 et 500.'); return }
     const publicAttendu = publicAttenduOuNull(form.publicAttendu)
     if (publicAttendu === undefined) { setFlash('Le public attendu doit être un nombre entre 0 et 500 000, ou rester vide.'); return }
-    const equipes = dispositifsDeActivite(form.dispositifs)
-    if ((form.dispositifs || []).some(d => !DISPOSITIFS_CONNUS.has(d))) {
+    const equipesListe = dispositifsDepuisComptes(form.equipes)
+    if (Object.keys(form.equipes || {}).some(d => !DISPOSITIFS_CONNUS.has(d))) {
       setFlash('Une des équipes est inconnue.'); return
     }
     setSauve(true)
@@ -263,8 +271,8 @@ export default function ActivitesSecours() {
     const payload = {
       titre,
       type: TYPES_ACTIVITE.some(t => t.v === form.type) ? form.type : 'activite',
-      dispositifs: equipes,
-      dispositif: equipes[0] || null,
+      dispositifs: equipesListe,
+      dispositif: equipesListe[0] || null,
       public_attendu: publicAttendu,
       lieu: form.lieu.trim() || null,
       debut,
@@ -371,29 +379,41 @@ export default function ActivitesSecours() {
               <F label="Fin" type="datetime-local" value={form.fin} set={v => majForm({ fin: v })} />
               <F label="Places" type="number" value={form.places} set={v => majForm({ places: v })} required />
               <F label="Public attendu" type="number" value={form.publicAttendu} set={v => majForm({ publicAttendu: v })} />
-              <div style={{ marginBottom: 10 }}>
-                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Équipes / dispositifs</span>
-                <div className="ha-act-choix" role="group" aria-label="Équipes du préventif">
-                  {DISPOSITIFS.map(d => (
-                    <button
-                      key={d.v}
-                      type="button"
-                      className={'ha-act-choix-btn' + (form.dispositifs.includes(d.v) ? ' is-on' : '')}
-                      aria-pressed={form.dispositifs.includes(d.v)}
-                      onClick={() => basculerEquipe(d.v)}
-                    >
-                      {d.court}
-                    </button>
-                  ))}
-                </div>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Équipes / dispositifs</span>
+              <div className="ha-act-equipes-qte" role="group" aria-label="Quantité par équipe">
+                {DISPOSITIFS.map(d => {
+                  const n = Number(form.equipes?.[d.v] || 0)
+                  return (
+                    <div key={d.v} className={'ha-act-equipe-ligne' + (n > 0 ? ' is-on' : '')}>
+                      <div className="ha-act-equipe-nom">
+                        <strong>{d.court}</strong>
+                        <span>{d.l.replace(/^[^—]+—\s*/, '')}</span>
+                      </div>
+                      <div className="ha-act-equipe-stepper">
+                        <button type="button" aria-label={`Retirer un ${d.court}`} disabled={n <= 0} onClick={() => fixerQuantiteEquipe(d.v, -1)}>−</button>
+                        <input
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={n}
+                          aria-label={`Nombre de ${d.court}`}
+                          onChange={e => fixerQuantiteEquipe(d.v, e.target.value, true)}
+                        />
+                        <button type="button" aria-label={`Ajouter un ${d.court}`} disabled={n >= 20} onClick={() => fixerQuantiteEquipe(d.v, 1)}>+</button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
-            {form.dispositifs.length > 0 && suggestionDepuisDispositifs(form.dispositifs) && (
+            {Object.values(form.equipes || {}).some(n => n > 0) && suggestionDepuisDispositifs(form.equipes) && (
               <p className="ha-act-note" style={{ color: 'var(--heading)' }}>
-                Effectif minimum : {suggestionDepuisDispositifs(form.dispositifs).resume}. Places et compétences sont préremplies — vous pouvez encore les ajuster.
+                Effectif minimum : {suggestionDepuisDispositifs(form.equipes).resume}. Places et compétences sont préremplies — vous pouvez encore les ajuster.
               </p>
             )}
-            <p className="ha-act-note">Un préventif peut combiner plusieurs équipes (AMBU, PMA, PAPS, Écho…). Le type n’est pas calculé à partir du public. Matrices = département secours uniquement (pas les souhaits). « Secouriste minimum » suit l’ordre des qualifications (1→7).</p>
+            <p className="ha-act-note">Indiquez combien de chaque équipe (ex. 2 AMBU + 1 PMA). Un préventif peut en combiner plusieurs. Matrices = département secours uniquement. « Secouriste minimum » = ordre des qualifications 1→7.</p>
             <div style={{ marginBottom: 8 }}>
               <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Compétences requises</span>
               <div className="ha-act-choix" role="group" aria-label="Compétences requises">
@@ -462,9 +482,7 @@ export default function ActivitesSecours() {
                       <Link to={`/app/secours/activites/${a.id}`} className="ha-act-titre">{a.titre}</Link>
                       <div className="ha-act-type">
                         {libelleTypeActivite(a.type)}
-                        {dispositifsDeActivite(a).length
-                          ? ` · ${dispositifsDeActivite(a).map(v => libelleDispositif(v, true)).join(' + ')}`
-                          : ''}
+                        {libelleComptesEquipes(a) ? ` · ${libelleComptesEquipes(a)}` : ''}
                       </div>
                     </td>
                     <td className="ha-act-lieu">{a.lieu || '—'}</td>
@@ -739,6 +757,30 @@ const CSS = `
   font-weight: 600;
 }
 .ha-act-choix-btn.is-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ha-act-equipes-qte { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.ha-act-equipe-ligne {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+  grid-column: 1 / -1;
+}
+.ha-act-equipe-ligne.is-on { border-color: var(--accent); }
+.ha-act-equipe-nom { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ha-act-equipe-nom strong { font-size: 13.5px; color: var(--heading); }
+.ha-act-equipe-nom span { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52vw; }
+.ha-act-equipe-stepper { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.ha-act-equipe-stepper button {
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-alt); color: var(--heading); font-size: 18px; line-height: 1;
+  font-family: inherit; cursor: pointer;
+}
+.ha-act-equipe-stepper button:disabled { opacity: .35; cursor: default; }
+.ha-act-equipe-stepper input {
+  width: 44px; text-align: center; padding: 6px 4px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface); color: var(--text); font-family: inherit; font-size: 14px;
+}
+.ha-act-equipe-stepper input::-webkit-outer-spin-button,
+.ha-act-equipe-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ha-act-equipe-stepper input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .ha-act-note { margin: 8px 0 12px; font-size: 12px; color: var(--text-muted); }
 .ha-sr {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;

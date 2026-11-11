@@ -26,6 +26,8 @@ import {
   armementComplet,
   dispositifsDeActivite,
   suggestionDepuisDispositifs,
+  libelleComptesEquipes,
+  comptesEquipesDe,
 } from './activitesSecours'
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -142,11 +144,13 @@ export default function FicheActivite() {
   const duree = activite ? dureeActivite(activite) : null
   const memeJour = activite && jourLocal(activite.debut) === jourLocal(activite.fin || activite.debut)
   const equipesIds = useMemo(() => dispositifsDeActivite(activite), [activite])
+  const comptesEquipes = useMemo(() => comptesEquipesDe(activite), [activite])
   const evalEquipe = useMemo(
     () => evaluerEquipeDispositif(activite, gens),
     [activite, gens],
   )
-  const sugEquipes = useMemo(() => suggestionDepuisDispositifs(equipesIds), [equipesIds])
+  const sugEquipes = useMemo(() => suggestionDepuisDispositifs(activite), [activite])
+  const libelleEquipes = useMemo(() => libelleComptesEquipes(activite), [activite])
 
   const personnel = useMemo(() => {
     const parId = new Map(gens.map(g => [g.id, g]))
@@ -371,7 +375,7 @@ export default function FicheActivite() {
                 : 'Le dispositif n’est pas encore terminé. Le bilan reprend déjà ce qui est enregistré.'}
             </p>
             <div className="ha-afiche-kv" style={{ marginTop: 14 }}>
-              <Champ k="Équipes" v={equipesIds.length ? equipesIds.map(v => libelleDispositif(v, true)).join(' + ') : '—'} />
+              <Champ k="Équipes" v={libelleEquipes || '—'} />
               <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
               <Champ k="Personnel" v={`${n} / ${places}`} />
               <Champ k="Durée" v={duree || '—'} />
@@ -393,7 +397,7 @@ export default function FicheActivite() {
                 <Champ k="Statut" v={libelleStatutActivite(statut)} />
                 <Champ k="Type" v={libelleTypeActivite(activite.type)} />
                 <Champ k="Nom" v={activite.titre} />
-                <Champ k="Équipes" v={equipesIds.length ? equipesIds.map(v => libelleDispositif(v, true)).join(' + ') : '—'} />
+                <Champ k="Équipes" v={libelleEquipes || '—'} />
                 <Champ k="Effectif min." v={sugEquipes?.resume || '—'} />
                 <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
               </div>
@@ -473,14 +477,16 @@ export default function FicheActivite() {
                 </p>
                 {equipesIds.map(id => {
                   const eq = equipeDuDispositif(id)
-                  if (!eq?.alternatives?.length) return null
+                  const qte = comptesEquipes[id] || 0
+                  if (!eq?.alternatives?.length || !qte) return null
                   return (
                     <p key={id} className="ha-afiche-vide" style={{ marginTop: 8 }}>
-                      <strong>{libelleDispositif(id, true)}</strong>
+                      <strong>{qte > 1 ? `${qte}× ` : ''}{libelleDispositif(id, true)}</strong>
                       {eq.alternatives.length > 1 ? ' — compositions : ' : ' — '}
                       {eq.alternatives.map((alt, i) => (
                         <span key={i}>{i ? ' · ou · ' : ''}{alt.map(b => `${b.n} ${libelleRoleEquipe(b.role)}`).join(' + ')}</span>
                       ))}
+                      {qte > 1 ? ' (chacun)' : ''}
                     </p>
                   )
                 })}

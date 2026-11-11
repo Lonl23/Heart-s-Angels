@@ -153,15 +153,57 @@ export function equipeDuDispositif(v) {
   return EQUIPES_DISPOSITIF[v] || null
 }
 
-/** Normalise 1..n équipes depuis dispositif / dispositifs. */
-export function dispositifsDeActivite(activiteOuListe) {
-  if (Array.isArray(activiteOuListe)) {
-    return [...new Set(activiteOuListe.filter(v => DISPOSITIFS_CONNUS.has(v)))]
+const MAX_EQUIPES_PAR_TYPE = 20
+
+/** Liste brute avec quantités (doublons possibles) depuis dispositif / dispositifs / comptes. */
+export function dispositifsListeAvecQuantite(activiteOuListeOuComptes) {
+  if (Array.isArray(activiteOuListeOuComptes)) {
+    return activiteOuListeOuComptes.filter(v => DISPOSITIFS_CONNUS.has(v))
   }
-  const a = activiteOuListe || {}
+  const a = activiteOuListeOuComptes || {}
+  // Formulaire : { paps: 2, ambu: 1 }
+  if (a && typeof a === 'object' && !Array.isArray(a) && !('dispositifs' in a) && !('dispositif' in a)
+    && Object.keys(a).some(k => DISPOSITIFS_CONNUS.has(k))) {
+    return dispositifsDepuisComptes(a)
+  }
+  if (a.equipes && typeof a.equipes === 'object' && !Array.isArray(a.equipes)) {
+    return dispositifsDepuisComptes(a.equipes)
+  }
   const fromArr = Array.isArray(a.dispositifs) ? a.dispositifs : []
-  const list = fromArr.length ? fromArr : (a.dispositif ? [a.dispositif] : [])
-  return [...new Set(list.filter(v => DISPOSITIFS_CONNUS.has(v)))]
+  if (fromArr.length) return fromArr.filter(v => DISPOSITIFS_CONNUS.has(v))
+  if (a.dispositif && DISPOSITIFS_CONNUS.has(a.dispositif)) return [a.dispositif]
+  return []
+}
+
+/** Types uniques présents (sans quantité). */
+export function dispositifsDeActivite(activiteOuListe) {
+  return [...new Set(dispositifsListeAvecQuantite(activiteOuListe))]
+}
+
+/** Compteurs par type d’équipe. */
+export function comptesEquipesDe(source) {
+  const comptes = Object.fromEntries(DISPOSITIFS.map(d => [d.v, 0]))
+  for (const v of dispositifsListeAvecQuantite(source)) comptes[v] += 1
+  return comptes
+}
+
+export function dispositifsDepuisComptes(comptes, maxParType = MAX_EQUIPES_PAR_TYPE) {
+  const out = []
+  for (const d of DISPOSITIFS) {
+    let n = Number(comptes?.[d.v] || 0)
+    if (!Number.isFinite(n) || n < 0) n = 0
+    n = Math.min(maxParType, Math.floor(n))
+    for (let i = 0; i < n; i++) out.push(d.v)
+  }
+  return out
+}
+
+export function libelleComptesEquipes(source) {
+  const c = comptesEquipesDe(source)
+  const parts = DISPOSITIFS
+    .filter(d => c[d.v] > 0)
+    .map(d => (c[d.v] > 1 ? `${c[d.v]}× ${d.court}` : d.court))
+  return parts.join(' + ')
 }
 
 /** Compétence affichée pour un rôle d’équipe (pastilles). */
@@ -170,9 +212,10 @@ function competencePourRole(role) {
   return role
 }
 
-/** Places + compétences suggérées pour une ou plusieurs équipes. */
-export function suggestionDepuisDispositifs(liste) {
-  const ids = dispositifsDeActivite(liste)
+/** Places + compétences suggérées (quantités prises en compte). */
+export function suggestionDepuisDispositifs(listeOuComptes) {
+  const comptes = comptesEquipesDe(listeOuComptes)
+  const ids = DISPOSITIFS.map(d => d.v).filter(v => comptes[v] > 0)
   if (!ids.length) return null
   const roles = new Set()
   let places = 0
@@ -180,8 +223,11 @@ export function suggestionDepuisDispositifs(liste) {
   for (const id of ids) {
     const eq = equipeDuDispositif(id)
     if (!eq) continue
-    places += eq.placesMin
-    resumes.push(`${libelleDispositif(id, true)} : ${eq.resume}`)
+    const n = comptes[id]
+    places += eq.placesMin * n
+    resumes.push(n > 1
+      ? `${n}× ${libelleDispositif(id, true)} : ${eq.resume} chacun`
+      : `${libelleDispositif(id, true)} : ${eq.resume}`)
     for (const alt of eq.alternatives) {
       for (const b of alt) roles.add(competencePourRole(b.role))
     }
@@ -190,7 +236,8 @@ export function suggestionDepuisDispositifs(liste) {
     places: String(Math.max(places, 1)),
     competences: [...roles],
     resume: resumes.join(' · '),
-    dispositifs: ids,
+    dispositifs: dispositifsDepuisComptes(comptes),
+    comptes,
   }
 }
 
@@ -404,37 +451,37 @@ function evaluerUneEquipe(dispositif, profilsInscrits) {
   }
 }
 
-/** Évalue une ou plusieurs équipes (préventif multi-équipes) contre les inscrits. */
+/** Évalue une ou plusieurs équipes (avec quantités) contre les inscrits. */
 export function evaluerEquipeDispositif(dispositifOuActivite, profilsInscrits) {
-  const ids = typeof dispositifOuActivite === 'string' || Array.isArray(dispositifOuActivite)
-    ? dispositifsDeActivite(dispositifOuActivite)
-    : dispositifsDeActivite(dispositifOuActivite)
-  if (!ids.length) {
+  const instances = typeof dispositifOuActivite === 'string'
+    ? (DISPOSITIFS_CONNUS.has(dispositifOuActivite) ? [dispositifOuActivite] : [])
+    : dispositifsListeAvecQuantite(dispositifOuActivite)
+  if (!instances.length) {
     return { ok: true, resume: '', manques: [], alternativeOk: null, placesMin: 0, parEquipe: [] }
   }
-  // Pool partagé : on consomme les personnes équipe par équipe (rangs les plus exigeants d’abord).
-  const ordre = [...ids].sort((a, b) => {
-    const ra = Math.max(...(equipeDuDispositif(a)?.alternatives?.[0] || []).map(x => rangRequisPourRole(x.role)), 0)
-    const rb = Math.max(...(equipeDuDispositif(b)?.alternatives?.[0] || []).map(x => rangRequisPourRole(x.role)), 0)
-    return rb - ra
-  })
+  // Pool partagé : instances triées des rangs les plus exigeants aux plus faibles.
+  const ordre = instances
+    .map((id, idx) => ({ id, idx }))
+    .sort((a, b) => {
+      const ra = Math.max(...(equipeDuDispositif(a.id)?.alternatives?.[0] || []).map(x => rangRequisPourRole(x.role)), 0)
+      const rb = Math.max(...(equipeDuDispositif(b.id)?.alternatives?.[0] || []).map(x => rangRequisPourRole(x.role)), 0)
+      return rb - ra || a.idx - b.idx
+    })
   let restants = [...(profilsInscrits || [])]
   const parEquipe = []
   const manques = []
   let placesMin = 0
   const resumes = []
-  for (const id of ordre) {
+  const comptesOk = {}
+  for (const { id } of ordre) {
     const ev = evaluerUneEquipe(id, restants)
     parEquipe.push(ev)
     placesMin += ev.placesMin || 0
-    if (ev.resume) resumes.push(`${libelleDispositif(id, true)} : ${ev.resume}`)
     if (!ev.ok) {
-      for (const m of ev.manques) {
-        manques.push({ ...m, dispositif: id })
-      }
+      for (const m of ev.manques) manques.push({ ...m, dispositif: id })
       continue
     }
-    // Retirer du pool les personnes assignées à cette équipe (approximation : consommer n placesMin meilleurs rangs requis).
+    comptesOk[id] = (comptesOk[id] || 0) + 1
     const eq = equipeDuDispositif(id)
     const alt = eq?.alternatives?.[ev.alternativeOk ?? 0] || []
     const slots = alt
@@ -453,6 +500,14 @@ export function evaluerEquipeDispositif(dispositifOuActivite, profilsInscrits) {
       if (best >= 0) usedIdx.add(best)
     }
     restants = restants.filter((_, i) => !usedIdx.has(i))
+  }
+  for (const d of DISPOSITIFS) {
+    const total = instances.filter(x => x === d.v).length
+    if (!total) continue
+    const ok = comptesOk[d.v] || 0
+    const eq = equipeDuDispositif(d.v)
+    if (ok === total) resumes.push(total > 1 ? `${total}× ${d.court} OK` : `${d.court} : ${eq?.resume || 'OK'}`)
+    else resumes.push(`${ok}/${total}× ${d.court}${eq?.resume ? ` (${eq.resume})` : ''}`)
   }
   return {
     ok: manques.length === 0,
