@@ -19,8 +19,8 @@ const vide = {
   telephone:'', iban:'', type_benevole:'',
   qualifications:[], roles_asbl:[],
   permis:{ B:false, C:false, E:false, selection_medicale:false, selection_validite:'' },
-  ambulancier:{ visa_atnup:'', badge_112:'' },
-  infirmier:{ visa:'', specialisations:[] },
+  ambulancier:{ visa_atnup:'', badge_112:'', atnup_validite:'', badge_112_validite:'' },
+  infirmier:{ visa:'', visa_validite:'', specialisations:[] },
   contacts_urgence:[],
   notif_prefs: prefsDepuisFiche(null),
 }
@@ -512,7 +512,9 @@ export default function FicheVolontaire({ userId, onBack }) {
           <Sec>Ambulancier(ère)</Sec>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px' }}>
             <F label="N° visa ATNUP (obligatoire)" value={f.ambulancier.visa_atnup} set={v=>setIn('ambulancier','visa_atnup',v)} required />
+            <F label="ATNUP — valide jusqu’au" type="date" value={f.ambulancier.atnup_validite || ''} set={v=>setIn('ambulancier','atnup_validite',v)} />
             <F label="N° badge 112 (optionnel)" value={f.ambulancier.badge_112} set={v=>setIn('ambulancier','badge_112',v)} />
+            <F label="Badge 112 — valide jusqu’au" type="date" value={f.ambulancier.badge_112_validite || ''} set={v=>setIn('ambulancier','badge_112_validite',v)} />
           </div>
         </Card>
       )}
@@ -521,8 +523,9 @@ export default function FicheVolontaire({ userId, onBack }) {
       {onglet === 'competence' && gestionQualif && estInfi && (
         <Card style={{ marginBottom:14 }}>
           <Sec>Infirmier(ère)</Sec>
-          <div style={{ maxWidth:280 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px', maxWidth:560 }}>
             <F label="N° visa infirmier" value={f.infirmier.visa} set={v=>setIn('infirmier','visa',v)} />
+            <F label="Visa — valide jusqu’au" type="date" value={f.infirmier.visa_validite || ''} set={v=>setIn('infirmier','visa_validite',v)} />
           </div>
           <label style={lbl}>Spécialisation(s)</label>
           <Chips options={SPECIALISATIONS_INF} selected={f.infirmier.specialisations} onToggle={toggleSpec} />

@@ -64,6 +64,7 @@ export const DEPARTEMENTS = [
     to: '/app/departement/logistique',
     modules: [
       { key: 'stock', to: '/app/stock', label: 'Stock', icon: '📦', desc: 'Matériel, lieux et mouvements' },
+      { key: 'flotte', to: '/app/flotte', label: 'Flotte', icon: '🚑', desc: 'Plaques véhicules et lien stock' },
     ],
   },
   {
@@ -88,6 +89,7 @@ export function moduleAutorise(key, auth) {
   if (key === 'actualites_edition') return auth.peutPublierActualites()
   if (key === 'organigramme') return true
   if (key === 'tresorerie') return auth.peutGererDefraiements()
+  if (key === 'flotte') return auth.canAccess('stock')
   return auth.canAccess(key)
 }
 

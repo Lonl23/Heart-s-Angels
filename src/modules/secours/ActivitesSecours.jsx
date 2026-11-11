@@ -18,6 +18,8 @@ import {
   estAVenir,
   dansLes30Jours,
   peutCreerActiviteSecours,
+  suggestionDepuisDispositif,
+  equipeDuDispositif,
 } from './activitesSecours'
 
 const VIDE = {
@@ -214,6 +216,19 @@ export default function ActivitesSecours() {
     setForm(f => ({ ...f, ...patch }))
   }
 
+  function choisirDispositif(v) {
+    const sug = suggestionDepuisDispositif(v)
+    if (!sug) {
+      majForm({ dispositif: v })
+      return
+    }
+    majForm({
+      dispositif: v,
+      places: sug.places,
+      competences: competencesConnues(sug.competences),
+    })
+  }
+
   function toggleCompetence(v) {
     setForm(f => {
       const a = f.competences.includes(v) ? f.competences.filter(x => x !== v) : [...f.competences, v]
@@ -349,14 +364,19 @@ export default function ActivitesSecours() {
               <F label="Places" type="number" value={form.places} set={v => majForm({ places: v })} required />
               <F label="Public attendu" type="number" value={form.publicAttendu} set={v => majForm({ publicAttendu: v })} />
               <label style={{ marginBottom: 10, display: 'block' }}>
-                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Dispositif</span>
-                <select value={form.dispositif} onChange={e => majForm({ dispositif: e.target.value })} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}>
+                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Équipe / dispositif</span>
+                <select value={form.dispositif} onChange={e => choisirDispositif(e.target.value)} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}>
                   <option value="">—</option>
                   {DISPOSITIFS.map(d => <option key={d.v} value={d.v}>{d.l}</option>)}
                 </select>
               </label>
             </div>
-            <p className="ha-act-note">Le type de dispositif se choisit. Il n’est pas calculé à partir du public.</p>
+            {form.dispositif && equipeDuDispositif(form.dispositif) && (
+              <p className="ha-act-note" style={{ color: 'var(--heading)' }}>
+                Effectif minimum : {equipeDuDispositif(form.dispositif).resume}. Places et compétences sont préremplies — vous pouvez encore les ajuster.
+              </p>
+            )}
+            <p className="ha-act-note">Le type d’équipe se choisit. Il n’est pas calculé à partir du public. Ces matrices concernent uniquement le département secours (pas les souhaits).</p>
             <div style={{ marginBottom: 8 }}>
               <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Compétences requises</span>
               <div className="ha-act-choix" role="group" aria-label="Compétences requises">
@@ -372,7 +392,7 @@ export default function ActivitesSecours() {
                   </button>
                 ))}
               </div>
-              <p className="ha-act-note">La carte « Requiert ma compétence » compare ces valeurs à la fiche : qualifications, et type médical ou non médical.</p>
+              <p className="ha-act-note">La carte « Requiert ma compétence » compare ces valeurs à la fiche : qualifications, SIAMU, et type médical ou non médical.</p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Btn type="submit" disabled={sauve}>{form.id ? 'Enregistrer' : 'Créer l’activité'}</Btn>

@@ -18,6 +18,12 @@ import {
   selectionChauffeurEchue,
   telechargerBilan,
   ouvrirBilan,
+  equipeDuDispositif,
+  evaluerEquipeDispositif,
+  texteManquesEquipe,
+  libelleRoleEquipe,
+  normaliserArmement,
+  armementComplet,
 } from './activitesSecours'
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -61,6 +67,9 @@ export default function FicheActivite() {
   const [busy, setBusy] = useState(false)
   const [filtreComp, setFiltreComp] = useState('')
   const [q, setQ] = useState('')
+  const [armement, setArmement] = useState(null)
+  const [plaques, setPlaques] = useState([])
+  const [sauveArme, setSauveArme] = useState(false)
 
   useEffect(() => { charger() }, [id, profile?.id])
 
@@ -70,7 +79,7 @@ export default function FicheActivite() {
     setAbsent(false)
     const a = await supabase
       .from('activites_secours')
-      .select('id,numero,titre,type,dispositif,public_attendu,lieu,debut,fin,places,competences,created_by,created_at')
+      .select('id,numero,titre,type,dispositif,public_attendu,lieu,debut,fin,places,competences,armement,created_by,created_at')
       .eq('id', id)
       .maybeSingle()
     if (a.error) {
@@ -111,9 +120,12 @@ export default function FicheActivite() {
       if (!c.error) qui = c.data
     }
     setActivite(a.data)
+    setArmement(normaliserArmement(a.data.armement, a.data.dispositif))
     setInscriptions(lignes)
     setGens(profils)
     setAuteur(qui)
+    const pl = await supabase.from('plaques_vehicules').select('plaque,libelle').eq('actif', true).order('plaque')
+    if (!pl.error) setPlaques(pl.data || [])
     setLoading(false)
   }
 
@@ -127,6 +139,11 @@ export default function FicheActivite() {
   const requises = Array.isArray(activite?.competences) ? activite.competences : []
   const duree = activite ? dureeActivite(activite) : null
   const memeJour = activite && jourLocal(activite.debut) === jourLocal(activite.fin || activite.debut)
+  const evalEquipe = useMemo(
+    () => evaluerEquipeDispositif(activite?.dispositif, gens),
+    [activite?.dispositif, gens],
+  )
+  const equipeDef = activite?.dispositif ? equipeDuDispositif(activite.dispositif) : null
 
   const personnel = useMemo(() => {
     const parId = new Map(gens.map(g => [g.id, g]))
@@ -135,8 +152,9 @@ export default function FicheActivite() {
       .map(ins => {
         const g = parId.get(ins.user_id)
         const fiche = g?.fiche || {}
-        const quals = Array.isArray(fiche.qualifications) ? fiche.qualifications : []
-        const couvre = requises.some(c => quals.includes(c) || mesCorrespond(c, g))
+        const comps = g ? [...competencesDuProfil(g)] : []
+        const quals = comps.filter(c => c !== 'medical' && c !== 'non_medical' && c !== 'volontaire_non_medical')
+        const couvre = requises.some(c => comps.includes(c) || mesCorrespond(c, g))
         return {
           id: ins.user_id,
           inscription: ins.created_at,
@@ -160,6 +178,38 @@ export default function FicheActivite() {
     setTemps(etape)
     if (etape === 'dimensionner') setOnglet('info')
     if (etape === 'armer') setOnglet('personnel')
+  }
+
+  function majArmement(patch) {
+    setArmement(a => ({ ...(a || normaliserArmement(null, activite?.dispositif)), ...patch }))
+  }
+
+  function toggleItemArme(idItem) {
+    setArmement(a => {
+      const base = a || normaliserArmement(null, activite?.dispositif)
+      return {
+        ...base,
+        items: base.items.map(it => it.id === idItem ? { ...it, ok: !it.ok } : it),
+      }
+    })
+  }
+
+  async function sauverArmement() {
+    if (!activite?.id || !armement || sauveArme) return
+    setSauveArme(true)
+    setFlash(null)
+    const payload = {
+      plaque: armement.plaque || '',
+      note: armement.note || '',
+      items: armement.items || [],
+    }
+    const { error } = await supabase.from('activites_secours').update({ armement: payload }).eq('id', activite.id)
+    if (error) setFlash(error.message || 'Armement non enregistré.')
+    else {
+      setActivite(x => ({ ...x, armement: payload }))
+      setFlash(null)
+    }
+    setSauveArme(false)
   }
 
   function donneesBilan() {
@@ -341,9 +391,17 @@ export default function FicheActivite() {
                 <Champ k="Type" v={libelleTypeActivite(activite.type)} />
                 <Champ k="Nom" v={activite.titre} />
                 <Champ k="Dispositif" v={libelleDispositif(activite.dispositif) || '—'} />
+                <Champ k="Effectif min." v={equipeDef?.resume || '—'} />
                 <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
               </div>
-              <p className="ha-afiche-vide">Le type de dispositif est choisi à la création. Il n’est pas déduit du public.</p>
+              <p className="ha-afiche-vide">Le type d’équipe se choisit à la création. Il n’est pas déduit du public (département secours uniquement).</p>
+              {equipeDef && (
+                <p className={'ha-afiche-vide'} style={{ color: evalEquipe.ok ? 'var(--heading)' : '#A32D2D', marginTop: 8 }}>
+                  {evalEquipe.ok
+                    ? 'Équipe inscrite : effectif minimum atteint.'
+                    : `Équipe incomplète — manque : ${texteManquesEquipe(evalEquipe)}.`}
+                </p>
+              )}
               <p className="ha-afiche-sec">Organisation</p>
               <div className="ha-afiche-kv">
                 <Champ k="Organisée par" v={org} />
@@ -401,7 +459,73 @@ export default function FicheActivite() {
         )}
 
         {temps !== 'rendre' && onglet === 'personnel' && (
+          <>
           <section className="ha-afiche-carte">
+            <h2>Effectif requis</h2>
+            {equipeDef ? (
+              <>
+                <p className="ha-afiche-vide" style={{ marginTop: 6 }}>{equipeDef.resume}</p>
+                <p style={{ marginTop: 10, fontWeight: 650, color: evalEquipe.ok ? 'var(--heading)' : '#A32D2D' }}>
+                  {evalEquipe.ok ? 'Minimum atteint avec les inscrits.' : `Manque : ${texteManquesEquipe(evalEquipe)}`}
+                </p>
+                {equipeDef.alternatives?.length > 1 && (
+                  <p className="ha-afiche-vide" style={{ marginTop: 8 }}>
+                    Compositions acceptées : {equipeDef.alternatives.map((alt, i) => (
+                      <span key={i}>{i ? ' · ou · ' : ''}{alt.map(b => `${b.n} ${libelleRoleEquipe(b.role)}`).join(' + ')}</span>
+                    ))}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="ha-afiche-vide" style={{ marginTop: 6 }}>Aucun type d’équipe choisi à la création.</p>
+            )}
+          </section>
+
+          <section className="ha-afiche-carte">
+            <h2>Armement</h2>
+            {armement && (
+              <>
+                <label style={{ display: 'block', marginTop: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Véhicule (plaque)</span>
+                  <select
+                    value={armement.plaque || ''}
+                    onChange={e => majArmement({ plaque: e.target.value })}
+                    style={{ width: '100%', maxWidth: 320, padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
+                  >
+                    <option value="">—</option>
+                    {plaques.map(p => (
+                      <option key={p.plaque} value={p.plaque}>{p.plaque}{p.libelle ? ` — ${p.libelle}` : ''}</option>
+                    ))}
+                  </select>
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                  {armement.items.map(it => (
+                    <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!it.ok} onChange={() => toggleItemArme(it.id)} />
+                      <span>{it.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <label style={{ display: 'block', marginBottom: 12 }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Note / dérogation</span>
+                  <textarea
+                    value={armement.note || ''}
+                    onChange={e => majArmement({ note: e.target.value })}
+                    rows={2}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', resize: 'vertical' }}
+                  />
+                </label>
+                <p className="ha-afiche-vide" style={{ marginBottom: 10 }}>
+                  {armementComplet(armement) ? 'Checklist complète.' : 'Checklist incomplète — précisez une dérogation si besoin.'}
+                  {armement.plaque ? ` Véhicule : ${armement.plaque}.` : ' Aucune plaque choisie.'}
+                </p>
+                <Btn onClick={sauverArmement} disabled={sauveArme}>{sauveArme ? '…' : 'Enregistrer l’armement'}</Btn>
+              </>
+            )}
+          </section>
+
+          <section className="ha-afiche-carte">
+            <h2>Personnel inscrit</h2>
             <div className="ha-afiche-outils">
               <select aria-label="Compétence" value={filtreComp} onChange={e => setFiltreComp(e.target.value)}>
                 <option value="">Toutes les compétences</option>
@@ -457,6 +581,7 @@ export default function FicheActivite() {
               </div>
             )}
           </section>
+          </>
         )}
       </div>
     </Page>

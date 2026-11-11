@@ -77,14 +77,36 @@ export function lignesCompetence(f) {
   for (const q of quals) {
     const def = QUALIFS.find(x => x.v === q)
     let description = def?.l || q
-    if (q === 'ambulancier' && f.ambulancier?.visa_atnup) description += ` · visa ${f.ambulancier.visa_atnup}`
-    if (q === 'infirmier' && f.infirmier?.visa) description += ` · visa ${f.infirmier.visa}`
+    let expiration = 'Permanente'
+    let statut = 'principale'
+    if (q === 'ambulancier' && f.ambulancier?.visa_atnup) {
+      description += ` · visa ${f.ambulancier.visa_atnup}`
+      const exp = f.ambulancier?.atnup_validite
+      if (exp) {
+        expiration = fmtDate(exp)
+        const etat = etatExpiration(exp)
+        statut = etat === 'ok' ? 'principale' : etat
+      } else {
+        expiration = 'Sans date'
+      }
+    }
+    if (q === 'infirmier' && f.infirmier?.visa) {
+      description += ` · visa ${f.infirmier.visa}`
+      const exp = f.infirmier?.visa_validite
+      if (exp) {
+        expiration = fmtDate(exp)
+        const etat = etatExpiration(exp)
+        statut = etat === 'ok' ? 'principale' : etat
+      } else if (f.infirmier?.visa) {
+        expiration = 'Sans date'
+      }
+    }
     rows.push({
       categorie: CAT_QUAL[q] || 'Autre',
       type: def?.l || q,
       description,
-      expiration: 'Permanente',
-      statut: 'principale',
+      expiration,
+      statut,
     })
   }
   for (const s of f?.infirmier?.specialisations || []) {
@@ -98,12 +120,14 @@ export function lignesCompetence(f) {
     })
   }
   if (f?.ambulancier?.badge_112) {
+    const exp = f.ambulancier?.badge_112_validite
+    const etat = exp ? etatExpiration(exp) : 'ok'
     rows.push({
       categorie: 'Secourisme',
       type: 'Badge 112',
       description: String(f.ambulancier.badge_112),
-      expiration: 'Permanente',
-      statut: 'principale',
+      expiration: exp ? fmtDate(exp) : 'Sans date',
+      statut: etat === 'ok' ? 'principale' : etat,
     })
   }
   const permis = [

@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, Modal, Empty, Loading } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
 import { QUALIFS, lblRoleCompte, libelleRoleAsblPropre, libellesRolesAsblPropres, mentionChauffeur, personneEstMedicale, qualsImplicites, rolesAsblSpecifiques } from '@/modules/fiche/ficheSchema'
+import { lignesCompetence, compterCompetences } from '@/modules/fiche/bilanFiche'
 import { CodeBox, FormInvit, Msg, genCode, BtnCopierLien, BtnEnvoyerInvitation } from '@/modules/admin/inviteUi'
 
 const TYPES_INVIT = [
@@ -47,6 +48,12 @@ function triAlpha(a, b) {
 }
 function chauffeurDe(u) {
   return mentionChauffeur(qualsImplicites(u.role, u.fiche))
+}
+function alerteValidite(u) {
+  const c = compterCompetences(lignesCompetence(u?.fiche || {}))
+  if (c.expirees > 0) return 'expiree'
+  if (c.bientot > 0) return 'bientot'
+  return null
 }
 
 export default function Volontaires() {
@@ -204,15 +211,21 @@ function Membres({ onOpenFiche }) {
 
 function GrillesVolontaires({ membres, onOpenFiche, onConfigurer, onToggle }) {
   const [q, setQ] = useState('')
+  const [filtreVal, setFiltreVal] = useState('')
   const [vue, setVue] = useState(() => sessionStorage.getItem('rh-volontaires-vue') === 'liste' ? 'liste' : 'vignettes')
   const needle = q.trim().toLowerCase()
-  const filtrés = (needle
-    ? membres.filter(u => {
-        const hay = [u.prenom, u.nom, u.email, typeBenevoleTxt(u), rolesAsblTxt(u), qualifsTxt(u), chauffeurDe(u)].join(' ').toLowerCase()
-        return hay.includes(needle)
-      })
-    : membres
-  ).slice().sort(triAlpha)
+  const filtrés = membres.filter(u => {
+    if (filtreVal === 'configurer' && !compteAConfigurer(u)) return false
+    if (filtreVal === 'expiree' && alerteValidite(u) !== 'expiree') return false
+    if (filtreVal === 'bientot' && alerteValidite(u) !== 'bientot') return false
+    if (filtreVal === 'alerte') {
+      const a = alerteValidite(u)
+      if (a !== 'expiree' && a !== 'bientot' && !compteAConfigurer(u)) return false
+    }
+    if (!needle) return true
+    const hay = [u.prenom, u.nom, u.email, typeBenevoleTxt(u), rolesAsblTxt(u), qualifsTxt(u), chauffeurDe(u)].join(' ').toLowerCase()
+    return hay.includes(needle)
+  }).slice().sort(triAlpha)
 
   function choisirVue(v) {
     setVue(v)
@@ -229,6 +242,18 @@ function GrillesVolontaires({ membres, onOpenFiche, onConfigurer, onToggle }) {
             onChange={e => setQ(e.target.value)}
             placeholder="Rechercher un volontaire…"
           />
+          <select
+            aria-label="Filtrer les validités"
+            value={filtreVal}
+            onChange={e => setFiltreVal(e.target.value)}
+            style={{ padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
+          >
+            <option value="">Tous</option>
+            <option value="alerte">Alertes (validité / compte)</option>
+            <option value="expiree">Validités expirées</option>
+            <option value="bientot">Bientôt expirées</option>
+            <option value="configurer">Compte à configurer</option>
+          </select>
           <div className="ha-cal-vues" role="tablist" aria-label="Affichage des volontaires">
             <button type="button" className={'ha-tab-like' + (vue === 'liste' ? ' is-on' : '')} onClick={() => choisirVue('liste')}>Liste</button>
             <button type="button" className={'ha-tab-like' + (vue === 'vignettes' ? ' is-on' : '')} onClick={() => choisirVue('vignettes')}>Vignettes</button>
@@ -259,12 +284,13 @@ function ListeVolontaires({ items, onOpenFiche, onConfigurer, onToggle }) {
       {items.map(u => {
         const aConfigurer = compteAConfigurer(u)
         const ch = chauffeurDe(u)
+        const alerte = alerteValidite(u)
         return (
           <div key={u.id} className="ha-vol-ligne" style={{ opacity: u.actif ? 1 : .55 }} onClick={() => onOpenFiche(u.id)} role="link" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter') onOpenFiche(u.id) }}>
             <AvatarVolontaire url={u.fiche?.photo_url} prenom={u.prenom} nom={u.nom} petit />
             <span className="ha-vol-ligne-nom">
               <strong>{u.nom} {u.prenom}</strong>
-              <span>{aConfigurer ? 'Compte à configurer' : (u.email || '—')}</span>
+              <span>{aConfigurer ? 'Compte à configurer' : (u.email || '—')}{alerte === 'expiree' ? ' · validité expirée' : alerte === 'bientot' ? ' · bientôt expirée' : ''}</span>
             </span>
             <span className="ha-vol-ligne-meta">
               {u.fiche?.telephone || '—'}
@@ -287,6 +313,7 @@ function TuileVolontaire({ u, onOpenFiche, onConfigurer, onToggle }) {
   const roles = libellesRolesAsblPropres(u.fiche?.roles_asbl)
   const quals = (u.fiche?.qualifications || []).map(_lblQual)
   const ch = chauffeurDe(u)
+  const alerte = alerteValidite(u)
   return (
     <Card
       clickable
@@ -311,6 +338,8 @@ function TuileVolontaire({ u, onOpenFiche, onConfigurer, onToggle }) {
           : u.actif
             ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill>
             : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}
+        {alerte === 'expiree' && <Pill color="#A32D2D" bg="#FCEBEB">Expirée</Pill>}
+        {alerte === 'bientot' && <Pill color="#BA7517" bg="#FAEEDA">Bientôt</Pill>}
         <Pill>{typeBenevoleTxt(u)}</Pill>
         {ch === 'Chauffeur' && <Pill color="#6A4A00" bg="#F8E7B0">Chauffeur</Pill>}
         {ch === 'Pas chauffeur' && <Pill color="#5C5346" bg="var(--bg-alt)">Pas chauffeur</Pill>}

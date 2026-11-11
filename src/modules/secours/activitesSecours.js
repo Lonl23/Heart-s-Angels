@@ -12,18 +12,160 @@ export function libelleTypeActivite(v) {
   return TYPES_ACTIVITE.find(t => t.v === v)?.l || 'Activité'
 }
 
-/** Type de dispositif prévisionnel. Choisi, pas calculé. */
+/**
+ * Équipes / dispositifs du département secours (pas les souhaits).
+ * Minimums validés avec Laurent — suggestions à la création, contrôle à l’armement.
+ * AMU / ATNUP = qualification ambulancier sur la fiche.
+ * Infirmier SIAMU = infirmier + spécialisation siamu.
+ */
 export const DISPOSITIFS = [
-  { v: 'paps', l: 'Point d’alerte et de premiers secours', court: 'PAPS' },
-  { v: 'pe', l: 'DPS petite envergure', court: 'Petite envergure' },
-  { v: 'me', l: 'DPS moyenne envergure', court: 'Moyenne envergure' },
-  { v: 'ge', l: 'DPS grande envergure', court: 'Grande envergure' },
+  { v: 'paps', l: 'PAPS — Point d’alerte et de premiers secours', court: 'PAPS' },
+  { v: 'ps', l: 'PS — Poste de secours', court: 'PS' },
+  { v: 'pma_cat2', l: 'PMA catégorie 2', court: 'PMA CAT 2' },
+  { v: 'pma_cat1', l: 'PMA catégorie 1', court: 'PMA CAT 1' },
+  { v: 'pma_cat0', l: 'PMA catégorie 0', court: 'PMA CAT 0' },
+  { v: 'ambu_112', l: 'Ambulance 112', court: 'AMBU 112' },
+  { v: 'ambu', l: 'Ambulance (ATNUP)', court: 'AMBU' },
 ]
+
+/** Rôles d’effectif pour le dimensionnement secours. */
+export const ROLES_EQUIPE = [
+  { v: 'secouriste', l: 'Secouriste' },
+  { v: 'ambulancier', l: 'AMU / ATNUP (ambulancier)' },
+  { v: 'infirmier', l: 'Infirmier(ère)' },
+  { v: 'infirmier_siamu', l: 'Infirmier(ère) SIAMU' },
+  { v: 'medecin', l: 'Médecin' },
+]
+
+/**
+ * Matrices d’équipes. `alternatives` = au moins une composition complète.
+ * Sinon `besoins` unique.
+ */
+export const EQUIPES_DISPOSITIF = {
+  paps: {
+    placesMin: 2,
+    resume: '2 secouristes minimum',
+    alternatives: [[{ role: 'secouriste', n: 2 }]],
+  },
+  ps: {
+    placesMin: 3,
+    resume: '2 secouristes + 1 AMU/ATNUP',
+    alternatives: [[
+      { role: 'secouriste', n: 2 },
+      { role: 'ambulancier', n: 1 },
+    ]],
+  },
+  pma_cat2: {
+    placesMin: 4,
+    resume: '2 secouristes + 1 AMU + 1 infirmier',
+    alternatives: [[
+      { role: 'secouriste', n: 2 },
+      { role: 'ambulancier', n: 1 },
+      { role: 'infirmier', n: 1 },
+    ]],
+  },
+  pma_cat1: {
+    placesMin: 4,
+    resume: '2 secouristes + 1 AMU + 1 infirmier SIAMU',
+    alternatives: [[
+      { role: 'secouriste', n: 2 },
+      { role: 'ambulancier', n: 1 },
+      { role: 'infirmier_siamu', n: 1 },
+    ]],
+  },
+  pma_cat0: {
+    placesMin: 5,
+    resume: '2 secouristes + 1 AMU + 1 infirmier SIAMU + 1 médecin',
+    alternatives: [[
+      { role: 'secouriste', n: 2 },
+      { role: 'ambulancier', n: 1 },
+      { role: 'infirmier_siamu', n: 1 },
+      { role: 'medecin', n: 1 },
+    ]],
+  },
+  ambu_112: {
+    placesMin: 2,
+    resume: '2 AMU, ou 1 AMU + 1 infirmier SIAMU',
+    alternatives: [
+      [{ role: 'ambulancier', n: 2 }],
+      [
+        { role: 'ambulancier', n: 1 },
+        { role: 'infirmier_siamu', n: 1 },
+      ],
+    ],
+  },
+  ambu: {
+    placesMin: 2,
+    resume: '2 ATNUP (ambulanciers) minimum',
+    alternatives: [[{ role: 'ambulancier', n: 2 }]],
+  },
+}
+
+/** Checklist d’armement par défaut (liée au terrain, pas un inventaire parallèle). */
+export const CHECKLIST_ARMEMENT = {
+  paps: ['Trousse premiers secours', 'Radio / téléphone', 'Gilet haute visibilité'],
+  ps: ['Matériel poste de secours', 'O₂ / insufflateur', 'Radio / téléphone', 'Véhicule si prévu'],
+  pma_cat2: ['Lot PMA', 'O₂', 'Brancard / chaise', 'Radio', 'Véhicule'],
+  pma_cat1: ['Lot PMA CAT 1', 'O₂ / monitorage', 'Brancard', 'Radio', 'Véhicule'],
+  pma_cat0: ['Lot PMA CAT 0', 'O₂ / monitorage', 'Brancard', 'Radio', 'Véhicule médecin'],
+  ambu_112: ['Ambulance équipée 112', 'O₂', 'Brancard', 'Radio 112'],
+  ambu: ['Ambulance ATNUP', 'O₂', 'Brancard', 'Radio'],
+}
 
 export function libelleDispositif(v, court = false) {
   const d = DISPOSITIFS.find(x => x.v === v)
   if (!d) return ''
   return court ? d.court : d.l
+}
+
+export function libelleRoleEquipe(v) {
+  return ROLES_EQUIPE.find(r => r.v === v)?.l || v
+}
+
+export function equipeDuDispositif(v) {
+  return EQUIPES_DISPOSITIF[v] || null
+}
+
+/** Places + compétences suggérées quand on choisit un dispositif. */
+export function suggestionDepuisDispositif(v) {
+  const eq = equipeDuDispositif(v)
+  if (!eq) return null
+  const roles = new Set()
+  for (const alt of eq.alternatives) {
+    for (const b of alt) roles.add(b.role === 'infirmier_siamu' ? 'infirmier' : b.role)
+  }
+  return {
+    places: String(eq.placesMin),
+    competences: [...roles],
+    resume: eq.resume,
+  }
+}
+
+export function checklistArmementDefaut(dispositif) {
+  const labels = CHECKLIST_ARMEMENT[dispositif] || ['Matériel de base', 'Radio / téléphone', 'Véhicule si prévu']
+  return labels.map((label, i) => ({ id: `c${i + 1}`, label, ok: false }))
+}
+
+export function normaliserArmement(raw, dispositif) {
+  const a = raw && typeof raw === 'object' ? raw : {}
+  const items = Array.isArray(a.items) && a.items.length
+    ? a.items.map((it, i) => ({
+      id: String(it?.id || `c${i + 1}`),
+      label: String(it?.label || `Point ${i + 1}`),
+      ok: !!it?.ok,
+    }))
+    : checklistArmementDefaut(dispositif)
+  return {
+    plaque: String(a.plaque || ''),
+    note: String(a.note || ''),
+    items,
+  }
+}
+
+export function armementComplet(armement) {
+  const a = normaliserArmement(armement)
+  if (!a.items.length) return false
+  return a.items.every(it => it.ok)
 }
 
 /** null si vide, nombre si valide, undefined si illisible. */
@@ -45,9 +187,10 @@ export function selectionChauffeurEchue(profile, activite, maintenant = new Date
   return maintenant.getTime() > fin.getTime()
 }
 
-/** Qualifications de la fiche, plus le type médical / non médical. */
+/** Qualifications de la fiche, plus type médical / non médical et SIAMU. */
 export const COMPETENCES_ACTIVITE = [
   ...QUALIFS,
+  { v: 'infirmier_siamu', l: 'Infirmier(ère) SIAMU' },
   { v: 'medical', l: 'Type médical' },
   { v: 'non_medical', l: 'Type non médical' },
 ]
@@ -55,7 +198,9 @@ export const COMPETENCES_ACTIVITE = [
 const CLES = new Set(COMPETENCES_ACTIVITE.map(c => c.v))
 
 export function libelleCompetence(v) {
-  return COMPETENCES_ACTIVITE.find(c => c.v === v)?.l || v
+  return COMPETENCES_ACTIVITE.find(c => c.v === v)?.l
+    || ROLES_EQUIPE.find(r => r.v === v)?.l
+    || v
 }
 
 export function competencesConnues(liste) {
@@ -69,13 +214,98 @@ export function competencesConnues(liste) {
   return out
 }
 
+function aSpecialisationSiamu(fiche) {
+  const specs = fiche?.infirmier?.specialisations
+  return Array.isArray(specs) && specs.includes('siamu')
+}
+
 /** Ce que la fiche couvre vraiment : qualifications (et celles que l’app en déduit) et le type. */
 export function competencesDuProfil(profile) {
   const fiche = profile?.fiche || {}
   const set = new Set(qualsImplicites(profile?.role, fiche))
   if (fiche.type_benevole === 'medical' || profile?.role === 'volontaire_medical') set.add('medical')
   if (fiche.type_benevole === 'non_medical' || profile?.role === 'volontaire_non_medical') set.add('non_medical')
+  if (set.has('infirmier') && aSpecialisationSiamu(fiche)) set.add('infirmier_siamu')
   return set
+}
+
+/**
+ * Rôles d’équipe qu’une personne peut couvrir (un volontaire peut en couvrir plusieurs,
+ * mais chaque inscription ne compte qu’une fois par rôle dans l’affectation greedy).
+ */
+export function rolesEquipeDuProfil(profile) {
+  const comps = competencesDuProfil(profile)
+  const roles = []
+  if (comps.has('secouriste') || comps.has('volontaire_non_medical')) roles.push('secouriste')
+  if (comps.has('ambulancier')) roles.push('ambulancier')
+  if (comps.has('infirmier_siamu')) roles.push('infirmier_siamu')
+  if (comps.has('infirmier')) roles.push('infirmier')
+  if (comps.has('medecin')) roles.push('medecin')
+  return roles
+}
+
+const ORDRE_RARTE = ['medecin', 'infirmier_siamu', 'ambulancier', 'infirmier', 'secouriste']
+
+function peutCouvrirRole(roles, role) {
+  if (roles.has(role)) return true
+  if (role === 'infirmier' && roles.has('infirmier_siamu')) return true
+  return false
+}
+
+/** Une personne = un poste. On assigne d’abord les rôles les plus rares. */
+function compositionSatisfaite(profils, besoins) {
+  const slots = besoins
+    .flatMap(b => Array.from({ length: b.n }, () => b.role))
+    .sort((a, b) => ORDRE_RARTE.indexOf(a) - ORDRE_RARTE.indexOf(b))
+  const pool = (profils || []).map(p => ({
+    roles: new Set(rolesEquipeDuProfil(p)),
+    used: false,
+  }))
+  const manqueParRole = {}
+  for (const role of slots) {
+    const cand = pool.find(p => !p.used && peutCouvrirRole(p.roles, role))
+    if (cand) cand.used = true
+    else manqueParRole[role] = (manqueParRole[role] || 0) + 1
+  }
+  const manques = Object.entries(manqueParRole).map(([role, manque]) => {
+    const besoin = besoins.find(b => b.role === role)?.n || manque
+    return { role, besoin, present: Math.max(0, besoin - manque), manque }
+  })
+  return { ok: manques.length === 0, manques }
+}
+
+/** Évalue l’équipe inscrite face à la matrice du dispositif. */
+export function evaluerEquipeDispositif(dispositif, profilsInscrits) {
+  const eq = equipeDuDispositif(dispositif)
+  if (!eq) {
+    return { ok: true, resume: '', manques: [], alternativeOk: null, placesMin: 0 }
+  }
+  let meilleure = null
+  for (let i = 0; i < eq.alternatives.length; i++) {
+    const r = compositionSatisfaite(profilsInscrits, eq.alternatives[i])
+    if (r.ok) {
+      return { ok: true, resume: eq.resume, manques: [], alternativeOk: i, placesMin: eq.placesMin }
+    }
+    const score = r.manques.reduce((s, m) => s + m.manque, 0)
+    if (!meilleure || score < meilleure.score) {
+      meilleure = { ...r, score }
+    }
+  }
+  return {
+    ok: false,
+    resume: eq.resume,
+    manques: meilleure?.manques || [],
+    alternativeOk: null,
+    placesMin: eq.placesMin,
+  }
+}
+
+export function texteManquesEquipe(evalEq) {
+  if (!evalEq || evalEq.ok) return ''
+  if (!evalEq.manques?.length) return `Équipe incomplète (min. ${evalEq.placesMin}).`
+  return evalEq.manques
+    .map(m => `${m.manque}× ${libelleRoleEquipe(m.role)}`)
+    .join(', ')
 }
 
 export function requiertMesCompetences(activite, mes) {
