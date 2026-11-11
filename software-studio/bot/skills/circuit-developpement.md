@@ -2,6 +2,9 @@
 
 Utilise ce skill quand Laurent demande une feature, un correctif, une appli, une revue, ou un déploiement.
 
+## Vision
+On construit l'**ERP Heart's Angels à échelle ASBL** (intégré, simple, complet pour leurs process). Pas « anti-ERP » : anti-usine enterprise.
+
 ## Noyau vs studio complet
 
 **Noyau** (petite appli / correctif) : `product` → code (`frontend` / `backend` / `rh` / `logistique` / `finance`) → `reviewer` + `qa` → `verifier` → accord → éventuellement `deployer` → `docs-formation` si impact utilisateur.
