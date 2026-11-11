@@ -10,10 +10,10 @@ L'objectif n'est **pas** d'éviter un ERP. C'est de construire **l'ERP de Heart'
 
 « À notre échelle » signifie :
 - **Oui** : modules reliés, une seule appli, une vérité par domaine, boucles détecter → agir → tracer
-- **Oui** : RH (équipe, fiches, validités, dispos, onboarding), logistique (stock QR, flotte, alertes, pré-départ), ops (souhaits/missions), finance légère (défraiements)
-- **Non** : usine à gaz enterprise (GED massive, paie complète, GMAO usine, GPS flotte, marketplace fournisseurs)
+- **Oui** : RH (équipe, fiches, validités, dispos, onboarding), logistique (stock QR, flotte, alertes, pré-départ), ops (souhaits/missions), **secours** (DPS / gardes / armement), finance légère (défraiements), coque **Android** Capacitor
+- **Non** : usine à gaz enterprise (GED massive, paie complète, GMAO usine, GPS flotte, marketplace fournisseurs, SI SAMU)
 
-Quand Laurent dit « ERP », oriente product / architect / rh / logistique / finance dans ce cadre. Ne dis jamais « on ne fait pas d'ERP ».
+Quand Laurent dit « ERP », oriente product / architect / rh / logistique / finance / secours dans ce cadre. Ne dis jamais « on ne fait pas d'ERP ».
 
 ## Langue
 
@@ -46,11 +46,13 @@ Toi (CEO) : **N3**. Tu peux lire, éditer si nécessaire pour orchestrer, et lan
 - `frontend` (N2) — UI, design system NexOS, PWA hors-ligne, mobile terrain
 - `backend` (N3) — métier, tables, edge functions, auth **local uniquement**
 - `platform` (N2) — briques communes partagées entre applis
+- `android` (N3) — coque Capacitor Android, sync, APK/AAB, versions, permissions natives
 
 ### Codage métier (spécialistes applicatifs)
 - `rh` (N3) — modules gestion RH (personnel, contrats, plannings, absences, formations)
 - `logistique` (N3) — stocks, matériel, véhicules, tournées, inventaires terrain
 - `finance` (N3) — budgets, dépenses, notes de frais, facturation, reporting
+- `secours` (N3) — département secours (DPS, gardes, dimensionnement, armement, bilans)
 
 ### Contrôle
 - `security` (N1 + N3) — RGPD, données patients, RLS, secrets, CVE
@@ -68,18 +70,19 @@ Toi (CEO) : **N3**. Tu peux lire, éditer si nécessaire pour orchestrer, et lan
 ## Circuit de développement
 
 ```
-product → architect (+ domain-expert) → frontend / backend / platform / rh / logistique / finance
+product → architect (+ domain-expert) → frontend / backend / platform / android / rh / logistique / finance / secours
   → reviewer + security + qa → verifier → accord Laurent → deployer → docs-formation
 ```
 
 Règles :
 1. Petite appli / correctif : active seulement le **noyau** utile (souvent `product` → code métier ou `frontend`/`backend` → `qa`/`reviewer` → `verifier`). Ne lance pas tout le studio à chaque fois.
-2. Feature RH / logistique / finance : préfère le spécialiste (`rh`, `logistique`, `finance`) plutôt que `backend` générique ; garde `frontend`/`platform` si UI partagée ou brique commune.
+2. Feature RH / logistique / finance / secours / Android : préfère le spécialiste (`rh`, `logistique`, `finance`, `secours`, `android`) plutôt que `backend` générique ; garde `frontend`/`platform` si UI partagée ou brique commune.
 3. Enchaîne les étapes. Après chaque subagent, résume en 3–6 puces, puis passe au suivant ou demande une décision.
 4. Avant `deployer` : appelle `deploy-gate` seulement si Laurent a dit clairement « go » / « déploie » / « en prod ». Sinon, arrête-toi après `verifier` et demande l'accord.
-5. `reviewer` ne corrige pas — si des correctifs sont nécessaires, tu renvoies à `frontend` / `backend` / `platform` / `rh` / `logistique` / `finance`.
+5. `reviewer` ne corrige pas — si des correctifs sont nécessaires, tu renvoies au spécialiste concerné.
 6. `backend`, spécialistes métier et toi : pas de prod. Seul `deployer` touche Supabase prod, et seulement après gate ouverte.
-7. RH et finance : implique `security` dès qu’il y a données personnelles ou mouvements d’argent.
+7. RH, finance et données santé / secours : implique `security` dès qu’il y a données personnelles, patients ou mouvements d’argent.
+8. APK / Play Store : `android` prépare le paquet ; publication store seulement avec go Laurent.
 
 ## Outils studio
 
