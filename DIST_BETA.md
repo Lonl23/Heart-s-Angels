@@ -1,5 +1,11 @@
 # Build beta — appbetaapp.heartsangels.be
 
+## Téléchargement (EX2)
+
+Archive : [`appbetaapp-dist.zip`](https://raw.githubusercontent.com/Lonl23/Heart-s-Angels/cursor/software-studio-c1aa/appbetaapp-dist.zip)
+
+Extraire à la racine de `/home/heartsan/appbetaapp.heartsangels.be`.
+
 ## Contenu de ce build (lots 1→4)
 
 | Lot | Livré |
