@@ -85,6 +85,11 @@ export function AuthProvider({ children }) {
     const BASE = ['dashboard','missions','defraiements','disponibilites']
     if (BASE.includes(feature)) return true
     if (feature === 'souhaits') return peutGererSouhaits()
+    if (feature === 'equipe') {
+      if (ADMINS.includes(role) || role === 'coordinateur') return true
+      const rolesEq = profile?.fiche?.roles_asbl || []
+      if (rolesEq.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint','administrateur_asbl','coord_benevoles','coord_benevoles_adjoint','coord_transport','coord_transport_adjoint'].includes(r))) return true
+    }
     const fi = profile?.fiche || {}
     const sujets = [
       fi.type_benevole && ['type', fi.type_benevole],
@@ -145,6 +150,27 @@ export function AuthProvider({ children }) {
       'resp_logistique','resp_logistique_adjoint',
     ].includes(r))
   }
+  function peutVoirEquipe() {
+    if (!role || role === 'partenaire') return false
+    return accesTotal() || can('admin') || role === 'coordinateur' || peutGererFiches() || peutGererDispos()
+  }
+  function peutValiderDefraiementsN1() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || ['admin','president','coordinateur','tresorier'].includes(role)) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => [
+      'president','vice_president',
+      'coord_benevoles','coord_benevoles_adjoint',
+      'coord_transport','coord_transport_adjoint',
+      'tresorier','tresorier_adjoint',
+    ].includes(r))
+  }
+  function peutValiderDefraiementsN2() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || ['admin','president','tresorier'].includes(role)) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president','vice_president','tresorier','tresorier_adjoint','administrateur_asbl'].includes(r))
+  }
   function estVolontaireNonMedical() {
     if (peutVoirToutesDispos()) return false
     const t = profile?.fiche?.type_benevole
@@ -157,7 +183,8 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, estVolontaireNonMedical,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, peutVoirEquipe,
+    peutValiderDefraiementsN1, peutValiderDefraiementsN2, estVolontaireNonMedical,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

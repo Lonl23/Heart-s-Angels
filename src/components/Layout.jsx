@@ -11,6 +11,7 @@ const NAV = [
   { to:'/app/missions',      label:'Mes missions',    icon:'🚑', key:'missions' },
   { to:'/app/defraiements',  label:'Défraiements',    icon:'🧾', key:'defraiements' },
   { to:'/app/disponibilites',label:'Disponibilités',  icon:'📅', key:'disponibilites' },
+  { to:'/app/equipe',        label:'Équipe',          icon:'👥', key:'equipe' },
   { to:'/app/stock',         label:'Stock',           icon:'📦', key:'stock' },
   { to:'/app/annuaire',      label:'Annuaire',        icon:'📇', key:'annuaire' },
 ]
@@ -20,6 +21,7 @@ const PAGE_TITLE = [
   ['/app/missions', 'Mes missions'],
   ['/app/defraiements', 'Défraiements'],
   ['/app/disponibilites', 'Disponibilités'],
+  ['/app/equipe', 'Équipe'],
   ['/app/stock', 'Stock'],
   ['/app/annuaire', 'Annuaire'],
   ['/app/admin', 'Administration'],
@@ -39,7 +41,7 @@ function toggleTheme() {
 }
 
 export default function Layout() {
-  const { profile, signOut, can, canAccess, peutGererStock } = useAuth()
+  const { profile, signOut, can, canAccess, peutGererStock, peutVoirEquipe } = useAuth()
   const { checkForUpdate, checking } = useSwUpdate()
   const nav = useNavigate()
   const loc = useLocation()
@@ -63,6 +65,7 @@ export default function Layout() {
   const items = [...NAV.filter(n => {
     if (n.key === 'missions') return true
     if (n.key === 'stock') return canAccess(n.key) && peutGererStock()
+    if (n.key === 'equipe') return peutVoirEquipe()
     return canAccess(n.key)
   }), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', icon:'⚙️' }] : [])]
   const collapsedEff = isDesktop && collapsed

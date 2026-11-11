@@ -89,6 +89,7 @@ export default function Stock() {
       )}
       <Tabs items={[
         { v:'lieux', l:'Lieux' },
+        { v:'flotte', l:'Flotte' },
         { v:'articles', l:'Types d’articles' },
         { v:'unites', l:'Pièces & boîtes' },
         { v:'alertes', l:'Alertes' },
@@ -98,9 +99,13 @@ export default function Stock() {
       {loading ? <Loading /> : (
         <>
           {tab === 'lieux' && <OngletLieux lieux={lieux} unites={unites} onChange={load} onOk={ok} onErr={setErr} />}
+          {tab === 'flotte' && <OngletFlotte lieux={lieux} unites={unites} onChange={load} onOk={ok} onErr={setErr} onRanger={(lieu) => { setLieuCible(lieu); setScan('ranger') }} onInventaire={() => setScan('inventaire')} />}
           {tab === 'articles' && <OngletCatalogue cats={cats} lieux={lieux} unites={unites} onChange={load} onOk={ok} onErr={setErr} />}
           {tab === 'unites' && <OngletUnites unites={unites} lieux={lieux} onChange={load} onOk={ok} onErr={setErr} />}
-          {tab === 'alertes' && <OngletAlertes />}
+          {tab === 'alertes' && <OngletAlertes onAction={({ mode, lieu }) => {
+            if (mode === 'ranger' && lieu) { setLieuCible(lieu); setScan('ranger'); setTab('lieux') }
+            else if (mode === 'inventaire') { setScan('inventaire') }
+          }} />}
           {tab === 'inventaire' && inv && <OngletInventaire inv={inv} onChange={load} />}
         </>
       )}
@@ -171,7 +176,7 @@ function NoeudLieu({ n, lieux, onEdit, onQr, onDel, profondeur = 0 }) {
       <Card style={{ padding:'10px 14px', marginLeft: profondeur * 16 }}>
         <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap', alignItems:'center' }}>
           <div>
-            <div style={{ fontWeight:600 }}>{n.nom}</div>
+            <div style={{ fontWeight:600 }}>{n.nom}{n.plaque ? ` · ${n.plaque}` : ''}</div>
             <div style={{ fontSize:12, color:'var(--text-muted)' }}>{lblLieu(n.type)}</div>
           </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
@@ -188,16 +193,36 @@ function NoeudLieu({ n, lieux, onEdit, onQr, onDel, profondeur = 0 }) {
 }
 
 function FormLieu({ item, lieux, onDone }) {
-  const [f, setF] = useState({ type:'armoire', ...item })
+  const [f, setF] = useState({ type:'armoire', plaque:'', ...item })
   const [saving, setSaving] = useState(false)
   const opts = [{ v:'', l:'— Racine —' }, ...lieux.filter(l => l.id !== f.id).map(l => ({ v:l.id, l: cheminLieux(lieux, l.id) }))]
   async function save() {
     if (!f.nom?.trim()) { alert('Nom requis.'); return }
     setSaving(true)
-    const payload = { nom: f.nom.trim(), type: f.type, parent_id: f.parent_id || null }
-    if (f.id) await supabase.from('stock_lieux').update(payload).eq('id', f.id)
-    else await supabase.from('stock_lieux').insert(payload)
-    setSaving(false); onDone()
+    const payload = {
+      nom: f.nom.trim(),
+      type: f.type,
+      parent_id: f.parent_id || null,
+      plaque: f.type === 'vehicule' ? (f.plaque || '').trim() || null : null,
+    }
+    const req = f.id
+      ? await supabase.from('stock_lieux').update(payload).eq('id', f.id)
+      : await supabase.from('stock_lieux').insert(payload)
+    setSaving(false)
+    if (req.error) {
+      // Colonne plaque absente tant que 22_erp_rh_logistique.sql n’est pas appliqué
+      if (String(req.error.message || '').toLowerCase().includes('plaque')) {
+        const { plaque: _p, ...sans } = payload
+        const retry = f.id
+          ? await supabase.from('stock_lieux').update(sans).eq('id', f.id)
+          : await supabase.from('stock_lieux').insert(sans)
+        if (retry.error) { alert(retry.error.message); return }
+        alert('Véhicule enregistré (sans plaque en base). Appliquez installeur/22_erp_rh_logistique.sql pour activer les plaques.')
+        onDone(); return
+      }
+      alert(req.error.message); return
+    }
+    onDone()
   }
   return (
     <Card style={{ marginBottom:12 }}>
@@ -205,11 +230,49 @@ function FormLieu({ item, lieux, onDone }) {
         <strong>{f.id ? 'Modifier le lieu' : 'Nouvel emplacement'}</strong>
         <Btn kind="soft" onClick={onDone}>Annuler</Btn>
       </div>
-      <F label="Nom" value={f.nom} set={v=>setF(s=>({ ...s, nom:v }))} required placeholder="Armoire A, Sac 1, Pochette avant…" />
+      <F label="Nom" value={f.nom} set={v=>setF(s=>({ ...s, nom:v }))} required placeholder="Armoire A, Sac 1, Ambulance 1…" />
       <Sel label="Type" value={f.type} set={v=>setF(s=>({ ...s, type:v }))} options={TYPES_LIEU} />
+      {f.type === 'vehicule' && (
+        <F label="Plaque" value={f.plaque || ''} set={v=>setF(s=>({ ...s, plaque:v }))} placeholder="1-ABC-123" />
+      )}
       <Sel label="Dans" value={f.parent_id || ''} set={v=>setF(s=>({ ...s, parent_id:v }))} options={opts} />
       <Btn onClick={save} disabled={saving} style={{ width:'100%' }}>{saving ? '…' : 'Enregistrer'}</Btn>
     </Card>
+  )
+}
+
+function OngletFlotte({ lieux, unites, onChange, onOk, onErr, onRanger, onInventaire }) {
+  const [edit, setEdit] = useState(null)
+  const flotte = (lieux || []).filter(l => l.type === 'vehicule' && l.actif !== false)
+    .slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+  return (
+    <div>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
+        <Btn onClick={() => setEdit({ nom:'', type:'vehicule', parent_id:'', plaque:'' })}>+ Véhicule</Btn>
+        <Btn kind="soft" onClick={() => onInventaire?.()}>Inventaire (scan)</Btn>
+      </div>
+      <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 12px' }}>
+        Un véhicule = un lieu de type « Véhicule / ambulance ». Affectations et stock y sont rattachés.
+      </p>
+      {edit && <FormLieu item={edit} lieux={lieux} onDone={() => { setEdit(null); onChange() }} />}
+      {flotte.length === 0 ? <Empty title="Aucun véhicule" hint="Ajoutez Ambulance 1, VSL…" /> : flotte.map(v => {
+        const nArt = (unites || []).filter(u => u.lieu_id === v.id && u.etat === 'dispo').length
+        return (
+          <Card key={v.id} style={{ padding:'12px 14px', marginBottom:8 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+              <div>
+                <div style={{ fontWeight:700 }}>{v.nom}{v.plaque ? ` · ${v.plaque}` : ''}</div>
+                <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>{nArt} article(s) rangé(s)</div>
+              </div>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                <Btn kind="soft" onClick={() => onRanger?.(v)}>Ranger ici</Btn>
+                <Btn kind="soft" onClick={() => setEdit(v)}>Modifier</Btn>
+              </div>
+            </div>
+          </Card>
+        )
+      })}
+    </div>
   )
 }
 
@@ -454,9 +517,31 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr }) {
   )
 }
 
-function OngletAlertes() {
+function OngletAlertes({ onAction }) {
   const [a, setA] = useState(null)
-  useEffect(() => { supabase.rpc('stock_alertes').then(({ data }) => setA(data)) }, [])
+  const [lieux, setLieux] = useState([])
+  useEffect(() => {
+    supabase.rpc('stock_alertes').then(({ data }) => setA(data))
+    supabase.from('stock_lieux').select('id,nom,type,actif').eq('actif', true).then(({ data }) => setLieux(data || []))
+  }, [])
+  async function marquerVide(u) {
+    if (!u?.id && !u?.qr_token) return
+    if (!confirm(`Marquer « ${u.nom} » comme vide / à recharger ?`)) return
+    if (u.qr_token) {
+      const { data, error } = await supabase.rpc('stock_scan', {
+        p_token: u.qr_token, p_action: 'ajuster', p_qte: 0, p_souhait: null, p_lieu: null,
+      })
+      if (error || data?.ok === false) {
+        const { error: e2 } = await supabase.from('stock_unites').update({ etat: 'vide', qte_restante: 0 }).eq('id', u.id)
+        if (e2) { alert(e2.message); return }
+      }
+    } else if (u.id) {
+      const { error } = await supabase.from('stock_unites').update({ etat: 'vide', qte_restante: 0 }).eq('id', u.id)
+      if (error) { alert(error.message); return }
+    }
+    const { data } = await supabase.rpc('stock_alertes')
+    setA(data)
+  }
   if (!a) return <Loading />
   const blocs = [
     { k:'perimes', t:'Périmés', c:'#A32D2D' },
@@ -467,19 +552,30 @@ function OngletAlertes() {
   ]
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      <p style={{ fontSize:13, color:'var(--text-muted)', margin:0 }}>
+        Chaque alerte propose une action : ranger, inventaire, ou marquer à recharger.
+      </p>
       {blocs.map(b => {
         const rows = a[b.k] || []
         return (
           <div key={b.k}>
             <div style={{ fontWeight:700, color: b.c, marginBottom:8 }}>{b.t} ({rows.length})</div>
-            {rows.length === 0 ? <div style={{ fontSize:13, color:'var(--text-muted)' }}>Rien.</div> : rows.map((u, i) => (
-              <Card key={u.id || i} style={{ padding:'10px 14px', marginBottom:6 }}>
-                <div style={{ fontWeight:600 }}>{u.nom}</div>
-                <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
-                  {u.reste != null ? `Reste total ${u.reste} / seuil ${u.stock_minimal}` : `${resteLabel(u)}${u.lieu_nom ? ' · ' + u.lieu_nom : ''}${u.date_peremption ? ' · DLC ' + u.date_peremption : ''}`}
-                </div>
-              </Card>
-            ))}
+            {rows.length === 0 ? <div style={{ fontSize:13, color:'var(--text-muted)' }}>Rien.</div> : rows.map((u, i) => {
+              const lieu = lieux.find(l => l.id === u.lieu_id) || (u.lieu_id ? { id: u.lieu_id, nom: u.lieu_nom } : null)
+              return (
+                <Card key={u.id || i} style={{ padding:'10px 14px', marginBottom:6 }}>
+                  <div style={{ fontWeight:600 }}>{u.nom}</div>
+                  <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>
+                    {u.reste != null ? `Reste total ${u.reste} / seuil ${u.stock_minimal}` : `${resteLabel(u)}${u.lieu_nom ? ' · ' + u.lieu_nom : ''}${u.date_peremption ? ' · DLC ' + u.date_peremption : ''}`}
+                  </div>
+                  <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:8 }}>
+                    {lieu && <Btn kind="soft" onClick={() => onAction?.({ mode: 'ranger', lieu })}>Ranger</Btn>}
+                    <Btn kind="soft" onClick={() => onAction?.({ mode: 'inventaire' })}>Inventaire</Btn>
+                    {u.id && <Btn kind="danger" onClick={() => marquerVide(u)}>Marquer vide</Btn>}
+                  </div>
+                </Card>
+              )
+            })}
           </div>
         )
       })}
