@@ -3,13 +3,14 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, PhoneF, inp, lbl } from '@/components/ui'
 import { QUALIFS, ROLES_ASBL, SPECIALISATIONS_INF, qualifsPourType, qualificationsCompatibles } from './ficheSchema'
+import { ONBOARDING_CASES, libelleValidite, onboardingScore, validitesFiche } from '@/lib/erpRh'
 
 const vide = {
   date_naissance:'', telephone:'', type_benevole:'',
   qualifications:[], roles_asbl:[],
   permis:{ B:false, C:false, E:false, selection_medicale:false, selection_validite:'' },
-  ambulancier:{ visa_atnup:'', badge_112:'' },
-  infirmier:{ visa:'', specialisations:[] },
+  ambulancier:{ visa_atnup:'', visa_atnup_validite:'', badge_112:'', badge_112_validite:'' },
+  infirmier:{ visa:'', visa_validite:'', specialisations:[] },
   contacts_urgence:[],
 }
 
@@ -93,9 +94,37 @@ export default function FicheVolontaire({ userId, onBack }) {
 
   if (!prof) return <Page title="Fiche volontaire"><p style={{ color:'var(--text-muted)' }}>Chargement…</p></Page>
 
+  const onboard = onboardingScore(f)
+  const alerts = validitesFiche(f)
+
   return (
     <Page title={userId ? `Fiche — ${prof.prenom} ${prof.nom}` : 'Ma fiche volontaire'} action={onBack && <Btn kind="soft" onClick={onBack}>← Retour</Btn>}>
       {msg && <Card style={{ marginBottom:12, padding:'10px 14px', background: msg.ok?'#F0FAF0':'#FEF2F2', border:`1px solid ${msg.ok?'#C3E6C3':'#FCD5D5'}`, color: msg.ok?'#1E5C1E':'#991B1B' }}>{msg.t}</Card>}
+
+      <Card style={{ marginBottom:14, padding:'12px 14px' }}>
+        <Sec>Onboarding ({onboard.pct}%)</Sec>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+          {ONBOARDING_CASES.map(c => {
+            const ok = onboard.checks.find(x => x.id === c.id)?.ok
+            return (
+              <span key={c.id} style={{ padding:'6px 10px', borderRadius:99, fontSize:12.5, fontWeight:600, border:`1px solid ${ok?'#C3E6C3':'var(--border)'}`, background: ok?'#F0FAF0':'var(--bg-alt)', color: ok?'#1E5C1E':'var(--text-muted)' }}>
+                {ok ? '✓' : '○'} {c.l}
+              </span>
+            )
+          })}
+        </div>
+      </Card>
+
+      {alerts.length > 0 && (
+        <Card style={{ marginBottom:14, padding:'12px 14px', border:'1px solid #FCD5D5', background:'#FEF2F2' }}>
+          <Sec>Validités à surveiller</Sec>
+          {alerts.map(a => (
+            <div key={a.id} style={{ fontSize:13, color: a.level === 'bientot' ? '#BA7517' : '#A32D2D', marginBottom:4 }}>
+              {libelleValidite(a)}
+            </div>
+          ))}
+        </Card>
+      )}
 
       <div style={{ columns:'300px', columnGap:14 }}>
       {/* Identité */}
@@ -146,7 +175,9 @@ export default function FicheVolontaire({ userId, onBack }) {
           <Sec>Ambulancier</Sec>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px' }}>
             <F label="N° visa ATNUP (obligatoire)" value={f.ambulancier.visa_atnup} set={v=>setIn('ambulancier','visa_atnup',v)} required />
+            <F label="Visa ATNUP — valide jusqu'au" type="date" value={f.ambulancier.visa_atnup_validite||''} set={v=>setIn('ambulancier','visa_atnup_validite',v)} />
             <F label="N° badge 112 (optionnel)" value={f.ambulancier.badge_112} set={v=>setIn('ambulancier','badge_112',v)} />
+            <F label="Badge 112 — valide jusqu'au" type="date" value={f.ambulancier.badge_112_validite||''} set={v=>setIn('ambulancier','badge_112_validite',v)} />
           </div>
         </Card>
       )}
@@ -155,8 +186,9 @@ export default function FicheVolontaire({ userId, onBack }) {
       {estInfi && (
         <Card style={{ marginBottom:14, breakInside:'avoid', WebkitColumnBreakInside:'avoid' }}>
           <Sec>Infirmier(ère)</Sec>
-          <div style={{ maxWidth:280 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px', maxWidth:560 }}>
             <F label="N° visa infirmier" value={f.infirmier.visa} set={v=>setIn('infirmier','visa',v)} />
+            <F label="Visa — valide jusqu'au" type="date" value={f.infirmier.visa_validite||''} set={v=>setIn('infirmier','visa_validite',v)} />
           </div>
           <label style={lbl}>Spécialisation(s)</label>
           <Chips options={SPECIALISATIONS_INF} selected={f.infirmier.specialisations} onToggle={toggleSpec} />

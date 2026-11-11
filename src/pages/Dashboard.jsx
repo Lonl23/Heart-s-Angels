@@ -9,14 +9,19 @@ const CARDS = [
   { to:'/app/souhaits',      key:'souhaits',      icon:'⭐', label:'Souhaits',       desc:'Encoder et préparer les dossiers' },
   { to:'/app/defraiements',  key:'defraiements',  icon:'🧾', label:'Défraiements',   desc:'Frais, validation, paiement' },
   { to:'/app/disponibilites',key:'disponibilites',icon:'📅', label:'Disponibilités', desc:'Agenda : vos jours et les missions (sans nom de patient)' },
-  { to:'/app/stock',         key:'stock',         icon:'📦', label:'Stock',          desc:'Matériel et mouvements' },
+  { to:'/app/equipe',        key:'equipe',        icon:'👥', label:'Équipe',         desc:'Hub RH : membres, onboarding, validités' },
+  { to:'/app/stock',         key:'stock',         icon:'📦', label:'Stock',          desc:'Matériel, flotte et mouvements' },
   { to:'/app/annuaire',      key:'annuaire',      icon:'📇', label:'Annuaire',       desc:'Contacts et institutions' },
 ]
 
 export default function Dashboard() {
-  const { profile, canAccess, peutGererStock } = useAuth()
+  const { profile, canAccess, peutGererStock, peutVoirEquipe } = useAuth()
   const [missions, setMissions] = useState(null)
-  const cartes = CARDS.filter(c => c.key === 'stock' ? canAccess(c.key) && peutGererStock() : canAccess(c.key))
+  const cartes = CARDS.filter(c => {
+    if (c.key === 'stock') return canAccess(c.key) && peutGererStock()
+    if (c.key === 'equipe') return peutVoirEquipe()
+    return canAccess(c.key)
+  })
   const date = new Date().toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long' })
 
   useEffect(() => {

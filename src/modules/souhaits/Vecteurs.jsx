@@ -5,6 +5,7 @@ import {
   ROLES_MISSION, lblRoleMission, teinteDepuisQuals, roleSuggere, qualsImplicites,
   rolesRequisEffectifs, rolesRequisVecteur, phraseIlManque, rolesEncoreManquants,
 } from '@/modules/fiche/ficheSchema'
+import { labelVehicule, vehiculesDepuisLieux } from '@/lib/flotte'
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'v' + Date.now() + Math.random().toString(16).slice(2))
 const TYPES = ['', 'Ambulance', 'VSL', 'Voiture', 'Autre']
@@ -21,15 +22,18 @@ export default function Vecteurs({ souhaitId, m, setM }) {
   const [equipe, setEquipe] = useState([])
   const [pool, setPool] = useState([])
   const [dates, setDates] = useState({ d0: null, d1: null })
+  const [flotte, setFlotte] = useState([])
 
   useEffect(() => { charger() }, [souhaitId])
 
   async function charger() {
-    const [{ data: sh }, { data: eq }, rpc] = await Promise.all([
+    const [{ data: sh }, { data: eq }, rpc, { data: lieux }] = await Promise.all([
       supabase.from('souhaits').select('date_souhaitee,date_fin').eq('id', souhaitId).single(),
       supabase.from('souhait_personnel').select('*, profiles(prenom,nom,role,fiche)').eq('souhait_id', souhaitId),
       supabase.rpc('personnel_disponible_souhait', { p_souhait: souhaitId }),
+      supabase.from('stock_lieux').select('id,nom,type,plaque,actif').eq('actif', true),
     ])
+    setFlotte(vehiculesDepuisLieux(lieux || []))
     const d0 = sh?.date_souhaitee || null
     const d1 = sh?.date_fin || sh?.date_souhaitee || null
     setDates({ d0, d1 })
@@ -139,7 +143,23 @@ export default function Vecteurs({ souhaitId, m, setM }) {
                 <Btn kind="danger" onClick={()=>retirerVecteur(v.id)} style={{ padding:'4px 10px' }}>Retirer</Btn>
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'0 14px' }}>
-                <F label="Nom / identifiant" value={v.nom} set={val=>majVecteur(v.id,{nom:val})} placeholder="Ambulance 1" />
+                <div>
+                  <label style={lbl}>Depuis la flotte</label>
+                  <select
+                    value={v.stock_lieu_id || ''}
+                    onChange={e => {
+                      const id = e.target.value
+                      const fl = flotte.find(x => x.id === id)
+                      if (!fl) { majVecteur(v.id, { stock_lieu_id: '', nom: v.nom, plaque: v.plaque }); return }
+                      majVecteur(v.id, { stock_lieu_id: fl.id, nom: fl.nom, plaque: fl.plaque || '' })
+                    }}
+                    style={inp}
+                  >
+                    <option value="">— Saisie manuelle —</option>
+                    {flotte.map(fl => <option key={fl.id} value={fl.id}>{labelVehicule(fl)}</option>)}
+                  </select>
+                </div>
+                <F label="Nom / identifiant" value={v.nom} set={val=>majVecteur(v.id,{nom:val, stock_lieu_id: ''})} placeholder="Ambulance 1" />
                 <Sel label="Type de transport" value={v.type_transport} set={val=>majVecteur(v.id,{type_transport:val})} options={TYPES.map(t=>({v:t,l:t||'—'}))} />
                 <F label="Plaque" value={v.plaque} set={val=>majVecteur(v.id,{plaque:val})} />
               </div>

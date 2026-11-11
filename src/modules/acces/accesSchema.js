@@ -5,6 +5,7 @@ export const ACCES = [
   { v:'mission',        l:'Mes missions' },
   { v:'defraiements',   l:'Défraiements' },
   { v:'disponibilites', l:'Disponibilités' },
+  { v:'equipe',         l:'Équipe (RH)' },
   { v:'stock',          l:'Stock' },
   { v:'annuaire',       l:'Annuaire' },
 ]

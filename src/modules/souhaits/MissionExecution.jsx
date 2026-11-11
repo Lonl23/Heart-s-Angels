@@ -505,6 +505,13 @@ export default function MissionExecution({ souhaitId, onBack }) {
 
           {etape === 'vehicule' && (
             <>
+              <Section titre="Pré-départ (ERP logistique)">
+                <div style={{ fontSize:13.5, color:'var(--text-2)', lineHeight:1.45, marginBottom:8 }}>
+                  Avant de quitter la base : photos 4 côtés, checklist, emport matériel (scan),
+                  et <strong>pression O₂ au manomètre</strong> si une bouteille part avec vous.
+                  Une bouteille ≤ 50 bar ne doit pas sortir.
+                </div>
+              </Section>
               <Section titre="Mon statut à la base">
                 <div className="ha-statuts-base">
                   {STATUTS_BASE.map(s => (
@@ -526,7 +533,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
                 {!cotesOk && <div style={{ fontSize:13, color:'#BA7517', marginTop:8 }}>Les 4 côtés sont demandés avant de quitter la base.</div>}
               </Section>
-              <Section titre="Checklist départ">
+              <Section titre="Checklist départ + emport / O₂">
                 <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
                   checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} />
                 <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
