@@ -353,6 +353,8 @@ export const ROLES_ASBL = [
   { v:'relations_publiques_adjoint', l:'Adjoint relations publiques' },
   { v:'resp_informatique',           l:'Coordinateur informatique' },
   { v:'resp_informatique_adjoint',   l:'Coordinateur informatique adjoint' },
+  { v:'resp_dps',                    l:'Responsable DPS' },
+  { v:'resp_dps_adjoint',            l:'Adjoint responsable DPS' },
   { v:'administrateur_asbl',         l:"Administrateur de l'ASBL" },
 ]
 
@@ -377,6 +379,7 @@ export const EQUIPES_ASBL = [
   { v:'medical',       l:'Coordination médicale',      roles:['coord_medical','coord_medical_adjoint','coordinateur_medical'] },
   { v:'tresorerie',    l:'Trésorerie',                 roles:['tresorier','tresorier_adjoint'] },
   { v:'informatique',  l:'Informatique',               roles:['resp_informatique','resp_informatique_adjoint'] },
+  { v:'secours',       l:'Département secours (DPS)',  roles:['resp_dps','resp_dps_adjoint'] },
   { v:'rp',            l:'Relations publiques',        roles:['relations_publiques','relations_publiques_adjoint'] },
   { v:'recolte',       l:'Récolteurs de souhait',      roles:['recolteur_souhait'] },
   { v:'admin_asbl',    l:"Administrateur de l'ASBL",   roles:['administrateur_asbl'] },

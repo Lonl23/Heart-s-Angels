@@ -40,6 +40,7 @@ export const DEPARTEMENTS = [
     toujoursVisible: true,
     modules: [
       { key: 'activites_secours', to: '/app/secours/activites', label: 'Activités', icon: '🩺', desc: 'Dispositifs : dimensionner, armer, puis le bilan de fin' },
+      { key: 'conventions_dps', to: '/app/secours/conventions', label: 'Conventions DPS', icon: '📄', desc: 'Montant, engagements organisateur et ASBL' },
     ],
   },
   {
@@ -85,6 +86,13 @@ export function moduleAutorise(key, auth) {
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
   if (key === 'personnalisation') return auth.peutPersonnaliser()
   if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')
+  if (key === 'conventions_dps') {
+    if (!auth.can('staff')) return false
+    const role = auth.profile?.role
+    if (role === 'admin' || role === 'president') return true
+    const roles = auth.profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president', 'vice_president', 'resp_dps', 'resp_dps_adjoint'].includes(r))
+  }
   if (key === 'actualites') return true
   if (key === 'actualites_edition') return auth.peutPublierActualites()
   if (key === 'organigramme') return true

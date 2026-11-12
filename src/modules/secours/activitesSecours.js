@@ -585,13 +585,42 @@ export function dansLes30Jours(debut, maintenant = new Date()) {
   return d >= jour && d < limite
 }
 
+const ROLES_DPS_GESTION = ['president', 'vice_president', 'resp_dps', 'resp_dps_adjoint']
+
+/** Création / édition activités & conventions DPS. */
 export function peutCreerActiviteSecours(profile) {
   const role = profile?.role
   if (!role || role === 'partenaire') return false
   if (role === 'admin' || role === 'president') return true
   const roles = profile?.fiche?.roles_asbl || []
-  return roles.some(r => r === 'president' || r === 'vice_president')
+  return roles.some(r => ROLES_DPS_GESTION.includes(r))
 }
+
+export const STATUTS_CONVENTION = [
+  { v: 'brouillon', l: 'Brouillon' },
+  { v: 'proposee', l: 'Proposée' },
+  { v: 'signee', l: 'Signée' },
+  { v: 'annulee', l: 'Annulée' },
+]
+
+/** Texte type engagements (à adapter dans la convention). */
+export const MODELE_ENGAGEMENTS_ASBL = `Heart's Angels s'engage à :
+- Mettre en place le dispositif prévisionnel de secours dimensionné dans la présente convention (équipes, moyens humains et matériels).
+- Désigner un responsable de dispositif joignable pendant toute la durée d'ouverture.
+- Assurer les soins de premiers secours dans le cadre de son agrément et des règles applicables.
+- Tenir une main courante et assurer le transfert vers les secours publics selon les procédures en vigueur.
+- Informer l'organisateur de toute impossibilité majeure d'assurer le dispositif dans les meilleurs délais.`
+
+export const MODELE_ENGAGEMENTS_ORGANISATEUR = `L'organisateur s'engage à :
+- Fournir un emplacement adapté, les accès, l'alimentation électrique, l'éclairage, l'eau et les sanitaires nécessaires au poste.
+- Désigner un interlocuteur joignable pendant toute la manifestation.
+- Faciliter l'accès des véhicules de secours et la signalisation du poste.
+- Régler la participation financière indiquée dans la convention selon les modalités convenues.
+- Informer Heart's Angels de tout changement de jauge, horaires, lieu ou risques particuliers.`
+
+export const MODELE_ENGAGEMENTS_COMMUNS = `La convention prend effet à sa signature et couvre le montage, l'accueil du public et la fin effective du dispositif.
+Toute modification importante (jauge, lieu, horaires, risques) fait l'objet d'un avenant écrit.
+En cas de litige, les parties recherchent d'abord une solution amiable.`
 
 export function indexInscriptions(inscriptions, userId) {
   const nombres = new Map()

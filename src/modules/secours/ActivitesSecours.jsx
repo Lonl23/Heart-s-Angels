@@ -38,6 +38,9 @@ const VIDE = {
   fin: '',
   places: '1',
   publicAttendu: '',
+  adresse: '',
+  organisateurNom: '',
+  organisateurContact: '',
   equipes: equipesVides(),
   competences: [],
 }
@@ -134,7 +137,7 @@ export default function ActivitesSecours() {
     if (!silencieux) setLoading(true)
     setErr(null)
     const [a, i] = await Promise.all([
-      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
+      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,organisateur_nom,organisateur_contact,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
       supabase.from('activites_secours_inscrits').select('id,activite_id,user_id'),
     ])
     if (a.error || i.error) {
@@ -214,6 +217,9 @@ export default function ActivitesSecours() {
       fin: versChamp(a.fin),
       places: String(a.places ?? 1),
       publicAttendu: a.public_attendu == null ? '' : String(a.public_attendu),
+      adresse: a.adresse || '',
+      organisateurNom: a.organisateur_nom || '',
+      organisateurContact: a.organisateur_contact || '',
       equipes: { ...equipesVides(), ...comptesEquipesDe(a) },
       competences: competencesConnues(a.competences),
     })
@@ -275,6 +281,9 @@ export default function ActivitesSecours() {
       dispositif: equipesListe[0] || null,
       public_attendu: publicAttendu,
       lieu: form.lieu.trim() || null,
+      adresse: form.adresse.trim() || null,
+      organisateur_nom: form.organisateurNom.trim() || null,
+      organisateur_contact: form.organisateurContact.trim() || null,
       debut,
       fin,
       places,
@@ -312,7 +321,12 @@ export default function ActivitesSecours() {
     <Page
       title="Activités"
       subtitle="Département secours. Une activité se dimensionne, s’arme, puis se rend en bilan."
-      action={gerer ? <Btn onClick={ouvrirCreation}>+ Activité</Btn> : null}
+      action={gerer ? (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Link to="/app/secours/conventions"><Btn kind="soft">Conventions DPS</Btn></Link>
+          <Btn onClick={ouvrirCreation}>+ Activité</Btn>
+        </div>
+      ) : null}
     >
       <style>{CSS}</style>
       {err && <Flash kind="err">{err}</Flash>}
@@ -374,7 +388,10 @@ export default function ActivitesSecours() {
                   {TYPES_ACTIVITE.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
                 </select>
               </label>
-              <F label="Lieu" value={form.lieu} set={v => majForm({ lieu: v })} />
+              <F label="Lieu (libellé)" value={form.lieu} set={v => majForm({ lieu: v })} />
+              <F label="Adresse exacte du site" value={form.adresse} set={v => majForm({ adresse: v })} />
+              <F label="Organisateur" value={form.organisateurNom} set={v => majForm({ organisateurNom: v })} />
+              <F label="Contact organisateur" value={form.organisateurContact} set={v => majForm({ organisateurContact: v })} />
               <F label="Début" type="datetime-local" value={form.debut} set={v => majForm({ debut: v })} required />
               <F label="Fin" type="datetime-local" value={form.fin} set={v => majForm({ fin: v })} />
               <F label="Places" type="number" value={form.places} set={v => majForm({ places: v })} required />

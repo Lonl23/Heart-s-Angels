@@ -83,7 +83,7 @@ export default function FicheActivite() {
     setAbsent(false)
     const a = await supabase
       .from('activites_secours')
-      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,debut,fin,places,competences,armement,created_by,created_at')
+      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,organisateur_nom,organisateur_contact,debut,fin,places,competences,armement,created_by,created_at')
       .eq('id', id)
       .maybeSingle()
     if (a.error) {
@@ -294,8 +294,9 @@ export default function FicheActivite() {
   else if (complet) { libelle = 'Complet'; desactive = true }
 
   const org = config.organisation?.nom || 'Heart’s Angels ASBL'
-  const lieuUrl = activite?.lieu
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activite.lieu)}`
+  const lieuMaps = activite?.adresse || activite?.lieu || ''
+  const lieuUrl = lieuMaps
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lieuMaps)}`
     : ''
 
   if (loading) {
@@ -400,6 +401,8 @@ export default function FicheActivite() {
                 <Champ k="Équipes" v={libelleEquipes || '—'} />
                 <Champ k="Effectif min." v={sugEquipes?.resume || '—'} />
                 <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
+                <Champ k="Organisateur" v={activite.organisateur_nom || '—'} />
+                <Champ k="Contact orga." v={activite.organisateur_contact || '—'} />
               </div>
               <p className="ha-afiche-vide">Les équipes se choisissent à la création (plusieurs possibles). Pas de calcul depuis le public. « Minimum » = ordre des qualifications 1→7.</p>
               {sugEquipes && (
@@ -453,14 +456,21 @@ export default function FicheActivite() {
 
             <section className="ha-afiche-carte">
               <h2>Lieu</h2>
-              {activite.lieu
+              {activite.adresse || activite.lieu
                 ? (
                   <>
-                    <p className="ha-afiche-lieu">{activite.lieu}</p>
+                    {activite.lieu && <p className="ha-afiche-lieu">{activite.lieu}</p>}
+                    {activite.adresse && <p className="ha-afiche-lieu" style={{ marginTop: activite.lieu ? 6 : 0 }}>{activite.adresse}</p>}
                     <a className="ha-afiche-maps" href={lieuUrl} target="_blank" rel="noreferrer">Ouvrir dans Google Maps</a>
                   </>
                 )
                 : <p className="ha-afiche-vide">Aucun lieu renseigné.</p>}
+              {(activite.organisateur_nom || activite.organisateur_contact) && (
+                <div className="ha-afiche-kv" style={{ marginTop: 14 }}>
+                  <Champ k="Organisateur" v={activite.organisateur_nom || '—'} />
+                  <Champ k="Contact" v={activite.organisateur_contact || '—'} />
+                </div>
+              )}
             </section>
           </div>
         )}
