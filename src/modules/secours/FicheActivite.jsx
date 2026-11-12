@@ -34,6 +34,13 @@ import {
   estResponsableDpsProfil,
   peutCreerActiviteSecours,
 } from './activitesSecours'
+import {
+  P2_ACTIVITE,
+  E1_ENVIRONNEMENT,
+  E2_DELAI,
+  calculerDimensionnement,
+  normaliserDimensionnement,
+} from './dpsDimensionnement'
 
 function pad(n) { return String(n).padStart(2, '0') }
 
@@ -68,7 +75,8 @@ export default function FicheActivite() {
   const [gens, setGens] = useState([])
   const [auteur, setAuteur] = useState(null)
   const [onglet, setOnglet] = useState('info')
-  const [temps, setTemps] = useState('dimensionner')
+  const [sousPerso, setSousPerso] = useState('liste')
+  const [sousLog, setSousLog] = useState('vehicule')
   const [loading, setLoading] = useState(true)
   const [absent, setAbsent] = useState(false)
   const [err, setErr] = useState(null)
@@ -79,6 +87,12 @@ export default function FicheActivite() {
   const [armement, setArmement] = useState(null)
   const [plaques, setPlaques] = useState([])
   const [sauveArme, setSauveArme] = useState(false)
+  const [dim, setDim] = useState(() => normaliserDimensionnement(null))
+  const [sauveDim, setSauveDim] = useState(false)
+  const [statsPatient, setStatsPatient] = useState({ secours: 0, evacuations: 0, assistees: 0, decedees: 0 })
+  const [rapport, setRapport] = useState([])
+  const [noteRapport, setNoteRapport] = useState('')
+  const gerer = peutCreerActiviteSecours(profile)
 
   useEffect(() => { charger() }, [id, profile?.id])
 
@@ -88,7 +102,7 @@ export default function FicheActivite() {
     setAbsent(false)
     const a = await supabase
       .from('activites_secours')
-      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,adresse_mode,adresse_rue,adresse_numero,adresse_cp,adresse_ville,organisateur_nom,organisateur_contact,responsable_preventif_id,disp_alpha_id,disp_bravo_id,debut,fin,places,competences,armement,created_by,created_at')
+      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,adresse_mode,adresse_rue,adresse_numero,adresse_cp,adresse_ville,organisateur_nom,organisateur_contact,responsable_preventif_id,disp_alpha_id,disp_bravo_id,debut,fin,places,competences,armement,dps_dimensionnement,created_by,created_at')
       .eq('id', id)
       .maybeSingle()
     if (a.error) {
@@ -152,11 +166,27 @@ export default function FicheActivite() {
     }
     setActivite(act)
     setArmement(normaliserArmement(act.armement, act))
+    setDim(normaliserDimensionnement(act.dps_dimensionnement))
     setInscriptions(lignes)
     setGens(profils)
     setAuteur(act.created_by ? parId.get(act.created_by) || null : null)
     const pl = await supabase.from('plaques_vehicules').select('plaque,libelle').eq('actif', true).order('plaque')
     if (!pl.error) setPlaques(pl.data || [])
+    const fp = await supabase
+      .from('fiches_patient_dps')
+      .select('id,orientation')
+      .eq('activite_id', id)
+    if (!fp.error) {
+      const rows = fp.data || []
+      setStatsPatient({
+        secours: rows.length,
+        evacuations: rows.filter(r => r.orientation === 'transport' || r.orientation === 'secours_publics').length,
+        assistees: rows.filter(r => r.orientation === 'laisse_sur_place' || !r.orientation).length,
+        decedees: rows.filter(r => r.orientation === 'decede').length,
+      })
+    }
+    const rp = act.dps_dimensionnement?.rapport
+    setRapport(Array.isArray(rp) ? rp : [])
     setLoading(false)
   }
 
@@ -179,6 +209,15 @@ export default function FicheActivite() {
   const sugEquipes = useMemo(() => suggestionDepuisDispositifs(activite), [activite])
   const libelleEquipes = useMemo(() => libelleComptesEquipes(activite), [activite])
   const parIdGens = useMemo(() => new Map(gens.map(g => [g.id, g])), [gens])
+  const compsCouvertes = useMemo(() => {
+    const req = Array.isArray(activite?.competences) ? activite.competences : []
+    if (!req.length) return { ok: 0, total: 0 }
+    let ok = 0
+    for (const c of req) {
+      if (gens.some(g => competencesDuProfil(g).has(c) || mesCorrespond(c, g))) ok += 1
+    }
+    return { ok, total: req.length }
+  }, [activite?.competences, gens])
 
   const personnel = useMemo(() => {
     const parId = new Map(gens.map(g => [g.id, g]))
@@ -209,15 +248,64 @@ export default function FicheActivite() {
       .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, 'fr'))
   }, [inscriptions, gens, q, filtreComp, requises])
 
-  function aller(etape) {
-    setTemps(etape)
-    if (etape === 'dimensionner') setOnglet('info')
-    if (etape === 'armer') setOnglet('personnel')
+  function aller(tab) {
+    setOnglet(tab)
+    if (tab === 'personnel') setSousPerso('liste')
+    if (tab === 'logistique') setSousLog('vehicule')
   }
 
   function majArmement(patch) {
     setArmement(a => ({ ...(a || normaliserArmement(null, activite)), ...patch }))
   }
+
+  function majDim(patch) {
+    setDim(d => ({ ...d, ...patch }))
+  }
+
+  async function sauverDimensionnement() {
+    if (!activite?.id || sauveDim || !gerer) return
+    setSauveDim(true)
+    setFlash(null)
+    const payload = normaliserDimensionnement(dim)
+    const next = {
+      ...(activite.dps_dimensionnement && typeof activite.dps_dimensionnement === 'object' ? activite.dps_dimensionnement : {}),
+      ...payload,
+      rapport,
+    }
+    const { error } = await supabase.from('activites_secours').update({
+      dps_dimensionnement: next,
+      public_attendu: payload.public_declare || activite.public_attendu,
+    }).eq('id', activite.id)
+    if (error) setFlash(error.message || 'Dimensionnement non enregistré.')
+    else {
+      setActivite(x => ({ ...x, dps_dimensionnement: next, public_attendu: payload.public_declare || x.public_attendu }))
+      setDim(payload)
+    }
+    setSauveDim(false)
+  }
+
+  async function ajouterNoteRapport() {
+    if (!gerer || !noteRapport.trim() || !activite?.id) return
+    const entree = {
+      id: crypto.randomUUID?.() || String(Date.now()),
+      at: new Date().toISOString(),
+      auteur: `${profile?.prenom || ''} ${profile?.nom || ''}`.trim() || '—',
+      texte: noteRapport.trim().slice(0, 1000),
+    }
+    const nextRapport = [entree, ...rapport]
+    setRapport(nextRapport)
+    setNoteRapport('')
+    const next = {
+      ...(activite.dps_dimensionnement && typeof activite.dps_dimensionnement === 'object' ? activite.dps_dimensionnement : {}),
+      ...normaliserDimensionnement(dim),
+      rapport: nextRapport,
+    }
+    const { error } = await supabase.from('activites_secours').update({ dps_dimensionnement: next }).eq('id', activite.id)
+    if (error) setFlash(error.message || 'Rapport non enregistré.')
+    else setActivite(x => ({ ...x, dps_dimensionnement: next }))
+  }
+
+  const calcDim = useMemo(() => calculerDimensionnement(dim), [dim])
 
   function toggleItemArme(idItem) {
     setArmement(a => {
@@ -367,8 +455,14 @@ export default function FicheActivite() {
         <header className="ha-afiche-head">
           <div className="ha-afiche-top">
             <div>
-              <Link to="/app/secours/activites" className="ha-afiche-retour">Activités</Link>
-              <p className="ha-afiche-type">{libelleTypeActivite(activite.type)}</p>
+              <p className="ha-afiche-fil">
+                <Link to="/app/secours/activites">Activités</Link>
+                <span> · </span>
+                <span>{libelleStatutActivite(statut)}</span>
+                <span> · </span>
+                <span>{libelleTypeActivite(activite.type)}</span>
+                {activite.numero != null && <span> · #{activite.numero}</span>}
+              </p>
               <h1>{activite.titre}</h1>
               <p className="ha-afiche-quand">
                 {memeJour
@@ -378,60 +472,34 @@ export default function FicheActivite() {
                 {fmtHeure(activite.debut)}
                 {activite.fin ? ` – ${fmtHeure(activite.fin)}` : ''}
                 {duree ? ` (${duree})` : ''}
+                {(adresseComposee || activite.lieu) ? ` · ${adresseComposee || activite.lieu}` : ''}
               </p>
             </div>
             <span className={'ha-afiche-etat is-' + statut}>{libelleStatutActivite(statut)}</span>
           </div>
           <div className="ha-afiche-chiffres">
-            <Chiffre label="Personnel inscrit" valeur={n} />
-            <Chiffre label="Places" valeur={`${n} / ${places}`} />
-            <Chiffre label="Durée" valeur={duree || '—'} />
+            <Chiffre label="Personnel inscrit" valeur={`${n} / ${places || '—'}`} />
+            <Chiffre label="Logistique" valeur={armement?.plaque ? '1 véhicule' : (plaques.length ? `${plaques.length} dispo.` : '—')} />
+            <Chiffre label="Places restantes" valeur={places ? Math.max(places - n, 0) : '—'} />
+            <Chiffre label="Compétences" valeur={compsCouvertes.total ? `${compsCouvertes.ok}/${compsCouvertes.total}` : '—'} />
           </div>
         </header>
 
-        <nav className="ha-dps-temps" aria-label="Déroulement du dispositif">
-          <button type="button" className={temps === 'dimensionner' ? 'is-on' : ''} onClick={() => aller('dimensionner')}>
-            <span>1</span> Dimensionner
-          </button>
-          <button type="button" className={temps === 'armer' ? 'is-on' : ''} onClick={() => aller('armer')}>
-            <span>2</span> Armer
-          </button>
-          <button type="button" className={temps === 'rendre' ? 'is-on' : ''} onClick={() => aller('rendre')}>
-            <span>3</span> Rendre
-          </button>
-        </nav>
-
-        {temps !== 'rendre' && (
         <nav className="ha-afiche-onglets" aria-label="Fiche de l’activité">
-          <button type="button" className={onglet === 'info' ? 'is-on' : ''} onClick={() => aller('dimensionner')}>Information</button>
-          <button type="button" className={onglet === 'personnel' ? 'is-on' : ''} onClick={() => aller('armer')}>
-            Personnel{n ? ` ${n}` : ''}
-          </button>
+          {[
+            { v: 'info', l: 'Information' },
+            { v: 'personnel', l: `Personnel${n ? ` (${n})` : ''}` },
+            { v: 'logistique', l: 'Logistique' },
+            { v: 'intervention', l: 'Intervention' },
+            { v: 'rapport', l: 'Rapport' },
+            { v: 'statistique', l: 'Statistique' },
+            { v: 'dps', l: 'DPS' },
+          ].map(t => (
+            <button key={t.v} type="button" className={onglet === t.v ? 'is-on' : ''} onClick={() => aller(t.v)}>{t.l}</button>
+          ))}
         </nav>
-        )}
 
-        {temps === 'rendre' && (
-          <section className="ha-afiche-carte">
-            <h2>Bilan de fin</h2>
-            <p className="ha-afiche-vide" style={{ marginTop: 8 }}>
-              {statut === 'terminee'
-                ? 'Le dispositif est terminé. Le bilan reprend l’équipe inscrite, la durée et le dimensionnement.'
-                : 'Le dispositif n’est pas encore terminé. Le bilan reprend déjà ce qui est enregistré.'}
-            </p>
-            <div className="ha-afiche-kv" style={{ marginTop: 14 }}>
-              <Champ k="Équipes" v={libelleEquipes || '—'} />
-              <Champ k="Public attendu" v={activite.public_attendu == null ? '—' : String(activite.public_attendu)} />
-              <Champ k="Personnel" v={`${n} / ${places}`} />
-              <Champ k="Durée" v={duree || '—'} />
-            </div>
-            <div className="ha-dps-actions">
-              <Btn onClick={recupererBilan}>Récupérer</Btn>
-              <Btn kind="soft" onClick={imprimerBilan}>Imprimer</Btn>
-            </div>
-          </section>
-        )}
-
-        {temps !== 'rendre' && onglet === 'info' && (
+        {onglet === 'info' && (
           <div className="ha-afiche-grille">
             <section className="ha-afiche-carte">
               <h2>Détails de l’activité</h2>
@@ -539,137 +607,384 @@ export default function FicheActivite() {
           </div>
         )}
 
-        {temps !== 'rendre' && onglet === 'personnel' && (
+        {onglet === 'personnel' && (
           <>
-          <section className="ha-afiche-carte">
-            <h2>Effectif requis</h2>
-            {equipesIds.length ? (
-              <>
-                <p className="ha-afiche-vide" style={{ marginTop: 6 }}>{sugEquipes?.resume}</p>
-                <p style={{ marginTop: 10, fontWeight: 650, color: evalEquipe.ok ? 'var(--heading)' : '#A32D2D' }}>
-                  {evalEquipe.ok ? 'Minimum atteint avec les inscrits.' : `Manque : ${texteManquesEquipe(evalEquipe)}`}
-                </p>
-                {equipesIds.map(id => {
-                  const eq = equipeDuDispositif(id)
-                  const qte = comptesEquipes[id] || 0
-                  if (!eq?.alternatives?.length || !qte) return null
-                  return (
-                    <p key={id} className="ha-afiche-vide" style={{ marginTop: 8 }}>
-                      <strong>{qte > 1 ? `${qte}× ` : ''}{libelleDispositif(id, true)}</strong>
-                      {eq.alternatives.length > 1 ? ' — compositions : ' : ' — '}
-                      {eq.alternatives.map((alt, i) => (
-                        <span key={i}>{i ? ' · ou · ' : ''}{alt.map(b => `${b.n} ${libelleRoleEquipe(b.role)}`).join(' + ')}</span>
-                      ))}
-                      {qte > 1 ? ' (chacun)' : ''}
-                    </p>
-                  )
-                })}
-              </>
-            ) : (
-              <p className="ha-afiche-vide" style={{ marginTop: 6 }}>Aucune équipe choisie à la création.</p>
-            )}
-          </section>
+            <nav className="ha-afiche-sousnav" aria-label="Personnel">
+              {[
+                { v: 'liste', l: 'Liste' },
+                { v: 'equipe', l: 'Équipe' },
+                { v: 'affectation', l: 'Affectation' },
+              ].map(s => (
+                <button key={s.v} type="button" className={sousPerso === s.v ? 'is-on' : ''} onClick={() => setSousPerso(s.v)}>{s.l}</button>
+              ))}
+            </nav>
+            <div className="ha-afiche-bandeau">
+              <span><strong>{n}/{places || '—'}</strong> inscrit</span>
+              <span><strong>{compsCouvertes.ok}/{compsCouvertes.total || '—'}</strong> compétence</span>
+              <span style={{ color: evalEquipe.ok ? undefined : '#A32D2D' }}>
+                {evalEquipe.ok ? 'Effectif min. OK' : `Manque : ${texteManquesEquipe(evalEquipe)}`}
+              </span>
+            </div>
 
-          <section className="ha-afiche-carte">
-            <h2>Armement</h2>
-            {armement && (
-              <>
-                <label style={{ display: 'block', marginTop: 8, marginBottom: 10 }}>
-                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Véhicule (plaque)</span>
-                  <select
-                    value={armement.plaque || ''}
-                    onChange={e => majArmement({ plaque: e.target.value })}
-                    style={{ width: '100%', maxWidth: 320, padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
-                  >
-                    <option value="">—</option>
-                    {plaques.map(p => (
-                      <option key={p.plaque} value={p.plaque}>{p.plaque}{p.libelle ? ` — ${p.libelle}` : ''}</option>
+            {sousPerso === 'liste' && (
+              <section className="ha-afiche-carte">
+                <h2>Personnel inscrit</h2>
+                <div className="ha-afiche-outils">
+                  <select aria-label="Compétence" value={filtreComp} onChange={e => setFiltreComp(e.target.value)}>
+                    <option value="">Toutes les compétences</option>
+                    {COMPETENCES_ACTIVITE.filter(c => c.v !== 'medical' && c.v !== 'non_medical').map(c => (
+                      <option key={c.v} value={c.v}>{c.l}</option>
                     ))}
                   </select>
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                  {armement.items.map(it => (
-                    <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={!!it.ok} onChange={() => toggleItemArme(it.id)} />
-                      <span>{it.label}</span>
-                    </label>
-                  ))}
+                  <input type="search" placeholder="Rechercher" aria-label="Rechercher une personne" value={q} onChange={e => setQ(e.target.value)} />
                 </div>
-                <label style={{ display: 'block', marginBottom: 12 }}>
+                {personnel.length === 0 ? (
+                  <p className="ha-afiche-vide">{inscriptions.length === 0 ? 'Personne n’est inscrit pour le moment.' : 'Aucune personne ne correspond.'}</p>
+                ) : (
+                  <div className="ha-afiche-table-wrap">
+                    <table className="ha-afiche-table">
+                      <thead>
+                        <tr>
+                          <th>Photo</th>
+                          <th>Personnel</th>
+                          <th>Fonction</th>
+                          <th>Compétence</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {personnel.map(p => (
+                          <tr key={p.id} className={p.manque ? 'is-manque' : undefined}>
+                            <td><Portrait url={p.photo} prenom={p.prenom} nom={p.nom} /></td>
+                            <td>
+                              <strong>{`${p.prenom} ${p.nom}`.trim() || 'Compte retiré'}</strong>
+                              <span className="ha-afiche-sous">{fmtDate(p.inscription)}</span>
+                            </td>
+                            <td>{fonctionDe(p)}</td>
+                            <td>
+                              {p.quals.length === 0
+                                ? <span className="ha-afiche-vide">—</span>
+                                : p.quals.map(c => (
+                                  <span key={c} className={'ha-act-chip' + (requises.includes(c) ? ' is-moi' : '')}>
+                                    {libelleCompetence(c)}
+                                  </span>
+                                ))}
+                            </td>
+                            <td>
+                              {p.id === profile?.id && (
+                                <button type="button" className="ha-afiche-moi" onClick={inscrire} disabled={busy}>
+                                  {busy ? '…' : 'Se désinscrire'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {sousPerso === 'equipe' && (
+              <section className="ha-afiche-carte">
+                <h2>Équipes / dispositifs</h2>
+                <div className="ha-afiche-info-box">
+                  <strong>Deux usages</strong>
+                  <p>L’équipe opérationnelle structure le dispositif. Les affectations aux postes organisent qui est où pendant le créneau.</p>
+                </div>
+                {equipesIds.length === 0 ? (
+                  <p className="ha-afiche-vide">Aucune équipe choisie à la création.</p>
+                ) : equipesIds.map(eid => {
+                  const eq = equipeDuDispositif(eid)
+                  const qte = comptesEquipes[eid] || 0
+                  return (
+                    <div key={eid} className="ha-afiche-equipe-bloc">
+                      <div className="ha-afiche-equipe-titre">
+                        <strong>{qte > 1 ? `${qte}× ` : ''}{libelleDispositif(eid, true)}</strong>
+                        <span>{eq?.resume}</span>
+                      </div>
+                      <div className="ha-afiche-slots">
+                        {(eq?.alternatives?.[0] || []).flatMap(b => Array.from({ length: b.n * Math.max(1, qte) }, (_, i) => (
+                          <div key={`${b.role}-${i}`} className="ha-afiche-slot">
+                            <span>{libelleRoleEquipe(b.role)}</span>
+                            <em>Poste libre</em>
+                          </div>
+                        )))}
+                      </div>
+                    </div>
+                  )
+                })}
+                <div className="ha-afiche-equipe-bloc" style={{ marginTop: 12 }}>
+                  <div className="ha-afiche-equipe-titre">
+                    <strong>Véhicule</strong>
+                    <span>{armement?.plaque || 'Sans plaque'}</span>
+                  </div>
+                  <p className="ha-afiche-vide">Affectations aux postes : à compléter depuis la liste du personnel.</p>
+                </div>
+              </section>
+            )}
+
+            {sousPerso === 'affectation' && (
+              <section className="ha-afiche-carte">
+                <h2>Affectation</h2>
+                <p className="ha-afiche-vide">
+                  Commandement : Resp. {nomDe(activite.responsable_preventif_id)} · Alpha {nomDe(activite.disp_alpha_id)}
+                  {activite.disp_bravo_id ? ` · Bravo ${nomDe(activite.disp_bravo_id)}` : ''}
+                </p>
+                <p className="ha-afiche-vide" style={{ marginTop: 8 }}>
+                  Les postes d’équipe restent affectables par créneau. L’inscription globale est dans l’onglet Liste.
+                </p>
+              </section>
+            )}
+          </>
+        )}
+
+        {onglet === 'logistique' && (
+          <>
+            <nav className="ha-afiche-sousnav" aria-label="Logistique">
+              {[
+                { v: 'vehicule', l: 'Véhicule' },
+                { v: 'materiel', l: 'Matériel' },
+                { v: 'scanner', l: 'Scanner' },
+              ].map(s => (
+                <button key={s.v} type="button" className={sousLog === s.v ? 'is-on' : ''} onClick={() => setSousLog(s.v)}>{s.l}</button>
+              ))}
+            </nav>
+
+            {sousLog === 'vehicule' && (
+              <section className="ha-afiche-carte">
+                <h2>Véhicules</h2>
+                {armement && gerer && (
+                  <label style={{ display: 'block', marginBottom: 12 }}>
+                    <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Véhicule affecté (plaque)</span>
+                    <select
+                      value={armement.plaque || ''}
+                      onChange={e => majArmement({ plaque: e.target.value })}
+                      style={{ width: '100%', maxWidth: 360, padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
+                    >
+                      <option value="">—</option>
+                      {plaques.map(p => (
+                        <option key={p.plaque} value={p.plaque}>{p.plaque}{p.libelle ? ` — ${p.libelle}` : ''}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div className="ha-afiche-table-wrap">
+                  <table className="ha-afiche-table">
+                    <thead>
+                      <tr><th>Véhicule</th><th>Fonction</th><th>État</th></tr>
+                    </thead>
+                    <tbody>
+                      {armement?.plaque ? (
+                        <tr>
+                          <td><strong>{armement.plaque}</strong></td>
+                          <td>Dispositif</td>
+                          <td><span className="ha-act-chip is-moi">Opérationnel</span></td>
+                        </tr>
+                      ) : (
+                        <tr><td colSpan={3}><span className="ha-afiche-vide">Aucun véhicule affecté.</span></td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {gerer && <div style={{ marginTop: 12 }}><Btn onClick={sauverArmement} disabled={sauveArme}>{sauveArme ? '…' : 'Enregistrer'}</Btn></div>}
+              </section>
+            )}
+
+            {sousLog === 'materiel' && (
+              <section className="ha-afiche-carte">
+                <h2>Matériel attendu</h2>
+                {armement?.items?.length ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {armement.items.map(it => (
+                      <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: gerer ? 'pointer' : 'default' }}>
+                        <input type="checkbox" checked={!!it.ok} disabled={!gerer} onChange={() => toggleItemArme(it.id)} />
+                        <span>{it.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : <p className="ha-afiche-vide">Aucun matériel listé.</p>}
+                <label style={{ display: 'block', marginTop: 12 }}>
                   <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Note / dérogation</span>
                   <textarea
-                    value={armement.note || ''}
+                    value={armement?.note || ''}
+                    disabled={!gerer}
                     onChange={e => majArmement({ note: e.target.value })}
                     rows={2}
-                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit', resize: 'vertical' }}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
                   />
                 </label>
-                <p className="ha-afiche-vide" style={{ marginBottom: 10 }}>
-                  {armementComplet(armement) ? 'Checklist complète.' : 'Checklist incomplète — précisez une dérogation si besoin.'}
-                  {armement.plaque ? ` Véhicule : ${armement.plaque}.` : ' Aucune plaque choisie.'}
+                <p className="ha-afiche-vide" style={{ marginTop: 8 }}>
+                  {armementComplet(armement) ? 'Checklist complète.' : 'Checklist incomplète.'}
                 </p>
-                <Btn onClick={sauverArmement} disabled={sauveArme}>{sauveArme ? '…' : 'Enregistrer l’armement'}</Btn>
+                {gerer && <Btn onClick={sauverArmement} disabled={sauveArme}>{sauveArme ? '…' : 'Enregistrer l’armement'}</Btn>}
+              </section>
+            )}
+
+            {sousLog === 'scanner' && (
+              <section className="ha-afiche-carte">
+                <h2>Scanner</h2>
+                <p className="ha-afiche-vide">Le scan d’emport matériel se fait depuis le module Stock / Scan emport. Relier le DPS à un lot d’emport dans une prochaine itération.</p>
+              </section>
+            )}
+          </>
+        )}
+
+        {onglet === 'intervention' && (
+          <section className="ha-afiche-carte">
+            <h2>Intervention · carte</h2>
+            {lieuMaps ? (
+              <>
+                <p className="ha-afiche-lieu">{lieuMaps}</p>
+                <div className="ha-afiche-carte-map">
+                  <iframe
+                    title="Carte du dispositif"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://maps.google.com/maps?q=${encodeURIComponent(lieuMaps)}&z=15&output=embed`}
+                  />
+                </div>
+                {lieuUrl && <a className="ha-afiche-maps" href={lieuUrl} target="_blank" rel="noreferrer">Ouvrir dans Google Maps</a>}
               </>
+            ) : (
+              <p className="ha-afiche-vide">Aucune adresse pour afficher la carte. Renseignez rue/n° ou CP/ville à la création.</p>
             )}
           </section>
+        )}
 
+        {onglet === 'rapport' && (
           <section className="ha-afiche-carte">
-            <h2>Personnel inscrit</h2>
-            <div className="ha-afiche-outils">
-              <select aria-label="Compétence" value={filtreComp} onChange={e => setFiltreComp(e.target.value)}>
-                <option value="">Toutes les compétences</option>
-                {COMPETENCES_ACTIVITE.filter(c => c.v !== 'medical' && c.v !== 'non_medical').map(c => (
-                  <option key={c.v} value={c.v}>{c.l}</option>
-                ))}
-              </select>
-              <input type="search" placeholder="Rechercher" aria-label="Rechercher une personne" value={q} onChange={e => setQ(e.target.value)} />
-            </div>
-            {personnel.length === 0 ? (
-              <p className="ha-afiche-vide">{inscriptions.length === 0 ? 'Personne n’est inscrit pour le moment.' : 'Aucune personne ne correspond.'}</p>
-            ) : (
-              <div className="ha-afiche-table-wrap">
-                <table className="ha-afiche-table">
-                  <thead>
-                    <tr>
-                      <th>Photo</th>
-                      <th>Personnel</th>
-                      <th>Fonction</th>
-                      <th>Compétence</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {personnel.map(p => (
-                      <tr key={p.id} className={p.manque ? 'is-manque' : undefined}>
-                        <td><Portrait url={p.photo} prenom={p.prenom} nom={p.nom} /></td>
-                        <td>
-                          <strong>{`${p.prenom} ${p.nom}`.trim() || 'Compte retiré'}</strong>
-                          <span className="ha-afiche-sous">{fmtDate(p.inscription)}</span>
-                        </td>
-                        <td>{fonctionDe(p)}</td>
-                        <td>
-                          {p.quals.length === 0
-                            ? <span className="ha-afiche-vide">—</span>
-                            : p.quals.map(c => (
-                              <span key={c} className={'ha-act-chip' + (requises.includes(c) ? ' is-moi' : '')}>
-                                {libelleCompetence(c)}
-                              </span>
-                            ))}
-                        </td>
-                        <td>
-                          {p.id === profile?.id && (
-                            <button type="button" className="ha-afiche-moi" onClick={inscrire} disabled={busy}>
-                              {busy ? '…' : 'Se désinscrire'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <h2>Rapport <span className="ha-afiche-badge">{rapport.length}</span></h2>
+            <p className="ha-afiche-vide">Chronologie des messages, interventions et changements de statut.</p>
+            {gerer && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  value={noteRapport}
+                  onChange={e => setNoteRapport(e.target.value)}
+                  placeholder="Ajouter une entrée…"
+                  style={{ flex: 1, minWidth: 200, padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
+                />
+                <Btn onClick={ajouterNoteRapport} disabled={!noteRapport.trim()}>Ajouter</Btn>
               </div>
             )}
+            {rapport.length === 0 ? (
+              <div className="ha-afiche-empty">
+                <p><strong>Aucune entrée dans le rapport</strong></p>
+                <p className="ha-afiche-vide">Les messages, interventions et changements de statut apparaîtront ici.</p>
+              </div>
+            ) : (
+              <ul className="ha-afiche-rapport">
+                {rapport.map(e => (
+                  <li key={e.id}>
+                    <strong>{fmtQuand(e.at)}</strong>
+                    <span>{e.auteur}</span>
+                    <p>{e.texte}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="ha-dps-actions" style={{ marginTop: 14 }}>
+              <Btn onClick={recupererBilan}>Récupérer le bilan</Btn>
+              <Btn kind="soft" onClick={imprimerBilan}>Imprimer</Btn>
+            </div>
           </section>
+        )}
+
+        {onglet === 'statistique' && (
+          <div className="ha-afiche-stats">
+            <StatCard label="Secours à personnes" sous="Malaise, soin" valeur={statsPatient.secours} ton="vert" />
+            <StatCard label="Évacuations réalisées" sous="Transport / secours publics" valeur={statsPatient.evacuations} ton="orange" />
+            <StatCard label="Personnes assistées" sous="Laissées sur place" valeur={statsPatient.assistees} ton="violet" />
+            <StatCard label="Personnes décédées" sous="Décédé" valeur={statsPatient.decedees} ton="bleu" />
+            <p className="ha-afiche-vide" style={{ gridColumn: '1 / -1' }}>
+              Compteurs issus des fiches patient liées (`patient-registry` / `fiches_patient_dps`). Automatique.
+            </p>
+          </div>
+        )}
+
+        {onglet === 'dps' && (
+          <>
+            <div className="ha-afiche-bandeau">
+              <span><strong>{calcDim.secouristesPublic}</strong> public secouristes</span>
+              <span><strong>{calcDim.acteurs}</strong> acteurs équiv.</span>
+              <span><strong>{calcDim.encadrement}</strong> encadrement</span>
+              <span><strong>{calcDim.total}</strong> personnes au total</span>
+            </div>
+            <p className="ha-afiche-vide" style={{ margin: '0 2px 8px' }}>{calcDim.message}</p>
+
+            <div className="ha-afiche-grille">
+              <section className="ha-afiche-carte">
+                <h2>Demande</h2>
+                <label style={{ display: 'block', marginBottom: 10 }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Effectif déclaré au public</span>
+                  <input type="number" min={0} value={dim.public_declare} disabled={!gerer} onChange={e => majDim({ public_declare: e.target.value })} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }} />
+                </label>
+                <label style={{ display: 'block', marginBottom: 10 }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Équivalence intervenants (acteurs)</span>
+                  <input type="number" min={0} value={dim.acteurs_equivalent} disabled={!gerer} onChange={e => majDim({ acteurs_equivalent: e.target.value })} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }} />
+                </label>
+                <label style={{ display: 'block' }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Descriptif demande acteurs</span>
+                  <textarea rows={3} value={dim.acteurs_descriptif} disabled={!gerer} onChange={e => majDim({ acteurs_descriptif: e.target.value })} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }} />
+                </label>
+              </section>
+
+              <section className="ha-afiche-carte">
+                <h2>Activité (indicateur P2)</h2>
+                {P2_ACTIVITE.map(opt => (
+                  <label key={opt.v} className={'ha-afiche-toggle' + (dim.p2 === opt.v ? ' is-on' : '')}>
+                    <span>
+                      <strong>{opt.l}</strong>
+                      <em>{opt.detail}</em>
+                    </span>
+                    <input type="radio" name="p2" checked={dim.p2 === opt.v} disabled={!gerer} onChange={() => majDim({ p2: opt.v })} />
+                    <b>{opt.poids.toFixed(2)}</b>
+                  </label>
+                ))}
+              </section>
+            </div>
+
+            <div className="ha-afiche-grille">
+              <section className="ha-afiche-carte">
+                <h2>Environnement (E1)</h2>
+                {E1_ENVIRONNEMENT.map(opt => (
+                  <label key={opt.v} className={'ha-afiche-toggle' + (dim.e1 === opt.v ? ' is-on' : '')}>
+                    <span>
+                      <strong>{opt.l}</strong>
+                      <em>{opt.detail}</em>
+                    </span>
+                    <input type="radio" name="e1" checked={dim.e1 === opt.v} disabled={!gerer} onChange={() => majDim({ e1: opt.v })} />
+                    <b>{opt.poids.toFixed(2)}</b>
+                  </label>
+                ))}
+              </section>
+              <section className="ha-afiche-carte">
+                <h2>Délai secours publics (E2)</h2>
+                {E2_DELAI.map(opt => (
+                  <label key={opt.v} className={'ha-afiche-toggle' + (dim.e2 === opt.v ? ' is-on' : '')}>
+                    <span><strong>{opt.l}</strong></span>
+                    <input type="radio" name="e2" checked={dim.e2 === opt.v} disabled={!gerer} onChange={() => majDim({ e2: opt.v })} />
+                    <b>{opt.poids.toFixed(2)}</b>
+                  </label>
+                ))}
+              </section>
+            </div>
+
+            <section className="ha-afiche-carte">
+              <h2>Rappel RNMSC-DPS</h2>
+              <p className="ha-afiche-vide">
+                Arrêté du 7 novembre 2006 fixant le référentiel national relatif aux dispositifs prévisionnels de secours (NOR : INTE0600910A).
+                Référentiel national – Missions de Sécurité Civile : Dispositifs Prévisionnels de Secours.
+                En Belgique, croiser avec la loi AMU du 8 juillet 1964 (voir docs/secours/).
+              </p>
+              {gerer && (
+                <div style={{ marginTop: 12 }}>
+                  <Btn onClick={sauverDimensionnement} disabled={sauveDim}>{sauveDim ? '…' : 'Enregistrer le dimensionnement'}</Btn>
+                </div>
+              )}
+            </section>
           </>
         )}
       </div>
@@ -709,6 +1024,16 @@ function Chiffre({ label, valeur }) {
   )
 }
 
+function StatCard({ label, sous, valeur, ton }) {
+  return (
+    <div className={'ha-afiche-stat is-' + ton}>
+      <div className="ha-afiche-k">{label}</div>
+      <div className="ha-afiche-nb">{valeur}</div>
+      <div className="ha-afiche-sous">{sous} · Automatique</div>
+    </div>
+  )
+}
+
 function Portrait({ url, prenom, nom }) {
   const ini = `${(prenom || '').charAt(0)}${(nom || '').charAt(0)}`.toUpperCase() || '?'
   return (
@@ -727,10 +1052,64 @@ const CSS = `
   padding: 14px 16px 12px;
 }
 .ha-afiche-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.ha-afiche-fil { margin: 0 0 6px; font-size: 12.5px; color: var(--text-muted); }
+.ha-afiche-fil a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .ha-afiche-retour { font-size: 12.5px; font-weight: 700; color: var(--accent); text-decoration: none; }
 .ha-afiche-type { margin: 6px 0 0; font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
 .ha-afiche h1 { margin: 2px 0 0; font-size: 1.35rem; color: var(--heading); line-height: 1.2; }
 .ha-afiche-quand { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; }
+.ha-afiche-sousnav { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+.ha-afiche-sousnav button {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 650; font-family: inherit; cursor: pointer;
+}
+.ha-afiche-sousnav button.is-on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ha-afiche-bandeau {
+  display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 14px; border-radius: 12px;
+  background: var(--bg-alt); border: 1px solid var(--border); font-size: 13px; color: var(--text-muted);
+}
+.ha-afiche-bandeau strong { color: var(--heading); }
+.ha-afiche-info-box {
+  margin: 10px 0 14px; padding: 10px 12px; border-radius: 10px; background: #EAF3FB; color: #185FA5; font-size: 13px;
+}
+.ha-afiche-info-box p { margin: 4px 0 0; }
+.ha-afiche-equipe-bloc { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ha-afiche-equipe-titre { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.ha-afiche-equipe-titre span { color: var(--text-muted); font-size: 12.5px; }
+.ha-afiche-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.ha-afiche-slot {
+  border: 1px dashed var(--border); border-radius: 10px; padding: 10px; min-height: 64px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 12.5px;
+}
+.ha-afiche-slot em { color: var(--text-muted); font-style: normal; }
+.ha-afiche-carte-map {
+  margin: 10px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); aspect-ratio: 16 / 10; background: var(--bg-alt);
+}
+.ha-afiche-carte-map iframe { width: 100%; height: 100%; border: 0; display: block; }
+.ha-afiche-badge {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 1.4em; height: 1.4em;
+  margin-left: 6px; padding: 0 6px; border-radius: 999px; background: #EAF3FB; color: #185FA5; font-size: 12px;
+}
+.ha-afiche-empty { text-align: center; padding: 28px 12px; }
+.ha-afiche-rapport { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ha-afiche-rapport li { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.ha-afiche-rapport strong { display: block; font-size: 12.5px; color: var(--heading); }
+.ha-afiche-rapport span { font-size: 12px; color: var(--text-muted); }
+.ha-afiche-rapport p { margin: 6px 0 0; font-size: 13.5px; }
+.ha-afiche-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ha-afiche-stat { border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: var(--card); }
+.ha-afiche-stat.is-vert { border-color: #9fd4b0; }
+.ha-afiche-stat.is-orange { border-color: #f0c28a; }
+.ha-afiche-stat.is-violet { border-color: #c9b6e8; }
+.ha-afiche-stat.is-bleu { border-color: #9ec0e8; }
+.ha-afiche-toggle {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.ha-afiche-toggle.is-on { background: rgba(15, 92, 76, 0.06); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px; }
+.ha-afiche-toggle strong { display: block; font-size: 13.5px; color: var(--heading); }
+.ha-afiche-toggle em { display: block; font-style: normal; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.ha-afiche-toggle b { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 12.5px; }
 .ha-afiche-etat {
   flex: none;
   border-radius: 999px;

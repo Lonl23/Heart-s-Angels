@@ -388,7 +388,9 @@ export default function ActivitesSecours() {
   return (
     <Page
       title="Activités"
-      subtitle="Département secours. Une activité se dimensionne, s’arme, puis se rend en bilan."
+      subtitle={gerer
+        ? 'DPS : adresse rue/n° ou CP/ville · responsable · Disp Alpha/Bravo · types élargis · conventions.'
+        : 'Département secours. Inscriptions — création réservée aux responsables / adjoints DPS.'}
       action={gerer ? (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link to="/app/secours/conventions"><Btn kind="soft">Conventions DPS</Btn></Link>
