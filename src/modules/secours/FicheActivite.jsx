@@ -28,6 +28,11 @@ import {
   suggestionDepuisDispositifs,
   libelleComptesEquipes,
   comptesEquipesDe,
+  composerAdresse,
+  estGrosPreventif,
+  proposerDispAlphaId,
+  estResponsableDpsProfil,
+  peutCreerActiviteSecours,
 } from './activitesSecours'
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -83,7 +88,7 @@ export default function FicheActivite() {
     setAbsent(false)
     const a = await supabase
       .from('activites_secours')
-      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,organisateur_nom,organisateur_contact,debut,fin,places,competences,armement,created_by,created_at')
+      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,adresse_mode,adresse_rue,adresse_numero,adresse_cp,adresse_ville,organisateur_nom,organisateur_contact,responsable_preventif_id,disp_alpha_id,disp_bravo_id,debut,fin,places,competences,armement,created_by,created_at')
       .eq('id', id)
       .maybeSingle()
     if (a.error) {
@@ -111,23 +116,45 @@ export default function FicheActivite() {
       return
     }
     const lignes = i.data || []
-    const ids = [...new Set(lignes.map(x => x.user_id).filter(Boolean))]
+    const idsCmd = [
+      a.data.responsable_preventif_id,
+      a.data.disp_alpha_id,
+      a.data.disp_bravo_id,
+      a.data.created_by,
+    ].filter(Boolean)
+    const ids = [...new Set([
+      ...lignes.map(x => x.user_id).filter(Boolean),
+      ...idsCmd,
+    ])]
     let profils = []
     if (ids.length) {
       const p = await supabase.from('profiles').select('id,prenom,nom,role,fiche').in('id', ids)
       if (p.error) setErr(p.error.message || 'Chargement du personnel impossible.')
       else profils = p.data || []
     }
-    let qui = null
-    if (a.data.created_by) {
-      const c = await supabase.from('profiles').select('id,prenom,nom').eq('id', a.data.created_by).maybeSingle()
-      if (!c.error) qui = c.data
+    const parId = new Map(profils.map(p => [p.id, p]))
+    let act = a.data
+    const autoAlpha = proposerDispAlphaId(lignes.map(x => x.user_id), parId)
+    if (
+      autoAlpha
+      && autoAlpha !== act.disp_alpha_id
+      && peutCreerActiviteSecours(profile)
+    ) {
+      const maj = await supabase
+        .from('activites_secours')
+        .update({ disp_alpha_id: autoAlpha })
+        .eq('id', id)
+        .select('disp_alpha_id')
+        .maybeSingle()
+      if (!maj.error && maj.data) {
+        act = { ...act, disp_alpha_id: maj.data.disp_alpha_id }
+      }
     }
-    setActivite(a.data)
-    setArmement(normaliserArmement(a.data.armement, a.data))
+    setActivite(act)
+    setArmement(normaliserArmement(act.armement, act))
     setInscriptions(lignes)
     setGens(profils)
-    setAuteur(qui)
+    setAuteur(act.created_by ? parId.get(act.created_by) || null : null)
     const pl = await supabase.from('plaques_vehicules').select('plaque,libelle').eq('actif', true).order('plaque')
     if (!pl.error) setPlaques(pl.data || [])
     setLoading(false)
@@ -151,6 +178,7 @@ export default function FicheActivite() {
   )
   const sugEquipes = useMemo(() => suggestionDepuisDispositifs(activite), [activite])
   const libelleEquipes = useMemo(() => libelleComptesEquipes(activite), [activite])
+  const parIdGens = useMemo(() => new Map(gens.map(g => [g.id, g])), [gens])
 
   const personnel = useMemo(() => {
     const parId = new Map(gens.map(g => [g.id, g]))
@@ -294,10 +322,25 @@ export default function FicheActivite() {
   else if (complet) { libelle = 'Complet'; desactive = true }
 
   const org = config.organisation?.nom || 'Heart’s Angels ASBL'
-  const lieuMaps = activite?.adresse || activite?.lieu || ''
+  const adresseComposee = activite
+    ? (composerAdresse({
+      mode: activite.adresse_mode,
+      rue: activite.adresse_rue,
+      numero: activite.adresse_numero,
+      cp: activite.adresse_cp,
+      ville: activite.adresse_ville,
+    }) || activite.adresse || '')
+    : ''
+  const lieuMaps = adresseComposee || activite?.lieu || ''
   const lieuUrl = lieuMaps
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lieuMaps)}`
     : ''
+  function nomDe(uid) {
+    if (!uid) return '—'
+    const g = parIdGens.get(uid)
+    if (!g) return '—'
+    return `${g.prenom || ''} ${g.nom || ''}`.trim() || '—'
+  }
 
   if (loading) {
     return <Page title="Activité"><Loading /></Page>
@@ -404,7 +447,21 @@ export default function FicheActivite() {
                 <Champ k="Organisateur" v={activite.organisateur_nom || '—'} />
                 <Champ k="Contact orga." v={activite.organisateur_contact || '—'} />
               </div>
-              <p className="ha-afiche-vide">Les équipes se choisissent à la création (plusieurs possibles). Pas de calcul depuis le public. « Minimum » = ordre des qualifications 1→7.</p>
+              <p className="ha-afiche-sec">Commandement</p>
+              <div className="ha-afiche-kv">
+                <Champ k="Resp. préventif" v={nomDe(activite.responsable_preventif_id)} />
+                <Champ
+                  k="Disp Alpha"
+                  v={nomDe(activite.disp_alpha_id) + (activite.disp_alpha_id && estResponsableDpsProfil(parIdGens.get(activite.disp_alpha_id)) ? ' · resp. DPS' : '')}
+                />
+                <Champ
+                  k="Disp Bravo"
+                  v={estGrosPreventif(activite)
+                    ? nomDe(activite.disp_bravo_id)
+                    : (activite.disp_bravo_id ? nomDe(activite.disp_bravo_id) : '— (optionnel)')}
+                />
+              </div>
+              <p className="ha-afiche-vide">Les équipes se choisissent à la création (plusieurs possibles). Pas de calcul depuis le public. « Minimum » = ordre des qualifications 1→7. Un responsable DPS inscrit devient d’office Disp Alpha.</p>
               {sugEquipes && (
                 <p className={'ha-afiche-vide'} style={{ color: evalEquipe.ok ? 'var(--heading)' : '#A32D2D', marginTop: 8 }}>
                   {evalEquipe.ok
@@ -456,12 +513,19 @@ export default function FicheActivite() {
 
             <section className="ha-afiche-carte">
               <h2>Lieu</h2>
-              {activite.adresse || activite.lieu
+              {adresseComposee || activite.lieu
                 ? (
                   <>
                     {activite.lieu && <p className="ha-afiche-lieu">{activite.lieu}</p>}
-                    {activite.adresse && <p className="ha-afiche-lieu" style={{ marginTop: activite.lieu ? 6 : 0 }}>{activite.adresse}</p>}
-                    <a className="ha-afiche-maps" href={lieuUrl} target="_blank" rel="noreferrer">Ouvrir dans Google Maps</a>
+                    {adresseComposee && (
+                      <p className="ha-afiche-lieu" style={{ marginTop: activite.lieu ? 6 : 0 }}>
+                        {adresseComposee}
+                        <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                          {activite.adresse_mode === 'approximative' ? 'Adresse approximative (CP + ville)' : 'Adresse exacte (rue + n°)'}
+                        </span>
+                      </p>
+                    )}
+                    {lieuUrl && <a className="ha-afiche-maps" href={lieuUrl} target="_blank" rel="noreferrer">Ouvrir dans Google Maps</a>}
                   </>
                 )
                 : <p className="ha-afiche-vide">Aucun lieu renseigné.</p>}

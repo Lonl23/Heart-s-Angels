@@ -23,6 +23,10 @@ import {
   dispositifsDepuisComptes,
   libelleComptesEquipes,
   DISPOSITIFS_CONNUS,
+  composerAdresse,
+  estGrosPreventif,
+  proposerDispAlphaId,
+  estResponsableDpsProfil,
 } from './activitesSecours'
 
 function equipesVides() {
@@ -32,17 +36,29 @@ function equipesVides() {
 const VIDE = {
   id: null,
   titre: '',
-  type: 'activite',
+  type: 'preventif',
   lieu: '',
   debut: '',
   fin: '',
   places: '1',
   publicAttendu: '',
-  adresse: '',
+  adresseMode: 'exacte',
+  adresseRue: '',
+  adresseNumero: '',
+  adresseCp: '',
+  adresseVille: '',
   organisateurNom: '',
   organisateurContact: '',
+  responsablePreventifId: '',
+  dispAlphaId: '',
+  dispBravoId: '',
   equipes: equipesVides(),
   competences: [],
+}
+
+function nomProfil(p) {
+  if (!p) return '—'
+  return `${p.prenom || ''} ${p.nom || ''}`.trim() || p.email || p.id
 }
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -130,15 +146,19 @@ export default function ActivitesSecours() {
   const [busy, setBusy] = useState(null)
   const [form, setForm] = useState(null)
   const [sauve, setSauve] = useState(false)
+  const [candidats, setCandidats] = useState([])
 
   useEffect(() => { charger() }, [profile?.id])
 
   async function charger(silencieux = false) {
     if (!silencieux) setLoading(true)
     setErr(null)
-    const [a, i] = await Promise.all([
-      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,organisateur_nom,organisateur_contact,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
+    const [a, i, p] = await Promise.all([
+      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,adresse_mode,adresse_rue,adresse_numero,adresse_cp,adresse_ville,organisateur_nom,organisateur_contact,responsable_preventif_id,disp_alpha_id,disp_bravo_id,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
       supabase.from('activites_secours_inscrits').select('id,activite_id,user_id'),
+      gerer
+        ? supabase.from('profiles').select('id,prenom,nom,email,role,fiche,actif').neq('role', 'partenaire').eq('actif', true).order('nom')
+        : Promise.resolve({ data: [], error: null }),
     ])
     if (a.error || i.error) {
       setErr(a.error?.message || i.error?.message || 'Chargement impossible.')
@@ -148,6 +168,7 @@ export default function ActivitesSecours() {
       setActivites(Array.isArray(a.data) ? a.data : [])
       setInscriptions(Array.isArray(i.data) ? i.data : [])
     }
+    if (!p.error) setCandidats(Array.isArray(p.data) ? p.data : [])
     setLoading(false)
   }
 
@@ -204,22 +225,38 @@ export default function ActivitesSecours() {
 
   function ouvrirCreation() {
     setErr(null)
-    setForm({ ...VIDE, equipes: equipesVides(), competences: [] })
+    setForm({
+      ...VIDE,
+      equipes: equipesVides(),
+      competences: [],
+      responsablePreventifId: profile?.id || '',
+      dispAlphaId: estResponsableDpsProfil(profile) ? (profile?.id || '') : '',
+    })
   }
 
   function ouvrirEdition(a) {
+    const inscrits = inscriptions.filter(x => x.activite_id === a.id).map(x => x.user_id)
+    const map = new Map(candidats.map(c => [c.id, c]))
+    const autoAlpha = proposerDispAlphaId(inscrits, map)
     setForm({
       id: a.id,
       titre: a.titre || '',
-      type: TYPES_ACTIVITE.some(t => t.v === a.type) ? a.type : 'activite',
+      type: TYPES_ACTIVITE.some(t => t.v === a.type) ? a.type : 'preventif',
       lieu: a.lieu || '',
       debut: versChamp(a.debut),
       fin: versChamp(a.fin),
       places: String(a.places ?? 1),
       publicAttendu: a.public_attendu == null ? '' : String(a.public_attendu),
-      adresse: a.adresse || '',
+      adresseMode: a.adresse_mode === 'approximative' ? 'approximative' : 'exacte',
+      adresseRue: a.adresse_rue || '',
+      adresseNumero: a.adresse_numero || '',
+      adresseCp: a.adresse_cp || '',
+      adresseVille: a.adresse_ville || '',
       organisateurNom: a.organisateur_nom || '',
       organisateurContact: a.organisateur_contact || '',
+      responsablePreventifId: a.responsable_preventif_id || '',
+      dispAlphaId: autoAlpha || a.disp_alpha_id || '',
+      dispBravoId: a.disp_bravo_id || '',
       equipes: { ...equipesVides(), ...comptesEquipesDe(a) },
       competences: competencesConnues(a.competences),
     })
@@ -272,18 +309,49 @@ export default function ActivitesSecours() {
     if (Object.keys(form.equipes || {}).some(d => !DISPOSITIFS_CONNUS.has(d))) {
       setFlash('Une des équipes est inconnue.'); return
     }
+    const adresseMode = form.adresseMode === 'approximative' ? 'approximative' : 'exacte'
+    if (adresseMode === 'exacte' && !form.adresseRue.trim() && !form.adresseNumero.trim() && !form.adresseVille.trim()) {
+      /* adresse optionnelle */ }
+    if (adresseMode === 'approximative' && form.adresseCp.trim() && !form.adresseVille.trim()) {
+      setFlash('En mode approximatif, indiquez au moins la ville avec le code postal.'); return
+    }
+    const adresseComposee = composerAdresse({
+      mode: adresseMode,
+      rue: form.adresseRue.trim(),
+      numero: form.adresseNumero.trim(),
+      cp: form.adresseCp.trim(),
+      ville: form.adresseVille.trim(),
+    }) || null
+    const inscrits = form.id
+      ? inscriptions.filter(x => x.activite_id === form.id).map(x => x.user_id)
+      : []
+    const map = new Map(candidats.map(c => [c.id, c]))
+    const autoAlpha = proposerDispAlphaId(inscrits, map)
+    let dispAlphaId = form.dispAlphaId || null
+    if (autoAlpha) dispAlphaId = autoAlpha
+    if (estGrosPreventif(places, equipesListe) && !form.dispBravoId) {
+      setFlash('Sur un gros préventif, désignez un Disp Bravo.'); return
+    }
     setSauve(true)
     setFlash(null)
     const payload = {
       titre,
-      type: TYPES_ACTIVITE.some(t => t.v === form.type) ? form.type : 'activite',
+      type: TYPES_ACTIVITE.some(t => t.v === form.type) ? form.type : 'preventif',
       dispositifs: equipesListe,
       dispositif: equipesListe[0] || null,
       public_attendu: publicAttendu,
       lieu: form.lieu.trim() || null,
-      adresse: form.adresse.trim() || null,
+      adresse_mode: adresseMode,
+      adresse_rue: form.adresseRue.trim() || null,
+      adresse_numero: form.adresseNumero.trim() || null,
+      adresse_cp: form.adresseCp.trim() || null,
+      adresse_ville: form.adresseVille.trim() || null,
+      adresse: adresseComposee,
       organisateur_nom: form.organisateurNom.trim() || null,
       organisateur_contact: form.organisateurContact.trim() || null,
+      responsable_preventif_id: form.responsablePreventifId || null,
+      disp_alpha_id: dispAlphaId || null,
+      disp_bravo_id: form.dispBravoId || null,
       debut,
       fin,
       places,
@@ -389,13 +457,98 @@ export default function ActivitesSecours() {
                 </select>
               </label>
               <F label="Lieu (libellé)" value={form.lieu} set={v => majForm({ lieu: v })} />
-              <F label="Adresse exacte du site" value={form.adresse} set={v => majForm({ adresse: v })} />
               <F label="Organisateur" value={form.organisateurNom} set={v => majForm({ organisateurNom: v })} />
               <F label="Contact organisateur" value={form.organisateurContact} set={v => majForm({ organisateurContact: v })} />
               <F label="Début" type="datetime-local" value={form.debut} set={v => majForm({ debut: v })} required />
               <F label="Fin" type="datetime-local" value={form.fin} set={v => majForm({ fin: v })} />
               <F label="Places" type="number" value={form.places} set={v => majForm({ places: v })} required />
               <F label="Public attendu" type="number" value={form.publicAttendu} set={v => majForm({ publicAttendu: v })} />
+            </div>
+
+            <div style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10 }}>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 650 }}>Adresse du site</span>
+                <label style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input type="radio" name="adresseMode" checked={form.adresseMode === 'exacte'} onChange={() => majForm({ adresseMode: 'exacte' })} />
+                  Exacte (rue + n°)
+                </label>
+                <label style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input type="radio" name="adresseMode" checked={form.adresseMode === 'approximative'} onChange={() => majForm({ adresseMode: 'approximative' })} />
+                  Approximative (CP + ville)
+                </label>
+              </div>
+              <div className="ha-act-form">
+                {form.adresseMode === 'exacte' ? (
+                  <>
+                    <F label="Rue" value={form.adresseRue} set={v => majForm({ adresseRue: v })} />
+                    <F label="Numéro" value={form.adresseNumero} set={v => majForm({ adresseNumero: v })} />
+                    <F label="Code postal" value={form.adresseCp} set={v => majForm({ adresseCp: v })} />
+                    <F label="Ville" value={form.adresseVille} set={v => majForm({ adresseVille: v })} />
+                  </>
+                ) : (
+                  <>
+                    <F label="Code postal" value={form.adresseCp} set={v => majForm({ adresseCp: v })} />
+                    <F label="Ville" value={form.adresseVille} set={v => majForm({ adresseVille: v })} />
+                  </>
+                )}
+              </div>
+              {composerAdresse({
+                mode: form.adresseMode,
+                rue: form.adresseRue,
+                numero: form.adresseNumero,
+                cp: form.adresseCp,
+                ville: form.adresseVille,
+              }) && (
+                <p className="ha-act-note" style={{ marginBottom: 0 }}>
+                  Affichage : {composerAdresse({
+                    mode: form.adresseMode,
+                    rue: form.adresseRue,
+                    numero: form.adresseNumero,
+                    cp: form.adresseCp,
+                    ville: form.adresseVille,
+                  })}
+                </p>
+              )}
+            </div>
+
+            <div style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10 }}>
+              <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 650, display: 'block', marginBottom: 8 }}>Commandement du préventif</span>
+              <div className="ha-act-form">
+                <label style={{ marginBottom: 10, display: 'block' }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Responsable de préventif</span>
+                  <select value={form.responsablePreventifId} onChange={e => majForm({ responsablePreventifId: e.target.value })} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}>
+                    <option value="">—</option>
+                    {candidats.map(c => <option key={c.id} value={c.id}>{nomProfil(c)}</option>)}
+                  </select>
+                </label>
+                <label style={{ marginBottom: 10, display: 'block' }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Disp Alpha</span>
+                  <select
+                    value={form.dispAlphaId}
+                    disabled={!!proposerDispAlphaId(
+                      (form.id ? inscriptions.filter(x => x.activite_id === form.id).map(x => x.user_id) : []),
+                      new Map(candidats.map(c => [c.id, c])),
+                    )}
+                    onChange={e => majForm({ dispAlphaId: e.target.value })}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
+                  >
+                    <option value="">—</option>
+                    {candidats.map(c => <option key={c.id} value={c.id}>{nomProfil(c)}{estResponsableDpsProfil(c) ? ' (resp. DPS)' : ''}</option>)}
+                  </select>
+                </label>
+                <label style={{ marginBottom: 10, display: 'block' }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>
+                    Disp Bravo{estGrosPreventif(Number(form.places), dispositifsDepuisComptes(form.equipes)) ? ' (requis)' : ' (optionnel)'}
+                  </span>
+                  <select value={form.dispBravoId} onChange={e => majForm({ dispBravoId: e.target.value })} style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}>
+                    <option value="">—</option>
+                    {candidats.map(c => <option key={c.id} value={c.id}>{nomProfil(c)}</option>)}
+                  </select>
+                </label>
+              </div>
+              <p className="ha-act-note" style={{ marginBottom: 0 }}>
+                Si un responsable DPS est inscrit sur le préventif, il devient d’office Disp Alpha. Les adjoints DPS gèrent aussi les préventifs dans l’app.
+              </p>
             </div>
             <div style={{ marginBottom: 10 }}>
               <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Équipes / dispositifs</span>

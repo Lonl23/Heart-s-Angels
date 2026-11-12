@@ -88,10 +88,9 @@ export function moduleAutorise(key, auth) {
   if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')
   if (key === 'conventions_dps') {
     if (!auth.can('staff')) return false
-    const role = auth.profile?.role
-    if (role === 'admin' || role === 'president') return true
+    if (auth.profile?.role === 'admin') return true
     const roles = auth.profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['president', 'vice_president', 'resp_dps', 'resp_dps_adjoint'].includes(r))
+    return roles.some(r => ['resp_dps', 'resp_dps_adjoint'].includes(r))
   }
   if (key === 'actualites') return true
   if (key === 'actualites_edition') return auth.peutPublierActualites()

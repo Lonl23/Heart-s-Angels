@@ -2,14 +2,72 @@ import { QUALIFS, qualsImplicites } from '@/modules/fiche/ficheSchema'
 
 /** Nature de l’activité. Pas un rôle de compte. */
 export const TYPES_ACTIVITE = [
+  { v: 'preventif', l: 'Préventif (DPS)' },
   { v: 'activite', l: 'Activité' },
   { v: 'garde', l: 'Garde' },
+  { v: 'intervention', l: 'Intervention' },
+  { v: 'permanence', l: 'Permanence' },
   { v: 'manoeuvre', l: 'Manœuvre' },
+  { v: 'exercice', l: 'Exercice' },
   { v: 'formation', l: 'Formation' },
+  { v: 'reunion', l: 'Réunion' },
+  { v: 'transport', l: 'Transport' },
+  { v: 'autre', l: 'Autre' },
 ]
 
 export function libelleTypeActivite(v) {
   return TYPES_ACTIVITE.find(t => t.v === v)?.l || 'Activité'
+}
+
+/** Seuil « gros préventif » → Disp Bravo recommandé. */
+export const SEUIL_GROS_PREVENTIF_PLACES = 8
+
+export function estGrosPreventif(activiteOuPlaces, dispositifs) {
+  const places = typeof activiteOuPlaces === 'object'
+    ? Number(activiteOuPlaces?.places || 0)
+    : Number(activiteOuPlaces || 0)
+  const eqs = Array.isArray(dispositifs)
+    ? dispositifs
+    : (typeof activiteOuPlaces === 'object'
+      ? (activiteOuPlaces?.dispositifs || (activiteOuPlaces?.dispositif ? [activiteOuPlaces.dispositif] : []))
+      : [])
+  return places >= SEUIL_GROS_PREVENTIF_PLACES || eqs.length >= 2
+}
+
+/** Compose le libellé adresse (affichage / cartes). */
+export function composerAdresse({ mode, rue, numero, cp, ville } = {}) {
+  const m = mode === 'approximative' ? 'approximative' : 'exacte'
+  const villeL = [cp, ville].filter(Boolean).join(' ').trim()
+  if (m === 'approximative') return villeL || ''
+  const voie = [rue, numero].filter(Boolean).join(' ').trim()
+  return [voie, villeL].filter(Boolean).join(', ')
+}
+
+export function estResponsableDpsProfil(profile) {
+  const roles = profile?.fiche?.roles_asbl || []
+  return roles.includes('resp_dps')
+}
+
+export function estAdjointDpsProfil(profile) {
+  const roles = profile?.fiche?.roles_asbl || []
+  return roles.includes('resp_dps_adjoint')
+}
+
+export function estGestionnaireDpsProfil(profile) {
+  return estResponsableDpsProfil(profile) || estAdjointDpsProfil(profile)
+    || profile?.role === 'admin'
+}
+
+/**
+ * Si un responsable DPS est présent (inscrit), il devient Disp Alpha d’office.
+ * Les adjoints ne forcent pas Alpha.
+ */
+export function proposerDispAlphaId(inscritsIds, profilsParId) {
+  for (const id of inscritsIds || []) {
+    const p = profilsParId?.get?.(id) || profilsParId?.[id]
+    if (p && estResponsableDpsProfil(p)) return id
+  }
+  return null
 }
 
 /**
@@ -585,15 +643,9 @@ export function dansLes30Jours(debut, maintenant = new Date()) {
   return d >= jour && d < limite
 }
 
-const ROLES_DPS_GESTION = ['president', 'vice_president', 'resp_dps', 'resp_dps_adjoint']
-
-/** Création / édition activités & conventions DPS. */
+/** Création / édition activités & conventions : responsables DPS + adjoints (+ admin technique). */
 export function peutCreerActiviteSecours(profile) {
-  const role = profile?.role
-  if (!role || role === 'partenaire') return false
-  if (role === 'admin' || role === 'president') return true
-  const roles = profile?.fiche?.roles_asbl || []
-  return roles.some(r => ROLES_DPS_GESTION.includes(r))
+  return estGestionnaireDpsProfil(profile)
 }
 
 export const STATUTS_CONVENTION = [
