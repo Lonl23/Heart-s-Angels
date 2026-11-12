@@ -11,6 +11,7 @@ import {
   MODELE_ENGAGEMENTS_ASBL,
   MODELE_ENGAGEMENTS_ORGANISATEUR,
   MODELE_ENGAGEMENTS_COMMUNS,
+  REFERENCE_LOI_AMU,
   dispositifsDeActivite,
 } from './activitesSecours'
 
@@ -173,6 +174,15 @@ export default function ConventionsDps() {
     >
       {err && <Flash kind="err">{err}</Flash>}
       {flash && <Flash kind="err">{flash}</Flash>}
+
+      <Card style={{ marginBottom: 14, padding: 14, background: 'var(--bg-alt)' }}>
+        <div style={{ fontWeight: 700, color: 'var(--heading)', marginBottom: 4 }}>Cadre légal</div>
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+          <strong style={{ color: 'var(--text)' }}>{REFERENCE_LOI_AMU.titre}</strong>
+          {' '}({REFERENCE_LOI_AMU.brochure}). {REFERENCE_LOI_AMU.resume}
+          {' '}Réf. dépôt : <code>docs/secours/</code>.
+        </p>
+      </Card>
 
       {form && (
         <Card style={{ marginBottom: 14, padding: 14 }}>

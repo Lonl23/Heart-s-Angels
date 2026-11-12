@@ -603,22 +603,35 @@ export const STATUTS_CONVENTION = [
   { v: 'annulee', l: 'Annulée' },
 ]
 
+/**
+ * Cadre légal de référence (brochure SPF, 04/2014).
+ * PDF : docs/secours/loi-1964-aide-medicale-urgente-04-2014.pdf
+ */
+export const REFERENCE_LOI_AMU = {
+  titre: 'Loi du 8 juillet 1964 relative à l’aide médicale urgente',
+  brochure: '04/2014 — SPF Intérieur, D.G. Sécurité civile',
+  resume: 'L’AMU vise les secours après appel au système unifié (112), le transport et l’accueil hospitalier. Un DPS (dispositif prévisionnel) reste une convention d’événement distincte, sauf passage au 112.',
+}
+
 /** Texte type engagements (à adapter dans la convention). */
 export const MODELE_ENGAGEMENTS_ASBL = `Heart's Angels s'engage à :
-- Mettre en place le dispositif prévisionnel de secours dimensionné dans la présente convention (équipes, moyens humains et matériels).
+- Mettre en place le dispositif prévisionnel de secours (DPS) dimensionné dans la présente convention (équipes, moyens humains et matériels).
 - Désigner un responsable de dispositif joignable pendant toute la durée d'ouverture.
-- Assurer les soins de premiers secours dans le cadre de son agrément et des règles applicables.
-- Tenir une main courante et assurer le transfert vers les secours publics selon les procédures en vigueur.
+- Assurer les premiers secours dans le cadre de son agrément et des qualifications requises (brevet / compétences adaptées au type d'équipe).
+- Tenir une main courante des prises en charge et assurer le transfert vers les secours publics (112 / AMU) dès que l'état du patient dépasse les moyens du DPS.
+- Ne pas se présenter comme service d'aide médicale urgente au sens de la loi du 8 juillet 1964, sauf mission explicitement exécutée sous le régime AMU / 112 et avec les agréments requis.
 - Informer l'organisateur de toute impossibilité majeure d'assurer le dispositif dans les meilleurs délais.`
 
 export const MODELE_ENGAGEMENTS_ORGANISATEUR = `L'organisateur s'engage à :
 - Fournir un emplacement adapté, les accès, l'alimentation électrique, l'éclairage, l'eau et les sanitaires nécessaires au poste.
 - Désigner un interlocuteur joignable pendant toute la manifestation.
 - Faciliter l'accès des véhicules de secours et la signalisation du poste.
-- Régler la participation financière indiquée dans la convention selon les modalités convenues.
-- Informer Heart's Angels de tout changement de jauge, horaires, lieu ou risques particuliers.`
+- Régler la participation financière indiquée clairement dans la convention (montant net) selon les modalités convenues.
+- Informer Heart's Angels de tout changement de jauge, horaires, lieu ou risques particuliers.
+- Reconnaître que le DPS ne remplace pas les services d'aide médicale urgente (112) et faciliter immédiatement l'accès des secours publics en cas d'appel.`
 
-export const MODELE_ENGAGEMENTS_COMMUNS = `La convention prend effet à sa signature et couvre le montage, l'accueil du public et la fin effective du dispositif.
+export const MODELE_ENGAGEMENTS_COMMUNS = `Cadre : la présente convention porte sur un dispositif prévisionnel de secours pour la manifestation désignée. Elle se distingue de l'aide médicale urgente organisée par la loi du 8 juillet 1964 (appel au système unifié, transport et accueil hospitalier).
+La convention prend effet à sa signature et couvre le montage, l'accueil du public et la fin effective du dispositif.
 Toute modification importante (jauge, lieu, horaires, risques) fait l'objet d'un avenant écrit.
 En cas de litige, les parties recherchent d'abord une solution amiable.`
 
