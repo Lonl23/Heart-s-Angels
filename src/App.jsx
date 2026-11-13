@@ -1,58 +1,105 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 // Logiciel propriétaire. Voir LICENSE. Mention à ne pas retirer.
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { RequireStaff, RequirePartenaire } from '@/components/Protected'
+import { Route, Navigate } from 'react-router-dom'
+import { RequireStaff, RequirePartenaire, RequireAcces } from '@/components/Protected'
 import Layout from '@/components/Layout'
-import Login from '@/pages/Login'
+import { RoutesAvecFondu } from '@/components/Fondu'
 
+const Login = lazy(() => import('@/pages/Login'))
+const MotDePasseOublie = lazy(() => import('@/pages/MotDePasseOublie'))
+const ReinitialiserMotDePasse = lazy(() => import('@/pages/ReinitialiserMotDePasse'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const DemandeSouhait = lazy(() => import('@/pages/DemandeSouhait'))
 const Inscription = lazy(() => import('@/pages/Inscription'))
+const DemandePartenaire = lazy(() => import('@/pages/DemandePartenaire'))
 const PartenairePortail = lazy(() => import('@/pages/PartenairePortail'))
-const Stub = lazy(() => import('@/modules/Stub'))
+const Defraiements = lazy(() => import('@/modules/defraiements/Defraiements'))
 const Souhaits = lazy(() => import('@/modules/souhaits/Souhaits'))
 const Disponibilites = lazy(() => import('@/modules/Disponibilites'))
+const EvenementsInternes = lazy(() => import('@/modules/EvenementsInternes'))
 const Stock = lazy(() => import('@/modules/Stock'))
+const Volontaires = lazy(() => import('@/modules/volontaires/Volontaires'))
 const Admin = lazy(() => import('@/modules/Admin'))
 const FicheVolontaire = lazy(() => import('@/modules/fiche/FicheVolontaire'))
 const MesMissions = lazy(() => import('@/modules/MesMissions'))
 const Annuaire = lazy(() => import('@/modules/annuaire/Annuaire'))
+const Departement = lazy(() => import('@/pages/Departement'))
+const Organigramme = lazy(() => import('@/modules/rh/Organigramme'))
+const OrganigrammeEdition = lazy(() => import('@/modules/it/OrganigrammeEdition'))
+const ConfigurationSouhaits = lazy(() => import('@/modules/it/ConfigurationSouhaits'))
+const Tresorerie = lazy(() => import('@/modules/Tresorerie'))
+const Actualites = lazy(() => import('@/modules/actualites/Actualites'))
+const Statistiques = lazy(() => import('@/modules/it/Statistiques'))
+const Helpdesk = lazy(() => import('@/modules/it/Helpdesk'))
+const Personnalisation = lazy(() => import('@/modules/it/Personnalisation'))
+const ActivitesSecours = lazy(() => import('@/modules/secours/ActivitesSecours'))
+const FicheActivite = lazy(() => import('@/modules/secours/FicheActivite'))
+const ConventionsDps = lazy(() => import('@/modules/secours/ConventionsDps'))
+const Flotte = lazy(() => import('@/modules/logistique/Flotte'))
 
 function EcranChargement() {
   return (
-    <div style={{ padding: 32, color: 'var(--text-muted)', fontSize: 14 }}>Chargement…</div>
+    <div style={{ minHeight: '100%', background: 'var(--bg)' }} aria-hidden />
   )
 }
 
 export default function App() {
   return (
     <Suspense fallback={<EcranChargement />}>
-      <Routes>
+      <RoutesAvecFondu>
         <Route path="/login" element={<Login />} />
+        <Route path="/login/partenaire" element={<Login />} />
+        <Route path="/mot-de-passe-oublie" element={<MotDePasseOublie />} />
+        <Route path="/reinitialiser-mot-de-passe" element={<ReinitialiserMotDePasse />} />
+        <Route path="/login/partenaire/demande" element={<DemandePartenaire />} />
         <Route path="/demande" element={<DemandeSouhait />} />
         <Route path="/inscription" element={<Inscription />} />
+        <Route path="/inscription/partenaire" element={<Inscription />} />
 
         <Route path="/app" element={<RequireStaff><Layout /></RequireStaff>}>
           <Route index element={<Dashboard />} />
-          <Route path="souhaits/nouveau" element={<Souhaits />} />
-          <Route path="souhaits/:id/preparer" element={<Souhaits />} />
-          <Route path="souhaits/:id" element={<Souhaits />} />
-          <Route path="souhaits" element={<Souhaits />} />
-          <Route path="missions/:id" element={<MesMissions />} />
-          <Route path="missions" element={<MesMissions />} />
-          <Route path="defraiements"   element={<Stub nom="Défraiements" />} />
-          <Route path="disponibilites" element={<Disponibilites />} />
-          <Route path="stock"          element={<Stock />} />
-          <Route path="annuaire"       element={<Annuaire />} />
-          <Route path="admin"          element={<Admin />} />
+          <Route path="departement/:id" element={<Departement />} />
+          <Route path="souhaits/nouveau" element={<RequireAcces feature="souhaits"><Souhaits /></RequireAcces>} />
+          <Route path="souhaits/:id/preparer" element={<RequireAcces feature="souhaits"><Souhaits /></RequireAcces>} />
+          <Route path="souhaits/:id" element={<RequireAcces feature="souhaits"><Souhaits /></RequireAcces>} />
+          <Route path="souhaits" element={<RequireAcces feature="souhaits"><Souhaits /></RequireAcces>} />
+          <Route path="missions/:id" element={<RequireAcces feature="missions"><MesMissions /></RequireAcces>} />
+          <Route path="missions" element={<RequireAcces feature="missions"><MesMissions /></RequireAcces>} />
+          <Route path="defraiements"   element={<RequireAcces feature="defraiements"><Defraiements /></RequireAcces>} />
+          <Route path="disponibilites" element={<RequireAcces feature="disponibilites"><Disponibilites /></RequireAcces>} />
+          <Route path="actualites/:id" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
+          <Route path="actualites" element={<RequireAcces feature="actualites"><Actualites /></RequireAcces>} />
+          <Route path="it/actualites/nouveau" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
+          <Route path="it/actualites/:id/editer" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
+          <Route path="it/actualites" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
+          <Route path="it/helpdesk" element={<RequireAcces feature="helpdesk"><Helpdesk /></RequireAcces>} />
+          <Route path="it/personnalisation" element={<RequireAcces feature="personnalisation"><Personnalisation /></RequireAcces>} />
+          <Route path="it/statistiques" element={<RequireAcces feature="statistiques"><Statistiques /></RequireAcces>} />
+          <Route path="statistiques" element={<Navigate to="/app/it/statistiques" replace />} />
+          <Route path="evenements/nouveau" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="evenements/:id/editer" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="evenements/:id" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="evenements"     element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="secours/activites/:id" element={<RequireAcces feature="activites_secours"><FicheActivite /></RequireAcces>} />
+          <Route path="secours/activites" element={<RequireAcces feature="activites_secours"><ActivitesSecours /></RequireAcces>} />
+          <Route path="secours/conventions" element={<RequireAcces feature="conventions_dps"><ConventionsDps /></RequireAcces>} />
+          <Route path="stock"          element={<RequireAcces feature="stock"><Stock /></RequireAcces>} />
+          <Route path="flotte"         element={<RequireAcces feature="stock"><Flotte /></RequireAcces>} />
+          <Route path="annuaire"       element={<RequireAcces feature="annuaire"><Annuaire /></RequireAcces>} />
+          <Route path="volontaires"    element={<RequireAcces feature="fiches"><Volontaires /></RequireAcces>} />
+          <Route path="rh/organigramme" element={<RequireAcces feature="organigramme"><Organigramme /></RequireAcces>} />
+          <Route path="it/organigramme" element={<RequireAcces feature="organigramme_edition"><OrganigrammeEdition /></RequireAcces>} />
+          <Route path="it/configuration" element={<RequireAcces feature="config_souhaits"><ConfigurationSouhaits /></RequireAcces>} />
+          <Route path="tresorerie"     element={<RequireAcces feature="tresorerie"><Tresorerie /></RequireAcces>} />
+          <Route path="admin"          element={<RequireAcces feature="admin"><Admin /></RequireAcces>} />
           <Route path="profil"         element={<FicheVolontaire />} />
         </Route>
 
         <Route path="/partenaire" element={<RequirePartenaire><PartenairePortail /></RequirePartenaire>} />
 
         <Route path="*" element={<Navigate to="/app" replace />} />
-      </Routes>
+      </RoutesAvecFondu>
     </Suspense>
   )
 }

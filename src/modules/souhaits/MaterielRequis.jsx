@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, Btn, F, Sel, Empty } from '@/components/ui'
-import { VOLUMES_O2 } from '@/modules/stock/stockSchema'
+import { Card, Btn, F, Sel, Empty, Modal } from '@/components/ui'
+import { VOLUMES_O2, nomTypeO2 } from '@/modules/stock/stockSchema'
 import { nid, libelleRequis } from '@/modules/stock/materielRequis'
+import { CHECKLISTS, extrasChecklist } from './missionSchema'
 
-export default function MaterielRequis({ m, setM }) {
+const SECTIONS_CL = [
+  { v:'base',        l:'Départ (base)' },
+  { v:'pec',         l:'Prise en charge' },
+  { v:'retour_pec',  l:'Retour patient' },
+  { v:'retour_base', l:'Retour base' },
+]
+
+export default function MaterielRequis({ m, setM, lecture=false }) {
   const list = Array.isArray(m?.materiel_requis) ? m.materiel_requis : []
   const setList = rows => setM(o => ({ ...o, materiel_requis: rows }))
   const [cats, setCats] = useState([])
@@ -22,7 +30,7 @@ export default function MaterielRequis({ m, setM }) {
     let row = { id: nid(), kind: add.kind, qte: Math.max(1, Number(add.qte) || 1) }
     if (add.kind === 'o2') {
       row.volume_l = Number(add.volume_l) || 5
-      row.libelle = `Oxygène ${row.volume_l} L`
+      row.libelle = nomTypeO2(row.volume_l)
     } else if (add.kind === 'sac') {
       const s = sacs.find(x => x.id === add.lieu_id)
       if (!s && !add.libelle.trim()) { alert('Choisissez un sac ou tapez son nom.'); return }
@@ -45,38 +53,34 @@ export default function MaterielRequis({ m, setM }) {
   const optsCat = [{ v:'', l:'— Type —' }, ...cats.map(c => ({ v:c.id, l:c.nom }))]
   const optsSac = [{ v:'', l:'— Sac du stock —' }, ...sacs.map(s => ({ v:s.id, l:s.nom }))]
 
+  const [popup, setPopup] = useState(false)
+  const [catalogue, setCatalogue] = useState([])
+  useEffect(() => {
+    supabase.from('materiel_emporter').select('libelle').eq('actif', true).order('ordre')
+      .then(({ data }) => setCatalogue((data || []).map(r => r.libelle)))
+  }, [])
+
   return (
     <div>
       <Card style={{ marginBottom:14 }}>
-        <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:6 }}>Matériel à emporter</div>
-        <p style={{ margin:'0 0 12px', fontSize:13.5, color:'var(--text-muted)' }}>
-          L’équipage scannera au départ chaque bouteille d’O₂ et chaque sac. Ajoutez ici ce qui est nécessaire pour ce souhait.
-        </p>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
-          {VOLUMES_O2.map(v => (
-            <Btn key={v.v} kind="soft" onClick={() => setList([...list, { id: nid(), kind:'o2', volume_l: Number(v.v), qte:1, libelle:`Oxygène ${v.v} L` }])}>
-              + O₂ {v.l}
-            </Btn>
-          ))}
-        </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, alignItems:'end' }}>
-          <Sel label="Ajouter" value={add.kind} set={v=>setAdd(a=>({ ...a, kind:v }))}
-            options={[{ v:'o2', l:'Bouteille O₂' }, { v:'sac', l:'Sac' }, { v:'catalogue', l:'Type d’article' }, { v:'libre', l:'Autre (sans QR)' }]} />
-          {add.kind === 'o2' && <Sel label="Volume" value={String(add.volume_l)} set={v=>setAdd(a=>({ ...a, volume_l:v }))} options={VOLUMES_O2} />}
-          {add.kind === 'sac' && <Sel label="Sac" value={add.lieu_id} set={v=>setAdd(a=>({ ...a, lieu_id:v }))} options={optsSac} />}
-          {add.kind === 'catalogue' && <Sel label="Article" value={add.catalogue_id} set={v=>setAdd(a=>({ ...a, catalogue_id:v }))} options={optsCat} />}
-          {(add.kind === 'libre' || (add.kind === 'sac' && !add.lieu_id)) && (
-            <F label="Libellé" value={add.libelle} set={v=>setAdd(a=>({ ...a, libelle:v }))} placeholder="Sac confort, brancard…" />
-          )}
-          {add.kind !== 'libre' && add.kind !== 'sac' && (
-            <F label="Quantité" type="number" value={add.qte} set={v=>setAdd(a=>({ ...a, qte:v }))} />
-          )}
-          <Btn onClick={ajouter}>+ Ajouter</Btn>
-        </div>
+        <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Matériel à emporter</div>
+        {!lecture && <Btn onClick={() => setPopup(true)}>Choisir</Btn>}
+        {popup && (
+          <PopupMateriel
+            options={catalogue.length ? catalogue : ['Kit supplémentaire', 'Sac intervention', 'Sac paramédic', 'Sac confort', 'Chaise roulante', 'Coussin demi-lune', 'Baffle', 'O2 B2', 'O2 B5', 'O2 B10']}
+            deja={list.map(r => r.libelle)}
+            onClose={() => setPopup(false)}
+            onValider={libs => {
+              const rows = libs.filter(l => !list.some(r => r.libelle === l)).map(versRequis)
+              setList([...list, ...rows])
+              setPopup(false)
+            }}
+          />
+        )}
       </Card>
 
       {list.length === 0 ? (
-        <Empty title="Rien de prévu" hint="Au minimum, l’équipage scannera les O₂ et sacs qu’il emporte. Ajoutez les volumes et sacs obligatoires ici." />
+        <Empty title="Rien de prévu" />
       ) : (
         <Card>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
@@ -88,12 +92,107 @@ export default function MaterielRequis({ m, setM }) {
                     {r.kind === 'o2' ? 'Scanner la bouteille au départ' : r.kind === 'sac' ? 'Scanner le QR du sac' : r.kind === 'catalogue' ? 'Scanner l’article' : 'À cocher (pas de QR)'}
                   </div>
                 </div>
-                <Btn kind="danger" onClick={() => setList(list.filter(x => x.id !== r.id))} style={{ padding:'5px 10px' }}>Retirer</Btn>
+                {!lecture && <Btn kind="danger" onClick={() => setList(list.filter(x => x.id !== r.id))} style={{ padding:'5px 10px' }}>Retirer</Btn>}
               </div>
             ))}
           </div>
         </Card>
       )}
+
+      <ChecklistExtras m={m} setM={setM} lecture={lecture} />
     </div>
+  )
+}
+
+function versRequis(libelle) {
+  const id = nid()
+  const vol = String(libelle).match(/\bB\s*(\d+)\b/i)
+  if (/o2|oxyg/i.test(libelle) && vol) return { id, kind: 'o2', volume_l: Number(vol[1]), qte: 1, libelle }
+  if (/sac/i.test(libelle)) return { id, kind: 'sac', qte: 1, libelle }
+  return { id, kind: 'libre', qte: 1, libelle }
+}
+
+function PopupMateriel({ options, deja, onClose, onValider }) {
+  const [cur, setCur] = useState(deja.filter(Boolean))
+  const [libre, setLibre] = useState('')
+  const tous = [...new Set([...options, ...cur])]
+  function toggle(opt) {
+    setCur(list => list.includes(opt) ? list.filter(x => x !== opt) : [...list, opt])
+  }
+  return (
+    <Modal title="Matériel à emporter" onClose={onClose} wide footer={
+      <><Btn kind="soft" onClick={onClose}>Annuler</Btn><Btn onClick={() => onValider(cur)}>Valider</Btn></>
+    }>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {tous.map(opt => {
+          const on = cur.includes(opt)
+          return (
+            <button key={opt} type="button" onClick={() => toggle(opt)} style={{
+              padding: '8px 12px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+              border: `1.5px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+              background: on ? 'var(--accent)' : 'var(--card)', color: on ? '#fff' : 'var(--text)',
+            }}>{on ? '✓ ' : ''}{opt}</button>
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
+        <div style={{ flex: 1 }}><F label="Autre" value={libre} set={setLibre} /></div>
+        <Btn kind="soft" onClick={() => { const t = libre.trim(); if (t) { setCur(list => list.includes(t) ? list : [...list, t]); setLibre('') } }} style={{ marginBottom: 10 }}>Ajouter</Btn>
+      </div>
+    </Modal>
+  )
+}
+
+function ChecklistExtras({ m, setM, lecture }) {
+  const [add, setAdd] = useState({ section:'base', libelle:'', medical:false })
+  const extras = m?.checklist_extras || {}
+  function setExtras(next) { setM(o => ({ ...o, checklist_extras: next })) }
+  function ajouter() {
+    const libelle = add.libelle.trim()
+    if (!libelle) { alert('Indiquez le matériel ou l’élément à cocher.'); return }
+    const deja = extrasChecklist(m, add.section)
+    if (deja.some(x => x.libelle.toLowerCase() === libelle.toLowerCase()) || (CHECKLISTS[add.section]?.items || []).includes(libelle)) {
+      alert('Cet élément est déjà dans la checklist.'); return
+    }
+    const medical = add.section === 'pec' || (add.section === 'retour_pec' && add.medical)
+    setExtras({ ...extras, [add.section]: [...deja, { id: nid(), libelle, medical }] })
+    setAdd(a => ({ ...a, libelle:'' }))
+  }
+  function retirer(section, id) {
+    setExtras({ ...extras, [section]: extrasChecklist(m, section).filter(x => x.id !== id) })
+  }
+  return (
+    <Card style={{ marginTop:14 }}>
+      <div style={{ fontWeight:700, color:'var(--heading)', marginBottom:10 }}>À cocher sur le terrain</div>
+      {!lecture && (
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, alignItems:'end' }}>
+        <Sel label="Checklist" value={add.section} set={v=>setAdd(a=>({ ...a, section:v, medical: v==='pec' }))} options={SECTIONS_CL} />
+        <F label="Matériel / élément" value={add.libelle} set={v=>setAdd(a=>({ ...a, libelle:v }))} placeholder="Coussin, brancard, couverture…" />
+        {add.section === 'retour_pec' && (
+          <Sel label="Qui coche" value={add.medical ? 'medical' : 'logistique'} set={v=>setAdd(a=>({ ...a, medical: v==='medical' }))}
+            options={[{ v:'logistique', l:'Tout l’équipage' }, { v:'medical', l:'Médical seulement' }]} />
+        )}
+        <Btn onClick={ajouter}>+ Ajouter à la checklist</Btn>
+      </div>
+      )}
+      {SECTIONS_CL.map(s => {
+        const extra = extrasChecklist(m, s.v)
+        if (!extra.length) return null
+        return (
+          <div key={s.v} style={{ marginTop:14 }}>
+            <div style={{ fontSize:12.5, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:.4, marginBottom:6 }}>{s.l}</div>
+            {extra.map(x => (
+              <div key={x.id} style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', padding:'6px 0', borderBottom:'1px solid var(--border)' }}>
+                <div>
+                  <div style={{ fontWeight:600 }}>{x.libelle}</div>
+                  <div style={{ fontSize:12, color:'var(--text-muted)' }}>{x.medical || s.v === 'pec' ? 'Coché par le médical' : 'Coché par l’équipage'}</div>
+                </div>
+                {!lecture && <Btn kind="danger" onClick={() => retirer(s.v, x.id)} style={{ padding:'5px 10px' }}>Retirer</Btn>}
+              </div>
+            ))}
+          </div>
+        )
+      })}
+    </Card>
   )
 }

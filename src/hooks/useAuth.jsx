@@ -1,13 +1,27 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
+import { poserPreuve } from '@/lib/deuxFacteurs'
 
 const AuthContext = createContext(null)
 
-// Groupes de rôles (alignés sur l'énuméré role_utilisateur en base)
-const STAFF = ['admin','president','coordinateur','ambulancier_bleu','ambulancier_gris',
-               'infirmier','medecin','volontaire_non_medical','tresorier','secretaire']
+// Identités de compte (énuméré role_utilisateur). Qualifications ≠ rôle.
+const STAFF = ['admin','president','coordinateur','tresorier','secretaire',
+               'volontaire_medical','volontaire_non_medical']
 const ADMINS  = ['admin','president']
-const MEDICAL = ['admin','president','medecin','infirmier']
+
+/** Coordination transport, présidence, informatique : équipages, horaires, ambulances. */
+const ROLES_PROGRAMME_SOUHAIT = [
+  'president', 'vice_president',
+  'resp_informatique', 'resp_informatique_adjoint',
+  'coord_transport', 'coord_transport_adjoint',
+  'resp_logistique', 'resp_logistique_adjoint',
+]
+/** Partie patient (récolte) : récolteur et coordination médicale. */
+const ROLES_PATIENT_SOUHAIT = [
+  'recolteur_souhait',
+  'coord_medical', 'coord_medical_adjoint', 'coordinateur_medical',
+]
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
@@ -39,6 +53,8 @@ export function AuthProvider({ children }) {
         profileRef.current = null
         uid.current = null
         pret.current = true
+        setMatrix({})
+        setMatrixCount(0)
         setLoading(false)
         return
       }
@@ -48,7 +64,6 @@ export function AuthProvider({ children }) {
       if (meme && event !== 'USER_UPDATED') return
       setTimeout(() => loadProfile(s.user.id), 0)
     })
-    loadMatrix()
     return () => sub.subscription.unsubscribe()
   }, [])
 
@@ -67,56 +82,74 @@ export function AuthProvider({ children }) {
     uid.current = userId
     pret.current = true
     setLoading(false)
+    loadMatrix()
   }
 
   const role = profile?.role || null
+  function accesTotal() {
+    if (ADMINS.includes(role)) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint','administrateur_asbl'].includes(r))
+  }
+  function peutGererApp() {
+    if (!role || role === 'partenaire') return false
+    if (ADMINS.includes(role)) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint'].includes(r))
+  }
   function can(perm) {
     if (!role) return false
-    if (perm === 'admin')       return ADMINS.includes(role) || accesTotal()
-    if (perm === 'medical')     return MEDICAL.includes(role)
+    if (perm === 'admin')       return peutGererApp()
+    if (perm === 'medical')     return ADMINS.includes(role) || estMedical()
     if (perm === 'staff')       return STAFF.includes(role)
-    if (perm === 'partenaire')  return role === 'partenaire'
+    if (perm === 'partenaire')  return role === 'partenaire' && profile?.actif !== false
     return STAFF.includes(role)
   }
 
   function canAccess(feature) {
     if (!role || role === 'partenaire') return false
     if (ADMINS.includes(role) || accesTotal()) return true
-    const BASE = ['dashboard','missions','defraiements','disponibilites']
+    const BASE = ['dashboard','missions','defraiements','disponibilites','evenements']
     if (BASE.includes(feature)) return true
-    if (feature === 'souhaits') return peutGererSouhaits()
-    const fi = profile?.fiche || {}
-    const sujets = [
-      fi.type_benevole && ['type', fi.type_benevole],
-      ...(Array.isArray(fi.qualifications) ? fi.qualifications.map(q => ['qualif', q]) : []),
-      ...(Array.isArray(fi.roles_asbl) ? fi.roles_asbl.map(r => ['role', r]) : []),
-    ].filter(Boolean)
-    return sujets.some(([d, sj]) => matrix[`${d}:${sj}:${feature}`] === true)
+    if (feature === 'souhaits') return peutGererSouhaits() || matriceAutorise(feature)
+    if (feature === 'stock' && peutGererStock()) return true
+    return matriceAutorise(feature)
   }
 
-  function accesTotal() {
-    if (ADMINS.includes(role)) return true
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['president','vice_president','resp_informatique','resp_informatique_adjoint','administrateur_asbl'].includes(r))
-  }
   function estMedical() {
-    if (['medecin','infirmier','ambulancier_bleu','ambulancier_gris'].includes(role)) return true
-    return (profile?.fiche?.type_benevole) === 'medical'
+    const t = profile?.fiche?.type_benevole
+    if (t === 'non_medical') return false
+    if (t === 'medical') return true
+    return role === 'volontaire_medical'
   }
-  function peutGererSouhaits() {
+  function rolesAsbl() { return profile?.fiche?.roles_asbl || [] }
+  function matriceAutorise(feature) {
+    return rolesAsbl().some(r => matrix[`role:${r}:${feature}`] === true)
+  }
+  function peutProgrammerSouhait() {
     if (!role || role === 'partenaire') return false
     if (accesTotal() || role === 'coordinateur') return true
-    const roles = profile?.fiche?.roles_asbl || []
-    return roles.some(r => ['coord_transport','coord_transport_adjoint','coord_medical','coord_medical_adjoint','recolteur_souhait'].includes(r))
+    return rolesAsbl().some(r => ROLES_PROGRAMME_SOUHAIT.includes(r))
   }
-  function peutVoirSouhaitComplet() { return peutGererSouhaits() || estMedical() }
+  function peutEncoderPatientSouhait() {
+    if (!role || role === 'partenaire') return false
+    if (peutProgrammerSouhait()) return true
+    return rolesAsbl().some(r => ROLES_PATIENT_SOUHAIT.includes(r))
+  }
+  function peutGererSouhaits() {
+    return peutProgrammerSouhait() || peutEncoderPatientSouhait()
+  }
   function peutGererFiches() {
     if (accesTotal()) return true
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => ['coord_benevoles','coord_benevoles_adjoint'].includes(r))
   }
+  function peutEncoderDisposPourAutrui() {
+    return peutEncoderDisposPourAutruiDepuisFiche(role, rolesAsbl())
+  }
   function peutVoirToutesDispos() {
     if (!role || role === 'partenaire') return false
+    if (peutEncoderDisposPourAutrui()) return true
     if (accesTotal() || role === 'coordinateur') return true
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => [
@@ -126,15 +159,29 @@ export function AuthProvider({ children }) {
       'coord_benevoles','coord_benevoles_adjoint',
     ].includes(r))
   }
+  /** Alias : encoder le calendrier de quelqu’un d’autre (pas les équipes « soi »). */
   function peutGererDispos() {
+    return peutEncoderDisposPourAutrui()
+  }
+  /** Actualités : présidence, informatique, relations publiques. */
+  function peutPublierActualites() {
     if (!role || role === 'partenaire') return false
-    if (accesTotal() || role === 'coordinateur') return true
+    if (role === 'admin' || role === 'president') return true
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => [
-      'president','vice_president',
-      'coord_transport','coord_transport_adjoint',
-      'coord_benevoles','coord_benevoles_adjoint',
+      'president', 'vice_president',
+      'resp_informatique', 'resp_informatique_adjoint',
+      'relations_publiques', 'relations_publiques_adjoint',
     ].includes(r))
+  }
+  /** HTML + vignette : informatique (et admin / président). */
+  function peutGererEvenementsInternes() {
+    return peutEditerEvenementsInternesDepuisFiche(role, rolesAsbl())
+  }
+  /** Nombre (et noms) d’inscrits : responsables d’équipe ASBL, plus l’informatique. */
+  function peutVoirInscritsEvenements() {
+    if (peutGererEvenementsInternes()) return true
+    return estResponsableAsblDepuisFiche(role, rolesAsbl())
   }
   function peutGererStock() {
     if (!role || role === 'partenaire') return false
@@ -145,19 +192,63 @@ export function AuthProvider({ children }) {
       'resp_logistique','resp_logistique_adjoint',
     ].includes(r))
   }
+  function peutGererDefraiements() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'tresorier' || role === 'president') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president', 'vice_president', 'tresorier', 'tresorier_adjoint'].includes(r))
+  }
+  /** Photos de fond : responsable informatique et son adjoint. */
+  function peutPersonnaliser() {
+    return peutGererHelpdesk()
+  }
+  /** File des tickets : responsable informatique et son adjoint. */
+  function peutGererHelpdesk() {
+    if (!role || role === 'partenaire') return false
+    if (role === 'admin') return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['resp_informatique', 'resp_informatique_adjoint'].includes(r))
+  }
+  /** Suppression définitive d’une note : équipe informatique (et accès total). */
+  function peutSupprimerNoteFrais() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal()) return true
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['resp_informatique', 'resp_informatique_adjoint'].includes(r))
+  }
   function estVolontaireNonMedical() {
     if (peutVoirToutesDispos()) return false
     const t = profile?.fiche?.type_benevole
     if (t === 'medical') return false
     return t === 'non_medical' || role === 'volontaire_non_medical'
   }
+  function estRecolteurSouhait() {
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.includes('recolteur_souhait')
+  }
+  /** Chaque membre du staff choisit les alertes qu’il reçoit. */
+  function peutReglerNotifications() {
+    if (!role || role === 'partenaire') return false
+    return true
+  }
+  /** Président, vice-président, responsable informatique (pas l’adjoint) et récolteurs : archives PIN. */
+  function peutOuvrirArchives() {
+    if (!role || role === 'partenaire') return false
+    if (!profile || profile.actif === false) return false
+    const roles = profile?.fiche?.roles_asbl || []
+    return roles.some(r => ['president', 'vice_president', 'resp_informatique', 'recolteur_souhait'].includes(r))
+  }
 
-  async function signOut() { await supabase.auth.signOut() }
+  async function signOut() {
+    poserPreuve('')
+    await supabase.auth.signOut()
+  }
 
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
-    can, canAccess, accesTotal, estMedical, peutGererSouhaits, peutVoirSouhaitComplet,
-    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutGererStock, estVolontaireNonMedical,
+    can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
+    peutProgrammerSouhait, peutEncoderPatientSouhait,
+    peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutPublierActualites, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutGererHelpdesk, peutPersonnaliser, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
   }), [session, profile, role, loading, matrix, matrixCount])
 

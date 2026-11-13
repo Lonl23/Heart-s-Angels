@@ -10,10 +10,13 @@ create extension if not exists pgcrypto;
 
 -- ════════════════════════════════ TYPES ÉNUMÉRÉS ═══════════════════════════════
 do $$ begin
+  -- Identité de compte / accès. Qualifications (infirmier, médecin, ambulancier)
+  -- : fiche.qualifications. Fonctions ASBL multiples : fiche.roles_asbl.
   create type role_utilisateur as enum (
-    'admin','president','coordinateur','ambulancier_bleu','ambulancier_gris',
-    'infirmier','medecin','volontaire_non_medical','tresorier','secretaire',
-    'partenaire'   -- NOUVEAU : accès partenaire
+    'admin','president','coordinateur',
+    'tresorier','secretaire',
+    'volontaire_medical','volontaire_non_medical',
+    'partenaire'
   );
 exception when duplicate_object then null; end $$;
 
@@ -455,6 +458,8 @@ create table if not exists public.formulaires_config (
 -- rôle "authenticated" (jamais "anon", qui est la clé publique du bundle).
 -- Le RLS fin (dont l'isolation des partenaires et le seul accès anonyme —
 -- l'insertion du formulaire de demande externe) est posé dans "acces_partenaire.sql".
+-- Le 30 octobre 2026, Supabase n'accorde plus ces droits tout seul aux nouvelles
+-- tables. 107_grants_api.sql les réécrit une fois le schéma complet, sans ouvrir anon.
 grant usage on schema public to anon, authenticated, service_role;
 grant all on all tables in schema public to authenticated, service_role;
 grant all on all sequences in schema public to authenticated, service_role;
