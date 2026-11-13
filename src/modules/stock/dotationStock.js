@@ -30,17 +30,42 @@ function uniteDansLieux(u, lieuIds) {
   return Number(u.qte_restante) > 0 || u.qte_restante == null
 }
 
+function qteUnitePourCat(u, cat) {
+  const mode = cat?.mode || u.mode
+  if (u.etat && u.etat !== 'dispo') return 0
+  if (mode === 'boite') return Number(u.qte_restante) || 0
+  if (mode === 'oxygene') return Number(u.pression_bar) > 0 || u.pression_bar == null ? 1 : 0
+  return 1
+}
+
 export function cataloguesPresentsIds(unites, lieuIds) {
   return new Set((unites || []).filter(u => uniteDansLieux(u, lieuIds)).map(u => u.catalogue_id))
 }
 
-/** Contenu prévu d’un emplacement : présent / manque / hors liste. */
+/** Quantité présente d’un catalogue dans un ensemble de lieux. */
+export function qtePresenteCatalogue(unites, cats, catalogueId, lieuIds) {
+  const cat = (cats || []).find(c => c.id === catalogueId)
+  return (unites || [])
+    .filter(u => u.catalogue_id === catalogueId && lieuIds.includes(u.lieu_id))
+    .reduce((s, u) => s + qteUnitePourCat(u, cat), 0)
+}
+
+/** Contenu prévu d’un emplacement : présent / manque / hors liste (MRP : qté BOM). */
 export function etatDotationLieu(n, lieux, cats, dotations, unites, arbre = false) {
   const lieuIds = arbre ? idsSousArbre(lieux, n.id) : [n.id]
+  const dots = (dotations || []).filter(d => lieuIds.includes(d.lieu_id))
   const prevus = cataloguesPrevus(dotations, cats, lieuIds)
   const presents = cataloguesPresentsIds(unites, lieuIds)
-  const ok = prevus.filter(c => presents.has(c.id))
-  const manque = prevus.filter(c => !presents.has(c.id))
+  const ok = []
+  const manque = []
+  for (const c of prevus) {
+    const qteReq = dots
+      .filter(d => d.catalogue_id === c.id)
+      .reduce((s, d) => s + (Number(d.qte) > 0 ? Number(d.qte) : 1), 0)
+    const qteOk = qtePresenteCatalogue(unites, cats, c.id, lieuIds)
+    if (qteOk >= qteReq) ok.push(c)
+    else manque.push(c)
+  }
   const prevuIds = new Set(prevus.map(c => c.id))
   const extraCats = [...presents]
     .filter(id => !prevuIds.has(id))

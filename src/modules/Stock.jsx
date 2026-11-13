@@ -17,11 +17,13 @@ import OngletTransferts, { FormReceptionGuide, FormSortieGuide, FormO2 } from '.
 import { etiqLieu, etiqUnite, CarteQr, FormReception, FormTransfert, FormSortie } from './stock/formsStock'
 import { exporterStockExcel, lireInventaireExcel, resumeImport, exporterLieuxParSacExcel, telechargerCsvLieuxParSac } from './stock/excelStock'
 import ARefaire from './stock/ARefaire'
+import OngletMrp from './stock/OngletMrp'
 
 const ACCUEIL = [
   { v: 'unites', l: 'Inventaires' },
   { v: 'transferts', l: 'Transfert' },
   { v: 'reception', l: 'Réception' },
+  { v: 'mrp', l: 'MRP' },
   { v: 'declasse', l: 'Déclassé' },
   { v: 'rapport', l: 'Rapport de sortie' },
 ]
@@ -37,6 +39,7 @@ const LBL_RUBRIQUE = {
   unites: 'Inventaires',
   transferts: 'Transfert',
   reception: 'Réception',
+  mrp: 'MRP / réappro',
   declasse: 'Déclassé',
   rapport: 'Rapport de sortie',
   gestion: 'Gestion articles',
@@ -83,7 +86,7 @@ export default function Stock() {
       supabase.from('stock_catalogue').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_unites').select(selUnites).order('created_at', { ascending: false }).range(0, page - 1),
       supabase.from('stock_fournisseurs').select('*, stock_fournisseur_contacts(id,prenom,nom,telephone,email,ordre)').eq('actif', true).order('nom'),
-      supabase.from('stock_dotation').select('id, lieu_id, catalogue_id'),
+      supabase.from('stock_dotation').select('id, lieu_id, catalogue_id, qte'),
     ])
     const unitesBrutes = [...(c0.data || [])]
     if ((c0.data || []).length === page) {
@@ -285,6 +288,19 @@ export default function Stock() {
               onOk={ok} onErr={setErr} onAller={setTab}
               onDone={() => load()} />
           )}
+          {tab === 'mrp' && (
+            <OngletMrp
+              cats={cats} lieux={lieux} unites={unites} dotations={dotations}
+              onOk={ok} onErr={setErr}
+              onGotoLieux={() => setTab('lieux')}
+              onCommander={async (payload) => {
+                const { error } = await supabase.from('stock_commandes').insert(payload)
+                if (error) { setErr(error.message); return }
+                ok('Rappel MRP créé.')
+                setTab('alertes')
+              }}
+            />
+          )}
           {tab === 'declasse' && (
             <FormSortieGuide
               unites={unites} lieux={lieux}
@@ -461,7 +477,9 @@ function NoeudLieu({ n, lieux, cats, dotations, unites, keep, onEdit, onQr, onDe
 }
 
 function FormDotation({ lieu, cats, dotations, onDone, onOk, onErr }) {
-  const deja = new Set((dotations || []).filter(d => d.lieu_id === lieu.id).map(d => d.catalogue_id))
+  const dejaRows = (dotations || []).filter(d => d.lieu_id === lieu.id)
+  const deja = new Set(dejaRows.map(d => d.catalogue_id))
+  const [qtes, setQtes] = useState(() => Object.fromEntries(dejaRows.map(d => [d.catalogue_id, Number(d.qte) > 0 ? Number(d.qte) : 1])))
   const [ids, setIds] = useState([...deja])
   const [q, setQ] = useState('')
   const [saving, setSaving] = useState(false)
@@ -469,13 +487,27 @@ function FormDotation({ lieu, cats, dotations, onDone, onOk, onErr }) {
   const propositions = (cats || [])
     .filter(c => !ids.includes(c.id) && correspondArticle(c, q))
     .slice(0, 12)
+  function ajouter(id) {
+    setIds(s => s.includes(id) ? s : [...s, id])
+    setQtes(s => ({ ...s, [id]: s[id] || 1 }))
+  }
   async function save() {
     setSaving(true)
     const next = new Set(ids)
     const add = [...next].filter(id => !deja.has(id))
     const del = [...deja].filter(id => !next.has(id))
+    const keep = [...next].filter(id => deja.has(id))
     if (add.length) {
-      const { error } = await supabase.from('stock_dotation').insert(add.map(catalogue_id => ({ lieu_id: lieu.id, catalogue_id })))
+      const { error } = await supabase.from('stock_dotation').insert(add.map(catalogue_id => ({
+        lieu_id: lieu.id,
+        catalogue_id,
+        qte: Math.max(1, Number(qtes[catalogue_id]) || 1),
+      })))
+      if (error) { setSaving(false); onErr?.(error.message); return }
+    }
+    for (const catalogue_id of keep) {
+      const qte = Math.max(1, Number(qtes[catalogue_id]) || 1)
+      const { error } = await supabase.from('stock_dotation').update({ qte }).eq('lieu_id', lieu.id).eq('catalogue_id', catalogue_id)
       if (error) { setSaving(false); onErr?.(error.message); return }
     }
     if (del.length) {
@@ -483,27 +515,38 @@ function FormDotation({ lieu, cats, dotations, onDone, onOk, onErr }) {
       if (error) { setSaving(false); onErr?.(error.message); return }
     }
     setSaving(false)
-    onOk?.('Contenu prévu enregistré.')
+    onOk?.('Nomenclature (contenu prévu) enregistrée.')
     onDone()
   }
   return (
     <Card style={{ marginBottom:12 }}>
       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10, gap:8 }}>
-        <strong>Contenu prévu — {lieu.nom}</strong>
+        <strong>Nomenclature — {lieu.nom}</strong>
         <Btn kind="soft" onClick={onDone}>Annuler</Btn>
       </div>
       <p style={{ fontSize:13, color:'var(--text-muted)', margin:'0 0 10px' }}>
-        Types d’articles qui doivent se trouver ici (d’après les fiches papier). Ce n’est pas encore le stock réel : rangez ensuite les QR.
+        BOM MRP : articles × quantité attendus ici. Ce n’est pas encore le stock réel — rangez ensuite les QR. Le module MRP calcule les manques.
       </p>
       {choisis.length === 0 ? (
         <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:10 }}>Rien de prévu pour l’instant.</div>
       ) : (
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:12 }}>
           {choisis.map(c => (
-            <button key={c.id} type="button" className="ha-stock-dotation-chip"
-              onClick={() => setIds(s => s.filter(id => id !== c.id))}>
-              {c.nom} ×
-            </button>
+            <div key={c.id} style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+              <button type="button" className="ha-stock-dotation-chip"
+                onClick={() => { setIds(s => s.filter(id => id !== c.id)); setQtes(s => { const n = { ...s }; delete n[c.id]; return n }) }}>
+                {c.nom} ×
+              </button>
+              <label style={{ fontSize:12.5, color:'var(--text-muted)', display:'flex', gap:6, alignItems:'center' }}>
+                Qté
+                <input
+                  type="number" min={1} max={9999}
+                  value={qtes[c.id] ?? 1}
+                  onChange={e => setQtes(s => ({ ...s, [c.id]: e.target.value }))}
+                  style={{ width: 64, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
+                />
+              </label>
+            </div>
           ))}
         </div>
       )}
@@ -512,7 +555,7 @@ function FormDotation({ lieu, cats, dotations, onDone, onOk, onErr }) {
         placeholder="Nom (gants, compresses, O2…)" autoComplete="off" style={{ ...inp, marginBottom:8 }} />
       {q.trim() && propositions.map(c => (
         <button key={c.id} type="button" className="ha-stock-dotation-add"
-          onClick={() => { setIds(s => s.includes(c.id) ? s : [...s, c.id]); setQ('') }}>
+          onClick={() => { ajouter(c.id); setQ('') }}>
           + {c.nom}{c.categorie ? ` · ${c.categorie}` : ''}
         </button>
       ))}
