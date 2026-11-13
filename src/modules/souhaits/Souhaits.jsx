@@ -12,13 +12,13 @@ import { nomsRecolteurs } from './missionSchema'
 import {
   STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, peutChangerStatut, statutFige, libelleStatutFige,
-  estSouhaitDemo, MOTIF_DEMO_NON_REALISE,
+  estSouhaitDemo,
 } from './statuts'
 
 export {
   STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige,
-  estSouhaitDemo, MOTIF_DEMO_NON_REALISE,
+  estSouhaitDemo,
 }
 export { statutsDisponibles } from './statuts'
 
@@ -146,9 +146,12 @@ function Kanban({ onOpen }) {
       supabase.from('souhaits').select('*').order('date_souhaitee', { ascending:true, nullsFirst:false }),
       supabase.rpc('lister_souhaits_verrouilles'),
     ])
-    const ouverts = data || []
+    // Formation (Camille) : hors préparation — progression uniquement via Mes souhaits / session perso.
+    const ouverts = (data || []).filter(s => !estSouhaitDemo(s))
     const ids = new Set(ouverts.map(s => s.id))
-    const fermes = (verrouilles || []).filter(s => !ids.has(s.id)).map(s => ({ ...s, verrouille: true }))
+    const fermes = (verrouilles || [])
+      .filter(s => !ids.has(s.id) && !estSouhaitDemo(s))
+      .map(s => ({ ...s, verrouille: true }))
     setItems([...ouverts, ...fermes]); setLoading(false)
   }
   useEffect(() => { charger() }, [])
@@ -164,8 +167,12 @@ function Kanban({ onOpen }) {
   async function appliquer(id, col, extra={}) {
     const item = itemsRef.current.find(s => s.id === id)
     if (!item || item.statut === col) return
+    if (estSouhaitDemo(item)) {
+      flash(libelleStatutFige(item.statut, item), 'warn')
+      return
+    }
     if (!peutChangerStatut(item.statut, col, item)) {
-      if (statutFige(item.statut, item)) flash(libelleStatutFige(item.statut), 'warn')
+      if (statutFige(item.statut, item)) flash(libelleStatutFige(item.statut, item), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }
@@ -188,17 +195,12 @@ function Kanban({ onOpen }) {
   function deposer(s, col) {
     const item = typeof s === 'string' ? itemsRef.current.find(x => x.id === s) : s
     if (!item || !col || item.statut === col) return
-    if (!peutChangerStatut(item.statut, col, item)) {
-      if (statutFige(item.statut, item)) flash(libelleStatutFige(item.statut), 'warn')
+    if (estSouhaitDemo(item) || !peutChangerStatut(item.statut, col, item)) {
+      if (estSouhaitDemo(item) || statutFige(item.statut, item)) flash(libelleStatutFige(item.statut, item), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }
     if (col === 'non_realise') {
-      if (estSouhaitDemo(item)) {
-        const motif = String(item.mission?.motif_non_realise || '').trim() || MOTIF_DEMO_NON_REALISE
-        appliquer(item.id, col, { mission: { ...(item.mission || {}), motif_non_realise: motif } })
-        return
-      }
       setMotif({ id: item.id, from: item.statut })
       setMotifTxt(item.mission?.motif_non_realise || '')
       return
@@ -230,12 +232,12 @@ function Kanban({ onOpen }) {
       const dist = Math.hypot(e.clientX - o.x, e.clientY - o.y)
       if (!o.started && dist < 8) return
       if (statutFige(o.s.statut, o.s)) {
-        if (!o.started) {
-          o.started = true
-          flashRef.current(libelleStatutFige(o.s.statut), 'warn')
+          if (!o.started) {
+            o.started = true
+            flashRef.current(libelleStatutFige(o.s.statut, o.s), 'warn')
+          }
+          return
         }
-        return
-      }
       if (!o.started) {
         o.started = true
         try { o.el.setPointerCapture(o.pid) } catch { /* */ }
@@ -288,7 +290,7 @@ function Kanban({ onOpen }) {
     <div className="ha-kanban-page">
       <div className="ha-kanban-toolbar" style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-end', gap:12, marginBottom:14 }}>
         <ChampRechercheNom id="recherche-souhaits" value={q} onChange={setQ} />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Le souhait de formation peut être déplacé dans n’importe quelle colonne à tout moment, y compris depuis Réalisé ou Non réalisé. Les autres souhaits réalisés ou non réalisés restent verrouillés.</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Les souhaits réalisés ou non réalisés restent verrouillés. Le souhait de formation (Camille) n’apparaît pas ici : chacun le joue dans Mes souhaits, pour son propre compte.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -371,7 +373,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
     ? (s.statut === 'non_realise'
       ? 'Non réalisé — verrouillé. Ouvrir avec le PIN.'
       : 'Réalisé — verrouillé un mois calendrier après la réalisation. Ouvrir avec le PIN.')
-    : demo ? 'Souhait de formation — glissez pour changer de colonne à tout moment.'
+    : demo ? 'Souhait de formation — hors préparation (progression dans Mes souhaits).'
     : s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.'
     : s.statut === 'non_realise' ? 'Non réalisé — verrouillé.'
     : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'

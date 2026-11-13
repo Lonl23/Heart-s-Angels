@@ -18,6 +18,8 @@ const Defraiements = lazy(() => import('@/modules/defraiements/Defraiements'))
 const Souhaits = lazy(() => import('@/modules/souhaits/Souhaits'))
 const Disponibilites = lazy(() => import('@/modules/Disponibilites'))
 const EvenementsInternes = lazy(() => import('@/modules/EvenementsInternes'))
+const EvenementsOuverts = lazy(() => import('@/modules/EvenementsOuverts'))
+const InscriptionSoiree = lazy(() => import('@/pages/InscriptionSoiree'))
 const Stock = lazy(() => import('@/modules/Stock'))
 const Volontaires = lazy(() => import('@/modules/volontaires/Volontaires'))
 const Admin = lazy(() => import('@/modules/Admin'))
@@ -56,6 +58,7 @@ export default function App() {
         <Route path="/demande" element={<DemandeSouhait />} />
         <Route path="/inscription" element={<Inscription />} />
         <Route path="/inscription/partenaire" element={<Inscription />} />
+        <Route path="/soiree/:token" element={<InscriptionSoiree />} />
 
         <Route path="/app" element={<RequireStaff><Layout /></RequireStaff>}>
           <Route index element={<Dashboard />} />
@@ -81,6 +84,8 @@ export default function App() {
           <Route path="evenements/:id/editer" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements"     element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="ouvertures/:id" element={<RequireAcces feature="evenements"><EvenementsOuverts /></RequireAcces>} />
+          <Route path="ouvertures"     element={<RequireAcces feature="evenements"><EvenementsOuverts /></RequireAcces>} />
           <Route path="secours/activites/:id" element={<RequireAcces feature="activites_secours"><FicheActivite /></RequireAcces>} />
           <Route path="secours/activites" element={<RequireAcces feature="activites_secours"><ActivitesSecours /></RequireAcces>} />
           <Route path="secours/conventions" element={<RequireAcces feature="conventions_dps"><ConventionsDps /></RequireAcces>} />

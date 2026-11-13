@@ -18,6 +18,7 @@ export const DEPARTEMENTS = [
       { key: 'annuaire', to: '/app/annuaire', label: 'Annuaire', icon: '📇', desc: 'Bénéficiaires, contacts rattachés, institutions' },
       { key: 'organigramme', to: '/app/rh/organigramme', label: 'Organigramme', icon: '🌳', desc: 'N+1, téléphone et e-mail des responsables' },
       { key: 'evenements', to: '/app/evenements', label: 'Événements internes', icon: '📣', desc: 'Vignettes ASBL : page d’inscription dans l’app' },
+      { key: 'ouvertures', to: '/app/ouvertures', label: 'Inscriptions ouvertes', icon: '🔗', desc: 'Liens Facebook / soirées d’info → liste puis accès app' },
       { key: 'actualites', to: '/app/actualites', label: 'Actualités', icon: '📰', desc: 'Les nouvelles de l’ASBL' },
     ],
   },
@@ -97,6 +98,7 @@ export function moduleAutorise(key, auth) {
   if (key === 'organigramme') return true
   if (key === 'tresorerie') return auth.peutGererDefraiements()
   if (key === 'flotte') return auth.canAccess('stock')
+  if (key === 'ouvertures') return auth.canAccess('evenements')
   return auth.canAccess(key)
 }
 

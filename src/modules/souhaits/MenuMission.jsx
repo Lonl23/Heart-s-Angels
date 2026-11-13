@@ -105,7 +105,18 @@ export default function MenuMission({ souhaitId, onBack }) {
       {onglet === 'contacts' && <ContactsMission souhaitId={souhaitId} individuel={jouette} />}
       {onglet === 'statuts' && (
         fenetre.ouvert
-          ? <MissionExecution souhaitId={souhaitId} onBack={() => setOnglet('recap')} />
+          ? (
+            <>
+              {jouette && (
+                <div style={{ padding: '0 16px 8px' }}>
+                  <Flash kind="ok">
+                    Formation Camille — vos statuts sont personnels et disponibles à tout moment (indépendants des autres volontaires).
+                  </Flash>
+                </div>
+              )}
+              <MissionExecution souhaitId={souhaitId} onBack={() => setOnglet('recap')} />
+            </>
+          )
           : (
             <div style={{ padding: 16 }}>
               <Flash kind="warn">{fenetre.raison}</Flash>

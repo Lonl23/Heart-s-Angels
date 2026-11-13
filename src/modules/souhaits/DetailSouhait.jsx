@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
-import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige, estSouhaitDemo, MOTIF_DEMO_NON_REALISE } from './statuts'
+import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige, estSouhaitDemo } from './statuts'
 import { fmtDatesSouhait } from './datesSouhait'
 import { medecinPluri, nomPluri, nomsRecolteurs } from './missionSchema'
 import FormSouhait from './FormSouhait'
@@ -69,8 +69,12 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
   function flash(t){ setMsg(t); setTimeout(()=>setMsg(null), 3000) }
 
   async function appliquerStatut(v, missionPatch={}) {
+    if (estSouhaitDemo(s)) {
+      flash(libelleStatutFige(s.statut, s))
+      return
+    }
     if (statutFige(s.statut, s) && v !== s.statut) {
-      flash(libelleStatutFige(s.statut))
+      flash(libelleStatutFige(s.statut, s))
       return
     }
     const patch = { statut: v }
@@ -82,22 +86,16 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     }
     const { error } = await supabase.from('souhaits').update(patch).eq('id', id)
     if (error) { flash(error.message); return }
-    if (v === 'non_realise' && !estSouhaitDemo(s)) return
     setS(x => ({ ...x, ...patch })); flash('Statut mis à jour.')
   }
   function majStatut(v) {
     if (v === s.statut) return
-    if (!peutChangerStatut(s.statut, v, s) && v !== 'non_realise') {
-      if (statutFige(s.statut, s)) flash(libelleStatutFige(s.statut))
+    if (estSouhaitDemo(s) || (!peutChangerStatut(s.statut, v, s) && v !== 'non_realise')) {
+      if (estSouhaitDemo(s) || statutFige(s.statut, s)) flash(libelleStatutFige(s.statut, s))
       return
     }
     if (v === 'non_realise') {
       if (!peutPasserNonRealise(s.statut, s)) return
-      if (estSouhaitDemo(s)) {
-        const t = String(s.mission?.motif_non_realise || '').trim() || MOTIF_DEMO_NON_REALISE
-        appliquerStatut('non_realise', { motif_non_realise: t })
-        return
-      }
       setMotif(s.mission?.motif_non_realise || '')
       setMotifOpen(true)
       return
@@ -175,12 +173,12 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
   const st = stInfo(s.statut)
   const extras = demo
-    ? KANBAN_COLONNES.filter(k => !PIPELINE.includes(k))
+    ? []
     : [
         ...(['en_cours','terminee_terrain','realise'].includes(s.statut) ? [s.statut] : []),
         ...statutsDisponibles(s.statut, s).filter(k => !PIPELINE.includes(k)),
       ]
-  const pipelineStatut = demo ? PIPELINE : PIPELINE_ENCODE
+  const pipelineStatut = PIPELINE_ENCODE
   const m = s.mission || {}
   const pretHints = []
   if (!(m.vecteurs||[]).length) pretHints.push(m.demo_cle ? 'un vecteur' : 'un vecteur et un équipage')
@@ -229,18 +227,20 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
       <Card style={{ marginBottom:12, padding:'12px 16px' }}>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>
-          {statutFige(s.statut, s)
+          {demo
+            ? 'Souhait de formation — hors tableau de préparation. Le statut partagé ne bouge plus : chaque volontaire avance seul dans Mes souhaits.'
+            : statutFige(s.statut, s)
             ? (s.statut === 'non_realise'
               ? 'Souhait non réalisé — verrouillé, plus rien à préparer.'
               : 'Souhait réalisé — le statut ne peut plus être modifié, les heures de mission sont conservées.')
             : s.statut === 'terminee_terrain'
               ? 'Terminée terrain — l’équipage est rentré. La mission n’est pas clôturée : le staff la passe en Réalisé ici.'
-              : demo
-              ? 'Souhait de formation — déplaçable dans n’importe quelle colonne à tout moment, y compris Réalisé et Non réalisé.'
               : `Préparation ${s.statut === 'en_cours' ? '— En cours se pose depuis Mes souhaits' : ''}`}
         </div>
-        <StatutFlow value={s.statut} info={stInfo} pipeline={pipelineStatut} extras={extras} onPick={majStatut} locked={statutFige(s.statut, s)} />
-        {programmer && s.statut === 'pret' && pretHints.length > 0 && (
+        {!demo && (
+          <StatutFlow value={s.statut} info={stInfo} pipeline={pipelineStatut} extras={extras} onPick={majStatut} locked={statutFige(s.statut, s)} />
+        )}
+        {programmer && !demo && s.statut === 'pret' && pretHints.length > 0 && (
           <div style={{ fontSize:12.5, color:'#BA7517', marginTop:8 }}>Avant le terrain, il manque encore : {pretHints.join(', ')}.</div>
         )}
       </Card>
@@ -259,7 +259,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
       {s.fictif && (
         <Flash kind="warn">
           {s.mission?.demo_cle
-            ? 'Souhait de formation fictif — dossier préencodé, déplaçable dans n’importe quelle colonne à tout moment. Ce n’est pas un vrai patient. Pas besoin d’affecter un équipage : tous les volontaires le voient dans Mes souhaits pour se faire la main. Une fois clôturé, il revient en Nouveau le lendemain (départ base 9h30) ; l’encodage (protocole, trajet, institutions) reste.'
+            ? 'Souhait de formation fictif — ce n’est pas un vrai patient. Hors préparation collective : chacun le joue dans Mes souhaits, avec une progression personnelle indépendante des autres. L’encodage du dossier (protocole, trajet, institutions) reste partagé pour le staff.'
             : 'Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.'}
         </Flash>
       )}
