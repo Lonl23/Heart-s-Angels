@@ -1,0 +1,35 @@
+{
+  "id": "/?canal=beta",
+  "name": "Heart's Angels ASBL (Bêta)",
+  "short_name": "HA Bêta",
+  "description": "Version de test — espace interne Heart's Angels.",
+  "lang": "fr-BE",
+  "dir": "ltr",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F7F5F2",
+  "theme_color": "#E86F24",
+  "categories": ["medical", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/ha-logo-192-beta.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ha-logo-512-beta.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/ha-logo-512-maskable-beta.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
