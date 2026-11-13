@@ -22,33 +22,33 @@ import OngletInventaireFacile from './stock/OngletInventaireFacile'
 
 const ACCUEIL = [
   { v: 'unites', l: 'Inventaires' },
-  { v: 'transferts', l: 'Transfert' },
+  { v: 'transferts', l: 'Ranger' },
   { v: 'reception', l: 'Réception' },
-  { v: 'mrp', l: 'MRP' },
-  { v: 'declasse', l: 'Déclassé' },
-  { v: 'rapport', l: 'Rapport de sortie' },
+  { v: 'alertes', l: 'Alertes' },
 ]
 
 const PLUS = [
+  ['mrp', 'Réappro'],
+  ['declasse', 'Hors service'],
+  ['rapport', 'Rapport de sortie'],
   ['gestion', 'Gestion articles'],
-  ['alertes', 'Alertes'],
   ['fournisseurs', 'Fournisseurs'],
   ['lieux', 'Lieux'],
 ]
 
 const LBL_RUBRIQUE = {
   unites: 'Inventaires',
-  transferts: 'Transfert',
+  transferts: 'Ranger',
   reception: 'Réception',
-  mrp: 'MRP / réappro',
-  declasse: 'Déclassé',
+  mrp: 'Réappro',
+  declasse: 'Hors service',
   rapport: 'Rapport de sortie',
   gestion: 'Gestion articles',
   alertes: 'Alertes',
   articles: 'Gestion articles',
   fournisseurs: 'Fournisseurs',
   lieux: 'Lieux',
-  inventaire: 'Scan lieu',
+  inventaire: 'Contrôle lieu',
   o2: 'Relevé oxygène',
 }
 
@@ -316,24 +316,23 @@ export default function Stock() {
           )}
           {tab === 'unites' && (
             <>
-              <div className="ha-stock-outils">
-                <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
-                <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer</Btn>
-                <Btn kind="soft" onClick={() => setScan('inventaire')}>Scan lieu</Btn>
-                {((cats || []).some(c => c.mode === 'oxygene') || (unites || []).some(u => u.mode === 'oxygene')) && (
-                  <Btn kind="soft" onClick={() => setTab('o2')}>Oxygène</Btn>
-                )}
-              </div>
               <OngletInventaireFacile
                 cats={cats} lieux={lieux} unites={unites}
                 onChange={load} onOk={ok} onErr={setErr}
                 onScanLieu={() => setScan('inventaire')}
                 onRanger={() => { setLieuCible(null); setScan('ranger') }}
               />
-              <details style={{ marginTop: 16 }}>
-                <summary style={{ cursor: 'pointer', fontWeight: 650, color: 'var(--heading)', marginBottom: 10 }}>
-                  Vue détaillée — lots &amp; pièces QR
+              <details style={{ marginTop: 20 }}>
+                <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+                  Outils (Excel, lots, O₂…)
                 </summary>
+                <div className="ha-stock-outils" style={{ marginBottom: 12 }}>
+                  <Btn kind="soft" onClick={exportExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
+                  <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer</Btn>
+                  {((cats || []).some(c => c.mode === 'oxygene') || (unites || []).some(u => u.mode === 'oxygene')) && (
+                    <Btn kind="soft" onClick={() => setTab('o2')}>Oxygène</Btn>
+                  )}
+                </div>
                 <OngletUnites unites={unites} lieux={lieux} onChange={load} onRefresh={() => load(true)} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />
               </details>
             </>
