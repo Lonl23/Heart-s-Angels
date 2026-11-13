@@ -63,6 +63,19 @@ export function libelleTracabilite(article) {
   return 'Sans lot ni DLC'
 }
 
+/** Étiquette QR : 1 QR par pièce/boîte/bouteille. Sinon stock quantité/lot sans étiquette. */
+export function gestionQr(article) {
+  if (!article) return true
+  if (typeof article.gestion_qr === 'boolean') return article.gestion_qr
+  // O₂ et durable : QR par défaut
+  if (article.mode === 'oxygene' || article.mode === 'durable') return true
+  return true
+}
+
+export function libelleQr(article) {
+  return gestionQr(article) ? 'QR par pièce' : 'Sans QR (quantité / lot)'
+}
+
 export const TYPES_ENTRETIEN = [
   { v: 'controle', l: 'Contrôle' },
   { v: 'remplacement', l: 'Remplacement' },

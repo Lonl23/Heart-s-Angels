@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Pill, Empty, Loading, Flash, inp } from '@/components/ui'
-import { TYPES_LIEU, MODES, NATURES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, lblNature, natureDepuisMode, estMateriel, cheminLieux, enfantsDe, resteLabel, nomTypeO2, gestionLot, gestionDlc, libelleTracabilite } from './stock/stockSchema'
+import { TYPES_LIEU, MODES, NATURES, VOLUMES_O2, PRESSION_PLEINE, PRESSION_ALERTE, lblLieu, lblMode, lblNature, natureDepuisMode, estMateriel, cheminLieux, enfantsDe, resteLabel, nomTypeO2, gestionLot, gestionDlc, gestionQr, libelleTracabilite, libelleQr } from './stock/stockSchema'
 import EntretienPiece from './stock/EntretienPiece'
 import VueLots from './stock/VueLots'
 import { aggregerLots, fmtDlc, dlcPassee, dlcProche, qteLotLabel, lotCorrespond } from './stock/lotsStock'
@@ -82,7 +82,7 @@ export default function Stock() {
   async function load(silencieux) {
     if (silencieux !== true) setLoading(true)
     const page = 1000
-    const selUnites = '*, stock_catalogue(nom,mode,nature,unite,volume_l,photo_path,fournisseur_id,entretien_mois,gestion_lot,gestion_dlc), stock_lieux(nom), stock_unite_entretiens(date_fait,date_prochain,created_at)'
+    const selUnites = '*, stock_catalogue(nom,mode,nature,unite,volume_l,photo_path,fournisseur_id,entretien_mois,gestion_lot,gestion_dlc,gestion_qr), stock_lieux(nom), stock_unite_entretiens(date_fait,date_prochain,created_at)'
     const [a, b, c0, d, e] = await Promise.all([
       supabase.from('stock_lieux').select('*').eq('actif', true).order('nom'),
       supabase.from('stock_catalogue').select('*').eq('actif', true).order('nom'),
@@ -119,6 +119,7 @@ export default function Stock() {
         entretien_mois: u.stock_catalogue?.entretien_mois,
         gestion_lot: u.stock_catalogue?.gestion_lot,
         gestion_dlc: u.stock_catalogue?.gestion_dlc,
+        gestion_qr: u.stock_catalogue?.gestion_qr,
         entretien_dernier: ents[0]?.date_fait || null,
         entretien_prochain: ents[0]?.date_prochain || null,
       }
@@ -703,6 +704,7 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
                             : ''}
                           {` · ${lblNature(natureDepuisMode(c.mode, c.nature))}`}
                           {` · ${libelleTracabilite(c)}`}
+                          {` · ${libelleQr(c)}`}
                           {estMateriel(c) && Number(c.entretien_mois) > 0 ? ` · entretien tous les ${Number(c.entretien_mois)} mois` : ''}
                           {c.fournisseur_id && fourById[c.fournisseur_id] ? ` · ${fourById[c.fournisseur_id].nom}` : ' · sans fournisseur'}
                           {c.ref_fournisseur ? ` · réf. ${c.ref_fournisseur}` : ''}
@@ -786,6 +788,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
     unite: 'pièce', mode: 'piece', stock_minimal: 0, stock_minimal_sacs: 0, fournisseur_id: '', ref_fournisseur: '',
     gestion_lot: gestionLot({ ...item, nature: natureInit }),
     gestion_dlc: gestionDlc({ ...item, nature: natureInit }),
+    gestion_qr: gestionQr({ ...item, nature: natureInit }),
     ...item,
     nature: natureInit,
   })
@@ -812,6 +815,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       entretien_mois: estMateriel(f) && Number(f.entretien_mois) > 0 ? Number(f.entretien_mois) : null,
       gestion_lot: !!f.gestion_lot,
       gestion_dlc: !!f.gestion_dlc,
+      gestion_qr: f.mode === 'oxygene' ? true : !!f.gestion_qr,
     }
     if (f.id) {
       const { error } = await supabase.from('stock_catalogue').update(payload).eq('id', f.id)
@@ -835,7 +839,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       </div>
       <PhotoArticleChamp path={photoPath} catalogueId={f.id} onChange={setPhotoPath} onErr={onErr} />
       <F label="Nom" value={f.nom} set={v=>setF(s=>({ ...s, nom:v }))} required placeholder="Gants nitrile M, Compresse, O2 B5L" />
-      <Sel label="Mode QR" value={f.mode} set={v=>{
+      <Sel label="Mode de suivi" value={f.mode} set={v=>{
         const nature = v === 'boite' ? 'consommable' : (v === 'durable' || v === 'oxygene' ? 'materiel' : f.nature)
         const base = { mode: v, nature }
         setF(s => ({
@@ -843,6 +847,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
           ...(v==='oxygene' && !s.volume_l ? { volume_l:'5' } : {}),
           gestion_lot: gestionLot(base),
           gestion_dlc: gestionDlc(base),
+          gestion_qr: v === 'oxygene' ? true : gestionQr({ ...s, ...base }),
         }))
       }} options={MODES} />
       <Sel label="Nature" value={natureDepuisMode(f.mode, f.nature)} set={v=>setF(s=>{
@@ -853,6 +858,23 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
         La garantie d’une commande et les dates d’entretien concernent le matériel. Un consommable n’en a pas.
       </div>
       <div style={{ display:'grid', gap:8, marginBottom:12, padding:'10px 12px', background:'var(--bg-alt)', borderRadius:10 }}>
+        <label style={{ display:'flex', gap:8, alignItems:'flex-start', fontSize:13.5, cursor: f.mode === 'oxygene' ? 'default' : 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={f.mode === 'oxygene' ? true : !!f.gestion_qr}
+            disabled={f.mode === 'oxygene'}
+            onChange={e=>setF(s=>({ ...s, gestion_qr: e.target.checked }))}
+            style={{ marginTop:3 }}
+          />
+          <span>
+            <strong>Étiquette QR (1 QR par pièce / boîte)</strong><br />
+            <span style={{ color:'var(--text-muted)', fontSize:12.5 }}>
+              {f.mode === 'oxygene'
+                ? 'Obligatoire pour l’oxygène : une bouteille = un QR.'
+                : 'Coché : un QR par unité (à imprimer chez vous). Décoché : stock en quantité / lot, sans étiquette.'}
+            </span>
+          </span>
+        </label>
         <label style={{ display:'flex', gap:8, alignItems:'flex-start', fontSize:13.5, cursor:'pointer' }}>
           <input type="checkbox" checked={!!f.gestion_lot} onChange={e=>setF(s=>({ ...s, gestion_lot: e.target.checked }))} style={{ marginTop:3 }} />
           <span><strong>Suivi n° de lot</strong><br /><span style={{ color:'var(--text-muted)', fontSize:12.5 }}>Demande un lot à la réception et à l’inventaire.</span></span>
@@ -861,7 +883,7 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
           <input type="checkbox" checked={!!f.gestion_dlc} onChange={e=>setF(s=>({ ...s, gestion_dlc: e.target.checked }))} style={{ marginTop:3 }} />
           <span><strong>Suivi péremption (DLC)</strong><br /><span style={{ color:'var(--text-muted)', fontSize:12.5 }}>Décochez si l’article n’a pas de date de péremption. Avec un lot, même n° = même DLC.</span></span>
         </label>
-        <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Actuellement : {libelleTracabilite(f)}</div>
+        <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>{libelleTracabilite(f)} · {libelleQr(f)}</div>
       </div>
       {estMateriel(f) && (
         <F label="Entretien tous les (mois)" type="number" value={f.entretien_mois ?? ''} set={v=>setF(s=>({ ...s, entretien_mois:v }))} placeholder="12 pour une batterie, vide si aucun rythme" />
