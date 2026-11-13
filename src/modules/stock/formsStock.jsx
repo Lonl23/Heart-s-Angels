@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, Btn, F, Sel, lbl, inp } from '@/components/ui'
-import { PRESSION_PLEINE, cheminLieux, nomTypeO2 } from './stockSchema'
+import { PRESSION_PLEINE, cheminLieux, nomTypeO2, gestionLot, gestionDlc, libelleTracabilite } from './stockSchema'
 import { lotConnuPour, fmtDlc } from './lotsStock'
 import { ApercuEtiq, telechargerWord, telechargerPng, copierPng, telechargerCsv } from './QrImg'
 import { PhotoArticle } from './photoStock'
@@ -73,11 +73,13 @@ export function CarteQrLot({ unites, onClose, onOk }) {
   )
 }
 
-export function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
+export function FormReception({ cat, lieux, unites, onDone, onOk, onErr, lieuPref }) {
+  const avecLot = gestionLot(cat)
+  const avecDlc = gestionDlc(cat)
   const [f, setF] = useState({
     qte: cat.mode === 'boite' ? (cat.qte_defaut || '') : '1',
     nb: '1',
-    lot:'', dlc:'', lieu_id: lieux[0]?.id || '',
+    lot:'', dlc:'', lieu_id: lieuPref || lieux[0]?.id || '',
     pression: String(PRESSION_PLEINE),
   })
   const [saving, setSaving] = useState(false)
@@ -130,13 +132,15 @@ export function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
 
   async function save() {
     if (cat.mode === 'boite' && !(Number(f.qte) > 0)) { onErr?.('Indiquez combien il y a dans la boîte.'); return }
+    if (avecLot && !(f.lot || '').trim()) { onErr?.('Indiquez le n° de lot pour cet article.'); return }
+    if (avecDlc && !f.dlc) { onErr?.('Indiquez la date de péremption (DLC).'); return }
     const nb = Math.max(1, Math.min(80, Math.round(Number(f.nb) || 1)))
     setSaving(true)
     const { data, error } = await supabase.rpc('stock_creer_unites', {
       p_catalogue: cat.id,
       p_qte: Number(f.qte) || 1,
-      p_lot: f.lot || null,
-      p_dlc: f.dlc || null,
+      p_lot: avecLot ? (f.lot || null) : null,
+      p_dlc: avecDlc ? (f.dlc || null) : null,
       p_lieu: f.lieu_id || null,
       p_notes: null,
       p_pression: cat.mode === 'oxygene' ? (Number(f.pression) || PRESSION_PLEINE) : 200,
@@ -182,21 +186,35 @@ export function FormReception({ cat, lieux, unites, onDone, onOk, onErr }) {
           </div>
         </div>
       )}
-      <div className="ha-stock-recv-lot" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-        <div style={{ marginBottom:10 }}>
-          <label style={lbl}>N° de lot</label>
-          <input value={f.lot} onChange={e=>onLotChange(e.target.value)} onBlur={onLotBlur}
-            placeholder="ex. A23-481" autoComplete="off" style={inp} />
-        </div>
-        <div style={{ marginBottom:10 }}>
-          <label style={lbl}>{dlcLiee ? 'Péremption — liée au lot' : 'Péremption (DLC)'}</label>
-          <input type="date" value={f.dlc || ''} readOnly={dlcLiee}
-            onChange={e => { if (!dlcLiee) setF(s => ({ ...s, dlc: e.target.value })) }}
-            style={{ ...inp, background: dlcLiee ? 'var(--bg-alt)' : inp.background }} />
-        </div>
+      <div style={{ fontSize:12.5, color:'var(--text-muted)', margin:'0 0 10px' }}>
+        Traçabilité : {libelleTracabilite(cat)}
       </div>
-      {hintLot && <div style={{ fontSize:12.5, color:'var(--heading)', margin:'-4px 0 10px' }}>{hintLot}</div>}
-      {warnDlc && <div style={{ fontSize:12.5, color:'#A32D2D', margin:'-4px 0 10px' }}>{warnDlc}</div>}
+      {(avecLot || avecDlc) && (
+        <div className="ha-stock-recv-lot" style={{ display:'grid', gridTemplateColumns: avecLot && avecDlc ? '1fr 1fr' : '1fr', gap:10 }}>
+          {avecLot && (
+            <div style={{ marginBottom:10 }}>
+              <label style={lbl}>N° de lot</label>
+              <input value={f.lot} onChange={e=>onLotChange(e.target.value)} onBlur={onLotBlur}
+                placeholder="ex. A23-481" autoComplete="off" style={inp} />
+            </div>
+          )}
+          {avecDlc && (
+            <div style={{ marginBottom:10 }}>
+              <label style={lbl}>{dlcLiee ? 'Péremption — liée au lot' : 'Péremption (DLC)'}</label>
+              <input type="date" value={f.dlc || ''} readOnly={dlcLiee}
+                onChange={e => { if (!dlcLiee) setF(s => ({ ...s, dlc: e.target.value })) }}
+                style={{ ...inp, background: dlcLiee ? 'var(--bg-alt)' : inp.background }} />
+            </div>
+          )}
+        </div>
+      )}
+      {!avecDlc && (
+        <div style={{ fontSize:12.5, color:'var(--text-muted)', margin:'-4px 0 10px' }}>
+          Pas de date de péremption pour ce type d’article.
+        </div>
+      )}
+      {hintLot && avecLot && <div style={{ fontSize:12.5, color:'var(--heading)', margin:'-4px 0 10px' }}>{hintLot}</div>}
+      {warnDlc && avecDlc && <div style={{ fontSize:12.5, color:'#A32D2D', margin:'-4px 0 10px' }}>{warnDlc}</div>}
       <Sel label="Ranger dans" value={f.lieu_id} set={v=>setF(s=>({ ...s, lieu_id:v }))} options={optsLieu} />
       <F label={cat.mode === 'boite' ? 'Nombre de boîtes (1 QR chacune)' : cat.mode === 'oxygene' ? 'Nombre de bouteilles (1 QR chacune)' : 'Nombre de pièces (1 QR chacune)'}
         type="number" value={f.nb} set={v=>setF(s=>({ ...s, nb:v }))} />
