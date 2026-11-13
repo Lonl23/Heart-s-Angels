@@ -59,6 +59,7 @@ export default function Stock() {
   const gerer = peutGererStock()
   const [tab, setTab] = useState('accueil')
   const [plus, setPlus] = useState(false)
+  const [outilsInv, setOutilsInv] = useState(false)
   const [lieux, setLieux] = useState([])
   const [cats, setCats] = useState([])
   const [unites, setUnites] = useState([])
@@ -322,19 +323,30 @@ export default function Stock() {
                 onScanLieu={() => setScan('inventaire')}
                 onRanger={() => { setLieuCible(null); setScan('ranger') }}
               />
-              <details style={{ marginTop: 20 }}>
-                <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+              {!outilsInv ? (
+                <button
+                  type="button"
+                  onClick={() => setOutilsInv(true)}
+                  style={{ marginTop: 20, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)', fontFamily: 'inherit', textDecoration: 'underline' }}
+                >
                   Outils (Excel, lots, O₂…)
-                </summary>
-                <div className="ha-stock-outils" style={{ marginBottom: 12 }}>
-                  <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
-                  <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer</Btn>
-                  {((cats || []).some(c => c.mode === 'oxygene') || (unites || []).some(u => u.mode === 'oxygene')) && (
-                    <Btn kind="soft" onClick={() => setTab('o2')}>Oxygène</Btn>
-                  )}
+                </button>
+              ) : (
+                <div style={{ marginTop: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                    <strong style={{ fontSize: 13, color: 'var(--text-muted)' }}>Outils</strong>
+                    <Btn kind="soft" onClick={() => setOutilsInv(false)} style={{ padding: '4px 10px' }}>Masquer</Btn>
+                  </div>
+                  <div className="ha-stock-outils" style={{ marginBottom: 12 }}>
+                    <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
+                    <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer</Btn>
+                    {((cats || []).some(c => c.mode === 'oxygene') || (unites || []).some(u => u.mode === 'oxygene')) && (
+                      <Btn kind="soft" onClick={() => setTab('o2')}>Oxygène</Btn>
+                    )}
+                  </div>
+                  <OngletUnites unites={unites} lieux={lieux} onChange={load} onRefresh={() => load(true)} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />
                 </div>
-                <OngletUnites unites={unites} lieux={lieux} onChange={load} onRefresh={() => load(true)} onOk={ok} onErr={setErr} onXfer={setXfer} onSortie={setSortie} />
-              </details>
+              )}
             </>
           )}
           {tab === 'o2' && (
