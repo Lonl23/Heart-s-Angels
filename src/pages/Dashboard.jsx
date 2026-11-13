@@ -58,7 +58,18 @@ export default function Dashboard() {
   const montrerPush = pushEtat === 'default' || pushEtat === 'denied' || pushEtat === 'absent'
 
   useEffect(() => {
-    supabase.rpc('mes_affectations').then(({ data }) => setMissions(data || []))
+    Promise.all([
+      supabase.rpc('mes_affectations'),
+      supabase.rpc('mes_sessions_formation'),
+    ]).then(([{ data }, { data: sessions }]) => {
+      const parFormation = new Map((sessions || []).map(s => [s.souhait_id, s]))
+      setMissions((data || []).map(m => {
+        if (!m.fictif) return m
+        const sess = parFormation.get(m.souhait_id)
+        if (!sess) return { ...m, statut: 'pret' }
+        return { ...m, statut: sess.statut || 'pret' }
+      }))
+    })
   }, [])
 
   useEffect(() => {

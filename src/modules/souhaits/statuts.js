@@ -35,11 +35,16 @@ export function estSouhaitDemo(s) {
 }
 
 export function statutFige(statut, souhait) {
+  // Formation : pas une archive — l’encodage du dossier reste possible ;
+  // la progression terrain est personnelle (peutChangerStatut = false).
   if (estSouhaitDemo(souhait)) return false
   return statut === 'realise' || statut === 'non_realise'
 }
 
-export function libelleStatutFige(statut) {
+export function libelleStatutFige(statut, souhait) {
+  if (estSouhaitDemo(souhait)) {
+    return 'Souhait de formation — hors tableau de préparation. La progression est personnelle (Mes souhaits), indépendante des autres volontaires.'
+  }
   if (statut === 'non_realise') {
     return 'Un souhait non réalisé est verrouillé : il ne peut plus être préparé ni changer de statut.'
   }
@@ -47,18 +52,19 @@ export function libelleStatutFige(statut) {
 }
 
 export function peutPasserNonRealise(statut, souhait) {
-  if (estSouhaitDemo(souhait)) return true
+  if (estSouhaitDemo(souhait)) return false
   return !['en_cours', 'terminee_terrain', 'realise'].includes(statut)
 }
 
 export function peutChangerStatut(actuel, cible, souhait) {
   if (!cible || actuel === cible) return false
+  if (estSouhaitDemo(souhait)) return false
   if (statutFige(actuel, souhait)) return false
   if (cible === 'non_realise' && !peutPasserNonRealise(actuel, souhait)) return false
   return true
 }
 
 export function statutsDisponibles(actuel, souhait) {
-  if (estSouhaitDemo(souhait)) return Object.keys(STATUTS)
+  if (estSouhaitDemo(souhait)) return []
   return Object.keys(STATUTS).filter(k => k !== 'non_realise' || k === actuel || peutPasserNonRealise(actuel, souhait))
 }
