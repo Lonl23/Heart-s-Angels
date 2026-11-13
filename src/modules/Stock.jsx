@@ -327,7 +327,7 @@ export default function Stock() {
                   Outils (Excel, lots, O₂…)
                 </summary>
                 <div className="ha-stock-outils" style={{ marginBottom: 12 }}>
-                  <Btn kind="soft" onClick={exportExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
+                  <Btn kind="soft" onClick={exporterExcel} disabled={excelBusy}>{excelBusy && !apercu ? '…' : 'Excel'}</Btn>
                   <Btn kind="soft" onClick={() => fileRef.current?.click()} disabled={excelBusy}>Importer</Btn>
                   {((cats || []).some(c => c.mode === 'oxygene') || (unites || []).some(u => u.mode === 'oxygene')) && (
                     <Btn kind="soft" onClick={() => setTab('o2')}>Oxygène</Btn>
