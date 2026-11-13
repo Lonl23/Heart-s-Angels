@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, Btn, F, Sel, Empty, inp } from '@/components/ui'
-import { cheminLieux, gestionLot, gestionDlc, resteLabel } from './stockSchema'
+import { cheminLieux, gestionLot, gestionDlc, gestionQr, resteLabel } from './stockSchema'
 import { fmtDlc, dlcPassee, dlcProche, aggregerLots } from './lotsStock'
 import { PhotoArticle } from './photoStock'
 import { FormReception } from './formsStock'
@@ -60,12 +60,14 @@ export default function OngletInventaireFacile({
       onErr?.('Indiquez la date de péremption.'); return
     }
     setBusy(true)
+    const ajusterQte = (cat.mode === 'boite' || cat.mode === 'piece' || !gestionQr(cat))
+      && edit.qte !== '' && edit.qte != null
     const { data, error } = await supabase.rpc('stock_completer_unite', {
       p_unite: edit.id,
       p_lot: gestionLot(cat) ? (edit.lot || null) : null,
       p_dlc: gestionDlc(cat) ? (edit.dlc || null) : null,
       p_lieu: edit.lieu_id || null,
-      p_qte: cat.mode === 'boite' && edit.qte !== '' && edit.qte != null ? Number(edit.qte) : null,
+      p_qte: ajusterQte ? Number(edit.qte) : null,
     })
     setBusy(false)
     if (error || data?.ok === false) {
@@ -88,8 +90,24 @@ export default function OngletInventaireFacile({
       lieu_id: u.lieu_id || '',
       qte: u.qte_restante != null ? String(u.qte_restante) : '',
       mode: cat.mode || u.mode,
+      gestion_qr: cat.gestion_qr,
     })
   }
+
+  async function supprimerUnite(u) {
+    const nom = u.nom || 'cet article'
+    if (!confirm(`Retirer « ${nom} » de l’inventaire ?${u.lot ? ` (lot ${u.lot})` : ''}\nCette entrée disparaît du stock.`)) return
+    setBusy(true)
+    const { error } = await supabase.from('stock_unites').delete().eq('id', u.id)
+    setBusy(false)
+    if (error) { onErr?.(error.message); return }
+    if (edit?.id === u.id) setEdit(null)
+    onOk?.('Retiré de l’inventaire.')
+    onChange?.()
+  }
+
+  const catEdit = edit ? (byCat[edit.catalogue_id] || { mode: edit.mode, gestion_qr: edit.gestion_qr }) : null
+  const peutAjusterQte = !!catEdit && (catEdit.mode === 'boite' || catEdit.mode === 'piece' || !gestionQr(catEdit))
 
   return (
     <div>
@@ -130,10 +148,10 @@ export default function OngletInventaireFacile({
         />
       )}
 
-      {edit && (
+      {edit && catEdit && (
         <Card style={{ padding: 14, marginBottom: 12 }}>
           <form onSubmit={sauverComplet}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
               <strong>{edit.nom}</strong>
               <Btn kind="soft" type="button" onClick={() => setEdit(null)}>Annuler</Btn>
             </div>
@@ -143,16 +161,26 @@ export default function OngletInventaireFacile({
               set={v => setEdit(s => ({ ...s, lieu_id: v }))}
               options={[{ v: '', l: '— Sans lieu —' }, ...lieux.map(l => ({ v: l.id, l: cheminLieux(lieux, l.id) || l.nom }))]}
             />
-            {gestionLot(byCat[edit.catalogue_id] || { mode: edit.mode }) && (
+            {gestionLot(catEdit) && (
               <F label="N° de lot" value={edit.lot} set={v => setEdit(s => ({ ...s, lot: v }))} required />
             )}
-            {gestionDlc(byCat[edit.catalogue_id] || { mode: edit.mode }) && (
+            {gestionDlc(catEdit) && (
               <F label="Péremption" type="date" value={edit.dlc} set={v => setEdit(s => ({ ...s, dlc: v }))} required />
             )}
-            {(byCat[edit.catalogue_id]?.mode === 'boite' || edit.mode === 'boite') && (
-              <F label="Quantité dans la boîte" type="number" value={edit.qte} set={v => setEdit(s => ({ ...s, qte: v }))} />
+            {peutAjusterQte && (
+              <F
+                label={catEdit.mode === 'boite' ? 'Quantité dans la boîte' : 'Quantité'}
+                type="number"
+                value={edit.qte}
+                set={v => setEdit(s => ({ ...s, qte: v }))}
+              />
             )}
-            <Btn type="submit" disabled={busy}>{busy ? '…' : 'Enregistrer'}</Btn>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Btn type="submit" disabled={busy}>{busy ? '…' : 'Enregistrer'}</Btn>
+              <Btn kind="danger" type="button" disabled={busy} onClick={() => supprimerUnite(edit)}>
+                Supprimer
+              </Btn>
+            </div>
           </form>
         </Card>
       )}
@@ -184,7 +212,10 @@ export default function OngletInventaireFacile({
                               {gestionDlc(cat) && (u.date_peremption ? ` · ${fmtDlc(u.date_peremption)}` : ' · DLC manquante')}
                             </div>
                           </div>
-                          <Btn kind="soft" onClick={() => ouvrirEdit(u)} style={{ padding: '5px 10px' }}>Modifier</Btn>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <Btn kind="soft" onClick={() => ouvrirEdit(u)} style={{ padding: '5px 10px' }}>Modifier</Btn>
+                            <Btn kind="danger" disabled={busy} onClick={() => supprimerUnite(u)} style={{ padding: '5px 10px' }}>Supprimer</Btn>
+                          </div>
                         </div>
                       </Card>
                     )
@@ -277,7 +308,10 @@ export default function OngletInventaireFacile({
                         Manque : {manques.join(', ')}
                       </div>
                     </div>
-                    <Btn onClick={() => ouvrirEdit(u)} style={{ padding: '5px 10px' }}>Compléter</Btn>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <Btn onClick={() => ouvrirEdit(u)} style={{ padding: '5px 10px' }}>Compléter</Btn>
+                      <Btn kind="danger" disabled={busy} onClick={() => supprimerUnite(u)} style={{ padding: '5px 10px' }}>Supprimer</Btn>
+                    </div>
                   </div>
                 </Card>
               )
