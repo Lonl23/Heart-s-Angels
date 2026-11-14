@@ -221,15 +221,30 @@ Heart's Angels ASBL`
 
 async function smtpAuth(admin: ReturnType<typeof createClient>) {
   let user = (Deno.env.get('SMTP_USER') || CCI).trim()
-  let pass = (Deno.env.get('SMTP_PASS') || '').trim()
+  const envPass = (Deno.env.get('SMTP_PASS') || '').trim()
+  let pass = envPass
+  let source: 'env' | 'vault' | 'none' = envPass ? 'env' : 'none'
   if (!pass) {
-    const { data: cfg } = await admin.rpc('smtp_mail_config')
+    const { data: cfg, error: cfgErr } = await admin.rpc('smtp_mail_config')
+    if (cfgErr) {
+      console.error('smtp_mail_config', cfgErr.message)
+    }
     if (cfg?.ok && cfg.pass) {
       user = String(cfg.user || user).trim()
       pass = String(cfg.pass).trim()
+      source = 'vault'
     }
   }
-  return { user, pass, from: DEPUIS, replyTo: REPONSE }
+  return { user, pass, from: DEPUIS, replyTo: REPONSE, source }
+}
+
+function transporteur(smtp: { user: string; pass: string }) {
+  return nodemailer.createTransport({
+    host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
+    port: Number(Deno.env.get('SMTP_PORT') || 465),
+    secure: true,
+    auth: { user: smtp.user, pass: smtp.pass },
+  })
 }
 
 async function envoyer(opts: {
@@ -240,15 +255,9 @@ async function envoyer(opts: {
   html: string
   bcc?: boolean
 }) {
-  const transporter = nodemailer.createTransport({
-    host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
-    port: Number(Deno.env.get('SMTP_PORT') || 465),
-    secure: true,
-    auth: { user: opts.smtp.user, pass: opts.smtp.pass },
-  })
   const dest = String(opts.to || '').trim()
   const bcc = opts.bcc === false || dest.toLowerCase() === CCI.toLowerCase() ? undefined : CCI
-  await transporter.sendMail({
+  await transporteur(opts.smtp).sendMail({
     from: opts.smtp.from,
     replyTo: opts.smtp.replyTo,
     to: dest,
@@ -281,6 +290,7 @@ Deno.serve(async (req) => {
     if (!smtp.pass) {
       return json({
         error: 'Envoi automatique pas encore branché.',
+        detail: 'Mot de passe SMTP absent (secret Edge SMTP_PASS ou Vault ha_smtp_pass).',
       }, 503)
     }
 
@@ -324,6 +334,36 @@ Deno.serve(async (req) => {
       user = (await asCaller.auth.getUser(jwt)).data.user
     }
     if (!user) return json({ error: 'Non authentifié.' }, 401)
+
+    // Diagnostic IT : vérifie l’auth Gmail sans envoyer de message.
+    if (action === 'ping_smtp') {
+      const { data: profPing } = await admin.from('profiles').select('role,fiche,actif').eq('id', user.id).maybeSingle()
+      if (!profPing || profPing.actif === false || !peutGererApp(profPing.role, profPing.fiche)) {
+        return json({ error: 'Accès refusé.' }, 403)
+      }
+      try {
+        await transporteur(smtp).verify()
+        return json({
+          ok: true,
+          action: 'ping_smtp',
+          user: smtp.user,
+          from: smtp.from,
+          source: smtp.source,
+          host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
+        })
+      } catch (envoi) {
+        const msg = envoi instanceof Error ? envoi.message : String(envoi)
+        console.error('ping_smtp', smtp.source, smtp.user, msg)
+        return json({
+          ok: false,
+          action: 'ping_smtp',
+          user: smtp.user,
+          from: smtp.from,
+          source: smtp.source,
+          error: msg,
+        }, 500)
+      }
+    }
 
     if (action === 'code_2fa') {
       const { data: prof } = await admin.from('profiles')

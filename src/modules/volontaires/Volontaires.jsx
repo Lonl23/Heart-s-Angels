@@ -121,7 +121,20 @@ function Membres({ onOpenFiche }) {
       profile_cible_id: profileId,
     })
     if (error) { flash(profileId && !f.profile_cible_id ? 'Fiche créée, mais invitation : ' + error.message : error.message, false); load(); return }
-    setForm(null); setLastInvite({ code, email, prenom: f.prenom, typeBenevole: f.role }); load()
+    const { envoyerInvitationEmail } = await import('@/lib/envoyerInvitation')
+    const envoi = await envoyerInvitationEmail(code)
+    setForm(null)
+    setLastInvite({
+      code,
+      email,
+      prenom: f.prenom,
+      typeBenevole: f.role,
+      mailEnvoye: !!envoi.ok,
+      mailErreur: envoi.ok ? null : (envoi.error || 'Envoi impossible.'),
+    })
+    if (envoi.ok) flash(`Invitation créée et mail envoyé à ${email}.`)
+    else flash(`Invitation créée, mais le mail n’est pas parti : ${envoi.error || 'erreur d’envoi'}. Utilisez « Envoyer le mail ».`, false)
+    load()
   }
   function configurerCompte(u) {
     setLastInvite(null)
@@ -156,7 +169,15 @@ function Membres({ onOpenFiche }) {
           onClose={() => { setForm(null); setLastInvite(null) }}
         >
           {lastInvite ? (
-            <CodeBox embedded code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} typeBenevole={lastInvite.typeBenevole} />
+            <CodeBox
+              embedded
+              code={lastInvite.code}
+              email={lastInvite.email}
+              prenom={lastInvite.prenom}
+              typeBenevole={lastInvite.typeBenevole}
+              mailEnvoye={lastInvite.mailEnvoye}
+              mailErreur={lastInvite.mailErreur}
+            />
           ) : (
             <>
               {form.profile_cible_id && (
