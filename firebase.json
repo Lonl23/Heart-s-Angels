@@ -7,6 +7,9 @@
       "**/node_modules/**"
     ],
     "rewrites": [
+      { "source": "/rescuetrack", "destination": "/rescuetrack/index.html" },
+      { "source": "/rescuetrack/", "destination": "/rescuetrack/index.html" },
+      { "source": "/rescuetrack/**", "destination": "/rescuetrack/index.html" },
       {
         "source": "**",
         "destination": "/index.html"
@@ -26,6 +29,10 @@
       },
       {
         "source": "/index.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate, max-age=0" }]
+      },
+      {
+        "source": "/rescuetrack/index.html",
         "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate, max-age=0" }]
       },
       {

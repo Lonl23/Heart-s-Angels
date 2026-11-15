@@ -5,7 +5,11 @@
    seulement quand l'utilisateur confirme « Mettre à jour ».
    Manifest, icônes et favicon passent toujours par le réseau (jamais le cache). */
 const CACHE_NAME = 'ha-app-v4-__SW_BUILD__'
-const PRECACHE = ['/index.html']
+const PRECACHE = ['/index.html', '/rescuetrack/index.html']
+
+function isRescueTrack(pathname) {
+  return pathname === '/rescuetrack' || pathname.startsWith('/rescuetrack/')
+}
 
 function isVolatile(pathname) {
   return (
@@ -44,6 +48,28 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return
   if (isVolatile(url.pathname)) return
+
+  // RescueTrack a sa propre enveloppe : ne jamais retomber sur /index.html.
+  if (isRescueTrack(url.pathname)) {
+    if (req.mode === 'navigate') {
+      event.respondWith(
+        fetch(req).then(res => {
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(CACHE_NAME).then(c => c.put('/rescuetrack/index.html', copy)).catch(() => {})
+          }
+          return res
+        }).catch(async () => {
+          const cached = await caches.match('/rescuetrack/index.html')
+          return cached || new Response('RescueTrack hors ligne', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          })
+        })
+      )
+    }
+    return
+  }
 
   if (req.mode === 'navigate') {
     event.respondWith(

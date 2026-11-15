@@ -13,6 +13,7 @@ const NAV = [
   { to:'/app/disponibilites',label:'Disponibilités',  icon:'📅', key:'disponibilites' },
   { to:'/app/stock',         label:'Stock',           icon:'📦', key:'stock' },
   { to:'/app/annuaire',      label:'Annuaire',        icon:'📇', key:'annuaire' },
+  { href:'/rescuetrack/',    label:'RescueTrack',     icon:'🩺', key:'rescuetrack' },
 ]
 
 const PAGE_TITLE = [
@@ -22,6 +23,7 @@ const PAGE_TITLE = [
   ['/app/disponibilites', 'Disponibilités'],
   ['/app/stock', 'Stock'],
   ['/app/annuaire', 'Annuaire'],
+  ['/rescuetrack', 'RescueTrack'],
   ['/app/admin', 'Administration'],
   ['/app/profil', 'Ma fiche'],
   ['/app', 'Tableau de bord'],
@@ -61,7 +63,8 @@ export default function Layout() {
   async function handleLogout() { await signOut(); nav('/login') }
 
   const items = [...NAV.filter(n => {
-    if (n.key === 'missions') return true
+    // RescueTrack reste visible pour tout le personnel, hors matrice d'accès.
+    if (n.key === 'missions' || n.key === 'rescuetrack') return true
     if (n.key === 'stock') return canAccess(n.key) && peutGererStock()
     return canAccess(n.key)
   }), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', icon:'⚙️' }] : [])]
@@ -82,7 +85,12 @@ export default function Layout() {
         </div>
 
         <nav style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflowY:'auto', minHeight:0 }}>
-          {items.map(n => (
+          {items.map(n => n.href ? (
+            <a key={n.href} href={n.href} title={n.label} className="ha-nav-item" onClick={()=>setMobileOpen(false)}
+              style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:10, textDecoration:'none', fontSize:14, fontWeight:500, color:'var(--text-2)', background:'transparent', whiteSpace:'nowrap', justifyContent: collapsedEff?'center':'flex-start' }}>
+              <span style={{ fontSize:16 }}>{n.icon}</span>{!collapsedEff && n.label}
+            </a>
+          ) : (
             <NavLink key={n.to} to={n.to} end={n.end} onClick={()=>setMobileOpen(false)} title={n.label}
               className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
               style={({isActive}) => ({ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:10, textDecoration:'none', fontSize:14, fontWeight:isActive?600:500, color:isActive?'#fff':'var(--text-2)', background:isActive?'var(--accent)':'transparent', whiteSpace:'nowrap', justifyContent: collapsedEff?'center':'flex-start' })}>
