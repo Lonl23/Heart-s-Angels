@@ -40,6 +40,7 @@ const ActivitesSecours = lazy(() => import('@/modules/secours/ActivitesSecours')
 const FicheActivite = lazy(() => import('@/modules/secours/FicheActivite'))
 const ConventionsDps = lazy(() => import('@/modules/secours/ConventionsDps'))
 const Flotte = lazy(() => import('@/modules/logistique/Flotte'))
+const DemandesVolontariat = lazy(() => import('@/modules/rh/DemandesVolontariat'))
 
 function EcranChargement() {
   return (
@@ -95,6 +96,7 @@ export default function App() {
           <Route path="flotte"         element={<RequireAcces feature="stock"><Flotte /></RequireAcces>} />
           <Route path="annuaire"       element={<RequireAcces feature="annuaire"><Annuaire /></RequireAcces>} />
           <Route path="volontaires"    element={<RequireAcces feature="fiches"><Volontaires /></RequireAcces>} />
+          <Route path="rh/candidatures" element={<RequireAcces feature="candidatures_volontariat"><DemandesVolontariat /></RequireAcces>} />
           <Route path="rh/organigramme" element={<RequireAcces feature="organigramme"><Organigramme /></RequireAcces>} />
           <Route path="it/organigramme" element={<RequireAcces feature="organigramme_edition"><OrganigrammeEdition /></RequireAcces>} />
           <Route path="it/configuration" element={<RequireAcces feature="config_souhaits"><ConfigurationSouhaits /></RequireAcces>} />

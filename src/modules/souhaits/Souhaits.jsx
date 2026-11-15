@@ -450,7 +450,14 @@ function Demandes({ onOpen }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const ch = supabase
+      .channel('ha-demandes-souhaits')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'demandes_souhaits' }, () => { load() })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
   async function load() {
     setLoading(true)
     const { data } = await supabase.from('demandes_souhaits').select('*').order('created_at', { ascending:false })
@@ -486,6 +493,7 @@ function Demandes({ onOpen }) {
       alert('Annuaire : ' + (e.message || e))
       return
     }
+    const medExtra = d.complements?.situation_medicale || ''
     const { data: s, error } = await supabase.from('souhaits').insert({
       beneficiaire_nom: d.patient_nom, beneficiaire_prenom: d.patient_prenom, beneficiaire_ddn: d.patient_ddn || null,
       beneficiaire_contact: `${d.contact_prenom || ''} ${d.contact_nom || ''} ${d.contact_telephone || d.contact_email || ''}`.trim(),
@@ -495,7 +503,13 @@ function Demandes({ onOpen }) {
       beneficiaire_tel_fixe: d.patient_tel_fixe || null,
       beneficiaire_adresse: d.patient_adresse || null,
       description: d.souhait_description, localisation: d.souhait_lieu, besoins_specifiques: d.equipement_medical,
-      notes_medicales: [d.mobilite && `Mobilité: ${d.mobilite}`, d.allergies && `Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
+      notes_medicales: [
+        d.mobilite && `Mobilité: ${d.mobilite}`,
+        d.allergies && `Allergies: ${d.allergies}`,
+        medExtra,
+        d.medecin_referent && `Médecin: ${d.medecin_referent}`,
+        d.etablissement && `Séjour: ${d.etablissement}`,
+      ].filter(Boolean).join('\n'),
       date_souhaitee: d.souhait_date || null, statut: 'nouveau', created_by: profile?.id,
       dates_possibles: d.souhait_date ? [{ debut: d.souhait_date, fin: d.souhait_date }] : [],
       origine: (d.partenaire_id || d.source === 'partenaire') ? 'institution' : 'prive',
@@ -528,13 +542,19 @@ function Demandes({ onOpen }) {
                 {d.fictif && <PillFictif />}
               </div>
               <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Par {d.contact_prenom} {d.contact_nom} · {d.contact_email}
-                {d.source === 'partenaire' && ' · Partenaire'}{d.source === 'externe' && ' · Formulaire public'}
+                {d.source === 'partenaire' && ' · Partenaire'}
+                {(d.source === 'externe' || d.complements?.origine === 'wordpress') && ' · Site web'}
                 {d.fictif && ' · Mission fictive'}
               </div>
             </div>
             <Pill>{DEMANDE_STATUTS[d.statut]?.l || d.statut}</Pill>
           </div>
           <div style={{ fontSize:13.5, color:'var(--text-2)', lineHeight:1.5, marginBottom:10 }}>{d.souhait_description}</div>
+          {d.complements?.situation_medicale && (
+            <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:8, whiteSpace:'pre-wrap' }}>
+              Situation médicale : {d.complements.situation_medicale}
+            </div>
+          )}
           {d.statut === 'acceptee'
             ? <Pill color="#3B6D11" bg="#EAF3DE">Souhait créé — ouvrez-le dans le tableau</Pill>
             : <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><Btn kind="ok" onClick={()=>accepter(d)}>Accepter et créer le souhait</Btn><Btn kind="danger" onClick={()=>refuser(d)}>Refuser</Btn></div>}

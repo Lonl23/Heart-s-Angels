@@ -14,6 +14,7 @@ export const DEPARTEMENTS = [
     modules: [
       { key: 'ma_fiche', to: '/app/profil', label: 'Ma fiche', icon: '🪪', desc: 'Identité, compétences, et le livret d’activité à récupérer' },
       { key: 'fiches', to: '/app/volontaires', label: 'Fiches volontaires', icon: '🗂️', desc: 'Invitations, membres et fiches' },
+      { key: 'candidatures_volontariat', to: '/app/rh/candidatures', label: 'Demandes de volontariat', icon: '🤝', desc: 'Candidatures du site → fiche et accès' },
       { key: 'defraiements', to: '/app/defraiements', label: 'Défraiements', icon: '🧾', desc: 'Note de frais : forfait et km' },
       { key: 'annuaire', to: '/app/annuaire', label: 'Annuaire', icon: '📇', desc: 'Bénéficiaires, contacts rattachés, institutions' },
       { key: 'organigramme', to: '/app/rh/organigramme', label: 'Organigramme', icon: '🌳', desc: 'N+1, téléphone et e-mail des responsables' },
@@ -84,7 +85,7 @@ export const DEPARTEMENTS = [
 export function moduleAutorise(key, auth) {
   if (!auth?.can?.('staff')) return false
   if (key === 'ma_fiche') return auth.can('staff') && !auth.peutGererFiches()
-  if (key === 'fiches') return auth.peutGererFiches()
+  if (key === 'fiches' || key === 'candidatures_volontariat') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
   if (key === 'modules_menu') return auth.peutGererHelpdesk?.()
   if (key === 'personnalisation') return auth.peutPersonnaliser()
