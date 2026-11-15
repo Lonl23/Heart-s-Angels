@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>RESCUETRACK - Tableau de bord</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+<header class="header">
+  <div class="logo">
+    RESCUETRACK
+    <span class="app-subtitle">Tableau de bord</span>
+  </div>
+  <div class="header-right"><span id="time"></span></div>
+</header>
+
+<main class="page-content">
+  <section class="page-shell">
+    <section class="page-topbar">
+      <div class="page-user" id="connectedUser"></div>
+      <div class="button-row">
+        <button id="backBtn" class="btn-secondary">← Retour</button>
+        <button id="logoutBtn" class="btn-secondary">Déconnexion</button>
+      </div>
+    </section>
+
+    <!-- Global stats -->
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h1 class="page-title">Tableau de bord</h1>
+          <p class="page-subtitle" id="dashSubtitle">Fiches patients des préventifs, séparées des dossiers de souhaits.</p>
+        </div>
+        <div class="button-row">
+          <select id="eventFilter" class="field-block" style="min-height:42px;padding:9px 13px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface-alt);">
+            <option value="">Tous les préventifs</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="globalStats">
+        <div class="stat-card total"><span class="stat-label">Total patients</span><span class="stat-value" id="statTotal">0</span></div>
+        <div class="stat-card u1"><span class="stat-label">U1 – Urgences vitales</span><span class="stat-value" id="statU1">0</span></div>
+        <div class="stat-card u2"><span class="stat-label">U2 – Urgences relatives</span><span class="stat-value" id="statU2">0</span></div>
+        <div class="stat-card u3h"><span class="stat-label">U3H – Non urgents hospitalisés</span><span class="stat-value" id="statU3H">0</span></div>
+        <div class="stat-card u3nh"><span class="stat-label">U3NH – Non urgents</span><span class="stat-value" id="statU3NH">0</span></div>
+        <div class="stat-card implique"><span class="stat-label">Impliqués</span><span class="stat-value" id="statIMPLIQUE">0</span></div>
+        <div class="stat-card dcd"><span class="stat-label">DCD</span><span class="stat-value" id="statDCD">0</span></div>
+      </div>
+    </section>
+
+    <!-- Events table -->
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="section-title">Préventifs</h2>
+          <p class="page-subtitle">Détail par préventif.</p>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Préventif</th>
+              <th>Province</th>
+              <th>Statut</th>
+              <th>Patients</th>
+              <th>U1</th>
+              <th>U2</th>
+              <th>U3H</th>
+              <th>U3NH</th>
+              <th>IMP.</th>
+              <th>DCD</th>
+              <th>Évac. 112</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="eventsStatsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Pathology breakdown -->
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 class="section-title">Groupes de pathologies</h2>
+        </div>
+      </div>
+      <div id="pathologyStats" class="stats-grid"></div>
+    </section>
+
+  </section>
+</main>
+
+<script src="config.js"></script>
+<script type="module" src="dashboard.js"></script>
+</body>
+</html>

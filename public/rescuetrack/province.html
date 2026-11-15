@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"><title>RESCUETRACK - Province</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css?v=3">
+</head>
+<body>
+<header class="header"><div class="logo">RESCUETRACK<span class="app-subtitle">Sélection province</span></div><div class="header-right"><span id="time"></span></div></header>
+<main class="page-content"><section class="page-shell">
+  <section class="page-topbar">
+    <div class="page-user" id="connectedUser"></div>
+    <div class="button-row">
+      <button id="searchBtn" class="btn-secondary">Recherche patients</button>
+      <button id="dashboardBtn" class="btn-secondary">Tableau de bord</button>
+      <button id="logoutBtn" class="btn-secondary">Déconnexion</button>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-header"><div>
+      <h1 class="page-title">Choix de la province</h1>
+      <p class="page-subtitle">Sélectionne une province pour voir les préventifs déjà créés dans Heart's Angels.</p>
+      <p class="notice-distinct">RescueTrack enregistre les fiches patients des préventifs. Les dossiers de souhaits restent dans Heart's Angels.</p>
+    </div></div>
+    <div class="map-layout">
+      <div class="belgium-map-wrapper"><div id="svgMapContainer" class="belgium-map-container"></div></div>
+      <div class="map-side-panel">
+        <div class="patient-card"><h2 class="section-title">Province sélectionnée</h2><div id="selectedProvinceLabel" class="page-subtitle">Aucune province sélectionnée</div></div>
+        <div class="patient-card"><h2 class="section-title">Accès rapide</h2>
+          <div class="province-list">
+            <button class="btn-secondary province-list-btn" data-province="Liège">Liège</button>
+            <button class="btn-secondary province-list-btn" data-province="Namur">Namur</button>
+            <button class="btn-secondary province-list-btn" data-province="Hainaut">Hainaut</button>
+            <button class="btn-secondary province-list-btn" data-province="Luxembourg">Luxembourg</button>
+            <button class="btn-secondary province-list-btn" data-province="Bruxelles">Bruxelles</button>
+            <button class="btn-secondary province-list-btn" data-province="Brabant wallon">Brabant wallon</button>
+            <button class="btn-secondary province-list-btn" data-province="Brabant flamand">Brabant flamand</button>
+            <button class="btn-secondary province-list-btn" data-province="Anvers">Anvers</button>
+            <button class="btn-secondary province-list-btn" data-province="Limbourg">Limbourg</button>
+            <button class="btn-secondary province-list-btn" data-province="Flandre orientale">Flandre orientale</button>
+            <button class="btn-secondary province-list-btn" data-province="Flandre occidentale">Flandre occidentale</button>
+            <button class="btn-secondary province-list-btn" data-province="__aucune__">Sans province renseignée</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</section></main>
+<script src="config.js"></script>
+<script type="module" src="province.js"></script>
+</body></html>

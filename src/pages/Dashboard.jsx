@@ -69,6 +69,11 @@ export default function Dashboard() {
             <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>{c.desc}</div>
           </Link>
         ))}
+        <a href="/rescuetrack/" className="ha-click" style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'18px 16px', textDecoration:'none', display:'block' }}>
+          <div style={{ fontSize:'1.8rem', marginBottom:8 }}>🩺</div>
+          <div style={{ fontSize:14.5, fontWeight:600, color:'var(--text)' }}>RescueTrack</div>
+          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:3 }}>Fiches patients des préventifs, séparées des dossiers de souhaits.</div>
+        </a>
       </div>
     </div>
   )

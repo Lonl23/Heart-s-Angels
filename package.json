@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "build:rescuetrack": "node scripts/build-rescuetrack-dist.mjs",
+    "preview": "vite preview",
+    "test": "node --test rescuetrack/model.test.js rescuetrack/paths.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

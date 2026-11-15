@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>RESCUETRACK - Préventifs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><link rel="stylesheet" href="style.css?v=3"></head>
+<body>
+<header class="header"><div class="logo">RESCUETRACK<span class="app-subtitle">Préventifs</span></div><div class="header-right"><span id="time"></span></div></header>
+<main class="page-content"><section class="page-shell">
+<section class="page-topbar"><div class="page-user" id="connectedUser"></div>
+<div class="button-row"><button id="changeProvinceBtn" class="btn-secondary">Changer de province</button><button id="logoutBtn" class="btn-secondary">Déconnexion</button></div></section>
+<section class="panel"><div class="panel-header"><div>
+<h1 class="page-title" id="pageTitle">Préventifs</h1>
+<p class="page-subtitle">Liste issue de Heart's Angels. RescueTrack enregistre les patients sur ces préventifs.</p>
+</div></div>
+<div class="table-responsive"><table class="data-table"><thead><tr><th>Préventif</th><th>Date</th><th>Lieu</th><th>Statut</th><th>Dispositifs</th><th></th></tr></thead>
+<tbody id="eventsTableBody"></tbody></table></div></section>
+</section></main>
+<script src="config.js"></script><script type="module" src="evenements.js"></script>
+</body></html>

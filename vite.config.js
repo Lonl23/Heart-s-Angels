@@ -22,8 +22,30 @@ function stampServiceWorker() {
   }
 }
 
+function rescuetrackSpaFallback() {
+  const rewrite = (req, _res, next) => {
+    const raw = req.url || ''
+    const chemin = raw.split('?')[0]
+    const query = raw.includes('?') ? raw.slice(raw.indexOf('?')) : ''
+    const dernier = chemin.split('/').pop() || ''
+    if (
+      req.method === 'GET'
+      && (chemin === '/rescuetrack' || chemin.startsWith('/rescuetrack/'))
+      && !dernier.includes('.')
+    ) {
+      req.url = '/rescuetrack/index.html' + query
+    }
+    next()
+  }
+  return {
+    name: 'rescuetrack-spa-fallback',
+    configureServer(server) { server.middlewares.use(rewrite) },
+    configurePreviewServer(server) { server.middlewares.use(rewrite) },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), stampServiceWorker()],
+  plugins: [react(), stampServiceWorker(), rescuetrackSpaFallback()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   build: {
     rollupOptions: {
