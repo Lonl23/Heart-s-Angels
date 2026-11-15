@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
+import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA, fmtAdresse } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
 
@@ -274,12 +274,28 @@ function Demandes({ onOpen }) {
   }
   async function refuser(d) { if (!confirm('Refuser cette demande ? Elle disparaîtra de la liste active.')) return; await supabase.from('demandes_souhaits').update({ statut:'refusee' }).eq('id', d.id); load() }
   async function accepter(d) {
+    const c = d.complements && typeof d.complements === 'object' ? d.complements : {}
+    const sejour = c.sejour || {}
+    const medecin = [c.medecin?.nom || d.medecin_referent, c.medecin?.telephone, c.medecin?.email].filter(Boolean).join(' · ')
+    const autre = [c.contact_secondaire?.nom, c.contact_secondaire?.telephone, c.contact_secondaire?.email].filter(Boolean).join(' ')
     const { data: s, error } = await supabase.from('souhaits').insert({
       beneficiaire_nom:d.patient_nom, beneficiaire_prenom:d.patient_prenom, beneficiaire_ddn:d.patient_ddn||null,
-      beneficiaire_contact:`${d.contact_prenom||''} ${d.contact_nom||''} ${d.contact_telephone||d.contact_email||''}`.trim(),
-      description:d.souhait_description, localisation:d.souhait_lieu, besoins_specifiques:d.equipement_medical,
-      notes_medicales:[d.mobilite&&`Mobilité: ${d.mobilite}`, d.allergies&&`Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
+      beneficiaire_contact:[`${d.contact_prenom||''} ${d.contact_nom||''}`.trim(), d.contact_telephone, d.contact_email, autre && `Autre contact : ${autre}`].filter(Boolean).join(' · '),
+      description:d.souhait_description, localisation:d.souhait_lieu || fmtAdresse(sejour.adresse) || d.etablissement || null,
+      besoins_specifiques:d.equipement_medical,
+      notes_medicales:[d.mobilite&&`Mobilité: ${d.mobilite}`, d.allergies&&`Allergies: ${d.allergies}`, c.situation_medicale, medecin && `Médecin : ${medecin}`].filter(Boolean).join('\n'),
       date_souhaitee:d.souhait_date||null, statut: 'nouveau', created_by:profile?.id,
+      mission: {
+        registre_national: c.beneficiaire?.registre || '',
+        patient_adresse: d.patient_adresse || (sejour.type === 'Domicile' ? sejour.adresse : null),
+        origine: c.origine === 'wordpress' ? 'Site heartsangels.be' : (d.source || ''),
+        date_demande: new Date().toISOString().slice(0, 10),
+        pathologies: c.situation_medicale || '',
+        pec_type: sejour.type === 'Domicile' ? 'Domicile du patient' : (sejour.type ? 'Institution' : ''),
+        pec_institution: sejour.type && sejour.type !== 'Domicile' ? sejour.type : '',
+        pec_adresse: sejour.adresse || null,
+        pec_precisions: sejour.telephone ? `Tél. lieu : ${sejour.telephone}` : '',
+      },
     }).select().single()
     if (error) { alert('Erreur : ' + error.message); return }
     await supabase.from('demandes_souhaits').update({ statut:'acceptee', souhait_id:s.id }).eq('id', d.id)
@@ -298,17 +314,44 @@ function Demandes({ onOpen }) {
             <div>
               <div style={{ fontWeight:600, color:'var(--text)' }}>{d.patient_prenom} {d.patient_nom} {d.urgence && <Pill color="#A32D2D" bg="#FCEBEB">Urgent</Pill>}</div>
               <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Par {d.contact_prenom} {d.contact_nom} · {d.contact_email}
-                {d.source === 'partenaire' && ' · Partenaire'}{d.source === 'externe' && ' · Formulaire public'}
+                {d.source === 'partenaire' && ' · Partenaire'}
+                {d.complements?.origine === 'wordpress' ? ' · Site heartsangels.be' : (d.source === 'externe' ? ' · Formulaire public' : '')}
               </div>
             </div>
             <Pill>{DEMANDE_STATUTS[d.statut]?.l || d.statut}</Pill>
           </div>
           <div style={{ fontSize:13.5, color:'var(--text-2)', lineHeight:1.5, marginBottom:10 }}>{d.souhait_description}</div>
+          <DossierDemande d={d} />
           {d.statut === 'acceptee'
             ? <Pill color="#3B6D11" bg="#EAF3DE">Souhait créé — ouvrez-le dans le tableau</Pill>
             : <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><Btn kind="ok" onClick={()=>accepter(d)}>Accepter et créer le souhait</Btn><Btn kind="danger" onClick={()=>refuser(d)}>Refuser</Btn></div>}
         </Card>
       ))}
     </div>
+  )
+}
+
+function DossierDemande({ d }) {
+  const c = d.complements && typeof d.complements === 'object' ? d.complements : {}
+  const sejour = c.sejour || {}
+  const lignes = [
+    ['Téléphone', d.patient_tel_gsm || c.beneficiaire?.telephone],
+    ['Adresse', fmtAdresse(d.patient_adresse)],
+    ['Registre national', c.beneficiaire?.registre],
+    ['E-mail du bénéficiaire', c.beneficiaire?.email],
+    ['Lieu de séjour', [sejour.type, fmtAdresse(sejour.adresse), sejour.telephone && `tél. ${sejour.telephone}`].filter(Boolean).join(' · ')],
+    ['Médecin', [d.medecin_referent, c.medecin?.telephone, c.medecin?.email].filter(Boolean).join(' · ')],
+    ['Autre contact', [c.contact_secondaire?.nom, c.contact_secondaire?.telephone, c.contact_secondaire?.email].filter(Boolean).join(' · ')],
+    ['Situation médicale', c.situation_medicale],
+    ['Fichier joint (reçu par e-mail)', c.fichier],
+  ].filter(([, v]) => v)
+  if (!lignes.length) return null
+  return (
+    <details style={{ margin:'0 0 10px', fontSize:12.5, color:'var(--text-2)' }}>
+      <summary style={{ cursor:'pointer', color:'var(--text-muted)', marginBottom:6 }}>Voir le dossier reçu</summary>
+      <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+        {lignes.map(([k, v]) => <div key={k}><span style={{ color:'var(--text-muted)' }}>{k} : </span>{v}</div>)}
+      </div>
+    </details>
   )
 }
