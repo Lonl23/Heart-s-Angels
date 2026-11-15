@@ -2,16 +2,17 @@
 import { requireAuth, logout } from './auth.js'
 import { listerPreventifs } from './data.js'
 import { echapper, heureBruxelles } from './model.js'
+import { rt } from './paths.js'
 function tick(){ document.getElementById('time').textContent = new Date().toLocaleTimeString('fr-BE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) }
 setInterval(tick,1000); tick()
 const session = await requireAuth()
 if (!session) throw new Error('Auth requise')
 const province = sessionStorage.getItem('selectedProvince')
-if (!province) { location.href = '/rescuetrack/province.html'; throw new Error('Province requise') }
+if (!province) { location.href = rt('province.html'); throw new Error('Province requise') }
 document.getElementById('connectedUser').textContent = `${session.profile.prenom||''} ${session.profile.nom||''} · ${province==='__aucune__'?'sans province':province}`
 document.getElementById('pageTitle').textContent = province==='__aucune__' ? 'Préventifs sans province' : `Préventifs · ${province}`
-document.getElementById('logoutBtn').addEventListener('click', async () => { await logout(); location.href='/rescuetrack/index.html' })
-document.getElementById('changeProvinceBtn').addEventListener('click', () => { location.href='/rescuetrack/province.html' })
+document.getElementById('logoutBtn').addEventListener('click', async () => { await logout(); location.href = rt('index.html') })
+document.getElementById('changeProvinceBtn').addEventListener('click', () => { location.href = rt('province.html') })
 const fmt = d => { if(!d) return '—'; const [y,m,j]=d.split('-'); return `${j}-${m}-${y}` }
 const body = document.getElementById('eventsTableBody')
 try {
@@ -24,7 +25,7 @@ try {
     body.querySelectorAll('[data-id]').forEach(btn => btn.addEventListener('click', () => {
       sessionStorage.setItem('currentEventId', btn.dataset.id)
       sessionStorage.removeItem('currentPmaId'); sessionStorage.removeItem('currentPmaName')
-      location.href = '/rescuetrack/event.html'
+      location.href = rt('event.html')
     }))
   }
 } catch (error) {

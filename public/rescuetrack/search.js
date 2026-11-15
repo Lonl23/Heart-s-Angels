@@ -2,14 +2,15 @@
 import { requireAuth, logout } from './auth.js'
 import { listerPreventifs, listerPatients } from './data.js'
 import { echapper } from './model.js'
+import { rt } from './paths.js'
 
 function tick() { document.getElementById('time').textContent = new Date().toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) }
 setInterval(tick, 1000); tick()
 const session = await requireAuth()
 if (!session) throw new Error('Auth requise')
 document.getElementById('connectedUser').textContent = `${session.profile.prenom || ''} ${session.profile.nom || ''}`.trim()
-document.getElementById('backBtn').addEventListener('click', () => { location.href = '/rescuetrack/province.html' })
-document.getElementById('logoutBtn').addEventListener('click', async () => { await logout(); location.href = '/rescuetrack/index.html' })
+document.getElementById('backBtn').addEventListener('click', () => { location.href = rt('province.html') })
+document.getElementById('logoutBtn').addEventListener('click', async () => { await logout(); location.href = rt('index.html') })
 
 const fmt = d => { if (!d) return '—'; const [y,m,j] = String(d).split('-'); return j && m && y ? `${j}-${m}-${y}` : d }
 const sexe = s => s === 'Homme' ? '♂' : s === 'Femme' ? '♀' : '?'
@@ -47,7 +48,7 @@ function render() {
   tbody.querySelectorAll('[data-patient]').forEach(btn => btn.addEventListener('click', () => {
     sessionStorage.setItem('currentEventId', btn.dataset.event)
     sessionStorage.setItem('selectedPatientId', btn.dataset.patient)
-    location.href = '/rescuetrack/patient.html'
+    location.href = rt('patient.html')
   }))
 }
 const liste = await listerPreventifs()

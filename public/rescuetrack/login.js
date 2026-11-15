@@ -1,5 +1,6 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 import { supabase } from './auth.js'
+import { apresConnexion, rt } from './paths.js'
 
 const time = document.getElementById('time')
 setInterval(() => {
@@ -13,7 +14,7 @@ if (params.get('refus') === '1') {
 }
 
 const { data } = await supabase.auth.getSession()
-if (data.session && params.get('refus') !== '1') location.replace('/rescuetrack/province.html')
+if (data.session && params.get('refus') !== '1') location.replace(rt('province.html'))
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault()
@@ -26,6 +27,5 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   })
   btn.disabled = false
   if (error) { err.textContent = 'Identifiants incorrects.'; return }
-  const next = params.get('next')
-  location.href = next && next.startsWith('/rescuetrack/') ? next : '/rescuetrack/province.html'
+  location.href = apresConnexion(params.get('next'), location.pathname)
 })

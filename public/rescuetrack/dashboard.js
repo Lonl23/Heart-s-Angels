@@ -2,14 +2,15 @@
 import { requireAuth, logout, supabase } from './auth.js'
 import { listerPreventifs, listerPatients } from './data.js'
 import { echapper } from './model.js'
+import { rt } from './paths.js'
 
 function tick() { document.getElementById('time').textContent = new Date().toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) }
 setInterval(tick, 1000); tick()
 const session = await requireAuth()
 if (!session) throw new Error('Auth requise')
 document.getElementById('connectedUser').textContent = `${session.profile.prenom || ''} ${session.profile.nom || ''}`.trim()
-document.getElementById('backBtn').addEventListener('click', () => { location.href = '/rescuetrack/province.html' })
-document.getElementById('logoutBtn').addEventListener('click', async () => { await logout(); location.href = '/rescuetrack/index.html' })
+document.getElementById('backBtn').addEventListener('click', () => { location.href = rt('province.html') })
+document.getElementById('logoutBtn').addEventListener('click', async () => { await logout(); location.href = rt('index.html') })
 
 const fmt = d => { if (!d) return '—'; const [y,m,j] = d.split('-'); return `${j}-${m}-${y}` }
 function countTriage(patients) {
@@ -43,7 +44,7 @@ function render() {
   tbody.querySelectorAll('[data-id]').forEach(btn => btn.addEventListener('click', () => {
     sessionStorage.setItem('currentEventId', btn.dataset.id)
     sessionStorage.removeItem('currentPmaId'); sessionStorage.removeItem('currentPmaName')
-    location.href = '/rescuetrack/event.html'
+    location.href = rt('event.html')
   }))
   const pathCount = {}
   visibles.forEach(p => { const path = p.secouristeBlock?.pathology || 'Non renseigné'; pathCount[path] = (pathCount[path] || 0) + 1 })

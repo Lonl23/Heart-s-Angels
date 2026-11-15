@@ -1,5 +1,6 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
+import { estPageConnexion, rt } from './paths.js'
 
 const cfg = window.__APP_CONFIG__?.supabase || {}
 export const supabase = createClient(cfg.url || '', cfg.anonKey || '', {
@@ -10,8 +11,8 @@ export async function requireAuth() {
   const { data } = await supabase.auth.getSession()
   if (!data.session) {
     const ici = location.pathname + location.search
-    if (!ici.endsWith('/index.html') && ici !== '/rescuetrack' && ici !== '/rescuetrack/') {
-      location.href = '/rescuetrack/index.html?next=' + encodeURIComponent(ici)
+    if (!estPageConnexion(location.pathname)) {
+      location.href = rt('index.html') + '?next=' + encodeURIComponent(ici)
     }
     return null
   }
@@ -20,7 +21,7 @@ export async function requireAuth() {
     .eq('id', data.session.user.id)
     .maybeSingle()
   if (!profile || profile.actif === false || profile.role === 'partenaire') {
-    location.href = '/rescuetrack/index.html?refus=1'
+    location.href = rt('index.html') + '?refus=1'
     return null
   }
   return { authUser: data.session.user, profile }

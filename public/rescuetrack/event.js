@@ -2,23 +2,24 @@
 import { requireAuth } from './auth.js'
 import { lirePreventif, listerPatients, enregistrerPatient, listerLogbook, ajouterLogbook } from './data.js'
 import { TRIAGES, echapper, heureBruxelles } from './model.js'
+import { rt } from './paths.js'
 
 function tick() { document.getElementById('time').textContent = new Date().toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) }
 setInterval(tick, 1000); tick()
 const session = await requireAuth()
 if (!session) throw new Error('Auth requise')
 const eventId = sessionStorage.getItem('currentEventId')
-if (!eventId) { location.href = '/rescuetrack/evenements.html'; throw new Error('Préventif requis') }
+if (!eventId) { location.href = rt('evenements.html'); throw new Error('Préventif requis') }
 
 const event = await lirePreventif(eventId)
-if (!event) { location.href = '/rescuetrack/evenements.html'; throw new Error('Préventif introuvable') }
+if (!event) { location.href = rt('evenements.html'); throw new Error('Préventif introuvable') }
 document.getElementById('eventTitle').textContent = event.description
 document.getElementById('eventMeta').textContent = [event.date, event.commune, event.status].filter(Boolean).join(' · ')
 document.getElementById('eventInfo').textContent = `${session.profile.prenom || ''} ${session.profile.nom || ''}`.trim()
-document.getElementById('backBtn').addEventListener('click', () => { location.href = '/rescuetrack/evenements.html' })
+document.getElementById('backBtn').addEventListener('click', () => { location.href = rt('evenements.html') })
 document.getElementById('addPatientBtn').addEventListener('click', () => {
   sessionStorage.removeItem('selectedPatientId')
-  location.href = '/rescuetrack/patient.html'
+  location.href = rt('patient.html')
 })
 const pmaModal = document.getElementById('pmaModal')
 document.getElementById('choosePmaBtn').addEventListener('click', () => pmaModal.classList.remove('hidden'))
@@ -76,7 +77,7 @@ async function render() {
   </tr>`).join('')
   body.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => {
     sessionStorage.setItem('selectedPatientId', btn.dataset.open)
-    location.href = '/rescuetrack/patient.html'
+    location.href = rt('patient.html')
   }))
   body.querySelectorAll('[data-exit]').forEach(btn => btn.addEventListener('click', () => ouvrirSortie(btn.dataset.exit)))
 }

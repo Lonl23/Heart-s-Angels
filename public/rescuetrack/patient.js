@@ -2,6 +2,7 @@
 import { requireAuth } from './auth.js'
 import { lirePreventif, lirePatient, enregistrerPatient } from './data.js'
 import { injectEidButton } from './eid.js'
+import { rt } from './paths.js'
 
 function tick() { document.getElementById('time').textContent = new Date().toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) }
 setInterval(tick, 1000); tick()
@@ -9,7 +10,7 @@ const session = await requireAuth()
 if (!session) throw new Error('Auth requise')
 
 const currentEventId = sessionStorage.getItem('currentEventId')
-if (!currentEventId) { location.href = '/rescuetrack/evenements.html'; throw new Error('Préventif requis') }
+if (!currentEventId) { location.href = rt('evenements.html'); throw new Error('Préventif requis') }
 const selectedPatientId = sessionStorage.getItem('selectedPatientId')
 
 const unknownIdentityCheckbox = document.getElementById('unknownIdentityCheckbox')
@@ -167,7 +168,7 @@ document.getElementById('savePatientBtn').addEventListener('click', async () => 
   try {
     await enregistrerPatient(currentEvent.id, buildFiche(), existingPatient?.id || null)
     sessionStorage.removeItem('selectedPatientId')
-    location.href = '/rescuetrack/event.html'
+    location.href = rt('event.html')
   } catch (error) {
     btn.disabled = false
     alert(error.message || "L'enregistrement a échoué.")
@@ -175,11 +176,11 @@ document.getElementById('savePatientBtn').addEventListener('click', async () => 
 })
 document.getElementById('backToEventBtn').addEventListener('click', () => {
   sessionStorage.removeItem('selectedPatientId')
-  location.href = '/rescuetrack/event.html'
+  location.href = rt('event.html')
 })
 
 currentEvent = await lirePreventif(currentEventId)
-if (!currentEvent) { location.href = '/rescuetrack/evenements.html'; throw new Error('Préventif introuvable') }
+if (!currentEvent) { location.href = rt('evenements.html'); throw new Error('Préventif introuvable') }
 if (selectedPatientId) existingPatient = await lirePatient(selectedPatientId)
 document.getElementById('patientModeLabel').textContent = existingPatient ? 'Modification de fiche' : 'Nouvelle fiche patient'
 document.getElementById('eventContext').textContent = [currentEvent.description, currentEvent.commune, currentEvent.province || 'province non renseignée'].filter(Boolean).join(' · ')
