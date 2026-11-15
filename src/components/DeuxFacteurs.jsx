@@ -9,6 +9,10 @@ import {
 import {
   biométrieDispo, enrolerBiometrie, verifierBiometrie, retirerBiometrie, nomAppareil,
 } from '@/lib/webauthn'
+import {
+  activiteFraiche, poserConfiance, doitDeverrouillerBio, estDeverrouilleMemoire,
+  marquerDeverrouilleMemoire,
+} from '@/lib/sessionApp'
 
 function ChampCode({ value, set, autoFocus }) {
   return (
@@ -30,23 +34,51 @@ function ChampCode({ value, set, autoFocus }) {
 }
 
 export function PorteDeuxFacteurs({ children }) {
-  const { signOut } = useAuth()
+  const { signOut, user } = useAuth()
   const [etat, setEtat] = useState('chargement')
   const [facteurs, setFacteurs] = useState(null)
+
+  function entrer() {
+    if (user?.id) poserConfiance(user.id)
+    else marquerDeverrouilleMemoire()
+    setEtat('ok')
+  }
 
   async function evaluer() {
     const f = await chargerFacteurs()
     if (f.erreur) { setEtat('erreur'); setFacteurs(f); return }
     setFacteurs(f)
     if (!f.totp || !f.emailActif) { setEtat('configurer'); return }
-    setEtat(besoinDefi({
+
+    const bioDispo = biométrieDispo()
+    const confiance = activiteFraiche(user?.id)
+
+    // Reprise < 48 h + biométrie sur cet appareil → déverrouiller (pas de mot de passe).
+    if (confiance && doitDeverrouillerBio({ webauthnActif: f.webauthnActif, bioDispo })) {
+      setEtat('deverrouiller')
+      return
+    }
+
+    // Reprise < 48 h sans biométrie (ou déjà déverrouillé) → entrer directement.
+    if (confiance) {
+      entrer()
+      return
+    }
+
+    // Première connexion / après expiration : défi 2FA (app, e-mail ou bio).
+    const defi = besoinDefi({
       totpActif: true,
       aal2: f.aal2,
       emailActif: true,
       emailOk: f.emailOk,
       webauthnActif: f.webauthnActif,
       webauthnOk: f.webauthnOk,
-    }) ? 'defi' : 'ok')
+    })
+    if (defi) {
+      setEtat('defi')
+      return
+    }
+    entrer()
   }
 
   useEffect(() => { evaluer() }, [])
@@ -60,12 +92,14 @@ export function PorteDeuxFacteurs({ children }) {
       <div style={{ width:'100%', maxWidth: etat === 'configurer' ? 460 : 380, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'30px 26px' }}>
         <Logo size={100} style={{ margin:'0 auto 8px' }} />
         <h1 style={{ textAlign:'center', fontSize:'1.35rem', color:'var(--heading)', margin:'8px 0 6px' }}>
-          {etat === 'configurer' ? 'Connexion en deux étapes' : 'Vérification'}
+          {etat === 'configurer' ? 'Connexion en deux étapes'
+            : etat === 'deverrouiller' ? 'Déverrouiller'
+              : 'Vérification'}
         </h1>
         {etat === 'configurer' ? (
           <>
             <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, margin:'0 0 14px' }}>
-              Activez l’application d’authentification et le code par e-mail. Les deux sont nécessaires pour entrer. Ensuite, à chaque connexion, vous choisirez l’un ou l’autre — ou la biométrie si vous l’activez.
+              Activez l’application d’authentification et le code par e-mail. Ensuite, pendant 48 h, la biométrie suffit pour rouvrir l’app (sinon la session reste ouverte). Après 48 h sans utilisation : mot de passe + code.
             </p>
             <ReglageDeuxFacteurs obligatoire onMaj={f => { if (f?.totp && f?.emailActif) evaluer() }} />
           </>
@@ -74,8 +108,13 @@ export function PorteDeuxFacteurs({ children }) {
             <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5 }}>{facteurs?.erreur || 'Vérification impossible.'}</p>
             <Btn onClick={evaluer} style={{ width:'100%', marginTop:8 }}>Réessayer</Btn>
           </>
+        ) : etat === 'deverrouiller' ? (
+          <DeverrouillageBio
+            onOk={() => { if (user?.id) poserConfiance(user.id); setEtat('ok') }}
+            onSecours={() => setEtat('defi')}
+          />
         ) : (
-          <Defi facteurs={facteurs} onOk={evaluer} />
+          <Defi facteurs={facteurs} onOk={async () => { await evaluer() }} apresSucces={() => { if (user?.id) poserConfiance(user.id) }} />
         )}
         <button type="button" onClick={() => signOut()} style={{ display:'block', width:'100%', marginTop:14, padding:8, background:'none', border:'none', color:'var(--text-muted)', fontSize:13, cursor:'pointer' }}>
           Se déconnecter
@@ -85,9 +124,40 @@ export function PorteDeuxFacteurs({ children }) {
   )
 }
 
-function Defi({ facteurs, onOk }) {
+function DeverrouillageBio({ onOk, onSecours }) {
+  const [err, setErr] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  async function lancer() {
+    setErr(null); setBusy(true)
+    const res = await verifierBiometrie()
+    setBusy(false)
+    if (!res.ok) { setErr(res.error); return }
+    onOk()
+  }
+
+  useEffect(() => { lancer() }, [])
+
+  return (
+    <div>
+      <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, margin:'12px 0' }}>
+        Moins de 48 h depuis la dernière utilisation — confirmez avec Face ID, l’empreinte ou Windows Hello.
+      </p>
+      <Btn onClick={lancer} disabled={busy} style={{ width:'100%' }}>
+        {busy ? 'Vérification…' : 'Déverrouiller'}
+      </Btn>
+      {err && <div className="ha-flash ha-flash-err" style={{ marginTop:12 }}>{err}</div>}
+      <button type="button" onClick={onSecours}
+        style={{ display:'block', width:'100%', marginTop:12, padding:8, background:'none', border:'none', color:'var(--text-muted)', fontSize:13, cursor:'pointer' }}>
+        Utiliser un code à la place
+      </button>
+    </div>
+  )
+}
+
+function Defi({ facteurs, onOk, apresSucces }) {
   const bioOk = !!facteurs.webauthnActif && biométrieDispo()
-  const methodeInit = bioOk ? 'bio' : (facteurs.totp ? 'totp' : 'email')
+  const methodeInit = bioOk && !estDeverrouilleMemoire() ? 'bio' : (facteurs.totp ? 'totp' : 'email')
   const [methode, setMethode] = useState(methodeInit)
   const [code, setCode] = useState('')
   const [err, setErr] = useState(null)
@@ -99,12 +169,17 @@ function Defi({ facteurs, onOk }) {
     facteurs.emailActif ? ['email', 'Code par e-mail'] : null,
   ].filter(Boolean)
 
+  async function reussi() {
+    apresSucces?.()
+    await onOk()
+  }
+
   async function lancerBio() {
     setErr(null); setInfo(null); setBusy(true)
     const res = await verifierBiometrie()
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }
-    await onOk()
+    await reussi()
   }
 
   useEffect(() => {
@@ -123,7 +198,7 @@ function Defi({ facteurs, onOk }) {
     setBusy(false)
     if (!res.ok) { setErr(res.erreur); return }
     setCode('')
-    await onOk()
+    await reussi()
   }
 
   async function envoyer() {

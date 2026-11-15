@@ -5,13 +5,13 @@ import config from '@/app.config'
 const CLE_PREUVE_WA = 'ha_2fa_webauthn_preuve'
 
 export function lirePreuveWebauthn() {
-  try { return sessionStorage.getItem(CLE_PREUVE_WA) || '' } catch { return '' }
+  try { return localStorage.getItem(CLE_PREUVE_WA) || '' } catch { return '' }
 }
 
 export function poserPreuveWebauthn(preuve) {
   try {
-    if (preuve) sessionStorage.setItem(CLE_PREUVE_WA, preuve)
-    else sessionStorage.removeItem(CLE_PREUVE_WA)
+    if (preuve) localStorage.setItem(CLE_PREUVE_WA, preuve)
+    else localStorage.removeItem(CLE_PREUVE_WA)
   } catch { /* navigation privée */ }
 }
 

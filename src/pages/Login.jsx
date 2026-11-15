@@ -17,6 +17,15 @@ export default function Login() {
   const [pwd, setPwd] = useState('')
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [sessionExpiree, setSessionExpiree] = useState(() => {
+    try {
+      if (sessionStorage.getItem('ha_session_expiree') === '1') {
+        sessionStorage.removeItem('ha_session_expiree')
+        return true
+      }
+    } catch { /* */ }
+    return false
+  })
   const pendingPartenaire = useRef(false)
 
   useEffect(() => {
@@ -98,6 +107,11 @@ export default function Login() {
         {!partenaire && <div style={{ height:8 }} />}
         {loc.state?.info && (
           <div className="ha-flash ha-flash-ok" style={{ marginBottom:14 }}>{loc.state.info}</div>
+        )}
+        {(sessionExpiree || loc.state?.sessionExpiree) && (
+          <div className="ha-flash ha-flash-warn" style={{ marginBottom:14 }}>
+            Plus de 48 h sans utilisation — retapez votre mot de passe, puis le code de vérification.
+          </div>
         )}
         {partenaire && session && !can('partenaire') && !loading && (
           <div className="ha-flash ha-flash-warn" style={{ marginBottom:14 }}>

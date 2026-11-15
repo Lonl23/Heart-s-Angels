@@ -5,13 +5,13 @@ import { lirePreuveWebauthn, poserPreuveWebauthn } from '@/lib/webauthn'
 const CLE_PREUVE = 'ha_2fa_preuve'
 
 export function lirePreuve() {
-  try { return sessionStorage.getItem(CLE_PREUVE) || '' } catch { return '' }
+  try { return localStorage.getItem(CLE_PREUVE) || '' } catch { return '' }
 }
 
 export function poserPreuve(preuve) {
   try {
-    if (preuve) sessionStorage.setItem(CLE_PREUVE, preuve)
-    else sessionStorage.removeItem(CLE_PREUVE)
+    if (preuve) localStorage.setItem(CLE_PREUVE, preuve)
+    else localStorage.removeItem(CLE_PREUVE)
   } catch { /* navigation privée */ }
 }
 

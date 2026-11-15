@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
 import { poserPreuve } from '@/lib/deuxFacteurs'
 import { poserPreuveWebauthn } from '@/lib/webauthn'
+import { activiteFraiche, toucherActivite, effacerConfiance } from '@/lib/sessionApp'
 
 const AuthContext = createContext(null)
 
@@ -36,9 +37,21 @@ export function AuthProvider({ children }) {
   const profileRef = useRef(null)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      if (data.session) loadProfile(data.session.user.id)
+    supabase.auth.getSession().then(async ({ data }) => {
+      const s = data.session
+      // Plus de 48 h sans utilisation → tout recommencer (mot de passe + 2FA).
+      if (s && !activiteFraiche(s.user.id)) {
+        try { sessionStorage.setItem('ha_session_expiree', '1') } catch { /* */ }
+        effacerConfiance()
+        poserPreuve('')
+        poserPreuveWebauthn('')
+        await supabase.auth.signOut()
+        pret.current = true
+        setLoading(false)
+        return
+      }
+      setSession(s)
+      if (s) loadProfile(s.user.id)
       else { pret.current = true; setLoading(false) }
     })
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
@@ -46,10 +59,14 @@ export function AuthProvider({ children }) {
       // TOKEN_REFRESHED, SIGNED_IN, voire un SIGNED_OUT transitoire : ne jamais
       // démonter l'écran ni envoyer vers /login.
       if (event === 'TOKEN_REFRESHED') {
-        if (s) setSession(s)
+        if (s) {
+          setSession(s)
+          if (activiteFraiche(s.user.id)) toucherActivite(s.user.id)
+        }
         return
       }
       if (event === 'SIGNED_OUT') {
+        effacerConfiance()
         setSession(null)
         setProfile(null)
         profileRef.current = null
@@ -69,6 +86,24 @@ export function AuthProvider({ children }) {
     })
     return () => sub.subscription.unsubscribe()
   }, [])
+
+  // Prolongation de la fenêtre 48 h tant que l’app est utilisée.
+  useEffect(() => {
+    if (!session?.user?.id) return undefined
+    const uidActuel = session.user.id
+    function prolonger() {
+      if (document.visibilityState === 'hidden') return
+      if (activiteFraiche(uidActuel)) toucherActivite(uidActuel)
+    }
+    const id = window.setInterval(prolonger, 5 * 60 * 1000)
+    document.addEventListener('visibilitychange', prolonger)
+    window.addEventListener('focus', prolonger)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', prolonger)
+      window.removeEventListener('focus', prolonger)
+    }
+  }, [session?.user?.id])
 
   async function loadMatrix() {
     const { data } = await supabase.from('acces_config').select('*')
@@ -265,6 +300,7 @@ export function AuthProvider({ children }) {
   async function signOut() {
     poserPreuve('')
     poserPreuveWebauthn('')
+    effacerConfiance()
     await supabase.auth.signOut()
   }
 
