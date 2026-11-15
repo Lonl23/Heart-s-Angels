@@ -235,6 +235,16 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: 0.4px;
 }
 
+.field-block label.check-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 14px;
+}
+.check-inline input { width: 18px; min-height: 18px; margin: 0; }
+
 .field-block input,
 .field-block select,
 .field-block textarea {
