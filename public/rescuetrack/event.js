@@ -1,7 +1,7 @@
 // © 2026 Heart's Angels ASBL & Laurent Noulin — Tous droits réservés.
 import { requireAuth } from './auth.js'
 import { lirePreventif, listerPatients, enregistrerPatient, listerLogbook, ajouterLogbook } from './data.js'
-import { TRIAGES, echapper, heureBruxelles } from './model.js'
+import { TRIAGES, TRIAGE_LIBELLES, echapper, heureBruxelles } from './model.js'
 import { rt } from './paths.js'
 
 function tick() { document.getElementById('time').textContent = new Date().toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) }
@@ -45,7 +45,7 @@ majPma()
 
 function compte(liste, pred) { return liste.filter(pred).length }
 function grille(el, patients, champ, extra) {
-  el.innerHTML = TRIAGES.map(t => `<div class="triage-counter ${t.toLowerCase()}"><span class="triage-counter-label">${t}</span><span class="triage-counter-value">${compte(patients, p => p[champ] === t && (!extra || extra(p)))}</span></div>`).join('')
+  el.innerHTML = TRIAGES.map(t => `<div class="triage-counter ${t.toLowerCase()}"><span class="triage-counter-label">${t}</span><span class="triage-counter-value">${compte(patients, p => p[champ] === t && (!extra || extra(p)))}</span><span class="triage-counter-hint">${echapper(TRIAGE_LIBELLES[t] || '')}</span></div>`).join('')
 }
 function surPlace(p) { return !p.timeOut && !p.destination }
 

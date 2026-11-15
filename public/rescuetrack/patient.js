@@ -127,7 +127,7 @@ function fillPatient(patient) {
   unknownIdentityCheckbox.checked = unknownIdentity
   document.getElementById('patientCodeDisplay').textContent = patient.patientCode || 'En attente'
   sex.value = patient.sex || ''
-  triageCurrent.value = patient.triageCurrent || patient.triageInitial || ''
+  choisirTriage(patient.triageCurrent || patient.triageInitial || '')
   lastName.value = patient.lastName || ''
   firstName.value = patient.firstName || ''
   birthDate.value = patient.birthDate || ''
@@ -155,6 +155,18 @@ function remplirEid(data) {
   if (data.address) patientAddress.value = data.address
   updateAgeField(); updatePostalRules()
 }
+
+function choisirTriage(code) {
+  triageCurrent.value = code || ''
+  document.querySelectorAll('.triage-choice').forEach(btn => {
+    const on = btn.dataset.triage === triageCurrent.value
+    btn.classList.toggle('is-on', on)
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false')
+  })
+}
+document.querySelectorAll('.triage-choice').forEach(btn => {
+  btn.addEventListener('click', () => choisirTriage(btn.dataset.triage))
+})
 
 unknownIdentityCheckbox.addEventListener('change', () => { unknownIdentity = unknownIdentityCheckbox.checked; applyUnknownIdentityState() })
 birthDate.addEventListener('change', () => { updateAgeField(); updatePostalRules() })

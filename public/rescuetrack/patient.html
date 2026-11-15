@@ -57,17 +57,18 @@
                 </select>
               </div>
 
-              <div class="field-block">
-                <label for="triageCurrent">Triage courant</label>
-                <select id="triageCurrent">
-                  <option value="">Choisir</option>
-                  <option value="U1">U1</option>
-                  <option value="U2">U2</option>
-                  <option value="U3H">U3H</option>
-                  <option value="U3NH">U3NH</option>
-                  <option value="IMPLIQUE">IMPLIQUE</option>
-                  <option value="DCD">DCD</option>
-                </select>
+            </div>
+
+            <div class="field-block">
+              <label id="triageLabel">Triage courant</label>
+              <input type="hidden" id="triageCurrent" value="">
+              <div class="triage-picker" role="radiogroup" aria-labelledby="triageLabel">
+                <button type="button" class="triage-choice u1" data-triage="U1"><strong>U1</strong><span>Urgence vitale</span></button>
+                <button type="button" class="triage-choice u2" data-triage="U2"><strong>U2</strong><span>Urgence relative</span></button>
+                <button type="button" class="triage-choice u3h" data-triage="U3H"><strong>U3H</strong><span>Non urgent, vers l'hôpital</span></button>
+                <button type="button" class="triage-choice u3nh" data-triage="U3NH"><strong>U3NH</strong><span>Non urgent, sans hôpital</span></button>
+                <button type="button" class="triage-choice implique" data-triage="IMPLIQUE"><strong>IMPLIQUE</strong><span>Impliqué, sans lésion</span></button>
+                <button type="button" class="triage-choice dcd" data-triage="DCD"><strong>DCD</strong><span>Décès</span></button>
               </div>
             </div>
 

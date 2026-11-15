@@ -15,6 +15,15 @@ export const LIBELLES_DISPOSITIF = {
 
 export const TRIAGES = ['U1', 'U2', 'U3H', 'U3NH', 'IMPLIQUE', 'DCD']
 
+export const TRIAGE_LIBELLES = {
+  U1: 'Urgence vitale',
+  U2: 'Urgence relative',
+  U3H: 'Non urgent, hôpital',
+  U3NH: 'Non urgent, sans hôpital',
+  IMPLIQUE: 'Impliqué',
+  DCD: 'Décès',
+}
+
 export function estPreventif(activite) {
   if (!activite) return false
   if (activite.type === 'preventif') return true
