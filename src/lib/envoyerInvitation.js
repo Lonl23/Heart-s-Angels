@@ -67,6 +67,18 @@ export async function envoyerMailBienvenue() {
   return { ok: false, error: await lireErreur(data, error) }
 }
 
+/** Bug helpdesk → mail prioritaire à laurent@ avec captures en PJ. */
+export async function envoyerMailBugHelpdesk(ticketId) {
+  const id = String(ticketId || '').trim()
+  if (!id) return { ok: false, error: 'Ticket manquant.' }
+  const { data, error } = await invokeEnvoyerInvitation({
+    action: 'helpdesk_bug',
+    ticket_id: id,
+  })
+  if (data?.ok) return { ok: true, pieces: data.pieces || 0 }
+  return { ok: false, error: await lireErreur(data, error) }
+}
+
 /** Rapport médical uniquement. L’objet est imposé côté serveur, sans copie cachée. */
 export async function envoyerRapportMedical({ souhaitId, email, html, texte }) {
   const adresse = String(email || '').trim()

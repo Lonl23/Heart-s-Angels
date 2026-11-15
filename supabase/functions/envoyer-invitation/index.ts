@@ -254,9 +254,12 @@ async function envoyer(opts: {
   texte: string
   html: string
   bcc?: boolean
+  priority?: 'high' | 'normal'
+  attachments?: { filename: string; content: Uint8Array; contentType?: string }[]
 }) {
   const dest = String(opts.to || '').trim()
   const bcc = opts.bcc === false || dest.toLowerCase() === CCI.toLowerCase() ? undefined : CCI
+  const high = opts.priority === 'high'
   await transporteur(opts.smtp).sendMail({
     from: opts.smtp.from,
     replyTo: opts.smtp.replyTo,
@@ -265,7 +268,60 @@ async function envoyer(opts: {
     subject: opts.sujet,
     text: opts.texte,
     html: opts.html,
+    priority: high ? 'high' : undefined,
+    headers: high
+      ? { 'X-Priority': '1', 'X-MSMail-Priority': 'High', Importance: 'high' }
+      : undefined,
+    attachments: (opts.attachments || []).map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType || 'application/octet-stream',
+    })),
   })
+}
+
+function mailBugHelpdesk(opts: {
+  numero: number
+  titre: string
+  description: string
+  auteurNom: string
+  auteurEmail: string
+  nPieces: number
+  pub: string
+}) {
+  const ref = `B-${opts.numero}`
+  const qui = opts.auteurNom || 'Volontaire'
+  const mailQui = opts.auteurEmail ? ` (${opts.auteurEmail})` : ''
+  const sujet = `[PRIORITÉ] Bug ${ref} — ${opts.titre}`
+  const texte = [
+    `Bug ${ref} signalé dans le helpdesk.`,
+    `Signalé par : ${qui}${mailQui}`,
+    '',
+    opts.titre,
+    '',
+    opts.description,
+    '',
+    opts.nPieces > 0
+      ? `${opts.nPieces} capture${opts.nPieces > 1 ? 's' : ''} en pièce jointe.`
+      : 'Aucune capture jointe.',
+    '',
+    `Ouvrir le helpdesk : ${opts.pub}/app/it/helpdesk`,
+  ].join('\n')
+  const html = cadreHtml(`
+    <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#B42318;letter-spacing:.04em">BUG PRIORITAIRE</p>
+    <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25">${esc(ref)} — ${esc(opts.titre)}</h1>
+    <p style="margin:0 0 16px;color:#4A5C61;font-size:15px">
+      Signalé par <strong>${esc(qui)}</strong>${opts.auteurEmail ? ` &lt;${esc(opts.auteurEmail)}&gt;` : ''}
+    </p>
+    <div style="margin:0 0 18px;padding:14px 14px;background:#F7FBFB;border-radius:10px;border:1px solid #E3EBEC;white-space:pre-wrap">${esc(opts.description)}</div>
+    <p style="margin:0 0 8px;color:#4A5C61;font-size:14px">
+      ${opts.nPieces > 0
+        ? `${opts.nPieces} capture${opts.nPieces > 1 ? 's' : ''} en pièce jointe.`
+        : 'Aucune capture jointe.'}
+    </p>
+    ${boutonHtml(`${opts.pub}/app/it/helpdesk`, 'Ouvrir le helpdesk')}
+  `)
+  return { sujet, texte, html }
 }
 
 Deno.serve(async (req) => {
@@ -281,6 +337,7 @@ Deno.serve(async (req) => {
       email?: string
       code?: string
       souhait_id?: string
+      ticket_id?: string
       html?: string
       texte?: string
     }
@@ -442,6 +499,58 @@ Deno.serve(async (req) => {
       })
       if (traceErr) return json({ error: 'Le message est parti, la trace n’a pas pu être enregistrée.' }, 500)
       return json({ ok: true, action: 'rapport_medical' })
+    }
+
+    // Bug helpdesk → mail prioritaire à Laurent, avec captures en PJ.
+    if (action === 'helpdesk_bug') {
+      const ticketId = String(body?.ticket_id || '').trim()
+      if (!ticketId) return json({ error: 'Ticket manquant.' }, 400)
+      const { data: detail, error: detErr } = await admin.rpc('helpdesk_bug_pour_mail', {
+        p_ticket: ticketId,
+        p_user: user.id,
+      })
+      if (detErr || !detail?.ok) {
+        return json({ error: detail?.error || detErr?.message || 'Ticket inaccessible.' }, 403)
+      }
+      const pieces = Array.isArray(detail.pieces) ? detail.pieces : []
+      const attachments: { filename: string; content: Uint8Array; contentType?: string }[] = []
+      for (let i = 0; i < pieces.length; i++) {
+        const pe = pieces[i] as { path?: string; nom?: string; mime?: string }
+        const path = String(pe?.path || '').trim()
+        if (!path) continue
+        const { data: blob, error: dlErr } = await admin.storage.from('helpdesk-captures').download(path)
+        if (dlErr || !blob) {
+          console.error('helpdesk_bug download', path, dlErr?.message)
+          continue
+        }
+        const buf = new Uint8Array(await blob.arrayBuffer())
+        const base = String(pe?.nom || `capture-${i + 1}.jpg`).replace(/[^\w.\- ()àâäéèêëïîôùûüç]+/gi, '_')
+        attachments.push({
+          filename: base || `capture-${i + 1}.jpg`,
+          content: buf,
+          contentType: String(pe?.mime || 'image/jpeg'),
+        })
+      }
+      const mail = mailBugHelpdesk({
+        numero: Number(detail.numero) || 0,
+        titre: String(detail.titre || ''),
+        description: String(detail.description || ''),
+        auteurNom: String(detail.auteur_nom || ''),
+        auteurEmail: String(detail.auteur_email || user.email || ''),
+        nPieces: attachments.length,
+        pub,
+      })
+      await envoyer({
+        smtp,
+        to: CCI,
+        sujet: mail.sujet,
+        texte: mail.texte,
+        html: mail.html,
+        bcc: false,
+        priority: 'high',
+        attachments,
+      })
+      return json({ ok: true, action: 'helpdesk_bug', pieces: attachments.length })
     }
 
     const { data: prof } = await admin.from('profiles').select('role,fiche,actif').eq('id', user.id).maybeSingle()
