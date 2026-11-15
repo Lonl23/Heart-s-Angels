@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { supabase } from '@/lib/supabase'
 import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
 import { poserPreuve } from '@/lib/deuxFacteurs'
+import { poserPreuveWebauthn } from '@/lib/webauthn'
 
 const AuthContext = createContext(null)
 
@@ -263,6 +264,7 @@ export function AuthProvider({ children }) {
 
   async function signOut() {
     poserPreuve('')
+    poserPreuveWebauthn('')
     await supabase.auth.signOut()
   }
 

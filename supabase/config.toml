@@ -12,3 +12,7 @@ verify_jwt = false
 [functions.envoyer-push]
 # Secret partagé x-ha-push-secret (Vault ha_push_hook_secret), pas le JWT utilisateur.
 verify_jwt = false
+
+[functions.webauthn-2fa]
+# JWT vérifié dans le code (comme les autres fonctions métier).
+verify_jwt = false

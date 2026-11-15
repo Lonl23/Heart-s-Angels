@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { demanderCodeEmail as envoyerCodeEmail } from '@/lib/envoyerInvitation'
+import { lirePreuveWebauthn, poserPreuveWebauthn } from '@/lib/webauthn'
 
 const CLE_PREUVE = 'ha_2fa_preuve'
 
@@ -27,8 +28,13 @@ export function srcQr(qr) {
   return prefix + encodeURIComponent(s)
 }
 
-/** Les deux méthodes activées : l’une ou l’autre suffit. */
-export function besoinDefi({ totpActif, aal2, emailActif, emailOk }) {
+/**
+ * Défi 2FA après le mot de passe.
+ * — Biométrie validée sur cet appareil → pas de défi.
+ * — Sinon TOTP et/ou e-mail : si les deux sont actifs, l’un ou l’autre suffit.
+ */
+export function besoinDefi({ totpActif, aal2, emailActif, emailOk, webauthnActif, webauthnOk }) {
+  if (webauthnActif && webauthnOk) return false
   const totpManque = !!totpActif && !aal2
   const emailManque = !!emailActif && !emailOk
   if (totpActif && emailActif) return totpManque && emailManque
@@ -44,16 +50,19 @@ export function messageCode(err) {
 }
 
 export async function chargerFacteurs() {
-  const [{ data: aal, error: aalErr }, { data: factors, error: facErr }, mail] = await Promise.all([
+  const [{ data: aal, error: aalErr }, { data: factors, error: facErr }, mail, wa] = await Promise.all([
     supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
     supabase.auth.mfa.listFactors(),
     supabase.rpc('etat_email_2fa'),
+    supabase.rpc('etat_webauthn_2fa'),
   ])
   if (aalErr || facErr || mail.error) {
     return { erreur: messageCode(aalErr || facErr || mail.error) }
   }
   const totp = factors?.totp?.[0] || null
   const emailActif = !!mail.data?.email_actif
+  const webauthnActif = !!(wa.data?.webauthn_actif || mail.data?.webauthn_actif)
+  const appareils = wa.data?.appareils || []
   let emailOk = false
   if (emailActif) {
     const preuve = lirePreuve()
@@ -63,11 +72,23 @@ export async function chargerFacteurs() {
       if (!emailOk) poserPreuve('')
     }
   }
+  let webauthnOk = false
+  if (webauthnActif) {
+    const preuveWa = lirePreuveWebauthn()
+    if (preuveWa) {
+      const { data } = await supabase.rpc('webauthn_2fa_valide', { p_preuve: preuveWa })
+      webauthnOk = !!data
+      if (!webauthnOk) poserPreuveWebauthn('')
+    }
+  }
   return {
     totp,
     aal2: aal?.currentLevel === 'aal2',
     emailActif,
     emailOk,
+    webauthnActif,
+    webauthnOk,
+    appareils,
     facteursBruts: factors,
   }
 }
