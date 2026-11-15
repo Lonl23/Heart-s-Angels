@@ -335,3 +335,15 @@ revoke all on table public.rescuetrack_fiches from anon;
 revoke all on table public.rescuetrack_logbook from anon;
 grant select, insert, update, delete on table public.rescuetrack_fiches to authenticated;
 grant select, insert, delete on table public.rescuetrack_logbook to authenticated;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'rescuetrack_fiches'
+  ) then
+    alter publication supabase_realtime add table public.rescuetrack_fiches;
+  end if;
+end $$;
