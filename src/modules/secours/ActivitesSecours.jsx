@@ -24,6 +24,7 @@ import {
   libelleComptesEquipes,
   DISPOSITIFS_CONNUS,
   composerAdresse,
+  PROVINCES_BE,
   estGrosPreventif,
   proposerDispAlphaId,
   estResponsableDpsProfil,
@@ -47,6 +48,7 @@ const VIDE = {
   adresseNumero: '',
   adresseCp: '',
   adresseVille: '',
+  adresseProvince: '',
   organisateurNom: '',
   organisateurContact: '',
   responsablePreventifId: '',
@@ -154,7 +156,7 @@ export default function ActivitesSecours() {
     if (!silencieux) setLoading(true)
     setErr(null)
     const [a, i, p] = await Promise.all([
-      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,adresse_mode,adresse_rue,adresse_numero,adresse_cp,adresse_ville,organisateur_nom,organisateur_contact,responsable_preventif_id,disp_alpha_id,disp_bravo_id,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
+      supabase.from('activites_secours').select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,adresse_mode,adresse_rue,adresse_numero,adresse_cp,adresse_ville,adresse_province,organisateur_nom,organisateur_contact,responsable_preventif_id,disp_alpha_id,disp_bravo_id,debut,fin,places,competences,created_by').order('debut', { ascending: true }),
       supabase.from('activites_secours_inscrits').select('id,activite_id,user_id'),
       gerer
         ? supabase.from('profiles').select('id,prenom,nom,email,role,fiche,actif').neq('role', 'partenaire').eq('actif', true).order('nom')
@@ -252,6 +254,7 @@ export default function ActivitesSecours() {
       adresseNumero: a.adresse_numero || '',
       adresseCp: a.adresse_cp || '',
       adresseVille: a.adresse_ville || '',
+      adresseProvince: a.adresse_province || '',
       organisateurNom: a.organisateur_nom || '',
       organisateurContact: a.organisateur_contact || '',
       responsablePreventifId: a.responsable_preventif_id || '',
@@ -315,12 +318,17 @@ export default function ActivitesSecours() {
     if (adresseMode === 'approximative' && form.adresseCp.trim() && !form.adresseVille.trim()) {
       setFlash('En mode approximatif, indiquez au moins la ville avec le code postal.'); return
     }
+    const province = PROVINCES_BE.includes(form.adresseProvince) ? form.adresseProvince : null
+    if (form.type === 'preventif' && !province) {
+      setFlash('Indiquez la province du préventif (lien RescueTrack).'); return
+    }
     const adresseComposee = composerAdresse({
       mode: adresseMode,
       rue: form.adresseRue.trim(),
       numero: form.adresseNumero.trim(),
       cp: form.adresseCp.trim(),
       ville: form.adresseVille.trim(),
+      province,
     }) || null
     const inscrits = form.id
       ? inscriptions.filter(x => x.activite_id === form.id).map(x => x.user_id)
@@ -346,6 +354,7 @@ export default function ActivitesSecours() {
       adresse_numero: form.adresseNumero.trim() || null,
       adresse_cp: form.adresseCp.trim() || null,
       adresse_ville: form.adresseVille.trim() || null,
+      adresse_province: province,
       adresse: adresseComposee,
       organisateur_nom: form.organisateurNom.trim() || null,
       organisateur_contact: form.organisateurContact.trim() || null,
@@ -493,6 +502,20 @@ export default function ActivitesSecours() {
                     <F label="Ville" value={form.adresseVille} set={v => majForm({ adresseVille: v })} />
                   </>
                 )}
+                <label style={{ marginBottom: 10, display: 'block' }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>
+                    Province{form.type === 'preventif' ? ' (requise — RescueTrack)' : ''}
+                  </span>
+                  <select
+                    value={form.adresseProvince || ''}
+                    onChange={e => majForm({ adresseProvince: e.target.value })}
+                    required={form.type === 'preventif'}
+                    style={{ width: '100%', padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 13.5, background: 'var(--surface)', color: 'var(--text)', fontFamily: 'inherit' }}
+                  >
+                    <option value="">— Choisir —</option>
+                    {PROVINCES_BE.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </label>
               </div>
               {composerAdresse({
                 mode: form.adresseMode,
@@ -500,6 +523,7 @@ export default function ActivitesSecours() {
                 numero: form.adresseNumero,
                 cp: form.adresseCp,
                 ville: form.adresseVille,
+                province: form.adresseProvince,
               }) && (
                 <p className="ha-act-note" style={{ marginBottom: 0 }}>
                   Affichage : {composerAdresse({
@@ -508,6 +532,7 @@ export default function ActivitesSecours() {
                     numero: form.adresseNumero,
                     cp: form.adresseCp,
                     ville: form.adresseVille,
+                    province: form.adresseProvince,
                   })}
                 </p>
               )}

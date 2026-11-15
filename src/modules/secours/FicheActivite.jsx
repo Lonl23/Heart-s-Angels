@@ -102,7 +102,7 @@ export default function FicheActivite() {
     setAbsent(false)
     const a = await supabase
       .from('activites_secours')
-      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,adresse_mode,adresse_rue,adresse_numero,adresse_cp,adresse_ville,organisateur_nom,organisateur_contact,responsable_preventif_id,disp_alpha_id,disp_bravo_id,debut,fin,places,competences,armement,dps_dimensionnement,created_by,created_at')
+      .select('id,numero,titre,type,dispositif,dispositifs,public_attendu,lieu,adresse,adresse_mode,adresse_rue,adresse_numero,adresse_cp,adresse_ville,adresse_province,organisateur_nom,organisateur_contact,responsable_preventif_id,disp_alpha_id,disp_bravo_id,debut,fin,places,competences,armement,dps_dimensionnement,created_by,created_at')
       .eq('id', id)
       .maybeSingle()
     if (a.error) {
@@ -417,6 +417,7 @@ export default function FicheActivite() {
       numero: activite.adresse_numero,
       cp: activite.adresse_cp,
       ville: activite.adresse_ville,
+      province: activite.adresse_province,
     }) || activite.adresse || '')
     : ''
   const lieuMaps = adresseComposee || activite?.lieu || ''
@@ -590,13 +591,23 @@ export default function FicheActivite() {
                         {adresseComposee}
                         <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                           {activite.adresse_mode === 'approximative' ? 'Adresse approximative (CP + ville)' : 'Adresse exacte (rue + n°)'}
+                          {activite.adresse_province ? ` · ${activite.adresse_province}` : ''}
                         </span>
+                      </p>
+                    )}
+                    {!adresseComposee && activite.adresse_province && (
+                      <p className="ha-afiche-lieu" style={{ marginTop: activite.lieu ? 6 : 0 }}>
+                        Province : {activite.adresse_province}
                       </p>
                     )}
                     {lieuUrl && <a className="ha-afiche-maps" href={lieuUrl} target="_blank" rel="noreferrer">Ouvrir dans Google Maps</a>}
                   </>
                 )
-                : <p className="ha-afiche-vide">Aucun lieu renseigné.</p>}
+                : (
+                  activite.adresse_province
+                    ? <p className="ha-afiche-lieu">Province : {activite.adresse_province}</p>
+                    : <p className="ha-afiche-vide">Aucun lieu renseigné.</p>
+                )}
               {(activite.organisateur_nom || activite.organisateur_contact) && (
                 <div className="ha-afiche-kv" style={{ marginTop: 14 }}>
                   <Champ k="Organisateur" v={activite.organisateur_nom || '—'} />
