@@ -1,0 +1,23 @@
+# RescueTrack bêta — dépôt EX2 (LiteSpeed / Apache), racine du sous-domaine.
+DirectoryIndex index.html
+Options -Indexes -MultiViews
+
+<IfModule mod_mime.c>
+  AddType application/javascript .js .mjs
+  AddType image/svg+xml .svg
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html|js)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI}.html -f
+  RewriteRule ^(.+?)/?$ $1.html [L]
+</IfModule>

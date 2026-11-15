@@ -21,7 +21,13 @@ export function showToast(message, type = "info", duration = 3500) {
   toast.className = `toast ${type}`;
 
   const icon = type === "success" ? "✓" : type === "error" ? "✕" : "ℹ";
-  toast.innerHTML = `<span style="font-weight:700;font-size:16px">${icon}</span><span>${message}</span>`;
+  const marque = document.createElement("span");
+  marque.style.fontWeight = "700";
+  marque.style.fontSize = "16px";
+  marque.textContent = icon;
+  const texte = document.createElement("span");
+  texte.textContent = message;
+  toast.append(marque, texte);
 
   container.appendChild(toast);
 

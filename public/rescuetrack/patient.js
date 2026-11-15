@@ -3,6 +3,7 @@ import { requireAuth } from './auth.js'
 import { lirePreventif, lirePatient, enregistrerPatient } from './data.js'
 import { injectEidButton } from './eid.js'
 import { rt } from './paths.js'
+import { showToast } from './toast.js'
 
 function tick() { document.getElementById('time').textContent = new Date().toLocaleTimeString('fr-BE', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) }
 setInterval(tick, 1000); tick()
@@ -82,9 +83,9 @@ function applyUnknownIdentityState() {
   updateAgeField(); updatePostalRules()
 }
 function validateBaseData() {
-  if (!triageCurrent.value) { alert('Le triage courant est obligatoire.'); return false }
+  if (!triageCurrent.value) { showToast('Le triage courant est obligatoire.', 'error'); return false }
   if (!unknownIdentity && (!lastName.value.trim() || !firstName.value.trim() || !birthDate.value || !sex.value || !nationality.value)) {
-    alert("Les champs d'identité obligatoires ne sont pas complets."); return false
+    showToast("Les champs d'identité obligatoires ne sont pas complets.", 'error'); return false
   }
   return true
 }
@@ -171,7 +172,7 @@ document.getElementById('savePatientBtn').addEventListener('click', async () => 
     location.href = rt('event.html')
   } catch (error) {
     btn.disabled = false
-    alert(error.message || "L'enregistrement a échoué.")
+    showToast(error.message || "L'enregistrement a échoué.", 'error')
   }
 })
 document.getElementById('backToEventBtn').addEventListener('click', () => {
