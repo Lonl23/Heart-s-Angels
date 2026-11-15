@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import jsQR from 'jsqr'
 import { Btn } from '@/components/ui'
 
 export default function Scanner({ onCode, onClose, titre = 'Scanner un QR' }) {
@@ -24,25 +25,41 @@ export default function Scanner({ onCode, onClose, titre = 'Scanner un QR' }) {
           videoRef.current.srcObject = stream
           await videoRef.current.play()
         }
+        const video = videoRef.current
         const Detector = window.BarcodeDetector
-        if (!Detector) {
-          setErr('Ce navigateur ne lit pas les QR en direct. Saisissez le code.')
-          return
+        const det = Detector ? new Detector({ formats: ['qr_code'] }) : null
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
+        const lire = async () => {
+          if (!video || video.readyState < 2) return ''
+          if (det) {
+            const codes = await det.detect(video)
+            return codes?.[0]?.rawValue?.trim() || ''
+          }
+          const w = video.videoWidth
+          const h = video.videoHeight
+          if (!w || !h || !ctx) return ''
+          const scale = w > 720 ? 720 / w : 1
+          const cw = Math.round(w * scale)
+          const ch = Math.round(h * scale)
+          canvas.width = cw
+          canvas.height = ch
+          ctx.drawImage(video, 0, 0, cw, ch)
+          const image = ctx.getImageData(0, 0, cw, ch)
+          return jsQR(image.data, cw, ch, { inversionAttempts: 'dontInvert' })?.data?.trim() || ''
         }
-        const det = new Detector({ formats: ['qr_code'] })
         const tick = async () => {
-          if (stop || !videoRef.current) return
+          if (stop) return
           try {
-            const codes = await det.detect(videoRef.current)
-            const raw = codes?.[0]?.rawValue?.trim()
+            const raw = await lire()
             if (raw && raw !== last.current) {
               last.current = raw
               cb.current(raw)
             }
-          } catch { /* frame ignoree */ }
-          timer = requestAnimationFrame(tick)
+          } catch { /* image pas encore prête */ }
+          timer = setTimeout(tick, 220)
         }
-        timer = requestAnimationFrame(tick)
+        timer = setTimeout(tick, 220)
       } catch (e) {
         setErr(e.message || 'Caméra inaccessible. Autorisez-la, ou saisissez le code.')
       }
@@ -50,7 +67,7 @@ export default function Scanner({ onCode, onClose, titre = 'Scanner un QR' }) {
     start()
     return () => {
       stop = true
-      if (timer) cancelAnimationFrame(timer)
+      if (timer) clearTimeout(timer)
       streamRef.current?.getTracks().forEach(t => t.stop())
     }
   }, [])
@@ -67,7 +84,7 @@ export default function Scanner({ onCode, onClose, titre = 'Scanner un QR' }) {
         <div style={{ fontSize:12.5, color:'#bbb', marginBottom:8 }}>Ou coller / taper le code</div>
         <div style={{ display:'flex', gap:8 }}>
           <input value={manuel} onChange={e=>setManuel(e.target.value)} placeholder="ha:u:… ou ha:l:…"
-            style={{ flex:1, padding:'10px 12px', borderRadius:9, border:'1px solid #444', background:'#222', color:'#fff', fontSize:14 }} />
+            style={{ flex:1, padding:'10px 12px', borderRadius:9, border:'1px solid #444', background:'#222', color:'#fff', fontSize:16 }} />
           <Btn onClick={() => manuel.trim() && cb.current(manuel.trim())}>OK</Btn>
         </div>
       </div>

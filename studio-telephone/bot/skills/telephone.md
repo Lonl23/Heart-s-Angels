@@ -21,6 +21,10 @@ L'application est une seule base React. L'ordinateur garde son menu latéral à 
 - Les tableaux larges deviennent des cartes sur téléphone, ou se font glisser avec une indication.
 - Le glisser-déposer des souhaits reste sur ordinateur. Sur téléphone, une colonne à la fois et un choix de statut sur la carte.
 
+## Applications Android et iOS
+
+Les applications installées sont la même base, ouverte par Capacitor (`android/`, `ios/`, `capacitor.config.json`). L'identifiant est `be.heartsangels.app`. Après un changement d'écran, `npm run build:mobile` recopie le site dans les deux projets. Ne crée pas une seconde application React Native. Dans l'application installée, le service worker du site ne se charge pas.
+
 ## À ne pas casser
 
 - Les routes, les appels Supabase et les textes métier restent ceux de l'ordinateur.
