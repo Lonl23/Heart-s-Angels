@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>RESCUETRACK - Patient</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="logo">
+      RESCUETRACK
+      <span class="app-subtitle">Fiche patient</span>
+    </div>
+    <div class="header-right"><span id="time"></span></div>
+  </header>
+
+  <main class="page-content">
+    <section class="page-shell">
+      <section class="patient-topbar">
+        <button id="backToEventBtn" class="btn-secondary">← Retour au préventif</button>
+        <div class="patient-mode-label" id="patientModeLabel">Nouvelle fiche patient</div>
+      </section>
+
+      <section class="patient-main-card">
+        <div class="patient-header-block">
+          <div>
+            <h1 class="patient-main-title">Fiche patient</h1>
+            <p class="patient-subtitle" id="eventContext"></p>
+          </div>
+          <div class="patient-code-box">
+            <span>Code patient</span>
+            <strong id="patientCodeDisplay">Attribué à l'enregistrement</strong>
+          </div>
+        </div>
+
+        <div class="patient-sections-grid">
+          <section class="patient-card">
+            <div id="eidMount"></div>
+            <h2 class="section-title">Identité et administratif</h2>
+
+            <div class="patient-grid-3">
+              <div class="field-block">
+                <label>
+                  <input type="checkbox" id="unknownIdentityCheckbox">
+                  Identité inconnue
+                </label>
+              </div>
+
+              <div class="field-block">
+                <label for="sex">Sexe</label>
+                <select id="sex">
+                  <option value="">Choisir</option>
+                  <option value="Homme">Homme</option>
+                  <option value="Femme">Femme</option>
+                  <option value="Indéterminé / inconnu">Indéterminé / inconnu</option>
+                </select>
+              </div>
+
+              <div class="field-block">
+                <label for="triageCurrent">Triage courant</label>
+                <select id="triageCurrent">
+                  <option value="">Choisir</option>
+                  <option value="U1">U1</option>
+                  <option value="U2">U2</option>
+                  <option value="U3H">U3H</option>
+                  <option value="U3NH">U3NH</option>
+                  <option value="IMPLIQUE">IMPLIQUE</option>
+                  <option value="DCD">DCD</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="patient-grid-3">
+              <div class="field-block">
+                <label for="lastName">Nom</label>
+                <input id="lastName" type="text">
+              </div>
+
+              <div class="field-block">
+                <label for="firstName">Prénom</label>
+                <input id="firstName" type="text">
+              </div>
+
+              <div class="field-block">
+                <label for="birthDate">Date de naissance</label>
+                <input id="birthDate" type="date">
+              </div>
+            </div>
+
+            <div class="patient-grid-3">
+              <div class="field-block">
+                <label for="ageDisplay">Âge calculé</label>
+                <input id="ageDisplay" type="text" readonly>
+              </div>
+
+              <div class="field-block">
+                <label for="nationality">Nationalité</label>
+                <select id="nationality">
+                  <option value="">Choisir</option>
+                  <option value="BE">BE</option>
+                  <option value="FR">FR</option>
+                  <option value="NL">NL</option>
+                  <option value="DE">DE</option>
+                  <option value="UK">UK</option>
+                  <option value="AUTRE">Autres</option>
+                </select>
+              </div>
+
+              <div class="field-block">
+                <label for="nationalNumber">Numéro national</label>
+                <input id="nationalNumber" type="text">
+              </div>
+            </div>
+
+            <div class="patient-grid-3">
+              <div class="field-block">
+                <label for="patientAddress">Rue et numéro</label>
+                <input id="patientAddress" type="text">
+              </div>
+
+              <div class="field-block">
+                <label for="postalCode">Code postal</label>
+                <input id="postalCode" type="text">
+              </div>
+
+              <div class="field-block">
+                <label for="locality">Localité</label>
+                <input id="locality" type="text">
+              </div>
+            </div>
+
+            <div class="patient-grid-2">
+              <div class="field-block">
+                <label for="pmaDisplay">PMA</label>
+                <input id="pmaDisplay" type="text" readonly>
+              </div>
+
+              <div class="field-block">
+                <label for="triageInitialDisplay">Triage initial</label>
+                <input id="triageInitialDisplay" type="text" readonly>
+              </div>
+            </div>
+          </section>
+
+          <section class="patient-card">
+            <h2 class="section-title">Clinique</h2>
+
+            <div class="field-block">
+              <label for="pathology">Groupe de pathologies</label>
+              <select id="pathology">
+                <option value="">Choisir</option>
+                <option value="Intox">Intox</option>
+                <option value="Trauma">Trauma</option>
+                <option value="Malaise">Malaise</option>
+                <option value="Brûlure">Brûlure</option>
+                <option value="Cardio">Cardio</option>
+                <option value="Respiratoire">Respiratoire</option>
+                <option value="Neurologique">Neurologique</option>
+                <option value="Autre">Autre</option>
+              </select>
+            </div>
+
+            <div class="field-block">
+              <label for="chiefComplaint">Motif / plainte principale</label>
+              <textarea id="chiefComplaint" rows="3"></textarea>
+            </div>
+
+            <div class="field-block">
+              <label for="clinicalNotes">Remarques cliniques</label>
+              <textarea id="clinicalNotes" rows="4"></textarea>
+            </div>
+          </section>
+        </div>
+
+        <div class="button-row sticky-actions">
+          <button id="savePatientBtn" class="btn-primary">Enregistrer</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/config.js"></script>
+  <script type="module" src="patient.js"></script>
+</body>
+</html>

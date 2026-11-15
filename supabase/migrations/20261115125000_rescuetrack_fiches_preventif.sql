@@ -1,251 +1,337 @@
--- RescueTrack : une fiche patient ne s'attache qu'à un préventif déjà présent.
--- Aucune création, modification ou suppression de préventif.
+-- Fiches patients des préventifs (RescueTrack).
+-- Table dédiée : aucun lien avec public.souhaits ni avec fiches_patient_dps.
+-- Déjà appliquée sur le projet Heart's Angels. Les ordres sont réexécutables.
 
-ALTER TABLE public.fiches_patient_dps
-  ADD COLUMN contenu jsonb NOT NULL DEFAULT '{}'::jsonb;
+create or replace function public.province_depuis_cp(p_cp text)
+returns text
+language sql
+immutable
+as $$
+  with n as (
+    select substring(coalesce(p_cp, '') from '([0-9]{4})')::int as cp
+  )
+  select case
+    when cp between 1000 and 1299 then 'Bruxelles'
+    when cp between 1300 and 1499 then 'Brabant wallon'
+    when cp between 1500 and 1999 or cp between 3000 and 3499 then 'Brabant flamand'
+    when cp between 2000 and 2999 then 'Anvers'
+    when cp between 3500 and 3999 then 'Limbourg'
+    when cp between 4000 and 4999 then 'Liège'
+    when cp between 5000 and 5999 then 'Namur'
+    when cp between 6000 and 6599 or cp between 7000 and 7999 then 'Hainaut'
+    when cp between 6600 and 6999 then 'Luxembourg'
+    when cp between 8000 and 8999 then 'Flandre occidentale'
+    when cp between 9000 and 9999 then 'Flandre orientale'
+    else null
+  end
+  from n;
+$$;
 
-ALTER TABLE public.fiches_patient_dps
-  ADD CONSTRAINT fiches_patient_dps_contenu CHECK (
-    jsonb_typeof(contenu) = 'object'
-    AND octet_length(contenu::text) < 16000
+create or replace function public.rescuetrack_code_province(p_nom text)
+returns text
+language sql
+immutable
+as $$
+  select case p_nom
+    when 'Liège' then 'LIE'
+    when 'Namur' then 'NAM'
+    when 'Hainaut' then 'HAI'
+    when 'Luxembourg' then 'LUX'
+    when 'Bruxelles' then 'BRU'
+    when 'Brabant wallon' then 'BWA'
+    when 'Brabant flamand' then 'BFL'
+    when 'Anvers' then 'ANV'
+    when 'Limbourg' then 'LIM'
+    when 'Flandre orientale' then 'FOR'
+    when 'Flandre occidentale' then 'FOC'
+    else 'XXX'
+  end;
+$$;
+
+create or replace function public.activite_est_preventif(p_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.activites_secours a
+    where a.id = p_id
+      and (
+        a.type = 'preventif'
+        or a.dispositif is not null
+        or cardinality(a.dispositifs) > 0
+      )
   );
+$$;
 
-CREATE OR REPLACE FUNCTION public.activite_est_preventif(p_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-  SELECT coalesce((
-    SELECT a.type = 'preventif'
-        OR a.dispositif IS NOT NULL
-        OR cardinality(a.dispositifs) > 0
-    FROM public.activites_secours a
-    WHERE a.id = p_id
-  ), false);
-$function$;
+create table if not exists public.rescuetrack_fiches (
+  id uuid primary key default gen_random_uuid(),
+  preventif_id uuid not null references public.activites_secours(id) on delete cascade,
+  numero_local integer not null check (numero_local >= 1 and numero_local <= 9999),
+  code_patient text not null check (char_length(code_patient) between 4 and 24),
+  nom text check (nom is null or char_length(nom) <= 120),
+  prenom text check (prenom is null or char_length(prenom) <= 120),
+  date_naissance date,
+  sexe text check (sexe is null or sexe = any (array['Homme','Femme','Indéterminé / inconnu'])),
+  triage_initial text check (triage_initial is null or triage_initial = any (array['U1','U2','U3H','U3NH','IMPLIQUE','DCD'])),
+  triage_actuel text check (triage_actuel is null or triage_actuel = any (array['U1','U2','U3H','U3NH','IMPLIQUE','DCD'])),
+  triage_sortie text check (triage_sortie is null or triage_sortie = any (array['U1','U2','U3H','U3NH','IMPLIQUE','DCD'])),
+  heure_entree timestamptz not null default now(),
+  heure_sortie timestamptz,
+  destination text check (destination is null or char_length(destination) <= 80),
+  fiche jsonb not null default '{}'::jsonb,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (preventif_id, numero_local),
+  unique (code_patient),
+  constraint rescuetrack_fiches_objet check (jsonb_typeof(fiche) = 'object'),
+  constraint rescuetrack_fiches_taille check (octet_length(fiche::text) <= 12000),
+  constraint rescuetrack_fiches_heures check (heure_sortie is null or heure_sortie >= heure_entree)
+);
 
-REVOKE ALL ON FUNCTION public.activite_est_preventif(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.activite_est_preventif(uuid) TO authenticated, service_role;
+comment on table public.rescuetrack_fiches is
+  'Fiches patients des préventifs, saisies dans RescueTrack. Distinct des dossiers de souhaits.';
 
-ALTER POLICY fiches_patient_dps_insert ON public.fiches_patient_dps
-  WITH CHECK (
-    is_staff()
-    AND (created_by IS NULL OR created_by = auth.uid())
-    AND public.activite_est_preventif(activite_id)
-  );
+create index if not exists rescuetrack_fiches_preventif_idx
+  on public.rescuetrack_fiches (preventif_id, numero_local);
 
-ALTER POLICY fiches_patient_dps_update ON public.fiches_patient_dps
-  USING (is_staff() AND public.activite_est_preventif(activite_id))
-  WITH CHECK (is_staff() AND public.activite_est_preventif(activite_id));
+create table if not exists public.rescuetrack_logbook (
+  id uuid primary key default gen_random_uuid(),
+  preventif_id uuid not null references public.activites_secours(id) on delete cascade,
+  dispositif text check (dispositif is null or char_length(dispositif) <= 80),
+  texte text not null check (char_length(btrim(texte)) between 1 and 2000),
+  created_by uuid references public.profiles(id) on delete set null,
+  auteur text check (auteur is null or char_length(auteur) <= 160),
+  created_at timestamptz not null default now()
+);
 
-CREATE OR REPLACE FUNCTION public.enregistrer_fiche_patient_dps(
-  p_activite_id uuid,
-  p_contenu jsonb DEFAULT '{}'::jsonb,
-  p_id uuid DEFAULT NULL,
-  p_nom text DEFAULT NULL,
-  p_prenom text DEFAULT NULL,
-  p_date_naissance date DEFAULT NULL,
-  p_sexe text DEFAULT NULL,
-  p_motifs text DEFAULT NULL,
-  p_heure_prise_en_charge timestamptz DEFAULT NULL,
-  p_heure_fin timestamptz DEFAULT NULL,
-  p_orientation text DEFAULT NULL,
-  p_notes text DEFAULT NULL
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_contenu jsonb;
-  v_nom text;
-  v_prenom text;
-  v_sexe text;
-  v_motifs text;
-  v_orientation text;
-  v_notes text;
-  v_inconnue boolean := false;
-  v_triage text;
-  v_pathologie text;
-  v_disp text;
+comment on table public.rescuetrack_logbook is
+  'Main courante d''un préventif. Distincte du suivi d''un souhait.';
+
+create index if not exists rescuetrack_logbook_preventif_idx
+  on public.rescuetrack_logbook (preventif_id, created_at desc);
+
+create or replace function public.rescuetrack_fiche_garde()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if not public.activite_est_preventif(new.preventif_id) then
+    raise exception 'RescueTrack n''enregistre des patients que sur un préventif';
+  end if;
+  if tg_op = 'UPDATE' and new.preventif_id is distinct from old.preventif_id then
+    raise exception 'Une fiche de préventif ne change pas de dispositif';
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists rescuetrack_fiches_garde on public.rescuetrack_fiches;
+create trigger rescuetrack_fiches_garde
+  before insert or update on public.rescuetrack_fiches
+  for each row execute function public.rescuetrack_fiche_garde();
+
+create or replace function public.rescuetrack_enregistrer_fiche(
+  p_id uuid,
+  p_preventif uuid,
+  p_fiche jsonb
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r public.rescuetrack_fiches;
   v_num integer;
-  v_existing public.fiches_patient_dps%ROWTYPE;
-  v_row jsonb;
-BEGIN
-  IF auth.uid() IS NULL OR NOT public.is_staff() THEN
-    RAISE EXCEPTION 'Accès réservé au personnel' USING ERRCODE = '42501';
-  END IF;
+  v_code text;
+  v_prov text;
+  v_evt integer;
+  v_cp text;
+  v_triage text;
+  v_initial text;
+  v_sortie text;
+  v_sexe text;
+  v_ddn date;
+  v_entree timestamptz;
+  v_sortie_h timestamptz;
+  v_doc jsonb;
+begin
+  if not public.is_staff() then
+    raise exception 'Accès refusé';
+  end if;
+  if p_preventif is null or not public.activite_est_preventif(p_preventif) then
+    raise exception 'RescueTrack n''enregistre des patients que sur un préventif existant';
+  end if;
+  if p_fiche is null or jsonb_typeof(p_fiche) <> 'object' then
+    raise exception 'Fiche invalide';
+  end if;
+  if octet_length(p_fiche::text) > 12000 then
+    raise exception 'Fiche trop volumineuse';
+  end if;
 
-  IF p_activite_id IS NULL OR NOT public.activite_est_preventif(p_activite_id) THEN
-    RAISE EXCEPTION 'RescueTrack n''enregistre des patients que sur un préventif existant'
-      USING ERRCODE = '23514';
-  END IF;
+  v_triage := nullif(p_fiche->>'triageCurrent', '');
+  v_initial := nullif(p_fiche->>'triageInitial', '');
+  v_sortie := nullif(p_fiche->>'triageOut', '');
+  v_sexe := nullif(p_fiche->>'sex', '');
+  if v_triage is not null and v_triage not in ('U1','U2','U3H','U3NH','IMPLIQUE','DCD') then
+    raise exception 'Triage inconnu';
+  end if;
+  if v_initial is not null and v_initial not in ('U1','U2','U3H','U3NH','IMPLIQUE','DCD') then
+    raise exception 'Triage inconnu';
+  end if;
+  if v_sortie is not null and v_sortie not in ('U1','U2','U3H','U3NH','IMPLIQUE','DCD') then
+    raise exception 'Triage inconnu';
+  end if;
+  if v_sexe is not null and v_sexe not in ('Homme','Femme','Indéterminé / inconnu') then
+    raise exception 'Sexe inconnu';
+  end if;
+  if char_length(coalesce(p_fiche->>'lastName','')) > 120
+     or char_length(coalesce(p_fiche->>'firstName','')) > 120
+     or char_length(coalesce(p_fiche->>'nationalNumber','')) > 20
+     or char_length(coalesce(p_fiche->>'chiefComplaint','')) > 2000
+     or char_length(coalesce(p_fiche->>'clinicalNotes','')) > 4000 then
+    raise exception 'Champ trop long';
+  end if;
 
-  v_contenu := coalesce(p_contenu, '{}'::jsonb);
-  IF jsonb_typeof(v_contenu) IS DISTINCT FROM 'object' THEN
-    RAISE EXCEPTION 'Le contenu de la fiche doit être un objet JSON' USING ERRCODE = '22P02';
-  END IF;
-  IF octet_length(v_contenu::text) >= 16000 THEN
-    RAISE EXCEPTION 'La fiche dépasse la taille autorisée' USING ERRCODE = '22023';
-  END IF;
+  begin
+    v_ddn := nullif(p_fiche->>'birthDate', '')::date;
+  exception when others then
+    raise exception 'Date de naissance invalide';
+  end;
+  begin
+    v_entree := nullif(p_fiche->>'timeIn', '')::timestamptz;
+    v_sortie_h := nullif(p_fiche->>'timeOut', '')::timestamptz;
+  exception when others then
+    raise exception 'Heure invalide';
+  end;
 
-  IF v_contenu ? 'identite_inconnue' THEN
-    IF jsonb_typeof(v_contenu->'identite_inconnue') IS DISTINCT FROM 'boolean' THEN
-      RAISE EXCEPTION 'identite_inconnue doit être un booléen' USING ERRCODE = '22P02';
-    END IF;
-    v_inconnue := (v_contenu->>'identite_inconnue')::boolean;
-  END IF;
-
-  IF v_contenu ? 'triage' AND jsonb_typeof(v_contenu->'triage') IS DISTINCT FROM 'null' THEN
-    IF jsonb_typeof(v_contenu->'triage') IS DISTINCT FROM 'string' THEN
-      RAISE EXCEPTION 'Triage non reconnu' USING ERRCODE = '23514';
-    END IF;
-    v_triage := nullif(btrim(v_contenu->>'triage'), '');
-    IF v_triage IS NOT NULL AND v_triage NOT IN ('U1', 'U2', 'U3H', 'U3NH', 'IMPLIQUE', 'DCD') THEN
-      RAISE EXCEPTION 'Triage non reconnu' USING ERRCODE = '23514';
-    END IF;
-  END IF;
-
-  IF v_contenu ? 'pathologie' AND jsonb_typeof(v_contenu->'pathologie') IS DISTINCT FROM 'null' THEN
-    IF jsonb_typeof(v_contenu->'pathologie') IS DISTINCT FROM 'string' THEN
-      RAISE EXCEPTION 'Pathologie non reconnue' USING ERRCODE = '23514';
-    END IF;
-    v_pathologie := nullif(btrim(v_contenu->>'pathologie'), '');
-    IF v_pathologie IS NOT NULL AND v_pathologie NOT IN (
-      'Intox', 'Trauma', 'Malaise', 'Brûlure', 'Cardio', 'Respiratoire', 'Neurologique', 'Autre'
-    ) THEN
-      RAISE EXCEPTION 'Pathologie non reconnue' USING ERRCODE = '23514';
-    END IF;
-  END IF;
-
-  IF v_contenu ? 'dispositif' AND jsonb_typeof(v_contenu->'dispositif') IS DISTINCT FROM 'null' THEN
-    IF jsonb_typeof(v_contenu->'dispositif') IS DISTINCT FROM 'string' THEN
-      RAISE EXCEPTION 'Dispositif non reconnu' USING ERRCODE = '23514';
-    END IF;
-    v_disp := nullif(btrim(v_contenu->>'dispositif'), '');
-    IF v_disp IS NOT NULL AND v_disp NOT IN (
-      'paps', 'ps', 'echo', 'pma_cat2', 'pma_cat1', 'pma_cat0', 'ambu_112', 'ambu'
-    ) THEN
-      RAISE EXCEPTION 'Dispositif non reconnu' USING ERRCODE = '23514';
-    END IF;
-  END IF;
-
-  IF v_contenu ? 'dispositif_index' AND jsonb_typeof(v_contenu->'dispositif_index') IS DISTINCT FROM 'null' THEN
-    IF jsonb_typeof(v_contenu->'dispositif_index') IS DISTINCT FROM 'number'
-       OR (v_contenu->>'dispositif_index') !~ '^[0-9]+$'
-       OR (v_contenu->>'dispositif_index')::int > 50 THEN
-      RAISE EXCEPTION 'Dispositif invalide' USING ERRCODE = '23514';
-    END IF;
-  END IF;
-
-  IF char_length(coalesce(v_contenu->>'nationalite', '')) > 40
-     OR char_length(coalesce(v_contenu->>'numero_national', '')) > 32
-     OR char_length(coalesce(v_contenu->>'adresse', '')) > 240
-     OR char_length(coalesce(v_contenu->>'cp', '')) > 12
-     OR char_length(coalesce(v_contenu->>'localite', '')) > 120 THEN
-    RAISE EXCEPTION 'La fiche dépasse la taille autorisée' USING ERRCODE = '22023';
-  END IF;
-
-  v_nom := nullif(btrim(coalesce(p_nom, '')), '');
-  v_prenom := nullif(btrim(coalesce(p_prenom, '')), '');
-  IF v_inconnue THEN
-    v_nom := NULL;
-    v_prenom := NULL;
-  END IF;
-  IF v_nom IS NOT NULL AND char_length(v_nom) > 120 THEN
-    RAISE EXCEPTION 'Le nom dépasse 120 caractères' USING ERRCODE = '23514';
-  END IF;
-  IF v_prenom IS NOT NULL AND char_length(v_prenom) > 120 THEN
-    RAISE EXCEPTION 'Le prénom dépasse 120 caractères' USING ERRCODE = '23514';
-  END IF;
-
-  v_sexe := nullif(btrim(coalesce(p_sexe, '')), '');
-  IF v_sexe IS NOT NULL AND v_sexe NOT IN ('F', 'M', 'X', 'inconnu') THEN
-    RAISE EXCEPTION 'Sexe non reconnu' USING ERRCODE = '23514';
-  END IF;
-
-  v_motifs := nullif(btrim(coalesce(p_motifs, '')), '');
-  v_notes := nullif(btrim(coalesce(p_notes, '')), '');
-  v_orientation := nullif(btrim(coalesce(p_orientation, '')), '');
-  IF v_motifs IS NOT NULL AND char_length(v_motifs) > 4000 THEN
-    RAISE EXCEPTION 'Le motif est trop long' USING ERRCODE = '23514';
-  END IF;
-  IF v_notes IS NOT NULL AND char_length(v_notes) > 8000 THEN
-    RAISE EXCEPTION 'Les remarques sont trop longues' USING ERRCODE = '23514';
-  END IF;
-  IF v_orientation IS NOT NULL AND v_orientation NOT IN (
-    'sur place', 'retour', 'conseil', 'évacuation', 'refus', 'autre'
-  ) THEN
-    RAISE EXCEPTION 'Orientation non reconnue' USING ERRCODE = '23514';
-  END IF;
-
-  IF p_heure_prise_en_charge IS NOT NULL
-     AND p_heure_fin IS NOT NULL
-     AND p_heure_fin < p_heure_prise_en_charge THEN
-    RAISE EXCEPTION 'L''heure de fin précède l''heure de début' USING ERRCODE = '23514';
-  END IF;
-
-  IF p_id IS NULL THEN
-    PERFORM pg_advisory_xact_lock(hashtextextended('rescuetrack.fiches_patient_dps:' || p_activite_id::text, 0));
-    SELECT coalesce(max(numero_local), 0) + 1
-      INTO v_num
-    FROM public.fiches_patient_dps
-    WHERE activite_id = p_activite_id;
-
-    INSERT INTO public.fiches_patient_dps AS f (
-      activite_id, numero_local, nom, prenom, date_naissance, sexe, motifs,
-      heure_prise_en_charge, heure_fin, orientation, notes, contenu, created_by
-    ) VALUES (
-      p_activite_id, v_num, v_nom, v_prenom, p_date_naissance, v_sexe, v_motifs,
-      p_heure_prise_en_charge, p_heure_fin, v_orientation, v_notes, v_contenu, auth.uid()
-    )
-    RETURNING to_jsonb(f.*) INTO v_row;
-  ELSE
-    SELECT * INTO v_existing
-    FROM public.fiches_patient_dps
-    WHERE id = p_id
-    FOR UPDATE;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Fiche introuvable' USING ERRCODE = 'P0002';
-    END IF;
-
-    IF v_existing.activite_id IS DISTINCT FROM p_activite_id THEN
-      RAISE EXCEPTION 'Une fiche ne peut pas être déplacée vers un autre préventif'
-        USING ERRCODE = '23514';
-    END IF;
-
-    UPDATE public.fiches_patient_dps AS f SET
-      nom = v_nom,
-      prenom = v_prenom,
-      date_naissance = p_date_naissance,
+  if p_id is null then
+    perform pg_advisory_xact_lock(hashtext('rescuetrack-fiche'), hashtext(p_preventif::text));
+    select coalesce(max(numero_local), 0) + 1 into v_num
+      from public.rescuetrack_fiches
+      where preventif_id = p_preventif;
+    select a.numero, a.adresse_cp into v_evt, v_cp
+      from public.activites_secours a
+      where a.id = p_preventif;
+    v_prov := public.rescuetrack_code_province(public.province_depuis_cp(v_cp));
+    v_code := to_char(now() at time zone 'Europe/Brussels', 'YY')
+      || v_prov
+      || lpad(coalesce(v_evt, 0)::text, 3, '0')
+      || lpad(v_num::text, 3, '0');
+    v_doc := p_fiche || jsonb_build_object(
+      'patientCode', v_code,
+      'patientSequence', v_num,
+      'eventId', p_preventif,
+      'triageInitial', coalesce(v_initial, v_triage),
+      'triageCurrent', v_triage
+    );
+    insert into public.rescuetrack_fiches (
+      preventif_id, numero_local, code_patient, nom, prenom, date_naissance, sexe,
+      triage_initial, triage_actuel, triage_sortie, heure_entree, heure_sortie,
+      destination, fiche, created_by
+    ) values (
+      p_preventif, v_num, v_code,
+      nullif(btrim(p_fiche->>'lastName'), ''),
+      nullif(btrim(p_fiche->>'firstName'), ''),
+      v_ddn, v_sexe,
+      coalesce(v_initial, v_triage), v_triage, v_sortie,
+      coalesce(v_entree, now()), v_sortie_h,
+      nullif(p_fiche->>'destination', ''),
+      v_doc, auth.uid()
+    ) returning * into r;
+  else
+    update public.rescuetrack_fiches set
+      nom = nullif(btrim(p_fiche->>'lastName'), ''),
+      prenom = nullif(btrim(p_fiche->>'firstName'), ''),
+      date_naissance = v_ddn,
       sexe = v_sexe,
-      motifs = v_motifs,
-      heure_prise_en_charge = p_heure_prise_en_charge,
-      heure_fin = p_heure_fin,
-      orientation = v_orientation,
-      notes = v_notes,
-      contenu = v_contenu,
-      updated_at = now()
-    WHERE f.id = p_id
-    RETURNING to_jsonb(f.*) INTO v_row;
-  END IF;
+      triage_initial = coalesce(v_initial, triage_initial),
+      triage_actuel = v_triage,
+      triage_sortie = v_sortie,
+      heure_sortie = v_sortie_h,
+      destination = nullif(p_fiche->>'destination', ''),
+      fiche = p_fiche || jsonb_build_object(
+        'patientCode', code_patient,
+        'patientSequence', numero_local,
+        'eventId', preventif_id,
+        'triageInitial', coalesce(v_initial, triage_initial),
+        'triageCurrent', v_triage
+      )
+    where id = p_id and preventif_id = p_preventif
+    returning * into r;
+    if not found then
+      raise exception 'Fiche introuvable';
+    end if;
+  end if;
 
-  RETURN v_row;
-END;
-$function$;
+  return jsonb_build_object(
+    'id', r.id,
+    'preventif_id', r.preventif_id,
+    'numero_local', r.numero_local,
+    'code_patient', r.code_patient,
+    'nom', r.nom,
+    'prenom', r.prenom,
+    'date_naissance', r.date_naissance,
+    'sexe', r.sexe,
+    'triage_initial', r.triage_initial,
+    'triage_actuel', r.triage_actuel,
+    'triage_sortie', r.triage_sortie,
+    'heure_entree', r.heure_entree,
+    'heure_sortie', r.heure_sortie,
+    'destination', r.destination,
+    'fiche', r.fiche,
+    'created_at', r.created_at
+  );
+end;
+$$;
 
-REVOKE ALL ON FUNCTION public.enregistrer_fiche_patient_dps(
-  uuid, jsonb, uuid, text, text, date, text, text, timestamptz, timestamptz, text, text
-) FROM PUBLIC, anon;
+alter table public.rescuetrack_fiches enable row level security;
+alter table public.rescuetrack_logbook enable row level security;
 
-GRANT EXECUTE ON FUNCTION public.enregistrer_fiche_patient_dps(
-  uuid, jsonb, uuid, text, text, date, text, text, timestamptz, timestamptz, text, text
-) TO authenticated, service_role;
+drop policy if exists rescuetrack_fiches_select on public.rescuetrack_fiches;
+drop policy if exists rescuetrack_fiches_insert on public.rescuetrack_fiches;
+drop policy if exists rescuetrack_fiches_update on public.rescuetrack_fiches;
+drop policy if exists rescuetrack_fiches_delete on public.rescuetrack_fiches;
+drop policy if exists rescuetrack_logbook_select on public.rescuetrack_logbook;
+drop policy if exists rescuetrack_logbook_insert on public.rescuetrack_logbook;
+drop policy if exists rescuetrack_logbook_delete on public.rescuetrack_logbook;
 
-COMMENT ON FUNCTION public.enregistrer_fiche_patient_dps(
-  uuid, jsonb, uuid, text, text, date, text, text, timestamptz, timestamptz, text, text
-) IS 'Enregistre une fiche patient sur un préventif existant. Ne crée pas de dispositif.';
+create policy rescuetrack_fiches_select on public.rescuetrack_fiches
+  for select to authenticated using (public.is_staff());
+create policy rescuetrack_fiches_insert on public.rescuetrack_fiches
+  for insert to authenticated
+  with check (public.is_staff() and created_by = auth.uid() and public.activite_est_preventif(preventif_id));
+create policy rescuetrack_fiches_update on public.rescuetrack_fiches
+  for update to authenticated
+  using (public.is_staff() and public.activite_est_preventif(preventif_id))
+  with check (public.is_staff() and public.activite_est_preventif(preventif_id));
+create policy rescuetrack_fiches_delete on public.rescuetrack_fiches
+  for delete to authenticated using (public.peut_creer_activite_secours());
+
+create policy rescuetrack_logbook_select on public.rescuetrack_logbook
+  for select to authenticated using (public.is_staff());
+create policy rescuetrack_logbook_insert on public.rescuetrack_logbook
+  for insert to authenticated
+  with check (public.is_staff() and created_by = auth.uid() and public.activite_est_preventif(preventif_id));
+create policy rescuetrack_logbook_delete on public.rescuetrack_logbook
+  for delete to authenticated using (public.peut_creer_activite_secours());
+
+revoke all on function public.province_depuis_cp(text) from public, anon;
+revoke all on function public.rescuetrack_code_province(text) from public, anon;
+revoke all on function public.activite_est_preventif(uuid) from public, anon;
+revoke all on function public.rescuetrack_enregistrer_fiche(uuid, uuid, jsonb) from public, anon;
+grant execute on function public.province_depuis_cp(text) to authenticated;
+grant execute on function public.rescuetrack_code_province(text) to authenticated;
+grant execute on function public.activite_est_preventif(uuid) to authenticated;
+grant execute on function public.rescuetrack_enregistrer_fiche(uuid, uuid, jsonb) to authenticated;
+
+revoke all on table public.rescuetrack_fiches from anon;
+revoke all on table public.rescuetrack_logbook from anon;
+grant select, insert, update, delete on table public.rescuetrack_fiches to authenticated;
+grant select, insert, delete on table public.rescuetrack_logbook to authenticated;

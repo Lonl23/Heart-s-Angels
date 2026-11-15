@@ -49,10 +49,6 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   build: {
     rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, 'index.html'),
-        rescuetrack: path.resolve(__dirname, 'rescuetrack/index.html'),
-      },
       output: {
         manualChunks(id) {
           const p = id.replace(/\\/g, '/')

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>RESCUETRACK</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="header">
+  <div class="logo">RESCUETRACK<span class="app-subtitle">Fiches des préventifs</span></div>
+  <div class="header-right"><span id="time"></span></div>
+</header>
+<main class="page-content">
+  <section class="page-shell" style="max-width:460px">
+    <section class="panel">
+      <h1 class="page-title">Connexion</h1>
+      <p class="page-subtitle">Même compte que Heart's Angels. RescueTrack enregistre les patients des préventifs.</p>
+      <p class="notice-distinct">Les dossiers de souhaits restent dans l'application Heart's Angels. RescueTrack ouvre les fiches des préventifs.</p>
+      <form id="loginForm" class="form-stack" style="margin-top:18px">
+        <div class="field-block"><label for="email">Adresse e-mail</label><input id="email" type="email" autocomplete="username" required></div>
+        <div class="field-block"><label for="password">Mot de passe</label><input id="password" type="password" autocomplete="current-password" required></div>
+        <p id="loginError" class="page-subtitle" style="color:var(--danger)"></p>
+        <button class="btn-primary" type="submit" id="loginBtn">Se connecter</button>
+      </form>
+    </section>
+  </section>
+</main>
+<script src="/config.js"></script>
+<script type="module" src="login.js"></script>
+</body>
+</html>

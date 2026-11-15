@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>RESCUETRACK - Recherche patients</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="header">
+  <div class="logo">
+    RESCUETRACK
+    <span class="app-subtitle">Recherche patients</span>
+  </div>
+  <div class="header-right"><span id="time"></span></div>
+</header>
+
+<main class="page-content">
+  <section class="page-shell">
+    <section class="page-topbar">
+      <div class="page-user" id="connectedUser"></div>
+      <div class="button-row">
+        <button id="backBtn" class="btn-secondary">← Retour</button>
+        <button id="logoutBtn" class="btn-secondary">Déconnexion</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h1 class="page-title">Recherche patients</h1>
+          <p class="page-subtitle">Recherche dans les fiches des préventifs uniquement.</p>
+        </div>
+      </div>
+
+      <div class="search-bar">
+        <input type="search" id="searchInput" class="search-input" placeholder="Nom, prénom, code patient, NISS, date de naissance…" autocomplete="off">
+        <select id="triageFilter" style="min-height:42px;padding:9px 13px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface-alt);">
+          <option value="">Tout triage</option>
+          <option value="U1">U1</option>
+          <option value="U2">U2</option>
+          <option value="U3H">U3H</option>
+          <option value="U3NH">U3NH</option>
+          <option value="IMPLIQUE">IMPLIQUE</option>
+          <option value="DCD">DCD</option>
+        </select>
+        <select id="eventFilter2" style="min-height:42px;padding:9px 13px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface-alt);min-width:200px;">
+          <option value="">Tous les préventifs</option>
+        </select>
+      </div>
+
+      <div id="resultCount" class="page-subtitle" style="margin-bottom:12px;"></div>
+
+      <div class="table-responsive">
+        <table class="patients-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Nom</th>
+              <th>Prénom</th>
+              <th>Naissance</th>
+              <th>Sexe</th>
+              <th>Triage IN</th>
+              <th>Triage actuel</th>
+              <th>Unité</th>
+              <th>Préventif</th>
+              <th>Sortie</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="searchResultsBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script src="/config.js"></script>
+<script type="module" src="search.js"></script>
+</body>
+</html>

@@ -49,23 +49,11 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return
   if (isVolatile(url.pathname)) return
 
-  // RescueTrack a sa propre enveloppe : ne jamais retomber sur /index.html.
+  // RescueTrack est une application à part : ne jamais la remplacer par l'index des souhaits.
   if (isRescueTrack(url.pathname)) {
     if (req.mode === 'navigate') {
       event.respondWith(
-        fetch(req).then(res => {
-          if (res.ok) {
-            const copy = res.clone()
-            caches.open(CACHE_NAME).then(c => c.put('/rescuetrack/index.html', copy)).catch(() => {})
-          }
-          return res
-        }).catch(async () => {
-          const cached = await caches.match('/rescuetrack/index.html')
-          return cached || new Response('RescueTrack hors ligne', {
-            status: 503,
-            headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-          })
-        })
+        fetch(req).catch(() => caches.match(req))
       )
     }
     return
