@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Page, Card, Btn, F, Sel, Pill } from '@/components/ui'
+import { Page, Card, Btn, F, Sel, Pill, fmtAdresse } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
 import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
 import { ACCES, TYPES_BENEVOLE } from '@/modules/acces/accesSchema'
@@ -92,6 +92,7 @@ function Membres() {
     <div>
       {msg && <Msg msg={msg} />}
       {lastCode && <CodeBox code={lastCode} />}
+      <Candidatures onInviter={d => { setLastCode(null); setForm({ prenom:d.prenom||'', nom:d.nom||'', email:d.email||'', role:'volontaire_non_medical' }) }} />
       <div style={{ marginBottom:14 }}><Btn onClick={()=>{ setLastCode(null); setForm({ role:'volontaire_non_medical' }) }}>+ Inviter un membre</Btn></div>
       {form && <FormInvit form={form} setForm={setForm} onSave={inviter} roles={ROLES_INTERNES} />}
 
@@ -224,6 +225,73 @@ function Partenaires() {
           </tbody>
         </table>
       </Card>
+    </div>
+  )
+}
+
+const STATUTS_CANDIDATURE = {
+  nouvelle: { l:'Nouvelle', c:'#185FA5', bg:'#E6F1FB' },
+  contactee: { l:'Contactée', c:'#BA7517', bg:'#FAEEDA' },
+  acceptee: { l:'Acceptée', c:'#3B6D11', bg:'#EAF3DE' },
+  refusee: { l:'Refusée', c:'#A32D2D', bg:'#FCEBEB' },
+}
+
+function Candidatures({ onInviter }) {
+  const [items, setItems] = useState([])
+  useEffect(() => { load() }, [])
+  async function load() {
+    const { data } = await supabase.from('candidatures_benevoles').select('*').order('created_at', { ascending:false })
+    setItems(data || [])
+  }
+  async function statut(id, valeur) {
+    if (valeur === 'refusee' && !confirm('Retirer cette candidature de la liste ?')) return
+    await supabase.from('candidatures_benevoles').update({ statut: valeur }).eq('id', id)
+    load()
+  }
+  const actives = items.filter(d => d.statut !== 'refusee')
+  if (actives.length === 0) return null
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
+      <div style={{ fontWeight:600, color:'var(--heading)' }}>Candidatures reçues du site</div>
+      {actives.map(d => {
+        const st = STATUTS_CANDIDATURE[d.statut] || STATUTS_CANDIDATURE.nouvelle
+        const lignes = [
+          ['Téléphone', d.telephone],
+          ['Adresse', fmtAdresse(d.adresse)],
+          ['Naissance', d.date_naissance ? new Date(d.date_naissance).toLocaleDateString('fr-BE') : ''],
+          ['Comités', Array.isArray(d.comites) ? d.comites.join(', ') : ''],
+          ['Profession', d.profession],
+          ['Motivation', d.motivation],
+          ['Commentaires', d.commentaires],
+          ['Registre national', d.registre],
+          ['Photo (reçue par e-mail)', d.photo_nom],
+          ['Diplôme (reçu par e-mail)', d.diplome_nom],
+        ].filter(([, v]) => v)
+        return (
+          <Card key={d.id}>
+            <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:8 }}>
+              <div>
+                <div style={{ fontWeight:600, color:'var(--text)' }}>{d.prenom} {d.nom}</div>
+                <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>{d.email} · Site heartsangels.be</div>
+              </div>
+              <Pill color={st.c} bg={st.bg}>{st.l}</Pill>
+            </div>
+            {lignes.length > 0 && (
+              <details style={{ margin:'0 0 10px', fontSize:12.5, color:'var(--text-2)' }}>
+                <summary style={{ cursor:'pointer', color:'var(--text-muted)', marginBottom:6 }}>Voir la candidature</summary>
+                <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+                  {lignes.map(([k, v]) => <div key={k}><span style={{ color:'var(--text-muted)' }}>{k} : </span>{v}</div>)}
+                </div>
+              </details>
+            )}
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <Btn onClick={() => onInviter(d)}>Inviter</Btn>
+              {d.statut !== 'contactee' && <Btn kind="soft" onClick={() => statut(d.id, 'contactee')}>Marquer contactée</Btn>}
+              <Btn kind="danger" onClick={() => statut(d.id, 'refusee')}>Refuser</Btn>
+            </div>
+          </Card>
+        )
+      })}
     </div>
   )
 }
