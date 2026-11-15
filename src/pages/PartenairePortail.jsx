@@ -22,7 +22,7 @@ export default function PartenairePortail() {
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--bg)' }}>
-      <header style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', background:'var(--surface)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:20 }}>
+      <header className="ha-partner-bar" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, padding:'12px 18px', background:'var(--surface)', borderBottom:'1px solid var(--border)', position:'sticky', top:0, zIndex:20 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <Logo size={40} />
           <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.3rem', color:'var(--heading)' }}>Espace partenaire</span>
@@ -140,11 +140,11 @@ function NouvelleDemande({ profile, onDone }) {
 
       <Card style={{ marginBottom:14 }}>
         <Sec>Patient</Sec>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <F label="Prénom" value={f.patient_prenom} set={v=>set('patient_prenom',v)} required />
           <F label="Nom" value={f.patient_nom} set={v=>set('patient_nom',v)} required />
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <F label="Date de naissance" type="date" value={f.patient_ddn} set={v=>set('patient_ddn',v)} />
           <F label="Établissement / lieu" value={f.etablissement} set={v=>set('etablissement',v)} />
         </div>
@@ -153,11 +153,11 @@ function NouvelleDemande({ profile, onDone }) {
 
       <Card style={{ marginBottom:14 }}>
         <Sec>Personne de contact (famille / proche)</Sec>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <F label="Prénom" value={f.contact_prenom} set={v=>set('contact_prenom',v)} required />
           <F label="Nom" value={f.contact_nom} set={v=>set('contact_nom',v)} required />
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <F label="Lien avec le patient" value={f.contact_relation} set={v=>set('contact_relation',v)} />
           <F label="Téléphone" value={f.contact_telephone} set={v=>set('contact_telephone',v)} />
         </div>
@@ -167,7 +167,7 @@ function NouvelleDemande({ profile, onDone }) {
       <Card style={{ marginBottom:14 }}>
         <Sec>Le souhait</Sec>
         <TA label="Description" value={f.souhait_description} set={v=>set('souhait_description',v)} rows={3} />
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <F label="Date envisagée" type="date" value={f.souhait_date} set={v=>set('souhait_date',v)} />
           <F label="Lieu" value={f.souhait_lieu} set={v=>set('souhait_lieu',v)} />
         </div>
@@ -190,11 +190,11 @@ function NouvelleDemande({ profile, onDone }) {
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {meds.map((m,i) => (
             <div key={i} style={{ border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px' }}>
-              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:8 }}>
+              <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:8 }}>
                 <F label="Médicament" value={m.medicament} set={v=>setMed(i,'medicament',v)} />
                 <F label="Dosage" value={m.dosage} set={v=>setMed(i,'dosage',v)} />
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+              <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                 <F label="Voie (orale, IV…)" value={m.voie} set={v=>setMed(i,'voie',v)} />
                 <F label="Fréquence (ex: 3x/jour)" value={m.frequence} set={v=>setMed(i,'frequence',v)} />
               </div>

@@ -66,19 +66,19 @@ export default function DemandeSouhait() {
         <label style={chk}><input type="checkbox" checked={f.consent_patient} onChange={e=>set('consent_patient',e.target.checked)} /> Le patient (ou son représentant) consent à cette demande.</label>
         <label style={chk}><input type="checkbox" checked={f.consent_rgpd} onChange={e=>set('consent_rgpd',e.target.checked)} /> J'accepte le traitement de ces données conformément au RGPD.</label>
         {err && <div style={{ color:'#C8435A', fontSize:13 }}>{err}</div>}
-        <button type="submit" disabled={busy} style={{ padding:13, background:'var(--accent)', color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:600, cursor:busy?'wait':'pointer' }}>{busy?'Envoi…':'Envoyer la demande'}</button>
+        <button type="submit" disabled={busy} style={{ padding:13, background:'var(--accent)', color:'#fff', border:'none', borderRadius:10, fontSize:16, fontWeight:600, minHeight:48, cursor:busy?'wait':'pointer' }}>{busy?'Envoi…':'Envoyer la demande'}</button>
       </form>
     </Wrap>
   )
 }
 
 function Wrap({ children }) {
-  return <div style={{ minHeight:'100vh', background:'var(--bg)', padding:'24px 16px' }}><div style={{ maxWidth:640, margin:'0 auto', background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'26px 24px' }}>{children}</div></div>
+  return <div className="ha-public" style={{ minHeight:'100vh', background:'var(--bg)', padding:'24px 16px' }}><div className="ha-public-card" style={{ maxWidth:640, margin:'0 auto', background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'26px 24px' }}>{children}</div></div>
 }
 function Section({ t, children }) {
   return <div><div style={{ fontSize:13, fontWeight:600, color:'var(--heading)', margin:'6px 0 10px' }}>{t}</div><div style={{ display:'flex', flexDirection:'column', gap:10 }}>{children}</div></div>
 }
-function Row({ children }) { return <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>{children}</div> }
+function Row({ children }) { return <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>{children}</div> }
 function I({ l, v, s, type='text', req }) {
   return <div><label style={lbl}>{l}</label><input type={type} value={v} onChange={e=>s(e.target.value)} required={req} style={inp} /></div>
 }

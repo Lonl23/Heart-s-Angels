@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Page, Card, Btn, F, Sel, Pill } from '@/components/ui'
+import { Page, Card, Btn, F, Sel, Pill, Empty } from '@/components/ui'
 import FicheVolontaire from '@/modules/fiche/FicheVolontaire'
 import { QUALIFS, ROLES_ASBL } from '@/modules/fiche/ficheSchema'
 import { ACCES, TYPES_BENEVOLE } from '@/modules/acces/accesSchema'
@@ -110,7 +110,23 @@ function Membres() {
       )}
 
       {loading ? <p style={{ color:'var(--text-muted)' }}>Chargement…</p> : (
-        <Card style={{ padding:0, overflow:'auto' }}>
+        <>
+          <div className="ha-phone-cards">
+            {membres.map(u => (
+              <Card key={u.id} style={{ opacity:u.actif?1:.55 }}>
+                <div style={{ fontWeight:700, fontSize:16 }}>{u.prenom} {u.nom}</div>
+                <div style={{ fontSize:13.5, color:'var(--text-muted)', margin:'4px 0 8px', wordBreak:'break-word' }}>{u.email}</div>
+                <div style={{ fontSize:14 }}>{rolesAsblTxt(u)}</div>
+                <div style={{ fontSize:13.5, color:'var(--text-2)', margin:'4px 0 8px' }}>{qualifsTxt(u)}</div>
+                <div style={{ marginBottom:10 }}>{u.actif ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill> : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}</div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <Btn kind="soft" onClick={()=>setFiche(u.id)} style={{ flex:1 }}>Fiche</Btn>
+                  <Btn kind={u.actif?'danger':'ok'} onClick={()=>toggle(u)} style={{ flex:1 }}>{u.actif?'Désactiver':'Activer'}</Btn>
+                </div>
+              </Card>
+            ))}
+          </div>
+          <Card className="ha-desktop-only" style={{ padding:0, overflow:'auto' }}>
           <table style={tbl}><thead><tr style={{ background:'var(--bg-alt)' }}>{['Nom','E-mail','Rôle (ASBL)','Qualification','Statut','Action'].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>
               {membres.map(u => (
@@ -123,6 +139,7 @@ function Membres() {
             </tbody>
           </table>
         </Card>
+        </>
       )}
     </div>
   )
@@ -210,7 +227,19 @@ function Partenaires() {
         </Card>
       )}
 
-      <Card style={{ padding:0, overflow:'auto' }}>
+      <div className="ha-phone-cards">
+        {comptes.length === 0 && <Empty title="Aucun compte partenaire" />}
+        {comptes.map(u => (
+          <Card key={u.id} style={{ opacity:u.actif?1:.55 }}>
+            <div style={{ fontWeight:700, fontSize:16 }}>{u.prenom} {u.nom}</div>
+            <div style={{ fontSize:13.5, color:'var(--text-muted)', margin:'4px 0 6px', wordBreak:'break-word' }}>{u.email}</div>
+            <div style={{ fontSize:14, marginBottom:8 }}>{orgNom(u.partenaire_id)}</div>
+            <div style={{ marginBottom:10 }}>{u.actif ? <Pill color="#3B6D11" bg="#EAF3DE">Actif</Pill> : <Pill color="#A32D2D" bg="#FCEBEB">Désactivé</Pill>}</div>
+            <Btn kind={u.actif?'danger':'ok'} onClick={()=>toggle(u)} style={{ width:'100%' }}>{u.actif?'Désactiver':'Activer'}</Btn>
+          </Card>
+        ))}
+      </div>
+      <Card className="ha-desktop-only" style={{ padding:0, overflow:'auto' }}>
         <table style={tbl}><thead><tr style={{ background:'var(--bg-alt)' }}>{['Nom','E-mail','Organisation','Statut','Action'].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
           <tbody>
             {comptes.map(u => (
@@ -242,7 +271,7 @@ function FormInvit({ form, setForm, onSave, roles, orgs }) {
         <div style={{ fontWeight:600, color:'var(--text)' }}>{roles ? 'Inviter un membre' : 'Inviter un partenaire'}</div>
         <Btn kind="soft" onClick={()=>setForm(null)}>Annuler</Btn>
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+      <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <F label="Prénom" value={form.prenom} set={v=>set('prenom',v)} required />
         <F label="Nom" value={form.nom} set={v=>set('nom',v)} required />
       </div>
@@ -266,11 +295,11 @@ function FormOrg({ form, setForm, onSave }) {
         <Btn kind="soft" onClick={()=>setForm(null)}>Annuler</Btn>
       </div>
       <F label="Nom" value={form.nom} set={v=>set('nom',v)} required />
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+      <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <Sel label="Type" value={form.type||''} set={v=>set('type',v)} options={[{v:'',l:'—'},{v:'hopital',l:'Hôpital'},{v:'maison_repos',l:'Maison de repos'},{v:'soins_palliatifs',l:'Soins palliatifs'},{v:'domicile',l:'Domicile'},{v:'institution',l:'Institution'},{v:'autre',l:'Autre'}]} />
         <F label="Ville" value={form.ville} set={v=>set('ville',v)} />
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+      <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <F label="Contact (nom)" value={form.contact_nom} set={v=>set('contact_nom',v)} />
         <F label="Contact (tél.)" value={form.contact_tel} set={v=>set('contact_tel',v)} />
       </div>
@@ -320,6 +349,7 @@ function AccesMatrice() {
         ))}
       </div>
 
+      <p className="ha-scroll-hint">Faites glisser le tableau horizontalement pour voir toutes les cases.</p>
       <Card style={{ padding:0, overflow:'auto' }}>
         <table style={{ width:'100%', minWidth:520, borderCollapse:'collapse', fontSize:13 }}>
           <thead>

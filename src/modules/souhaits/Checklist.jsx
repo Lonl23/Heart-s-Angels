@@ -81,7 +81,7 @@ export default function Checklist({ souhaitId }) {
 
       {/* Ajout libre */}
       <Card style={{ marginBottom:14 }}>
-        <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:8, alignItems:'end' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:8, alignItems:'end' }} className="ha-split">
           <F label="Ajouter un élément" value={add.libelle} set={v=>setAdd(a=>({...a,libelle:v}))} placeholder="Bonbonne d'oxygène, autorisation parentale…" />
           <Sel label="Catégorie" value={add.categorie} set={v=>setAdd(a=>({...a,categorie:v}))} options={CATS} />
           <Btn onClick={ajouter}>+ Ajouter</Btn>
@@ -128,7 +128,7 @@ function ModeleEditor({ onClose }) {
         <div style={{ fontWeight:600, color:'var(--heading)' }}>Modèle de checklist (standard)</div>
         <Btn kind="soft" onClick={onClose}>Fermer</Btn>
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:8, alignItems:'end', marginBottom:10 }}>
+      <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:8, alignItems:'end', marginBottom:10 }}>
         <F label="Élément standard" value={add.libelle} set={v=>setAdd(a=>({...a,libelle:v}))} />
         <Sel label="Catégorie" value={add.categorie} set={v=>setAdd(a=>({...a,categorie:v}))} options={CATS} />
         <Btn onClick={ajouter}>+ Ajouter</Btn>
