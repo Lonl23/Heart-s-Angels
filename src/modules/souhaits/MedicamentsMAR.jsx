@@ -38,6 +38,7 @@ export default function MedicamentsMAR({ meds, onSavePrises }) {
 
       {progr.length === 0 ? <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Aucun médicament programmé.</div> : (
         <div style={{ overflowX:'auto' }}>
+          <p className="ha-scroll-hint">Faites glisser pour voir chaque heure.</p>
           <table style={{ borderCollapse:'collapse', width:'100%', minWidth: 260 + cols.length*70 }}>
             <thead>
               <tr>

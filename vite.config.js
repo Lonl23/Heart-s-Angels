@@ -33,7 +33,8 @@ export default defineConfig({
           if (!p.includes('/node_modules/')) return
           if (p.includes('/qrcode/')) return 'vendor-qrcode'
           if (p.includes('/@supabase/')) return 'vendor-supabase'
-          if (p.includes('/react-dom/') || p.includes('/react-router') || p.includes('/react/')) return 'vendor-react'
+          if (p.includes('/scheduler/') || p.includes('/react-dom/') || p.includes('/react-router') || p.includes('/react/')) return 'vendor-react'
+          if (p.includes('/@capacitor/') || p.includes('/jsqr/')) return 'vendor-native'
           return 'vendor'
         },
       },

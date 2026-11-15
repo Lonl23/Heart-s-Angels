@@ -319,7 +319,7 @@ function FormCatalogue({ item, onDone }) {
         <Sel label="Volume de la bouteille" value={String(f.volume_l || '5')} set={v=>setF(s=>({ ...s, volume_l:v, nom: s.nom || `Oxygène ${v} L` }))} options={VOLUMES_O2} />
       )}
       {f.mode !== 'oxygene' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }} className="ha-split">
           <F label="Unité" value={f.unite} set={v=>setF(s=>({ ...s, unite:v }))} />
           <F label="Seuil d’alerte (total)" type="number" value={f.stock_minimal} set={v=>setF(s=>({ ...s, stock_minimal:v }))} />
         </div>
@@ -382,7 +382,7 @@ function FormReception({ cat, lieux, onDone, onOk, onErr }) {
           </div>
         </div>
       )}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+      <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <F label="N° de lot" value={f.lot} set={v=>setF(s=>({ ...s, lot:v }))} />
         <F label="Péremption" type="date" value={f.dlc} set={v=>setF(s=>({ ...s, dlc:v }))} />
       </div>
@@ -420,7 +420,28 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr }) {
       </p>
       <input value={filtre} onChange={e=>setFiltre(e.target.value)} placeholder="Rechercher…" style={{ ...inp, marginBottom:12 }} />
       {vis.length === 0 ? <Empty title="Aucune pièce" hint="Réceptionnez un type d’article pour générer un QR." /> : (
-        <Card style={{ padding:0, overflow:'auto' }}>
+        <>
+          <div className="ha-phone-cards">
+            {vis.map(u => {
+              const perime = u.date_peremption && u.date_peremption < new Date().toISOString().slice(0,10)
+              const alerte = (u.mode === 'oxygene' && Number(u.pression_bar) <= PRESSION_ALERTE) || perime
+              return (
+                <Card key={u.id}>
+                  <div style={{ fontWeight:700, fontSize:16 }}>{u.nom}</div>
+                  <div style={{ fontSize:13.5, color:'var(--text-muted)', margin:'4px 0 8px' }}>{lblMode(u.mode)}{u.lot ? ` · lot ${u.lot}` : ''}</div>
+                  <div style={{ fontSize:14.5, color: alerte ? '#A32D2D' : 'var(--text)', marginBottom:4 }}>{resteLabel(u)}</div>
+                  <div style={{ fontSize:13.5, color:'var(--text-2)' }}>{cheminLieux(lieux, u.lieu_id) || u.lieu_nom || 'Sans lieu'}</div>
+                  <div style={{ fontSize:13.5, color: perime ? '#A32D2D' : 'var(--text-muted)', margin:'4px 0 10px' }}>DLC {u.date_peremption || '—'}</div>
+                  {u.etat !== 'dispo' && <div style={{ marginBottom:10 }}><Pill color="#A32D2D" bg="#FCEBEB">{u.etat}</Pill></div>}
+                  <div style={{ display:'flex', gap:8 }}>
+                    <Btn kind="soft" onClick={() => setEtiq(u)} style={{ flex:1 }}>QR</Btn>
+                    <Btn kind="danger" onClick={() => supprimer(u)} style={{ flex:1 }}>Supprimer</Btn>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+          <Card className="ha-desktop-only" style={{ padding:0, overflow:'auto' }}>
           <table style={{ width:'100%', minWidth:640, borderCollapse:'collapse', fontSize:13.5 }}>
             <thead><tr style={{ background:'var(--bg-alt)' }}>
               {['Article','Reste','Lieu','DLC',' '].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:12, color:'var(--text-muted)' }}>{h}</th>)}
@@ -449,6 +470,7 @@ function OngletUnites({ unites, lieux, onChange, onOk, onErr }) {
             </tbody>
           </table>
         </Card>
+        </>
       )}
     </div>
   )

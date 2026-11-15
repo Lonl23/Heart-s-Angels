@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from '@/hooks/useAuth'
 import { SwUpdateProvider } from '@/hooks/useSwUpdate'
 import App from '@/App'
+import { startNativeShell } from '@/native'
 import './index.css'
 import config from '@/app.config'
 
@@ -13,6 +14,8 @@ import config from '@/app.config'
 const theme = localStorage.getItem('theme') || 'light'
 document.documentElement.setAttribute('data-theme', theme)
 if (config.organisation?.accent) document.documentElement.style.setProperty('--accent', config.organisation.accent)
+
+startNativeShell()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

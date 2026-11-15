@@ -37,13 +37,13 @@ export default function Annuaire() {
 
   return (
     <Page title="Annuaire" subtitle="Contacts médicaux, institutions et accompagnants.">
-      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14 }}>
+      <div className="ha-chip-row" style={{ display:'flex', gap:6, marginBottom:14 }}>
         {CATEGORIES.map(c => (
           <button key={c.v} onClick={()=>{ setCat(c.v); setQ('') }} style={{ padding:'8px 13px', borderRadius:9, border:'1px solid var(--border)', background: cat===c.v?'var(--accent)':'var(--card)', color: cat===c.v?'#fff':'var(--text-2)', fontWeight:600, fontSize:13, cursor:'pointer' }}>{c.icon} {c.l}</button>
         ))}
       </div>
 
-      <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
+      <div className="ha-toolbar" style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
         <input className="ha-search" value={q} onChange={e=>setQ(e.target.value)} placeholder={`Rechercher un(e) ${info.titre.toLowerCase()}…`} style={{ flex:1, minWidth:180, maxWidth:'none' }} />
         <Btn onClick={()=>setEditing({})}>+ {info.titre}</Btn>
       </div>

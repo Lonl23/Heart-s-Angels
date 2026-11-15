@@ -6,13 +6,13 @@ export const lbl = { fontSize:12.5, color:'var(--text-muted)', display:'block', 
 
 export function Page({ title, subtitle, action, children }) {
   return (
-    <div style={{ padding:'clamp(16px,3vw,28px)', width:'100%', boxSizing:'border-box' }}>
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom: subtitle ? 12 : 20 }}>
-        <div>
-          <h1 style={{ fontSize:'1.7rem', color:'var(--heading)', margin:0 }}>{title}</h1>
-          {subtitle && <p style={{ margin:'4px 0 0', color:'var(--text-muted)', fontSize:13.5 }}>{subtitle}</p>}
+    <div className="ha-page">
+      <div className={'ha-page-head' + (subtitle ? ' has-sub' : '')}>
+        <div className="ha-page-titles">
+          <h1 className="ha-page-title">{title}</h1>
+          {subtitle && <p className="ha-page-sub">{subtitle}</p>}
         </div>
-        {action}
+        {action && <div className="ha-page-action">{action}</div>}
       </div>
       {children}
     </div>
@@ -27,7 +27,7 @@ export function Card({ children, style, clickable, onClick, className, ...rest }
     </div>
   )
 }
-export function Btn({ children, onClick, kind='primary', type='button', disabled, style, title }) {
+export function Btn({ children, onClick, kind='primary', type='button', disabled, style, title, className, ...rest }) {
   const kinds = {
     primary: { background:'var(--accent)', color:'#fff', border:'none' },
     soft:    { background:'var(--bg-alt)', color:'var(--text-2)', border:'1px solid var(--border)' },
@@ -35,7 +35,8 @@ export function Btn({ children, onClick, kind='primary', type='button', disabled
     ok:      { background:'#EAF3DE', color:'#3B6D11', border:'none' },
   }
   return (
-    <button type={type} onClick={onClick} disabled={disabled} title={title}
+    <button type={type} onClick={onClick} disabled={disabled} title={title} {...rest}
+      className={['ha-btn', className].filter(Boolean).join(' ')}
       style={{ padding:'8px 14px', borderRadius:9, fontSize:13.5, fontWeight:600, fontFamily:'inherit', ...kinds[kind], ...style }}>
       {children}
     </button>
@@ -161,7 +162,7 @@ export function AddressFields({ value, set }) {
   const a = value && typeof value === 'object' ? value : {}
   const up = (k, v) => set({ ...a, [k]: v })
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'0 10px' }}>
+    <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'0 10px' }}>
       <F label="Rue" value={a.rue||''} set={v=>up('rue',v)} />
       <F label="Numéro" value={a.numero||''} set={v=>up('numero',v)} />
       <F label="Code postal" value={a.cp||''} set={v=>up('cp',v)} />

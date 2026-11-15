@@ -44,6 +44,16 @@ export function titreMois(d) {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
+export function titreJour(d) {
+  const t = d.toLocaleDateString('fr-BE', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
+export function grilleJour(anchor) {
+  const a = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
+  return { debut: iso(a), fin: iso(a), weeks: [startOfWeek(a)], day: a }
+}
+
 export function titreSemaine(d) {
   const a = startOfWeek(d)
   const b = addDays(a, 6)

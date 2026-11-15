@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { isNativeApp } from '@/native'
 
 const SwUpdateContext = createContext(null)
 
@@ -32,6 +33,9 @@ export function SwUpdateProvider({ children }) {
   }
 
   useEffect(() => {
+    // L'application Android / iOS charge ses fichiers dans l'app. Le service
+    // worker du site garderait une vieille version et casserait la navigation.
+    if (isNativeApp()) return
     if (!('serviceWorker' in navigator)) return
     let cancelled = false
     let interval

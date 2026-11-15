@@ -32,9 +32,9 @@ export default function Inscription() {
   }
 
   return (
-    <div style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
-      <div style={{ width:'100%', maxWidth:400, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'28px 26px' }}>
-        <Logo size={140} style={{ margin:'0 auto 8px' }} />
+    <div className="ha-auth" style={{ display:'grid', placeItems:'center', minHeight:'100vh', padding:20, background:'var(--bg)' }}>
+      <div className="ha-auth-card" style={{ width:'100%', maxWidth:400, background:'var(--card)', border:'1px solid var(--border)', borderRadius:18, padding:'28px 26px' }}>
+        <Logo size={140} className="ha-auth-logo" style={{ margin:'0 auto 8px' }} />
         <p style={{ textAlign:'center', color:'var(--text-muted)', fontSize:13.5, margin:'4px 0 18px' }}>Créer mon compte avec un code d'invitation</p>
         <form onSubmit={submit} style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <div>
@@ -54,7 +54,7 @@ export default function Inscription() {
             <input type="password" value={p2} onChange={e=>setP2(e.target.value)} autoComplete="new-password" required style={inp} />
           </div>
           {err && <div className="ha-flash ha-flash-err" style={{ marginBottom:0 }}>{err}</div>}
-          <button type="submit" disabled={busy} style={{ padding:12, background:'var(--accent)', color:'#fff', border:'none', borderRadius:10, fontSize:14, fontWeight:600 }}>{busy?'Création…':'Créer mon compte'}</button>
+          <button type="submit" disabled={busy} style={{ padding:12, background:'var(--accent)', color:'#fff', border:'none', borderRadius:10, fontSize:16, fontWeight:600, minHeight:48 }}>{busy?'Création…':'Créer mon compte'}</button>
           <Link to="/login" style={{ textAlign:'center', fontSize:13, color:'var(--text-muted)' }}>← Retour à la connexion</Link>
         </form>
         <div style={{ textAlign:'center', fontSize:10.5, color:'var(--text-faint)', marginTop:16 }}>{COPYRIGHT}</div>

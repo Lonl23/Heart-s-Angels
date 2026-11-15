@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding:'clamp(16px,3vw,28px)', width:'100%', boxSizing:'border-box' }}>
-      <h1 style={{ fontSize:'1.9rem', color:'var(--heading)', marginBottom:4 }}>Bonjour {profile?.prenom || ''}</h1>
+      <h1 className="ha-hello" style={{ fontSize:'1.9rem', color:'var(--heading)', marginBottom:4 }}>Bonjour {profile?.prenom || ''}</h1>
       <p style={{ color:'var(--text-muted)', marginBottom:22, textTransform:'capitalize' }}>{date}</p>
 
       {missions === null ? <Loading /> : aVenir.length > 0 && (
@@ -61,7 +61,7 @@ export default function Dashboard() {
       )}
 
       <div style={{ fontSize:13, fontWeight:700, color:'var(--heading)', marginBottom:10 }}>Accès rapides</div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:14 }}>
+      <div className="ha-dash-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:14 }}>
         {cartes.map(c => (
           <Link key={c.to} to={c.to} className="ha-click" style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:14, padding:'18px 16px', textDecoration:'none', display:'block' }}>
             <div style={{ fontSize:'1.8rem', marginBottom:8 }}>{c.icon}</div>

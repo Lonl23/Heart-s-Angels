@@ -4,8 +4,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, Sel, Empty } from '@/components/ui'
 import { libelleQualsImplicites, teinteDispo, rolesRequisEffectifs, phraseIlManque, couvertureMission, rolesManquantsMultiset, qualsImplicites } from '@/modules/fiche/ficheSchema'
 import {
-  iso, addDays, todayISO, JOURS,
-  titreMois, titreSemaine, grilleMois, grilleSemaine, packLanes, hhmm,
+  iso, addDays, todayISO, JOURS, daysInclusive, startOfWeek,
+  titreMois, titreSemaine, titreJour, grilleMois, grilleSemaine, grilleJour, packLanes, hhmm,
   estHoraire, plageCalendrier, packTimedDay, PX_HEURE,
 } from './disponibilites/dates'
 
@@ -39,7 +39,10 @@ export default function Disponibilites() {
   const voirTous = peutVoirToutesDispos()
   const gerer = peutGererDispos()
   const nonMed = estVolontaireNonMedical()
-  const [vue, setVue] = useState(() => sessionStorage.getItem('dispo-vue') || 'mois')
+  const [vue, setVue] = useState(() => {
+    const phone0 = window.matchMedia('(max-width:899px)').matches
+    return sessionStorage.getItem(phone0 ? 'dispo-vue-phone' : 'dispo-vue') || (phone0 ? 'jour' : 'mois')
+  })
   const [anchor, setAnchor] = useState(() => new Date())
   const [missions, setMissions] = useState([])
   const [dispos, setDispos] = useState([])
@@ -47,9 +50,9 @@ export default function Disponibilites() {
   const [form, setForm] = useState(null)
   const [err, setErr] = useState(null)
 
-  const grille = useMemo(() => vue === 'semaine' ? grilleSemaine(anchor) : grilleMois(anchor), [vue, anchor])
+  const grille = useMemo(() => vue === 'jour' ? grilleJour(anchor) : vue === 'semaine' ? grilleSemaine(anchor) : grilleMois(anchor), [vue, anchor])
 
-  useEffect(() => { sessionStorage.setItem('dispo-vue', vue) }, [vue])
+  useEffect(() => { sessionStorage.setItem(window.matchMedia('(max-width:899px)').matches ? 'dispo-vue-phone' : 'dispo-vue', vue) }, [vue])
   useEffect(() => { charger() }, [grille.debut, grille.fin, profile?.id, voirTous])
   useEffect(() => {
     if (!gerer) { setEquipe([]); return }
@@ -101,7 +104,11 @@ export default function Disponibilites() {
   }
 
   function aller(delta) {
-    setAnchor(a => vue === 'semaine' ? addDays(a, delta * 7) : new Date(a.getFullYear(), a.getMonth() + delta, 1))
+    setAnchor(a => {
+      if (vue === 'jour') return addDays(a, delta)
+      if (vue === 'semaine') return addDays(a, delta * 7)
+      return new Date(a.getFullYear(), a.getMonth() + delta, 1)
+    })
   }
   function clicJour(day) {
     setForm({
@@ -132,18 +139,19 @@ export default function Disponibilites() {
 
   return (
     <Page title="Disponibilités" subtitle={sousTitre}
-      action={<Btn onClick={() => clicJour(new Date())}>{gerer ? '+ Disponibilité' : '+ Me rendre disponible'}</Btn>}>
+      action={<Btn onClick={() => clicJour(vue === 'jour' ? anchor : new Date())}>{gerer ? '+ Disponibilité' : '+ Me rendre disponible'}</Btn>}>
 
       <div className="ha-cal-toolbar">
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-          <Btn kind="soft" onClick={() => aller(-1)}>←</Btn>
+          <Btn kind="soft" onClick={() => aller(-1)} aria-label="Période précédente">←</Btn>
           <Btn kind="soft" onClick={() => setAnchor(new Date())}>Aujourd’hui</Btn>
-          <Btn kind="soft" onClick={() => aller(1)}>→</Btn>
+          <Btn kind="soft" onClick={() => aller(1)} aria-label="Période suivante">→</Btn>
         </div>
-        <div className="ha-cal-titre">{vue === 'semaine' ? titreSemaine(anchor) : titreMois(anchor)}</div>
-        <div style={{ display:'flex', gap:6 }}>
-          <button type="button" className={'ha-tab-like' + (vue==='semaine' ? ' is-on' : '')} onClick={() => setVue('semaine')}>Semaine</button>
-          <button type="button" className={'ha-tab-like' + (vue==='mois' ? ' is-on' : '')} onClick={() => setVue('mois')}>Mois</button>
+        <div className="ha-cal-titre">{vue === 'jour' ? titreJour(anchor) : vue === 'semaine' ? titreSemaine(anchor) : titreMois(anchor)}</div>
+        <div className="ha-vue-switch" role="tablist" aria-label="Vue du calendrier">
+          {[['jour','Jour'],['semaine','Semaine'],['mois','Mois']].map(([v, l]) => (
+            <button key={v} type="button" role="tab" aria-selected={vue===v} className={'ha-tab-like' + (vue===v ? ' is-on' : '')} onClick={() => setVue(v)}>{l}</button>
+          ))}
         </div>
       </div>
 
@@ -164,7 +172,10 @@ export default function Disponibilites() {
       </div>
 
       <div className="ha-cal-scroll">
-        {vue === 'semaine' ? (
+        {vue === 'jour' ? (
+          <JourAgenda anchor={anchor} setAnchor={setAnchor} missions={missions} dispos={dispos}
+            moi={profile?.id} gerer={gerer} onDispo={clicDispo} onSuppr={supprimer} />
+        ) : vue === 'semaine' ? (
           <SemaineHoraire weekStart={grille.weeks[0]} today={today}
             missions={missions} dispos={dispos} moi={profile?.id}
             gerer={gerer}
@@ -184,7 +195,7 @@ export default function Disponibilites() {
         )}
       </div>
 
-      {missions.length === 0 && dispos.length === 0 && !form && (
+      {vue !== 'jour' && missions.length === 0 && dispos.length === 0 && !form && (
         <Empty title="Rien sur cette période" hint="Ajoutez vos jours de disponibilité. Les missions (lieu ou activité, sans nom de patient) s’afficheront ici." />
       )}
     </Page>
@@ -219,6 +230,78 @@ function ChipDispo({ it, moi, gerer, onDispo, onSuppr }) {
       onContextMenu={e => { if (editable) { e.preventDefault(); onSuppr(it.ev) } }}>
       {label}
     </button>
+  )
+}
+
+function couvre(debut, fin, day) {
+  if (!debut) return false
+  return debut.slice(0, 10) <= day && (fin || debut).slice(0, 10) >= day
+}
+
+function JourAgenda({ anchor, setAnchor, missions, dispos, moi, gerer, onDispo, onSuppr }) {
+  const day = iso(anchor)
+  const week = startOfWeek(anchor)
+  const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(week, i))
+  const today = todayISO()
+  const miss = missions.filter(m => couvre(m.date_debut, m.date_fin, day))
+  const dis = dispos.filter(d => couvre(d.date_debut, d.date_fin, day))
+
+  return (
+    <div>
+      <div className="ha-jour-strip" aria-label="Jours de la semaine">
+        {days.map((d, i) => {
+          const id = iso(d)
+          const on = id === day
+          return (
+            <button key={id} type="button"
+              className={'ha-jour-btn' + (i >= 5 ? ' is-we' : '') + (id === today ? ' is-today' : '') + (on ? ' is-on' : '')}
+              aria-pressed={on}
+              onClick={() => setAnchor(d)}>
+              <span className="dow">{JOURS[i].replace('.', '')}</span>
+              <span className="num">{d.getDate()}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="ha-jour-block">
+        <div className="ha-jour-kicker">Missions</div>
+        {miss.length === 0 && <Empty title="Aucune mission ce jour" hint="Le lieu ou l’activité s’affiche ici, sans nom de patient." />}
+        {miss.map(m => {
+          const total = daysInclusive(m.date_debut, m.date_fin || m.date_debut)
+          const j0 = daysInclusive(m.date_debut, day)
+          const txt = libelleMission({ ev: m, total, j0, j1: j0 })
+          const ok = couverture(m) === 'ok'
+          return (
+            <div key={m.souhait_id} className="ha-jour-card" style={{ borderColor: ok ? '#9BB800' : '#C62828' }}>
+              <strong>{ok ? 'Mission complète' : 'Mission incomplète'}</strong>
+              <span>{txt}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="ha-jour-block">
+        <div className="ha-jour-kicker">Disponibilités</div>
+        {dis.length === 0 && <Empty title="Aucune disponibilité ce jour" hint="Le bouton en haut enregistre la journée entière, de minuit à minuit." />}
+        {dis.map(d => {
+          const mine = d.user_id === moi
+          const editable = mine || gerer
+          const p = d.profiles
+          const quals = libelleQualsImplicites(p?.role, p?.fiche)
+          const nom = mine ? 'Moi' : `${p?.prenom || ''} ${p?.nom || ''}`.trim()
+          const label = quals ? `${nom} · ${quals}` : nom
+          return (
+            <button key={d.id} type="button" className="ha-jour-card"
+              onClick={() => editable && onDispo(d)}
+              onContextMenu={e => { if (editable) { e.preventDefault(); onSuppr(d) } }}>
+              <strong>{label}</strong>
+              <span>{d.commentaire || 'Journée entière, de minuit à minuit'}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -430,7 +513,7 @@ function FormDispo({ form, setForm, profile, equipe, gerer, onDone }) {
           options={[{ v:'', l:'— Choisir —' }, ...equipe.map(p => ({ v:p.id, l:`${p.prenom} ${p.nom}` }))]} />
       )}
       {quals && <div style={{ fontSize:13, color:'var(--text-2)', margin:'0 0 10px' }}>Rôle pour les missions : <strong>{quals}</strong></div>}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+      <div className="ha-split" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
         <F label="Du" type="date" value={form.date_debut} set={v => set('date_debut', v)} required />
         <F label="Au" type="date" value={form.date_fin || form.date_debut} set={v => set('date_fin', v)} />
       </div>

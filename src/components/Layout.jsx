@@ -6,14 +6,16 @@ import { Logo } from '@/components/ui'
 import { COPYRIGHT } from '@/copyright'
 
 const NAV = [
-  { to:'/app',               label:'Tableau de bord', icon:'🏠', end:true, key:'dashboard' },
-  { to:'/app/souhaits',      label:'Souhaits',        icon:'⭐', key:'souhaits' },
-  { to:'/app/missions',      label:'Mes missions',    icon:'🚑', key:'missions' },
-  { to:'/app/defraiements',  label:'Défraiements',    icon:'🧾', key:'defraiements' },
-  { to:'/app/disponibilites',label:'Disponibilités',  icon:'📅', key:'disponibilites' },
-  { to:'/app/stock',         label:'Stock',           icon:'📦', key:'stock' },
-  { to:'/app/annuaire',      label:'Annuaire',        icon:'📇', key:'annuaire' },
+  { to:'/app',               label:'Tableau de bord', short:'Accueil', icon:'🏠', end:true, key:'dashboard' },
+  { to:'/app/souhaits',      label:'Souhaits',        short:'Souhaits', icon:'⭐', key:'souhaits' },
+  { to:'/app/missions',      label:'Mes missions',    short:'Missions', icon:'🚑', key:'missions' },
+  { to:'/app/defraiements',  label:'Défraiements',    short:'Frais', icon:'🧾', key:'defraiements' },
+  { to:'/app/disponibilites',label:'Disponibilités',  short:'Agenda', icon:'📅', key:'disponibilites' },
+  { to:'/app/stock',         label:'Stock',           short:'Stock', icon:'📦', key:'stock' },
+  { to:'/app/annuaire',      label:'Annuaire',        short:'Annuaire', icon:'📇', key:'annuaire' },
 ]
+
+const PRIMARY_KEYS = ['dashboard', 'souhaits', 'missions', 'disponibilites']
 
 const PAGE_TITLE = [
   ['/app/souhaits', 'Souhaits'],
@@ -27,8 +29,23 @@ const PAGE_TITLE = [
   ['/app', 'Tableau de bord'],
 ]
 
+const SECTIONS = [
+  '/app/souhaits',
+  '/app/missions',
+  '/app/defraiements',
+  '/app/disponibilites',
+  '/app/stock',
+  '/app/annuaire',
+  '/app/admin',
+  '/app/profil',
+]
+
 function pageTitle(path) {
   return (PAGE_TITLE.find(([p]) => path === p || (p !== '/app' && path.startsWith(p))) || [])[1] || 'Espace interne'
+}
+
+function sectionHome(path) {
+  return SECTIONS.find(p => path === p || path.startsWith(p + '/')) || '/app'
 }
 
 function toggleTheme() {
@@ -44,17 +61,23 @@ export default function Layout() {
   const nav = useNavigate()
   const loc = useLocation()
   const [collapsed, setCollapsed] = useState(localStorage.getItem('nav_collapsed') === '1')
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [sheet, setSheet] = useState(false)
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width:900px)').matches)
   const [dark, setDark] = useState(() => (document.documentElement.getAttribute('data-theme') || 'light') === 'dark')
 
   useEffect(() => {
     const m = window.matchMedia('(min-width:900px)')
-    const h = e => { setIsDesktop(e.matches); if (e.matches) setMobileOpen(false) }
+    const h = e => { setIsDesktop(e.matches); if (e.matches) setSheet(false) }
     m.addEventListener('change', h)
     return () => m.removeEventListener('change', h)
   }, [])
-  useEffect(() => { setMobileOpen(false) }, [loc.pathname])
+  useEffect(() => { setSheet(false) }, [loc.pathname])
+  useEffect(() => {
+    if (!sheet) return
+    function onKey(e) { if (e.key === 'Escape') setSheet(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [sheet])
 
   function toggleCollapse() { const v = !collapsed; setCollapsed(v); localStorage.setItem('nav_collapsed', v ? '1' : '0') }
   function onTheme() { toggleTheme(); setDark(d => !d) }
@@ -64,73 +87,117 @@ export default function Layout() {
     if (n.key === 'missions') return true
     if (n.key === 'stock') return canAccess(n.key) && peutGererStock()
     return canAccess(n.key)
-  }), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', icon:'⚙️' }] : [])]
+  }), ...(can('admin') ? [{ to:'/app/admin', label:'Administration', short:'Admin', icon:'⚙️', key:'admin' }] : [])]
+
+  const primary = items.filter(n => PRIMARY_KEYS.includes(n.key))
+  const home = sectionHome(loc.pathname)
+  const atRoot = loc.pathname === home
+  const tabBar = !isDesktop && atRoot
+  const primaryOn = primary.some(n => n.end ? loc.pathname === n.to : (loc.pathname === n.to || loc.pathname.startsWith(n.to + '/')))
   const collapsedEff = isDesktop && collapsed
   const W = collapsedEff ? 66 : 250
 
   return (
-    <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
-      <aside className="ha-sidebar" style={{
-        width: W, flexShrink:0, zIndex:60, background:'var(--surface)',
-        borderRight:'1px solid var(--border)', display:'flex', flexDirection:'column',
-        padding:'14px 10px', overflow:'hidden', transition:'width .18s, transform .2s',
-        transform: mobileOpen ? 'translateX(0)' : undefined,
-      }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent: collapsedEff ? 'center' : 'space-between', flexDirection: collapsedEff ? 'column' : 'row', gap:8, padding:'2px 6px 14px' }}>
-          <Logo size={collapsedEff ? 36 : 56} />
-          <button onClick={toggleCollapse} title={collapsed?'Déplier le menu':'Replier le menu'} className="ha-collapse-btn" style={iconBtn}>{collapsedEff ? '»' : '«'}</button>
-        </div>
+    <div className={'ha-shell' + (tabBar ? ' has-tabs' : '')}>
+      {isDesktop && (
+        <aside className="ha-sidebar" style={{
+          width: W, flexShrink:0, zIndex:60, background:'var(--surface)',
+          borderRight:'1px solid var(--border)', display:'flex', flexDirection:'column',
+          padding:'14px 10px', overflow:'hidden', transition:'width .18s',
+        }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent: collapsedEff ? 'center' : 'space-between', flexDirection: collapsedEff ? 'column' : 'row', gap:8, padding:'2px 6px 14px' }}>
+            <Logo size={collapsedEff ? 36 : 56} />
+            <button onClick={toggleCollapse} title={collapsed?'Déplier le menu':'Replier le menu'} className="ha-collapse-btn" style={iconBtn}>{collapsedEff ? '»' : '«'}</button>
+          </div>
 
-        <nav style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflowY:'auto', minHeight:0 }}>
-          {items.map(n => (
-            <NavLink key={n.to} to={n.to} end={n.end} onClick={()=>setMobileOpen(false)} title={n.label}
-              className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
-              style={({isActive}) => ({ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:10, textDecoration:'none', fontSize:14, fontWeight:isActive?600:500, color:isActive?'#fff':'var(--text-2)', background:isActive?'var(--accent)':'transparent', whiteSpace:'nowrap', justifyContent: collapsedEff?'center':'flex-start' })}>
-              <span style={{ fontSize:16 }}>{n.icon}</span>{!collapsedEff && n.label}
+          <nav style={{ display:'flex', flexDirection:'column', gap:4, flex:1, overflowY:'auto', minHeight:0 }} aria-label="Sections">
+            {items.map(n => (
+              <NavLink key={n.to} to={n.to} end={n.end} title={n.label}
+                className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
+                style={({isActive}) => ({ display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:10, textDecoration:'none', fontSize:14, fontWeight:isActive?600:500, color:isActive?'#fff':'var(--text-2)', background:isActive?'var(--accent)':'transparent', whiteSpace:'nowrap', justifyContent: collapsedEff?'center':'flex-start' })}>
+                <span style={{ fontSize:16 }}>{n.icon}</span>{!collapsedEff && n.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div style={{ borderTop:'1px solid var(--border)', paddingTop:10, marginTop:8 }}>
+            <NavLink to="/app/profil" title="Ma fiche"
+              style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 8px 10px', textDecoration:'none', justifyContent: collapsedEff?'center':'flex-start' }}>
+              <Avatar url={profile?.fiche?.photo_url} prenom={profile?.prenom} nom={profile?.nom} />
+              {!collapsedEff && (
+                <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{profile?.prenom} {profile?.nom}<br/><span style={{ color:'var(--accent)', fontWeight:600 }}>Ma fiche ›</span></span>
+              )}
             </NavLink>
-          ))}
-        </nav>
+            <button type="button" onClick={onTheme} title={dark ? 'Passer au thème clair' : 'Passer au thème sombre'} style={rowBtn(collapsedEff)}>{dark ? '☀︎' : '☾'}{!collapsedEff && (dark ? ' Thème clair' : ' Thème sombre')}</button>
+            <button type="button" onClick={checkForUpdate} disabled={checking} title="Rechercher des mises à jour" style={rowBtn(collapsedEff)}>↻{!collapsedEff && (checking ? ' Recherche…' : ' Rechercher des mises à jour')}</button>
+            <button type="button" onClick={handleLogout} title="Déconnexion" style={{ ...rowBtn(collapsedEff), color:'#C8435A' }}>↩︎{!collapsedEff && ' Déconnexion'}</button>
+            {!collapsedEff && <div style={{ fontSize:10, color:'var(--text-faint)', padding:'10px 8px 0', lineHeight:1.4 }}>{COPYRIGHT}</div>}
+          </div>
+        </aside>
+      )}
 
-        <div style={{ borderTop:'1px solid var(--border)', paddingTop:10, marginTop:8 }}>
-          <NavLink to="/app/profil" onClick={()=>setMobileOpen(false)} title="Ma fiche"
-            style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 8px 10px', textDecoration:'none', justifyContent: collapsedEff?'center':'flex-start' }}>
-            <Avatar url={profile?.fiche?.photo_url} prenom={profile?.prenom} nom={profile?.nom} />
-            {!collapsedEff && (
-              <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{profile?.prenom} {profile?.nom}<br/><span style={{ color:'var(--accent)', fontWeight:600 }}>Ma fiche ›</span></span>
-            )}
-          </NavLink>
-          <button type="button" onClick={onTheme} title={dark ? 'Passer au thème clair' : 'Passer au thème sombre'} style={rowBtn(collapsedEff)}>{dark ? '☀︎' : '☾'}{!collapsedEff && (dark ? ' Thème clair' : ' Thème sombre')}</button>
-          <button type="button" onClick={checkForUpdate} disabled={checking} title="Rechercher des mises à jour" style={rowBtn(collapsedEff)}>↻{!collapsedEff && (checking ? ' Recherche…' : ' Rechercher des mises à jour')}</button>
-          <button type="button" onClick={handleLogout} title="Déconnexion" style={{ ...rowBtn(collapsedEff), color:'#C8435A' }}>↩︎{!collapsedEff && ' Déconnexion'}</button>
-          {!collapsedEff && <div style={{ fontSize:10, color:'var(--text-faint)', padding:'10px 8px 0', lineHeight:1.4 }}>{COPYRIGHT}</div>}
-        </div>
-      </aside>
-
-      {mobileOpen && <div onClick={()=>setMobileOpen(false)} className="ha-scrim" style={{ position:'fixed', inset:0, background:'var(--overlay)', zIndex:55 }} />}
-
-      <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', height:'100vh', minHeight:0 }}>
-        <header style={{ position:'sticky', top:0, zIndex:30, display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--surface)', borderBottom:'1px solid var(--border)' }}>
-          <button onClick={()=>setMobileOpen(o=>!o)} className="ha-burger" aria-label="Menu" style={iconBtn}>☰</button>
-          <Logo size={40} className="ha-header-logo" />
-          <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:'1.2rem', color:'var(--heading)', minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pageTitle(loc.pathname)}</div>
+      <div className="ha-maincol">
+        <header className="ha-topbar">
+          {!isDesktop && !atRoot && (
+            <button type="button" className="ha-icon-btn" aria-label="Retour" onClick={() => nav(home)}>←</button>
+          )}
+          {!isDesktop && <Logo size={32} className="ha-header-logo" />}
+          <div className="ha-topbar-title">{pageTitle(loc.pathname)}</div>
+          {!isDesktop && tabBar && (
+            <NavLink to="/app/profil" className="ha-head-avatar" aria-label="Ma fiche">
+              <Avatar url={profile?.fiche?.photo_url} prenom={profile?.prenom} nom={profile?.nom} />
+            </NavLink>
+          )}
+          {!isDesktop && !tabBar && (
+            <button type="button" className="ha-icon-btn" aria-label="Ouvrir les sections" onClick={() => setSheet(true)}>☰</button>
+          )}
         </header>
-        <main style={{ flex:1, minWidth:0, width:'100%', overflowX:'hidden', overflowY:'auto', minHeight:0 }}><Outlet /></main>
+        <main><Outlet /></main>
+        {tabBar && (
+          <nav className="ha-tabbar" aria-label="Navigation principale">
+            {primary.map(n => (
+              <NavLink key={n.to} to={n.to} end={n.end}
+                className={({isActive}) => isActive ? 'is-active' : undefined}>
+                <span className="ha-tab-ico" aria-hidden="true">{n.icon}</span>
+                {n.short}
+              </NavLink>
+            ))}
+            <button type="button" className={!primaryOn ? 'is-on' : undefined} aria-expanded={sheet} aria-label="Plus de sections" onClick={() => setSheet(true)}>
+              <span className="ha-tab-ico" aria-hidden="true">☰</span>
+              Plus
+            </button>
+          </nav>
+        )}
       </div>
 
-      <style>{`
-        @media (max-width: 899px) {
-          .ha-sidebar {
-            position: fixed; top:0; left:0; height:100vh; width: min(250px, 82vw) !important;
-            transform: translateX(-100%);
-          }
-          .ha-collapse-btn { display:none !important; }
-          .ha-header-logo { display:block; }
-        }
-        @media (min-width: 900px) {
-          .ha-sidebar { position: relative; height:100vh; transform:none !important; }
-          .ha-burger, .ha-scrim, .ha-header-logo { display:none !important; }
-        }
-      `}</style>
+      {!isDesktop && sheet && (
+        <div className="ha-sheet-scrim" onClick={() => setSheet(false)}>
+          <div className="ha-sheet" role="dialog" aria-modal="true" aria-label="Sections" onClick={e => e.stopPropagation()}>
+            <div className="ha-sheet-handle" />
+            <div className="ha-sheet-head">
+              <div>
+                <div className="ha-sheet-who">{profile?.prenom} {profile?.nom}</div>
+                <div className="ha-sheet-sub">Mêmes espaces que sur ordinateur</div>
+              </div>
+              <button type="button" className="ha-icon-btn" aria-label="Fermer" onClick={() => setSheet(false)}>✕</button>
+            </div>
+            <nav className="ha-sheet-nav" aria-label="Toutes les sections">
+              {items.map(n => (
+                <NavLink key={n.to} to={n.to} end={n.end} onClick={() => setSheet(false)}>
+                  <span aria-hidden="true">{n.icon}</span>{n.label}
+                </NavLink>
+              ))}
+              <NavLink to="/app/profil" onClick={() => setSheet(false)}><span aria-hidden="true">👤</span>Ma fiche</NavLink>
+            </nav>
+            <div className="ha-sheet-account">
+              <button type="button" className="ha-sheet-row" onClick={onTheme}>{dark ? '☀︎ Thème clair' : '☾ Thème sombre'}</button>
+              <button type="button" className="ha-sheet-row" onClick={checkForUpdate} disabled={checking}>{checking ? 'Recherche…' : '↻ Rechercher des mises à jour'}</button>
+              <button type="button" className="ha-sheet-row ha-sheet-out" onClick={handleLogout}>↩︎ Déconnexion</button>
+            </div>
+            <div className="ha-sheet-copy">{COPYRIGHT}</div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -138,8 +205,8 @@ export default function Layout() {
 function Avatar({ url, prenom, nom }) {
   const initiales = `${(prenom||'').charAt(0)}${(nom||'').charAt(0)}`.toUpperCase()
   return (
-    <div style={{ width:34, height:34, borderRadius:99, overflow:'hidden', flexShrink:0, background:'var(--accent)', color:'#fff', display:'grid', placeItems:'center', fontSize:13, fontWeight:700 }}>
-      {url ? <img src={url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : (initiales || '?')}
+    <div className="ha-avatar">
+      {url ? <img src={url} alt="" /> : (initiales || '?')}
     </div>
   )
 }

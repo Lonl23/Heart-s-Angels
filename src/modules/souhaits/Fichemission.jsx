@@ -50,7 +50,7 @@ export default function FicheMission({ souhaitId, onClose }) {
 
   return (
     <div style={{ background:'var(--bg)', minHeight:'100vh' }}>
-      <div className="no-print" style={{ display:'flex', gap:10, padding:'14px 16px', position:'sticky', top:0, background:'var(--surface)', borderBottom:'1px solid var(--border)', zIndex:5 }}>
+      <div className="no-print ha-fiche-bar" style={{ display:'flex', gap:10, padding:'14px 16px', position:'sticky', top:0, background:'var(--surface)', borderBottom:'1px solid var(--border)', zIndex:5, flexWrap:'wrap' }}>
         <Btn kind="soft" onClick={onClose}>← Retour</Btn>
         <Btn onClick={imprimer}>🖨 Imprimer / PDF (A4 recto-verso)</Btn>
         <span style={{ alignSelf:'center', fontSize:12.5, color:'var(--text-muted)' }}>{fiches.length} fiche{fiches.length>1?'s':''} · une par vecteur</span>
@@ -236,6 +236,11 @@ const styles = `
   .fiche { color:#243033; }
   .fiche-block { }
   .page { position:relative; background:#fff; color:#243033; width:210mm; min-height:297mm; margin:16px auto; padding:14mm; border:1px solid #E3EBEC; border-radius:8px; font-family:'Karla','Helvetica Neue',Arial,sans-serif; font-size:11.5px; overflow:hidden; }
+  @media screen and (max-width: 899px) {
+    .fiche { overflow-x:auto; }
+    .page { width:auto; max-width:100%; min-height:0; margin:10px 8px; padding:14px; box-sizing:border-box; }
+    .cl-wrap { width:100%; display:block; padding-right:0; }
+  }
   .page > .content { position:relative; z-index:1; }
   .wm { position:absolute; inset:0; z-index:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
   .wm span { transform:rotate(-45deg); font-size:58px; font-weight:800; letter-spacing:8px; white-space:pre; text-align:center; line-height:1.35; }

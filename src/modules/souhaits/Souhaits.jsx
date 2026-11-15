@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import { usePhone } from '@/hooks/usePhone'
 import { Page, Card, Btn, Pill, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
@@ -78,6 +79,8 @@ export default function Souhaits() {
 }
 
 function Kanban({ onOpen }) {
+  const phone = usePhone()
+  const [colVue, setColVue] = useState('nouveau')
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
@@ -173,12 +176,14 @@ function Kanban({ onOpen }) {
     : items
   const autres = filtered.filter(s => !PIPELINE.includes(s.statut))
   const ghost = drag && items.find(s => s.id === drag.id)
+  const colonnes = phone ? [colVue] : PIPELINE
+  const compte = col => col === 'non_realise' ? autres.length : filtered.filter(s => s.statut === col).length
 
   return (
     <div>
       <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:12, marginBottom:14 }}>
         <input className="ha-search" value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un bénéficiaire, un lieu…" />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>Nouveau → En attente → Prêt : préparation. En cours / Réalisé : le terrain (Mes missions).</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)' }}>{phone ? 'Choisissez une colonne, puis le statut sur la carte. Un appui ouvre le dossier.' : 'Nouveau → En attente → Prêt : préparation. En cours / Réalisé : le terrain (Mes missions).'}</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -197,31 +202,50 @@ function Kanban({ onOpen }) {
       {items.length > 0 && filtered.length === 0 && (
         <Empty title="Aucun résultat" hint="Essayez un autre mot, ou effacez la recherche." />
       )}
-      {filtered.length > 0 && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(min(100%,230px),1fr))', gap:12 }}>
-          {PIPELINE.map(col => {
+      {phone && filtered.length > 0 && (
+        <div className="ha-col-switch" role="tablist" aria-label="Colonnes des souhaits">
+          {[...PIPELINE, 'non_realise'].map(col => {
             const st = stInfo(col)
-            const list = filtered.filter(s => s.statut === col)
+            const on = colVue === col
+            return (
+              <button key={col} type="button" role="tab" aria-selected={on}
+                className={'ha-col-chip' + (on ? ' is-on' : '')}
+                style={on ? { background: st.c } : { color: st.c, borderColor: st.c + '66' }}
+                onClick={() => setColVue(col)}>
+                {st.l} · {compte(col)}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {filtered.length > 0 && (
+        <div style={{ display:'grid', gridTemplateColumns: phone ? '1fr' : 'repeat(auto-fill,minmax(min(100%,230px),1fr))', gap:12 }}>
+          {colonnes.map(col => {
+            const st = stInfo(col)
+            const list = col === 'non_realise' ? autres : filtered.filter(s => s.statut === col)
             return (
               <div key={col} data-col={col} style={{ minWidth:0 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                  <span style={{ width:10, height:10, borderRadius:99, background:st.c }} />
-                  <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5 }}>{st.l}</span>
-                  <span style={{ fontSize:12, color:'var(--text-muted)' }}>{list.length}</span>
-                </div>
+                {!phone && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                    <span style={{ width:10, height:10, borderRadius:99, background:st.c }} />
+                    <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5 }}>{st.l}</span>
+                    <span style={{ fontSize:12, color:'var(--text-muted)' }}>{list.length}</span>
+                  </div>
+                )}
                 <div className={'ha-kanban-drop' + (over===col ? ' is-over' : '')}>
                   {list.map(s => (
-                    <CarteSouhait key={s.id} s={s} dragging={drag?.id===s.id}
+                    <CarteSouhait key={s.id} s={s} phone={phone} dragging={drag?.id===s.id}
+                      onOpen={() => onOpen(s.id)} onStatut={v => deposer(s.id, v)}
                       onPointerDown={e=>onPointerDown(e,s)} onPointerMove={onPointerMove} onPointerUp={e=>onPointerUp(e,s)} />
                   ))}
-                  {list.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>Déposez ici</div>}
+                  {list.length === 0 && <div style={{ fontSize:12.5, color:'var(--text-faint)', padding:'10px 6px' }}>{phone ? 'Aucun souhait dans cette colonne' : 'Déposez ici'}</div>}
                 </div>
               </div>
             )
           })}
         </div>
       )}
-      {filtered.length > 0 && (
+      {!phone && filtered.length > 0 && (
         <div data-col="non_realise" style={{ marginTop:16 }}>
           <div style={{ fontSize:13, fontWeight:600, color:'var(--text-muted)', marginBottom:8 }}>Non réalisés</div>
           <div className={'ha-kanban-drop' + (over==='non_realise' ? ' is-over' : '')} style={{ minHeight: autres.length ? 48 : 72 }}>
@@ -242,11 +266,15 @@ function Kanban({ onOpen }) {
   )
 }
 
-function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp }) {
+function CarteSouhait({ s, phone, dragging, onOpen, onStatut, onPointerDown, onPointerMove, onPointerUp }) {
   return (
     <Card clickable className={'ha-kanban-card' + (dragging ? ' is-origin' : '')} style={{ padding:'12px 14px' }}
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-      title="Glisser pour changer le statut, cliquer pour ouvrir">
+      onClick={phone ? () => onOpen() : undefined}
+      onPointerDown={phone ? undefined : onPointerDown}
+      onPointerMove={phone ? undefined : onPointerMove}
+      onPointerUp={phone ? undefined : onPointerUp}
+      onPointerCancel={phone ? undefined : onPointerUp}
+      title={phone ? 'Ouvrir le dossier' : 'Glisser pour changer le statut, cliquer pour ouvrir'}>
       <div style={{ display:'flex', justifyContent:'space-between', gap:6, marginBottom:5 }}>
         <span style={{ fontWeight:600, color:'var(--text)', fontSize:13.5 }}>{s.beneficiaire_prenom} {s.beneficiaire_nom}</span>
         {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
@@ -257,6 +285,14 @@ function CarteSouhait({ s, dragging, onPointerDown, onPointerMove, onPointerUp }
         <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
           {ATTENTE_RAISONS.filter(r=>s.mission.attente[r.v]).map(r=><span key={r.v} style={{ fontSize:10.5, background:'#FAEEDA', color:'#BA7517', borderRadius:6, padding:'1px 6px', fontWeight:600 }}>{r.l}</span>)}
         </div>
+      )}
+      {phone && (
+        <label className="ha-statut-pick" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+          <span>Changer le statut</span>
+          <select value={PIPELINE.includes(s.statut) ? s.statut : 'non_realise'} onChange={e => onStatut(e.target.value)}>
+            {[...PIPELINE, 'non_realise'].map(k => <option key={k} value={k}>{STATUTS[k].l}</option>)}
+          </select>
+        </label>
       )}
     </Card>
   )
