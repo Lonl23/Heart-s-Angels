@@ -14,6 +14,12 @@ const STATUTS = {
   resolu: { l: 'Résolu', c: '#0F6E56', bg: '#E1F5EE' },
   ferme: { l: 'Fermé', c: '#7A7470', bg: '#F0EFED' },
 }
+/** Statuts que l’IT peut choisir (fermé = auto après 48 h en résolu). */
+const STATUTS_IT = ['ouvert', 'en_cours', 'resolu']
+
+function dossierFerme(t) {
+  return t?.statut === 'ferme'
+}
 
 function refTicket(t) {
   const prefix = t.type === 'suggestion' ? 'S' : 'B'
@@ -176,7 +182,15 @@ function MesDemandes() {
     if (error) setErr(error.message)
     else setTickets(Array.isArray(data) ? data : [])
   }
-  useEffect(() => { charger() }, [])
+  useEffect(() => {
+    charger()
+    const ch = supabase
+      .channel('ha-helpdesk-moi')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'helpdesk_tickets' }, () => { charger() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'helpdesk_suivi' }, () => { charger() })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   async function envoyer(e) {
     e.preventDefault()
@@ -278,10 +292,14 @@ function MesDemandes() {
               </div>
             ))}
           </div>
-          <form onSubmit={repondre}>
-            <TA label="Ajouter un message" value={reponse} set={setReponse} rows={3} />
-            <Btn type="submit" disabled={busy}>Envoyer</Btn>
-          </form>
+          {dossierFerme(courant) ? (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Dossier fermé — plus de message possible.</p>
+          ) : (
+            <form onSubmit={repondre}>
+              <TA label="Ajouter un message" value={reponse} set={setReponse} rows={3} />
+              <Btn type="submit" disabled={busy}>Envoyer</Btn>
+            </form>
+          )}
         </Card>
       )}
     </div>
@@ -303,10 +321,19 @@ function FileInformatique() {
     if (error || data?.ok === false) setErr(error?.message || data?.error || 'File inaccessible.')
     else setFile(data)
   }
-  useEffect(() => { charger() }, [])
+  useEffect(() => {
+    charger()
+    const ch = supabase
+      .channel('ha-helpdesk-it')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'helpdesk_tickets' }, () => { charger() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'helpdesk_suivi' }, () => { charger() })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   const tickets = (file?.tickets || []).filter(t => t.type === type)
   const courant = tickets.find(t => t.id === ouvert) || (file?.tickets || []).find(t => t.id === ouvert) || null
+  const ferme = dossierFerme(courant)
 
   function basculer(id) {
     setCoches(xs => xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id])
@@ -333,6 +360,7 @@ function FileInformatique() {
 
   async function noter(e, interne) {
     e.preventDefault()
+    if (ferme) { alert('Dossier fermé — plus de note possible.'); return }
     const texte = interne ? noteInterne : notePublique
     setBusy(true)
     const { data, error } = await supabase.rpc('helpdesk_note', { p_id: courant.id, p_message: texte, p_interne: interne })
@@ -375,12 +403,21 @@ function FileInformatique() {
       </div>
       {courant && (
         <Card style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <h2 style={{ margin: 0, fontSize: '1.1rem' }}>{refTicket(courant)} · {courant.titre}</h2>
-            <select value={courant.statut} onChange={e => statut(e.target.value)} disabled={busy}>
-              {Object.entries(STATUTS).map(([v, s]) => <option key={v} value={v}>{s.l}</option>)}
-            </select>
+            {ferme ? (
+              <Pastille statut="ferme" />
+            ) : (
+              <select value={courant.statut === 'ferme' ? 'resolu' : courant.statut} onChange={e => statut(e.target.value)} disabled={busy}>
+                {STATUTS_IT.map(v => <option key={v} value={v}>{STATUTS[v].l}</option>)}
+              </select>
+            )}
           </div>
+          {courant.statut === 'resolu' && courant.resolu_le && (
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              Passera en fermé automatiquement 48 h après le passage en résolu ({quand(courant.resolu_le)}).
+            </p>
+          )}
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{courant.auteur_nom}{courant.auteur_email ? ` · ${courant.auteur_email}` : ''}</p>
           <p style={{ whiteSpace: 'pre-wrap' }}>{courant.description}</p>
           <CapturesListe pieces={courant.pieces} />
@@ -403,14 +440,20 @@ function FileInformatique() {
               </div>
             ))}
           </div>
-          <form onSubmit={e => noter(e, false)} style={{ marginBottom: 10 }}>
-            <TA label="Réponse visible par l’auteur" value={notePublique} set={setNotePublique} rows={3} />
-            <Btn type="submit" disabled={busy}>Publier la réponse</Btn>
-          </form>
-          <form onSubmit={e => noter(e, true)}>
-            <TA label="Note interne, invisible pour les auteurs" value={noteInterne} set={setNoteInterne} rows={2} />
-            <Btn kind="soft" type="submit" disabled={busy}>Enregistrer la note</Btn>
-          </form>
+          {ferme ? (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Dossier fermé — plus de note possible.</p>
+          ) : (
+            <>
+              <form onSubmit={e => noter(e, false)} style={{ marginBottom: 10 }}>
+                <TA label="Réponse visible par l’auteur" value={notePublique} set={setNotePublique} rows={3} />
+                <Btn type="submit" disabled={busy}>Publier la réponse</Btn>
+              </form>
+              <form onSubmit={e => noter(e, true)}>
+                <TA label="Note interne, invisible pour les auteurs" value={noteInterne} set={setNoteInterne} rows={2} />
+                <Btn kind="soft" type="submit" disabled={busy}>Enregistrer la note</Btn>
+              </form>
+            </>
+          )}
         </Card>
       )}
     </div>
