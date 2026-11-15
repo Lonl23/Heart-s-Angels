@@ -35,6 +35,7 @@ const Actualites = lazy(() => import('@/modules/actualites/Actualites'))
 const Statistiques = lazy(() => import('@/modules/it/Statistiques'))
 const Helpdesk = lazy(() => import('@/modules/it/Helpdesk'))
 const Personnalisation = lazy(() => import('@/modules/it/Personnalisation'))
+const ModulesMenu = lazy(() => import('@/modules/it/ModulesMenu'))
 const ActivitesSecours = lazy(() => import('@/modules/secours/ActivitesSecours'))
 const FicheActivite = lazy(() => import('@/modules/secours/FicheActivite'))
 const ConventionsDps = lazy(() => import('@/modules/secours/ConventionsDps'))
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="it/actualites" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
           <Route path="it/helpdesk" element={<RequireAcces feature="helpdesk"><Helpdesk /></RequireAcces>} />
           <Route path="it/personnalisation" element={<RequireAcces feature="personnalisation"><Personnalisation /></RequireAcces>} />
+          <Route path="it/onglets" element={<RequireAcces feature="modules_menu"><ModulesMenu /></RequireAcces>} />
           <Route path="it/statistiques" element={<RequireAcces feature="statistiques"><Statistiques /></RequireAcces>} />
           <Route path="statistiques" element={<Navigate to="/app/it/statistiques" replace />} />
           <Route path="evenements/nouveau" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />

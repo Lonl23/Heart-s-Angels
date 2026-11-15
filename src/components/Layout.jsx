@@ -10,7 +10,7 @@ import { syncNativeTheme } from '@/lib/native'
 import { useFondPage } from '@/hooks/useFondPage'
 import { SortieFondu } from '@/components/Fondu'
 import BadgeBeta from '@/components/BadgeBeta'
-import { DEPARTEMENTS, filtrerDepartements, moduleAutorise, cheminActif, cheminDepartement, departementActif, titrePage } from '@/navigation'
+import { DEPARTEMENTS, filtrerDepartements, moduleAutorise, cheminActif, cheminDepartement, departementActif, titrePage, cleMaintenance } from '@/navigation'
 
 function toggleTheme() {
   const cur = document.documentElement.getAttribute('data-theme') || 'light'
@@ -21,7 +21,7 @@ function toggleTheme() {
 
 export default function Layout() {
   const auth = useAuth()
-  const { profile, signOut } = auth
+  const { profile, signOut, peutGererHelpdesk, moduleEnMaintenance } = auth
   const { checkForUpdate, checking } = useSwUpdate()
   const nav = useNavigate()
   const loc = useLocation()
@@ -91,14 +91,23 @@ export default function Layout() {
                 </NavLink>
                 {actif && !collapsedEff && d.modules.length > 0 && (
                   <div className="ha-nav-sub">
-                    {d.modules.map(m => (
-                      <NavLink key={m.key} to={m.to} onClick={()=>setMobileOpen(false)} title={m.label}
-                        className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
-                        style={({isActive}) => itemStyle(isActive, false)}>
-                        <span style={{ fontSize:15 }}>{m.icon}</span>
-                        <span className="ha-nav-label">{m.label}</span>
-                      </NavLink>
-                    ))}
+                    {d.modules.map(m => {
+                      const maj = !!moduleEnMaintenance?.(cleMaintenance(m.key))
+                      return (
+                        <NavLink key={m.key} to={m.to} onClick={()=>setMobileOpen(false)}
+                          title={maj ? `${m.label} — en maintenance` : m.label}
+                          className={({isActive}) => 'ha-nav-item' + (isActive ? ' is-active' : '')}
+                          style={({isActive}) => itemStyle(isActive, false)}>
+                          <span style={{ fontSize:15 }}>{m.icon}</span>
+                          <span className="ha-nav-label" style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+                            {m.label}
+                            {maj && peutGererHelpdesk?.() && (
+                              <span style={{ fontSize:10, fontWeight:700, color:'#BA7517', background:'#FAEEDA', borderRadius:5, padding:'1px 5px' }}>MAJ</span>
+                            )}
+                          </span>
+                        </NavLink>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -170,17 +179,21 @@ export default function Layout() {
         >
           {courant && courant.modules.length > 0 && !surGarde && (
             <nav className="ha-dept-onglets" aria-label={courant.label}>
-              {courant.modules.map(m => (
-                <NavLink
-                  key={m.key}
-                  to={m.to}
-                  className={() => 'ha-tab' + (cheminActif(loc.pathname, m.to) ? ' is-on' : '')}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  <span aria-hidden>{m.icon}</span>
-                  <span>{m.label}</span>
-                </NavLink>
-              ))}
+              {courant.modules.map(m => {
+                const maj = !!moduleEnMaintenance?.(cleMaintenance(m.key))
+                return (
+                  <NavLink
+                    key={m.key}
+                    to={m.to}
+                    className={() => 'ha-tab' + (cheminActif(loc.pathname, m.to) ? ' is-on' : '')}
+                    onClick={() => setMobileOpen(false)}
+                    title={maj ? `${m.label} — en maintenance` : m.label}
+                  >
+                    <span aria-hidden>{m.icon}</span>
+                    <span>{m.label}{maj && peutGererHelpdesk?.() ? ' · MAJ' : ''}</span>
+                  </NavLink>
+                )
+              })}
             </nav>
           )}
           <SortieFondu />

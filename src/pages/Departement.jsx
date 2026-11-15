@@ -2,11 +2,12 @@ import { useMemo } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { Empty, Page } from '@/components/ui'
-import { DEPARTEMENTS, filtrerDepartements, moduleAutorise } from '@/navigation'
+import { DEPARTEMENTS, filtrerDepartements, moduleAutorise, cleMaintenance } from '@/navigation'
 
 export default function Departement() {
   const { id } = useParams()
   const auth = useAuth()
+  const { moduleEnMaintenance } = auth
   const departement = useMemo(
     () => filtrerDepartements(DEPARTEMENTS, key => moduleAutorise(key, auth)).find(d => d.id === id) || null,
     [id, auth],
@@ -23,13 +24,30 @@ export default function Departement() {
         />
       ) : (
         <nav className="ha-garde" aria-label={departement.label}>
-          {departement.modules.map(m => (
-            <Link key={m.key} to={m.to} className="ha-garde-tuile">
-              <span className="ha-garde-ico" aria-hidden>{m.icon}</span>
-              <span className="ha-garde-nom">{m.label}</span>
-              {m.desc && <span className="ha-garde-desc">{m.desc}</span>}
-            </Link>
-          ))}
+          {departement.modules.map(m => {
+            const maj = !!moduleEnMaintenance?.(cleMaintenance(m.key))
+            return (
+              <Link key={m.key} to={m.to} className="ha-garde-tuile">
+                <span className="ha-garde-ico" aria-hidden>{m.icon}</span>
+                <span className="ha-garde-nom">
+                  {m.label}
+                  {maj && (
+                    <span style={{
+                      marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#BA7517',
+                      background: '#FAEEDA', borderRadius: 6, padding: '1px 6px', verticalAlign: 'middle',
+                    }}>
+                      Mise à jour
+                    </span>
+                  )}
+                </span>
+                {m.desc && (
+                  <span className="ha-garde-desc">
+                    {maj ? 'L’équipe informatique réaménage cet endroit. Elle reviendra très vite.' : m.desc}
+                  </span>
+                )}
+              </Link>
+            )
+          })}
         </nav>
       )}
     </Page>

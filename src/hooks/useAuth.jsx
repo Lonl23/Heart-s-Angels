@@ -29,6 +29,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [matrix, setMatrix] = useState({})
   const [matrixCount, setMatrixCount] = useState(0)
+  const [modulesMaintenance, setModulesMaintenance] = useState({})
   const pret = useRef(false)
   const uid = useRef(null)
   const profileRef = useRef(null)
@@ -55,6 +56,7 @@ export function AuthProvider({ children }) {
         pret.current = true
         setMatrix({})
         setMatrixCount(0)
+        setModulesMaintenance({})
         setLoading(false)
         return
       }
@@ -73,6 +75,15 @@ export function AuthProvider({ children }) {
     setMatrix(map); setMatrixCount((data||[]).length)
   }
 
+  async function loadModulesMaintenance() {
+    const { data } = await supabase.from('app_modules_maintenance').select('module_key,actif,message')
+    const map = {}
+    ;(data || []).forEach(r => {
+      map[r.module_key] = { actif: r.actif !== false, message: r.message || null }
+    })
+    setModulesMaintenance(map)
+  }
+
   async function loadProfile(userId) {
     const silencieux = pret.current && uid.current === userId && !!profileRef.current
     if (!silencieux) setLoading(true)
@@ -83,6 +94,7 @@ export function AuthProvider({ children }) {
     pret.current = true
     setLoading(false)
     loadMatrix()
+    loadModulesMaintenance()
   }
 
   const role = profile?.role || null
@@ -209,6 +221,16 @@ export function AuthProvider({ children }) {
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => ['resp_informatique', 'resp_informatique_adjoint'].includes(r))
   }
+  /** Onglet coupé pour les volontaires (l’IT continue de voir le contenu). */
+  function moduleEnMaintenance(key) {
+    if (!key) return false
+    const row = modulesMaintenance?.[key]
+    if (!row) return false
+    return row.actif === false
+  }
+  function messageMaintenance(key) {
+    return modulesMaintenance?.[key]?.message || null
+  }
   /** Suppression définitive d’une note : équipe informatique (et accès total). */
   function peutSupprimerNoteFrais() {
     if (!role || role === 'partenaire') return false
@@ -249,8 +271,10 @@ export function AuthProvider({ children }) {
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
     peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutPublierActualites, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutGererHelpdesk, peutPersonnaliser, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
-    reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
-  }), [session, profile, role, loading, matrix, matrixCount])
+    modulesMaintenance, moduleEnMaintenance, messageMaintenance,
+    reloadMatrix: loadMatrix, reloadModulesMaintenance: loadModulesMaintenance,
+    signOut, reload: () => session && loadProfile(session.user.id),
+  }), [session, profile, role, loading, matrix, matrixCount, modulesMaintenance])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

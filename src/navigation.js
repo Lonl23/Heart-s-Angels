@@ -57,6 +57,7 @@ export const DEPARTEMENTS = [
       { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
       { key: 'actualites_edition', to: '/app/it/actualites', label: 'Rédaction des actualités', icon: '📰', desc: 'Écrire, dater, publier' },
       { key: 'statistiques', to: '/app/it/statistiques', label: 'Statistiques', icon: '📊', desc: 'Tous les souhaits, graphiques et export Excel' },
+      { key: 'modules_menu', to: '/app/it/onglets', label: 'Onglets & mises à jour', icon: '🚧', desc: 'Activer ou couper un onglet pendant une mise à jour' },
     ],
   },
   {
@@ -85,6 +86,7 @@ export function moduleAutorise(key, auth) {
   if (key === 'ma_fiche') return auth.can('staff') && !auth.peutGererFiches()
   if (key === 'fiches') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
+  if (key === 'modules_menu') return auth.peutGererHelpdesk?.()
   if (key === 'personnalisation') return auth.peutPersonnaliser()
   if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')
   if (key === 'conventions_dps') {
@@ -100,6 +102,21 @@ export function moduleAutorise(key, auth) {
   if (key === 'flotte') return auth.canAccess('stock')
   if (key === 'ouvertures') return auth.canAccess('evenements')
   return auth.canAccess(key)
+}
+
+/** Clé partagée pour les routes qui réutilisent un même droit d’accès. */
+export function cleMaintenance(key) {
+  if (key === 'ouvertures') return 'evenements'
+  if (key === 'flotte') return 'stock'
+  return key
+}
+
+/** Volontaires : page d’attente. Informatique : contenu réel (bypass). */
+export function doitVoirMaintenance(key, auth) {
+  const cle = cleMaintenance(key)
+  if (!cle || !auth?.moduleEnMaintenance?.(cle)) return false
+  if (auth.peutGererHelpdesk?.()) return false
+  return true
 }
 
 export function cheminDepartement(departement) {
