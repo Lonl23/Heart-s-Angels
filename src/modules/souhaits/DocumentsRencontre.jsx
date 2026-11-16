@@ -7,9 +7,33 @@ import {
   medecinPluri, nomPluri,
 } from './missionSchema'
 import { formaterNiss } from '@/modules/annuaire/annuaireSchema'
+import { telechargerFichier } from '@/lib/telechargerFichier'
+import pdfConsentementUrl from '@/assets/papier/consentement-libre-eclaire.pdf?url'
+import pdfDroitImageUrl from '@/assets/papier/autorisation-droit-image.pdf?url'
 
-const PDF_CONSENTEMENT = '/papier/consentement-libre-eclaire.pdf'
-const PDF_DROIT_IMAGE = '/papier/autorisation-droit-image.pdf'
+const PDF_CONSENTEMENT = pdfConsentementUrl
+const PDF_DROIT_IMAGE = pdfDroitImageUrl
+const NOM_PDF_CONSENTEMENT = 'Consentement_Libre_et_Eclaire_Hearts_Angels.pdf'
+const NOM_PDF_DROIT_IMAGE = 'Autorisation_droit_a_l_image_Hearts_Angels.pdf'
+
+function BoutonPdf({ url, nom, label = 'Télécharger le PDF' }) {
+  const [busy, setBusy] = useState(false)
+  async function go() {
+    if (busy) return
+    setBusy(true)
+    try {
+      await telechargerFichier(url, nom)
+    } catch (e) {
+      alert(e.message || 'Téléchargement impossible.')
+    }
+    setBusy(false)
+  }
+  return (
+    <Btn kind="soft" onClick={go} disabled={busy}>
+      {busy ? '…' : label}
+    </Btn>
+  )
+}
 
 function bloc(m, cle) {
   const src = m?.rencontre?.[cle]
@@ -77,7 +101,7 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
             : 'Document officiel à compléter en présence du patient, puis signature tablette.'}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <a className="ha-gps-btn" href={PDF_CONSENTEMENT} target="_blank" rel="noopener noreferrer">Voir le PDF</a>
+          <BoutonPdf url={PDF_CONSENTEMENT} nom={NOM_PDF_CONSENTEMENT} />
           {!lecture && (
             <Btn kind={consOk ? 'soft' : 'primary'} onClick={() => setPopup('consentement')}>
               {consOk ? 'Revoir / resignature' : 'Compléter et faire signer'}
@@ -94,7 +118,7 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
             : 'Document officiel — cases du PDF, supports de diffusion, puis signature.'}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <a className="ha-gps-btn" href={PDF_DROIT_IMAGE} target="_blank" rel="noopener noreferrer">Voir le PDF</a>
+          <BoutonPdf url={PDF_DROIT_IMAGE} nom={NOM_PDF_DROIT_IMAGE} />
           {!lecture && (
             <Btn kind={photosOk ? 'soft' : 'primary'} onClick={() => setPopup('photos')}>
               {photosOk ? 'Revoir / resignature' : 'Compléter et faire signer'}
@@ -185,8 +209,14 @@ function PopupDocument({ mode, titre, pdf, initial, onSave, onClose }) {
         <div>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
             Complétez le document en présence du patient (comme sur le PDF), puis proposez la signature sur la tablette.
-            {' '}<a href={pdf} target="_blank" rel="noopener noreferrer">Ouvrir le modèle PDF</a>
           </p>
+          <div style={{ marginBottom: 10 }}>
+            <BoutonPdf
+              url={pdf}
+              nom={mode === 'consentement' ? NOM_PDF_CONSENTEMENT : NOM_PDF_DROIT_IMAGE}
+              label="Télécharger le modèle PDF"
+            />
+          </div>
 
           <div style={{ fontWeight: 700, margin: '8px 0 4px', color: 'var(--heading)' }}>Je soussigné(e)</div>
           <F label="Nom et prénom" value={f.nom || ''} set={v => set('nom', v)} />
