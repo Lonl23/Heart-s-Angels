@@ -20,10 +20,10 @@ import DocumentsRencontre from './DocumentsRencontre'
 import JournalDossier from './JournalDossier'
 import { journaliser, clesModifiees } from './journal'
 import { ChoixMultiple } from './ChoixPopup'
-import { CHAMPS_CLINIQUES, PATHOLOGIES, ACTIVITES_SOUHAIT } from './listesCliniques'
+import { CHAMPS_CLINIQUES, commeListe } from './listesCliniques'
 
 const grp = id => GROUPES.find(g => g.id === id)
-const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'priorite_elevee', 'date_demande', 'date_rencontre', 'consignes_equipage']
+const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'date_demande', 'date_rencontre', 'consignes_equipage']
 
 const TABS = [
   { id:'administratif', label:'Administratif', groupes:['administratif'], zone:'patient' },
@@ -166,7 +166,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
               <Card key={gid}>
                 <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-                  {g.fields.filter(f => f.k !== 'allergies' && !CHAMPS_CLINIQUES.some(c => c.k === f.k)).map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lectureOnglet} />)}
+                  {g.fields.filter(f => f.k !== 'allergies' && f.k !== 'pathologies' && !CHAMPS_CLINIQUES.some(c => c.k === f.k)).map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lectureOnglet} />)}
                   {gid === 'medical' && (
                     <>
                       <AllergiesChamp val={m.allergies} set={v => set('allergies', v)} lecture={lectureOnglet} />
@@ -322,14 +322,42 @@ function BlocAdministratif({ m, set, setM, lecture, souhait }) {
       )}
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        {g.fields.filter(f => ADMIN_MISSION.includes(f.k) && f.k !== 'consentement' && f.k !== 'autorisation_photos').map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lecture} />)}
+        {g.fields.filter(f => ADMIN_MISSION.includes(f.k) && f.k !== 'consentement' && f.k !== 'autorisation_photos' && f.k !== 'priorite_elevee').map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lecture} />)}
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        <ChoixMultiple label="Pathologies" options={PATHOLOGIES} value={m.categories?.pathologies} onChange={v => setM(o => ({ ...o, categories: { ...(o.categories || {}), pathologies: v } }))} lecture={lecture} />
-        <ChoixMultiple label="Activités" options={ACTIVITES_SOUHAIT} value={m.categories?.activites} onChange={v => setM(o => ({ ...o, categories: { ...(o.categories || {}), activites: v } }))} lecture={lecture} />
-      </div>
+      {(commeListe(m.categories?.pathologies).length > 0 || commeListe(m.categories?.activites).length > 0) && (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+          {commeListe(m.categories?.pathologies).length > 0 && (
+            <div>Catégories patho. : {commeListe(m.categories.pathologies).join(' · ')}</div>
+          )}
+          {commeListe(m.categories?.activites).length > 0 && (
+            <div>Activités : {commeListe(m.categories.activites).join(' · ')}</div>
+          )}
+        </div>
+      )}
+      <PathologiesNomsChamp
+        val={m.pathologies_noms}
+        set={v => set('pathologies_noms', v)}
+        lecture={lecture}
+      />
       <DocumentsRencontre m={m} setM={setM} lecture={lecture} souhait={souhait} />
     </Card>
+  )
+}
+
+function PathologiesNomsChamp({ val, set, lecture }) {
+  const [opts, setOpts] = useState([])
+  useEffect(() => {
+    supabase.from('pathologies_referentiel').select('libelle').eq('actif', true).order('ordre')
+      .then(({ data }) => setOpts((data || []).map(r => r.libelle)))
+  }, [])
+  return (
+    <ChoixMultiple
+      label="Pathologies (noms — ex. glioblastome, SLA…)"
+      options={opts}
+      value={val}
+      onChange={set}
+      lecture={lecture}
+    />
   )
 }
 
@@ -644,13 +672,19 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse, souhaitId }) {
             </div>
           )}
           {(source === 'demandeuse' || source === 'autre') && (
-            <DocsAdresse
-              souhaitId={souhaitId}
-              slotId="pec"
-              docs={m.pec_docs}
-              onChange={v => { if (!lecture) set('pec_docs', v) }}
-              lecture={lecture}
-            />
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Plans du site & documents d’accès</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
+                Plans, accès parking, consignes — visibles par l’équipe terrain.
+              </div>
+              <DocsAdresse
+                souhaitId={souhaitId}
+                slotId="pec"
+                docs={m.pec_docs}
+                onChange={v => { if (!lecture) set('pec_docs', v) }}
+                lecture={lecture}
+              />
+            </div>
           )}
           {(source === 'demandeuse' || source === 'autre') && (
             <ServicesInstitution m={m} set={set} lecture={lecture} />

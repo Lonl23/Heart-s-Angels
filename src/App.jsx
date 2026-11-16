@@ -30,6 +30,7 @@ const Departement = lazy(() => import('@/pages/Departement'))
 const Organigramme = lazy(() => import('@/modules/rh/Organigramme'))
 const OrganigrammeEdition = lazy(() => import('@/modules/it/OrganigrammeEdition'))
 const ConfigurationSouhaits = lazy(() => import('@/modules/it/ConfigurationSouhaits'))
+const AccesBlocages = lazy(() => import('@/modules/acces/AccesBlocages'))
 const Tresorerie = lazy(() => import('@/modules/Tresorerie'))
 const Actualites = lazy(() => import('@/modules/actualites/Actualites'))
 const Statistiques = lazy(() => import('@/modules/it/Statistiques'))
@@ -100,6 +101,7 @@ export default function App() {
           <Route path="rh/organigramme" element={<RequireAcces feature="organigramme"><Organigramme /></RequireAcces>} />
           <Route path="it/organigramme" element={<RequireAcces feature="organigramme_edition"><OrganigrammeEdition /></RequireAcces>} />
           <Route path="it/configuration" element={<RequireAcces feature="config_souhaits"><ConfigurationSouhaits /></RequireAcces>} />
+          <Route path="acces-blocages" element={<RequireStaff><AccesBlocages /></RequireStaff>} />
           <Route path="tresorerie"     element={<RequireAcces feature="tresorerie"><Tresorerie /></RequireAcces>} />
           <Route path="admin"          element={<RequireAcces feature="admin"><Admin /></RequireAcces>} />
           <Route path="profil"         element={<FicheVolontaire />} />

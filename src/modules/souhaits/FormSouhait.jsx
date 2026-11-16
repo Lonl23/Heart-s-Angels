@@ -15,6 +15,8 @@ import { periodesDepuisSouhait, normaliserPeriodes, plageGlobale } from './dates
 import {
   LIENS_FAMILLE, LIENS_FAMILLE_GROUPES, libelleLienFamille, genreDepuisLien, lienDepuisGroupeGenre,
 } from './liensFamille'
+import { ChoixMultiple } from './ChoixPopup'
+import { PATHOLOGIES, ACTIVITES_SOUHAIT, commeListe } from './listesCliniques'
 
 const sliceDate = v => (v ? String(v).slice(0, 10) : '')
 
@@ -32,11 +34,15 @@ function etatVide() {
     date_souhaitee: '', date_fin: '', dates_possibles: [{ debut: '', fin: '' }],
     courte_duree: false, heure_depart: '', heure_retour: '',
     statut: 'nouveau', priorite: 2,
+    categories_pathologies: [],
+    activites: [],
   }
 }
 
 function depuisSouhait(s) {
   if (!s) return etatVide()
+  const cats = s.mission?.categories || {}
+  const activites = commeListe(cats.activites?.length ? cats.activites : (s.localisation ? [s.localisation] : []))
   return {
     ...etatVide(),
     ...s,
@@ -56,6 +62,8 @@ function depuisSouhait(s) {
     date_souhaitee: sliceDate(s.date_souhaitee),
     date_fin: sliceDate(s.date_fin),
     dates_possibles: periodesDepuisSouhait(s),
+    categories_pathologies: commeListe(cats.pathologies),
+    activites,
   }
 }
 
@@ -213,6 +221,15 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
   const [saving, setSaving] = useState(false)
   const [popup, setPopup] = useState(null)
   const [contactEdit, setContactEdit] = useState(null)
+  const [optsActivites, setOptsActivites] = useState(ACTIVITES_SOUHAIT)
+  const [optsCatPatho, setOptsCatPatho] = useState(PATHOLOGIES)
+  useEffect(() => {
+    supabase.from('activites_souhait_referentiel').select('libelle').eq('actif', true).order('ordre')
+      .then(({ data }) => {
+        const libs = (data || []).map(r => r.libelle)
+        if (libs.length) setOptsActivites([...new Set([...libs, ...ACTIVITES_SOUHAIT])])
+      })
+  }, [])
   const pret = useRef(false)
   const saveRef = useRef(null)
   const chaine = useRef(Promise.resolve())
@@ -391,7 +408,7 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       partenaire_id: f.origine === 'institution' ? (partenaireId || null) : null,
       annuaire_externe_id: f.origine === 'institution' ? (f.annuaire_externe_id || null) : null,
       description: f.description || 'Souhait',
-      localisation: f.localisation || null,
+      localisation: commeListe(f.activites).join(' · ') || f.localisation || null,
       notes_medicales: f.notes_medicales || null,
       besoins_specifiques: f.besoins_specifiques || null,
       date_souhaitee: plage.date_souhaitee,
@@ -400,26 +417,43 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       courte_duree: !!f.courte_duree,
       heure_depart: f.courte_duree && f.heure_depart ? f.heure_depart : null,
       heure_retour: f.courte_duree && f.heure_retour ? f.heure_retour : null,
-      priorite: Number(f.priorite) || 2,
+      priorite: 2,
     }
     if (statut !== undefined) payload.statut = statut
+    async function mergerMission(sid) {
+      const { data: cur } = await supabase.from('souhaits').select('mission').eq('id', sid).maybeSingle()
+      const mission = {
+        ...(cur?.mission && typeof cur.mission === 'object' ? cur.mission : {}),
+        categories: {
+          ...((cur?.mission && cur.mission.categories) || {}),
+          pathologies: commeListe(f.categories_pathologies),
+          activites: commeListe(f.activites),
+        },
+      }
+      await supabase.from('souhaits').update({ mission }).eq('id', sid)
+      return mission
+    }
     if (f.id) {
       const { error } = await supabase.from('souhaits').update(payload).eq('id', f.id)
+      if (error) { setSaving(false); if (!silencieux) alert('Erreur : ' + error.message); return }
+      const mission = await mergerMission(f.id)
       setSaving(false)
-      if (error) { if (!silencieux) alert('Erreur : ' + error.message); return }
       setF(s => rattacherIds(s, { annuaireId, contactId, contactsMaj }))
-      onPatch?.({ ...payload, id: f.id })
+      onPatch?.({ ...payload, id: f.id, mission })
       if (!silencieux) onDone?.(f.id)
       return
     }
     const { data, error } = await supabase.from('souhaits').insert({ ...payload, created_by: profile?.id }).select('id').single()
-    setSaving(false)
-    if (error) { if (!silencieux) alert('Erreur : ' + error.message); return }
+    if (error) { setSaving(false); if (!silencieux) alert('Erreur : ' + error.message); return }
     if (data?.id) {
+      const mission = await mergerMission(data.id)
+      setSaving(false)
       setF(s => ({ ...rattacherIds(s, { annuaireId, contactId, contactsMaj }), id: data.id }))
-      onPatch?.({ ...payload, id: data.id })
+      onPatch?.({ ...payload, id: data.id, mission })
       onDone?.(data.id)
+      return
     }
+    setSaving(false)
   }
   saveRef.current = save
 
@@ -553,22 +587,12 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       <Card style={{ marginBottom: 14 }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>Le souhait</div>
         <TA label="Description *" value={f.description} set={v => set('description', v)} rows={3} />
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
-            Activité (affichée au calendrier, sans nom de patient)
-          </div>
-          {f.localisation ? (
-            <div className="ha-chip-sum" style={{ marginBottom: 8 }}>
-              <div style={{ fontWeight: 700 }}>{f.localisation}</div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <Btn kind="soft" style={{ padding: '4px 8px' }} onClick={() => setPopup('activite')}>Modifier</Btn>
-                <Btn kind="danger" style={{ padding: '4px 8px' }} onClick={() => set('localisation', '')}>Retirer</Btn>
-              </div>
-            </div>
-          ) : (
-            <Btn kind="soft" onClick={() => setPopup('activite')}>Choisir / encoder l’activité</Btn>
-          )}
-        </div>
+        <ChoixMultiple
+          label="Activité (calendrier, sans nom de patient)"
+          options={optsActivites}
+          value={f.activites}
+          onChange={v => setF(s => ({ ...s, activites: v, localisation: (v || []).join(' · ') }))}
+        />
         <DatesPossibles value={f.dates_possibles} set={v => set('dates_possibles', v)} />
         <label className="ha-check" style={{ marginBottom: 10 }}>
           <input type="checkbox" checked={!!f.courte_duree} onChange={e => set('courte_duree', e.target.checked)} />
@@ -583,14 +607,18 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
           {!inline && !f.id && <Sel label="Statut" value={f.statut} set={v => set('statut', v)} options={PIPELINE_ENCODE.map(k => ({ v: k, l: STATUTS[k].l }))} />}
           {!inline && f.id && <Sel label="Statut" value={f.statut} set={v => set('statut', v)} options={statutsDisponibles(initial?.statut || f.statut, initial || f).map(k => ({ v: k, l: STATUTS[k].l }))} />}
-          <Sel label="Priorité" value={String(f.priorite)} set={v => set('priorite', v)} options={[
-            { v: '1', l: '1 · Basse' }, { v: '2', l: '2 · Normale' }, { v: '3', l: '3 · Haute' }, { v: '4', l: '4 · Urgente' }, { v: '5', l: '5 · Critique' },
-          ]} />
         </div>
       </Card>
 
       <Card style={{ marginBottom: 14 }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>Médical & besoins</div>
+        <ChoixMultiple
+          label="Catégories de pathologies"
+          options={optsCatPatho}
+          value={f.categories_pathologies}
+          onChange={v => set('categories_pathologies', v)}
+          allowCustom={false}
+        />
         <TA label="Notes médicales (confidentiel)" value={f.notes_medicales} set={v => set('notes_medicales', v)} rows={2} />
         <TA label="Besoins spécifiques (matériel, logistique…)" value={f.besoins_specifiques} set={v => set('besoins_specifiques', v)} rows={2} />
       </Card>
@@ -739,13 +767,6 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
           }}
         />
       )}
-      {popup === 'activite' && (
-        <PopupActivite
-          initial={f.localisation || ''}
-          onClose={() => setPopup(null)}
-          onSave={v => { set('localisation', v); setPopup(null) }}
-        />
-      )}
       {popup === 'pick-inst' && (
         <PickerList
           title="Institution / partenaire"
@@ -813,30 +834,6 @@ function PickerList({ title, load, label, hint, onPick, onClose, empty, onSearch
           {hint?.(r) && <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>{hint(r)}</div>}
         </button>
       ))}
-    </Modal>
-  )
-}
-
-function PopupActivite({ initial, onSave, onClose }) {
-  const [v, setV] = useState(initial || '')
-  function go() {
-    const t = String(v || '').trim()
-    if (!t) { alert('Indiquez l’activité.'); return }
-    onSave(t)
-  }
-  return (
-    <Modal title="Activité (calendrier)" onClose={onClose} footer={
-      <><Btn onClick={go}>Enregistrer</Btn><Btn kind="soft" onClick={onClose}>Annuler</Btn></>
-    }>
-      <F
-        label="Activité"
-        value={v}
-        set={setV}
-        placeholder="ex. Aquarium-Muséum, promenade au parc…"
-      />
-      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 4px' }}>
-        Ce libellé apparaît au calendrier, sans le nom du patient. Ce n’est pas une adresse GPS.
-      </p>
     </Modal>
   )
 }

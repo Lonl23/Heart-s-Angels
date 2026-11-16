@@ -4,6 +4,7 @@ import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche,
 import { poserPreuve } from '@/lib/deuxFacteurs'
 import { poserPreuveWebauthn } from '@/lib/webauthn'
 import { activiteFraiche, toucherActivite, effacerConfiance } from '@/lib/sessionApp'
+import { cleAppareil } from '@/lib/appareil'
 
 const AuthContext = createContext(null)
 
@@ -137,6 +138,22 @@ export function AuthProvider({ children }) {
     const silencieux = pret.current && uid.current === userId && !!profileRef.current
     if (!silencieux) setLoading(true)
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+    const appareil = cleAppareil()
+    const { data: bloque } = await supabase.rpc('est_acces_bloque', {
+      p_user: userId,
+      p_appareil: appareil || null,
+    })
+    if (bloque === true) {
+      effacerConfiance()
+      setProfile(null)
+      profileRef.current = null
+      uid.current = null
+      pret.current = true
+      setLoading(false)
+      await supabase.auth.signOut()
+      try { sessionStorage.setItem('ha_acces_bloque', '1') } catch { /* */ }
+      return
+    }
     setProfile(data || null)
     profileRef.current = data || null
     uid.current = userId
@@ -186,6 +203,18 @@ export function AuthProvider({ children }) {
   function rolesAsbl() { return profile?.fiche?.roles_asbl || [] }
   function matriceAutorise(feature) {
     return rolesAsbl().some(r => matrix[`role:${r}:${feature}`] === true)
+  }
+  function peutBloquerAcces() {
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'coordinateur') return true
+    return rolesAsbl().some(r => [
+      'president', 'vice_president',
+      'resp_informatique', 'resp_informatique_adjoint',
+      'recolteur_souhait',
+      'coord_transport', 'coord_transport_adjoint',
+      'resp_logistique', 'resp_logistique_adjoint',
+      'coord_medical', 'coord_medical_adjoint', 'coordinateur_medical',
+    ].includes(r))
   }
   function estEquipePreparationSouhait() {
     if (!role || role === 'partenaire') return false
@@ -336,7 +365,7 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
-    estEquipePreparationSouhait, peutPreparerSouhait,
+    estEquipePreparationSouhait, peutPreparerSouhait, peutBloquerAcces,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
     peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutPublierActualites, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutGererHelpdesk, peutPersonnaliser, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     modulesMaintenance, moduleEnMaintenance, messageMaintenance,

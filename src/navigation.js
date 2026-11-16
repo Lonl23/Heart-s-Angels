@@ -54,8 +54,9 @@ export const DEPARTEMENTS = [
       { key: 'helpdesk', to: '/app/it/helpdesk', label: 'Helpdesk', icon: '🛠️', desc: 'Signaler un bug ou une suggestion' },
       { key: 'personnalisation', to: '/app/it/personnalisation', label: 'Personnalisation', icon: '🖼️', desc: 'Photos de fond de chaque page et de chaque module' },
       { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Partenaires et accès' },
+      { key: 'acces_blocages', to: '/app/acces-blocages', label: 'Blocages d’accès', icon: '🚫', desc: 'Bloquer un compte ou un appareil' },
       { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
-      { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
+      { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations, allergies, pathologies' },
       { key: 'actualites_edition', to: '/app/it/actualites', label: 'Rédaction des actualités', icon: '📰', desc: 'Écrire, dater, publier' },
       { key: 'statistiques', to: '/app/it/statistiques', label: 'Statistiques', icon: '📊', desc: 'Tous les souhaits, graphiques et export Excel' },
       { key: 'modules_menu', to: '/app/it/onglets', label: 'Onglets & mises à jour', icon: '🚧', desc: 'Activer ou couper un onglet pendant une mise à jour' },
@@ -87,6 +88,7 @@ export function moduleAutorise(key, auth) {
   if (key === 'ma_fiche') return auth.can('staff') && !auth.peutGererFiches()
   if (key === 'fiches' || key === 'candidatures_volontariat') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
+  if (key === 'acces_blocages') return auth.peutBloquerAcces?.()
   if (key === 'modules_menu') return auth.peutGererHelpdesk?.()
   if (key === 'personnalisation') return auth.peutPersonnaliser()
   if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')

@@ -212,6 +212,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
     setValideMsg((publies || []).length
       ? 'Date retenue. Équipage à prévoir est décoché. Les volontaires ont reçu leur mission.'
       : 'Date retenue. Équipage à prévoir est décoché.')
+    await supabase.rpc('notifier_photographes_souhait', { p_souhait: souhaitId })
     await charger()
   }
   async function retenirJour() {

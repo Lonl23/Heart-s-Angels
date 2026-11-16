@@ -503,7 +503,6 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
           {s.beneficiaire_prenom} {s.beneficiaire_nom}
           {s.fictif && <PillFictif />}
         </span>
-        {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
       </div>
       <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
       <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{dateAffichee}</div>

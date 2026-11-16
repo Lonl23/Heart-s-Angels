@@ -120,7 +120,6 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : ''} wide />
             {med && <Fld l="Registre national" v={m.registre_national} />}
             <Fld l="Récolteur de souhait" v={nomsRecolteurs(m)} />
-            <Fld l="Priorité élevée" v={m.priorite_elevee ? 'Oui' : ''} />
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
             {med && <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />}
             <Fld l="Autorisation photos" v={lblAutorisationPhotos(m.autorisation_photos)} />

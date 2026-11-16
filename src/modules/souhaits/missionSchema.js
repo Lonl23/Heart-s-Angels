@@ -307,15 +307,25 @@ export function documentsSejourVisibles(etape, mission) {
     lieuNom: (l.nom || '').trim() || lblTypeLieu(l.type),
     typeLieu: l.type,
   })))
-  if (!all.length) return []
+  const pecDocs = Array.isArray(mission?.pec_docs)
+    ? mission.pec_docs.filter(d => d && d.path).map(d => ({
+      ...d,
+      lieuId: 'pec',
+      lieuNom: 'Plans du site (PEC)',
+      typeLieu: 'pec',
+    }))
+    : []
   const extra = parseEtapeLieu(etape)
   const id = normaliserEtape(etape)
-  const priorite = extra?.lieuId
-    || ((id === 'dest_sur_place' || id === 'depart_dest') ? 'parking' : null)
-  if (!priorite) return all
+  const aPec = id === 'pec_sur_place' || id === 'arrivee_pec' || id === 'depart_pec' || id === 'depart_retour'
+  const combined = aPec ? [...pecDocs, ...all] : [...all, ...pecDocs]
+  if (!combined.length) return []
+  const priorite = aPec ? 'pec'
+    : (extra?.lieuId || ((id === 'dest_sur_place' || id === 'depart_dest') ? 'parking' : null))
+  if (!priorite) return combined
   return [
-    ...all.filter(d => d.lieuId === priorite || d.typeLieu === priorite),
-    ...all.filter(d => d.lieuId !== priorite && d.typeLieu !== priorite),
+    ...combined.filter(d => d.lieuId === priorite || d.typeLieu === priorite),
+    ...combined.filter(d => d.lieuId !== priorite && d.typeLieu !== priorite),
   ]
 }
 
@@ -410,16 +420,16 @@ export function numEcranTerrain(etape) {
 export const O2_LIGNES = ['B10','B10','B5','B5','B2']
 
 export const AUTORISATION_PHOTOS = [
-  { v:'refus', l:'Refus catégorique' },
   { v:'oui', l:'Oui' },
-  { v:'sans_visage', l:'Oui, sans le visage' },
+  { v:'oui_sauf_presse', l:'Oui, sauf presse' },
+  { v:'refus', l:'Refus' },
 ]
 
-/** Ancien booléen true/false → 3 niveaux. */
+/** Ancien booléen / anciens libellés → niveaux actuels. */
 export function normaliserAutorisationPhotos(v) {
   if (v === true || v === 'oui' || v === 'true' || v === 'Oui') return 'oui'
-  if (v === 'sans_visage' || v === 'oui_sans_visage' || v === 'sans visage') return 'sans_visage'
-  if (v === false || v === 'non' || v === 'refus' || v === 'false' || v === 'Refus catégorique') return 'refus'
+  if (v === 'oui_sauf_presse' || v === 'sauf_presse' || v === 'sans_visage' || v === 'oui_sans_visage' || v === 'sans visage') return 'oui_sauf_presse'
+  if (v === false || v === 'non' || v === 'refus' || v === 'false' || v === 'Refus catégorique' || v === 'Refus') return 'refus'
   if (v == null || v === '') return ''
   return 'refus'
 }
