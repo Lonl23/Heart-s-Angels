@@ -7,7 +7,8 @@ import {
   medecinPluri, nomPluri,
 } from './missionSchema'
 import { formaterNiss } from '@/modules/annuaire/annuaireSchema'
-import { telechargerFichier } from '@/lib/telechargerFichier'
+import { telechargerBlob, telechargerFichier } from '@/lib/telechargerFichier'
+import { genererPdfConsentement, genererPdfDroitImage } from './documentsRencontrePdf'
 import pdfConsentementUrl from '@/assets/papier/consentement-libre-eclaire.pdf?url'
 import pdfDroitImageUrl from '@/assets/papier/autorisation-droit-image.pdf?url'
 
@@ -16,7 +17,7 @@ const PDF_DROIT_IMAGE = pdfDroitImageUrl
 const NOM_PDF_CONSENTEMENT = 'Consentement_Libre_et_Eclaire_Hearts_Angels.pdf'
 const NOM_PDF_DROIT_IMAGE = 'Autorisation_droit_a_l_image_Hearts_Angels.pdf'
 
-function BoutonPdf({ url, nom, label = 'Télécharger le PDF' }) {
+function BoutonModelePdf({ url, nom, label = 'Télécharger le modèle PDF' }) {
   const [busy, setBusy] = useState(false)
   async function go() {
     if (busy) return
@@ -25,6 +26,33 @@ function BoutonPdf({ url, nom, label = 'Télécharger le PDF' }) {
       await telechargerFichier(url, nom)
     } catch (e) {
       alert(e.message || 'Téléchargement impossible.')
+    }
+    setBusy(false)
+  }
+  return (
+    <Btn kind="soft" onClick={go} disabled={busy}>
+      {busy ? '…' : label}
+    </Btn>
+  )
+}
+
+function BoutonPdfComplete({ mode, data, pret, label = 'Voir le PDF' }) {
+  const [busy, setBusy] = useState(false)
+  async function go() {
+    if (busy) return
+    if (!pret) {
+      alert('Complétez et faites signer le document avant de télécharger le PDF rempli.')
+      return
+    }
+    setBusy(true)
+    try {
+      const bytes = mode === 'consentement'
+        ? await genererPdfConsentement(data)
+        : await genererPdfDroitImage(data)
+      const nom = mode === 'consentement' ? NOM_PDF_CONSENTEMENT : NOM_PDF_DROIT_IMAGE
+      telechargerBlob(bytes, nom)
+    } catch (e) {
+      alert(e.message || 'Génération du PDF impossible.')
     }
     setBusy(false)
   }
@@ -90,6 +118,8 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
   const photos = bloc(m, 'photos')
   const consOk = !!(cons.signature && cons.accepte)
   const photosOk = !!(photos.signature && (photos.niveau || photos.accepte !== undefined))
+  const dataCons = prefills(souhait, m, 'consentement')
+  const dataPhotos = prefills(souhait, m, 'photos')
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
@@ -101,7 +131,7 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
             : 'Document officiel à compléter en présence du patient, puis signature tablette.'}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <BoutonPdf url={PDF_CONSENTEMENT} nom={NOM_PDF_CONSENTEMENT} />
+          <BoutonPdfComplete mode="consentement" data={dataCons} pret={consOk} />
           {!lecture && (
             <Btn kind={consOk ? 'soft' : 'primary'} onClick={() => setPopup('consentement')}>
               {consOk ? 'Revoir / resignature' : 'Compléter et faire signer'}
@@ -118,7 +148,7 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
             : 'Document officiel — cases du PDF, supports de diffusion, puis signature.'}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <BoutonPdf url={PDF_DROIT_IMAGE} nom={NOM_PDF_DROIT_IMAGE} />
+          <BoutonPdfComplete mode="photos" data={dataPhotos} pret={photosOk} />
           {!lecture && (
             <Btn kind={photosOk ? 'soft' : 'primary'} onClick={() => setPopup('photos')}>
               {photosOk ? 'Revoir / resignature' : 'Compléter et faire signer'}
@@ -131,8 +161,7 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
         <PopupDocument
           mode="consentement"
           titre="Consentement libre & éclairé"
-          pdf={PDF_CONSENTEMENT}
-          initial={prefills(souhait, m, 'consentement')}
+          initial={dataCons}
           onClose={() => setPopup(null)}
           onSave={next => { maj('consentement', { ...next, accepte: true }); setPopup(null) }}
         />
@@ -141,8 +170,7 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
         <PopupDocument
           mode="photos"
           titre="Autorisation du droit à l’image"
-          pdf={PDF_DROIT_IMAGE}
-          initial={prefills(souhait, m, 'photos')}
+          initial={dataPhotos}
           onClose={() => setPopup(null)}
           onSave={next => { maj('photos', next); setPopup(null) }}
         />
@@ -151,7 +179,7 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
   )
 }
 
-function PopupDocument({ mode, titre, pdf, initial, onSave, onClose }) {
+function PopupDocument({ mode, titre, initial, onSave, onClose }) {
   const [etape, setEtape] = useState(initial?.signature ? 2 : 1)
   const [f, setF] = useState(initial)
   const [err, setErr] = useState(null)
@@ -210,12 +238,19 @@ function PopupDocument({ mode, titre, pdf, initial, onSave, onClose }) {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
             Complétez le document en présence du patient (comme sur le PDF), puis proposez la signature sur la tablette.
           </p>
-          <div style={{ marginBottom: 10 }}>
-            <BoutonPdf
-              url={pdf}
+          <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <BoutonModelePdf
+              url={mode === 'consentement' ? PDF_CONSENTEMENT : PDF_DROIT_IMAGE}
               nom={mode === 'consentement' ? NOM_PDF_CONSENTEMENT : NOM_PDF_DROIT_IMAGE}
-              label="Télécharger le modèle PDF"
             />
+            {f.signature && (
+              <BoutonPdfComplete
+                mode={mode}
+                data={f}
+                pret
+                label="Aperçu PDF rempli"
+              />
+            )}
           </div>
 
           <div style={{ fontWeight: 700, margin: '8px 0 4px', color: 'var(--heading)' }}>Je soussigné(e)</div>
