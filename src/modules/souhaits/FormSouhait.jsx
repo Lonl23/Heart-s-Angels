@@ -543,7 +543,7 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>Le souhait</div>
         <TA label="Description *" value={f.description} set={v => set('description', v)} rows={3} />
         <F label="Lieu (affiché au calendrier, sans nom de patient)" value={f.localisation} set={v => set('localisation', v)} />
-        {f.localisation && <div style={{ margin: '-4px 0 10px' }}><LiensGps texte={f.localisation} /></div>}
+        {f.localisation && <div style={{ margin: '-4px 0 10px' }}><LiensGps texte={f.localisation} wazeMode="planifier" /></div>}
         <DatesPossibles value={f.dates_possibles} set={v => set('dates_possibles', v)} />
         <label className="ha-check" style={{ marginBottom: 10 }}>
           <input type="checkbox" checked={!!f.courte_duree} onChange={e => set('courte_duree', e.target.checked)} />
@@ -837,7 +837,7 @@ function PopupBeneficiaire({ initial, onSave, onClose }) {
       </div>
       <F label="E-mail" value={g.email || ''} set={v => set('email', v)} />
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse légale</div>
-      <AddressFields value={g.adresse} set={v => set('adresse', v)} />
+      <AddressFields value={g.adresse} set={v => set('adresse', v)} wazeMode="planifier" />
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, margin: '8px 0 12px', cursor: 'pointer' }}>
         <input
           type="checkbox"
@@ -853,7 +853,7 @@ function PopupBeneficiaire({ initial, onSave, onClose }) {
       {!residIdentique && (
         <>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
-          <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
+          <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} wazeMode="planifier" />
         </>
       )}
     </Modal>
@@ -999,7 +999,7 @@ function PopupContact({ initial, onSave, onClose, createdBy }) {
         </div>
         <F label="E-mail" value={g.email || ''} set={v => set('email', v)} />
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse légale</div>
-        <AddressFields value={g.adresse} set={v => set('adresse', v)} />
+        <AddressFields value={g.adresse} set={v => set('adresse', v)} wazeMode="planifier" />
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, margin: '8px 0 12px', cursor: 'pointer' }}>
           <input
             type="checkbox"
@@ -1015,7 +1015,7 @@ function PopupContact({ initial, onSave, onClose, createdBy }) {
         {!residIdentique && (
           <>
             <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
-            <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
+            <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} wazeMode="planifier" />
           </>
         )}
       </Modal>
@@ -1062,7 +1062,7 @@ function PopupInstitution({ onSave, onClose, createdBy }) {
       <F label="E-mail général" type="email" value={g.email} set={v => set('email', v)} />
       <F label="Personne de contact (facultatif)" value={g.contact_personne} set={v => set('contact_personne', v)} />
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
-      <AddressFields value={g.adresse} set={v => set('adresse', v)} />
+      <AddressFields value={g.adresse} set={v => set('adresse', v)} wazeMode="planifier" />
     </Modal>
   )
 }

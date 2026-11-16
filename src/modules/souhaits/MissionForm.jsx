@@ -306,14 +306,14 @@ function BlocAdministratif({ m, set, setM, lecture, souhait }) {
           {originLib && <div>Origine : {originLib}</div>}
         </div>
         {fmtAdresse(adresse)
-          ? <div style={{ marginTop:8 }}><AdresseAffichee label="Adresse légale" value={adresse} /></div>
+          ? <div style={{ marginTop:8 }}><AdresseAffichee label="Adresse légale" value={adresse} wazeMode="planifier" /></div>
           : <div style={{ marginTop:8, fontSize:13, color:'var(--text-muted)' }}>Aucune adresse sur la fiche — complétez-la ci-dessous.</div>}
       </div>
 
       {manqueAdresse && (
         <div style={{ marginBottom: 8 }}>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse du domicile du patient</div>
-          <AddressFields value={m.patient_adresse} set={v => { if (!lecture) set('patient_adresse', v) }} />
+          <AddressFields value={m.patient_adresse} set={v => { if (!lecture) set('patient_adresse', v) }} wazeMode="planifier" />
         </div>
       )}
       {!niss && (
@@ -383,7 +383,7 @@ function BlocBase({ m, set, lecture }) {
       )}
       <div style={{ marginTop: 8 }}>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
-        <AddressFields value={m.base_adresse} set={v => { if (!lecture) set('base_adresse', v) }} />
+        <AddressFields value={m.base_adresse} set={v => { if (!lecture) set('base_adresse', v) }} wazeMode="planifier" />
       </div>
       {(nomMatch?.protocole || m.base_protocole) && !m.base_autre && (
         <TA label="Protocole de mission" value={nomMatch?.protocole || m.base_protocole || ''} set={() => {}} rows={4} />
@@ -471,10 +471,10 @@ function BlocDestinations({ m, set, setM, lecture }) {
     <Card>
       <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Destination</div>
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
-      <AddressFields value={m.dest_adresse} set={v => { if (!lecture) set('dest_adresse', v) }} />
+      <AddressFields value={m.dest_adresse} set={v => { if (!lecture) set('dest_adresse', v) }} wazeMode="planifier" />
       <TA label="Précisions" value={m.dest_precisions || ''} set={v => set('dest_precisions', v)} rows={2} />
       <F label="Heure souhaitée sur place" type="datetime-local" value={m.arrivee_destination || ''} set={v => set('arrivee_destination', v)} readOnly={lecture} />
-      <LiensTrajet etapes={etapesTrajet(m)} />
+      <LiensTrajet etapes={etapesTrajet(m)} wazeMode="planifier" />
       <div style={{ fontWeight: 700, margin: '8px 0' }}>Sur place</div>
       {activites.map(a => (
         <div key={a.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
@@ -482,7 +482,7 @@ function BlocDestinations({ m, set, setM, lecture }) {
           <F label="Heure attendue" type="time" value={(a.heure || '').slice(0, 5)} set={v => majAct(a.id, { heure: v })} readOnly={lecture} />
           <F label="Téléphone" value={a.telephone || ''} set={v => majAct(a.id, { telephone: v })} readOnly={lecture} />
           <TA label="Notes" value={a.notes || ''} set={v => majAct(a.id, { notes: v })} rows={2} />
-          <AddressFields value={a.adresse} set={v => { if (!lecture) majAct(a.id, { adresse: v }) }} />
+          <AddressFields value={a.adresse} set={v => { if (!lecture) majAct(a.id, { adresse: v }) }} wazeMode="planifier" />
           {!lecture && (
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn kind="soft" onClick={() => memoriser(a)}>Réutiliser plus tard</Btn>
@@ -553,7 +553,7 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
         <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'10px 12px', margin:'6px 0' }}>
           <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse (domicile du patient — reprise de la fiche bénéficiaire)</div>
           <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— à renseigner sur la fiche bénéficiaire —'}</div>
-          {fmtAdresse(m.patient_adresse) && <div style={{ marginTop: 6 }}><LiensGps adresse={m.patient_adresse} /></div>}
+          {fmtAdresse(m.patient_adresse) && <div style={{ marginTop: 6 }}><LiensGps adresse={m.patient_adresse} wazeMode="planifier" /></div>}
         </div>
       )}
       {inst && (
@@ -582,7 +582,7 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
               <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(instDemandeuse.adresse) || fmtAdresse(m.pec_adresse) || '—'}</div>
               {instDemandeuse.tel && <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:4 }}>{instDemandeuse.tel}</div>}
               {fmtAdresse(instDemandeuse.adresse || m.pec_adresse) && (
-                <div style={{ marginTop:6 }}><LiensGps adresse={instDemandeuse.adresse || m.pec_adresse} /></div>
+                <div style={{ marginTop:6 }}><LiensGps adresse={instDemandeuse.adresse || m.pec_adresse} wazeMode="planifier" /></div>
               )}
             </div>
           )}
@@ -759,7 +759,7 @@ async function chercherPhoton(q) {
 function Champ({ f, val, set, lecture }) {
   if (!f) return null
   const lock = !!lecture
-  if (f.t === 'address') return <div style={{ gridColumn:'1 / -1', margin:'8px 0' }}><label style={lbl}>{f.l}</label><AddressFields value={val} set={lock ? (()=>{}) : set} /></div>
+  if (f.t === 'address') return <div style={{ gridColumn:'1 / -1', margin:'8px 0' }}><label style={lbl}>{f.l}</label><AddressFields value={val} set={lock ? (()=>{}) : set} wazeMode="planifier" /></div>
   if (f.t === 'sep') return <div style={{ gridColumn:'1 / -1', fontSize:12, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:.5, margin:'14px 0 6px' }}>{f.l.replace(/—/g,'').trim()}</div>
   if (f.t === 'toggle') return (
     <div style={{ display:'flex', alignItems:'center', gap:10, margin:'12px 0' }}>

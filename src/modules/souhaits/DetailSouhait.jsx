@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse, URL_WAZE_TRAFIC } from '@/components/ui'
+import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
 import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige, estSouhaitDemo, estSouhaitFormationPrep } from './statuts'
@@ -46,20 +46,6 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     setManque(false)
     setPinMsg(null)
   }, [id])
-  // Sur PC : ouvrir Waze Live Map une fois à l’entrée en préparation.
-  useEffect(() => {
-    if (!preparer || !id) return undefined
-    if (typeof window === 'undefined') return undefined
-    const estPc = window.matchMedia('(pointer: fine) and (min-width: 900px)').matches
-    if (!estPc) return undefined
-    const cle = `ha-waze-prep-${id}`
-    if (sessionStorage.getItem(cle)) return undefined
-    sessionStorage.setItem(cle, '1')
-    const t = setTimeout(() => {
-      window.open(URL_WAZE_TRAFIC, '_blank', 'noopener,noreferrer')
-    }, 400)
-    return () => clearTimeout(t)
-  }, [preparer, id])
   useEffect(() => {
     if (preparer && s && statutFige(s.statut, s) && !estSouhaitFormationPrep(s)) onVoir?.()
   }, [preparer, s?.id, s?.statut])
@@ -214,7 +200,6 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
           </div>
         </div>
         <div className="ha-souhait-actions">
-          <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
           <Btn kind="soft" onClick={()=>setFiche(true)}>Imprimer la fiche</Btn>
           {coordinationMedicale && (
             <Btn kind="soft" onClick={() => setDossier(v => !v)}>{dossier ? 'Fermer le rapport médical' : 'Rapport médical'}</Btn>
@@ -360,7 +345,7 @@ function Resume({ s, souhaitId, onVoirRapport }) {
         {tels && <L k="Téléphone" v={tels} />}
         {fmtAdresse(s.beneficiaire_adresse) && (
           <div style={{ marginBottom: 8 }}>
-            <AdresseAffichee label="Adresse légale" value={s.beneficiaire_adresse} />
+            <AdresseAffichee label="Adresse légale" value={s.beneficiaire_adresse} wazeMode={mode === 'edit' ? 'planifier' : 'naviguer'} />
           </div>
         )}
         {s.beneficiaire_contact && <L k="Contact / famille" v={s.beneficiaire_contact} />}
@@ -369,7 +354,7 @@ function Resume({ s, souhaitId, onVoirRapport }) {
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lieu</div>
             <div style={{ fontSize: 13.5 }}>{s.localisation}</div>
-            <LiensGps texte={s.localisation} />
+            <LiensGps texte={s.localisation} wazeMode={mode === 'edit' ? 'planifier' : 'naviguer'} />
           </div>
         )}
         {(() => {

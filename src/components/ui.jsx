@@ -240,10 +240,18 @@ export function urlGoogleMaps(a) {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`
 }
 
+export const URL_WAZE_TRAFIC = 'https://www.waze.com/fr/live-map'
+
 export function urlWaze(a) {
   const q = texteGps(a)
   if (!q) return ''
   return `https://waze.com/ul?q=${encodeURIComponent(q)}&navigate=yes`
+}
+
+/** Planification trajet (Live Map PC) vs navigation app. */
+export function hrefWaze(a, mode = 'naviguer') {
+  if (mode === 'planifier') return URL_WAZE_TRAFIC
+  return urlWaze(a)
 }
 
 export function urlItineraireMaps(etapes) {
@@ -256,9 +264,7 @@ export function urlItineraireMaps(etapes) {
   return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving${waypoints}`
 }
 
-export const URL_WAZE_TRAFIC = 'https://www.waze.com/fr/live-map'
-
-export function LiensTrajet({ etapes }) {
+export function LiensTrajet({ etapes, wazeMode = 'naviguer' }) {
   const pts = (etapes || []).map(e => ({ label: e.label, q: texteGps(e.adresse || e.texte) })).filter(e => e.q)
   const cle = pts.map(p => p.q).join('\n')
   const [legs, setLegs] = useState(null)
@@ -296,7 +302,7 @@ export function LiensTrajet({ etapes }) {
             )}
             {attente && !mesure && <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>…</span>}
             {leg && <a className="ha-gps-btn" href={leg} target="_blank" rel="noopener noreferrer">Google Maps</a>}
-            <a className="ha-gps-btn is-waze" href={urlWaze(dest.q)} target="_blank" rel="noopener noreferrer">Waze</a>
+            <a className="ha-gps-btn is-waze" href={hrefWaze(dest.q, wazeMode)} target="_blank" rel="noopener noreferrer" title={wazeMode === 'planifier' ? 'Planifier sur Waze Live Map' : 'Ouvrir dans Waze'}>Waze</a>
           </div>
         )
       })}
@@ -305,37 +311,47 @@ export function LiensTrajet({ etapes }) {
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {maps && <a className="ha-gps-btn" href={maps} target="_blank" rel="noopener noreferrer">Itinéraire complet</a>}
-        <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
+        {wazeMode === 'planifier' ? null : (
+          <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
+        )}
       </div>
     </div>
   )
 }
 
-export function LiensGps({ adresse, texte, onClick }) {
+export function LiensGps({ adresse, texte, onClick, wazeMode = 'naviguer' }) {
   const q = texte || texteGps(adresse)
   if (!q) return null
   const stop = e => { e.stopPropagation(); onClick?.(e) }
+  const wazeHref = hrefWaze(q, wazeMode)
   return (
     <span className="ha-gps" onClick={stop}>
       <a className="ha-gps-btn" href={urlGoogleMaps(q)} target="_blank" rel="noopener noreferrer" onClick={stop}>Google Maps</a>
-      <a className="ha-gps-btn is-waze" href={urlWaze(q)} target="_blank" rel="noopener noreferrer" onClick={stop}>Waze</a>
+      <a
+        className="ha-gps-btn is-waze"
+        href={wazeHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={stop}
+        title={wazeMode === 'planifier' ? 'Planifier le trajet sur Waze Live Map' : 'Ouvrir dans Waze'}
+      >Waze</a>
     </span>
   )
 }
 
-export function AdresseAffichee({ value, texte, label, compact }) {
+export function AdresseAffichee({ value, texte, label, compact, wazeMode = 'naviguer' }) {
   const t = texte || texteGps(value)
   if (!t) return null
   return (
     <div className={'ha-addr' + (compact ? ' is-compact' : '')}>
       {label && <div className="ha-addr-lab">{label}</div>}
       <div className="ha-addr-txt">{t}</div>
-      <LiensGps adresse={value} texte={t} />
+      <LiensGps adresse={value} texte={t} wazeMode={wazeMode} />
     </div>
   )
 }
 
-export function AddressFields({ value, set }) {
+export function AddressFields({ value, set, wazeMode = 'naviguer' }) {
   const a = value && typeof value === 'object' ? value : {}
   const up = (k, v) => set({ ...a, [k]: v })
   const txt = fmtAdresse(a)
@@ -397,7 +413,7 @@ export function AddressFields({ value, set }) {
       )}
       {txt && (
         <div style={{ margin: '-4px 0 10px' }}>
-          <LiensGps adresse={a} />
+          <LiensGps adresse={a} wazeMode={wazeMode} />
         </div>
       )}
     </div>
