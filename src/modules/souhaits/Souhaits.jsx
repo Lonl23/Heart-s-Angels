@@ -219,8 +219,8 @@ function Kanban({ onOpen, userId }) {
   function visiblePrep(s) {
     // Camille (terrain) : hors préparation.
     if (estSouhaitDemo(s)) return false
-    // Formation préparation : uniquement le dossier personnel du préparateur.
-    if (estSouhaitFormationPrep(s)) return !!(userId && s.created_by === userId)
+    // Formation préparation : hors colonnes — accès uniquement via « Mon souhait de formation ».
+    if (estSouhaitFormationPrep(s)) return false
     return true
   }
 
@@ -249,8 +249,10 @@ function Kanban({ onOpen, userId }) {
   async function appliquer(id, col, extra={}) {
     const item = itemsRef.current.find(s => s.id === id)
     if (!item || item.statut === col) return
-    if (estSouhaitDemo(item)) {
-      flash(libelleStatutFige(item.statut, item), 'warn')
+    if (estSouhaitDemo(item) || estSouhaitFormationPrep(item)) {
+      flash(estSouhaitFormationPrep(item)
+        ? 'Souhait de formation — hors colonnes, accessible via le bouton Mon souhait de formation.'
+        : libelleStatutFige(item.statut, item), 'warn')
       return
     }
     if (!peutChangerStatut(item.statut, col, item)) {
@@ -277,8 +279,9 @@ function Kanban({ onOpen, userId }) {
   function deposer(s, col) {
     const item = typeof s === 'string' ? itemsRef.current.find(x => x.id === s) : s
     if (!item || !col || item.statut === col) return
-    if (estSouhaitDemo(item) || !peutChangerStatut(item.statut, col, item)) {
-      if (estSouhaitDemo(item) || statutFige(item.statut, item)) flash(libelleStatutFige(item.statut, item), 'warn')
+    if (estSouhaitDemo(item) || estSouhaitFormationPrep(item) || !peutChangerStatut(item.statut, col, item)) {
+      if (estSouhaitFormationPrep(item)) flash('Souhait de formation — hors colonnes.', 'warn')
+      else if (estSouhaitDemo(item) || statutFige(item.statut, item)) flash(libelleStatutFige(item.statut, item), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }

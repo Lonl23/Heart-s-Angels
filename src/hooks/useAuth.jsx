@@ -17,6 +17,8 @@ const ROLES_EQUIPE_PREPARATION = [
   'recolteur_souhait',
   'coord_transport', 'coord_transport_adjoint',
   'resp_logistique', 'resp_logistique_adjoint',
+  // Informatique : souhait de formation (et tests) toujours accessible.
+  'resp_informatique', 'resp_informatique_adjoint',
 ]
 /** Anciens rôles élargis : voient encore le module, mais motif si hors équipe. */
 const ROLES_VOIR_SOUHAITS = [
@@ -197,7 +199,11 @@ export function AuthProvider({ children }) {
   function peutProgrammerSouhait() {
     if (!peutPreparerSouhait()) return false
     if (role === 'coordinateur' || aMotifPreparationSession()) return true
-    return rolesAsbl().some(r => ['coord_transport', 'coord_transport_adjoint', 'resp_logistique', 'resp_logistique_adjoint'].includes(r))
+    return rolesAsbl().some(r => [
+      'coord_transport', 'coord_transport_adjoint',
+      'resp_logistique', 'resp_logistique_adjoint',
+      'resp_informatique', 'resp_informatique_adjoint',
+    ].includes(r))
   }
   function peutEncoderPatientSouhait() {
     if (!peutPreparerSouhait()) return false

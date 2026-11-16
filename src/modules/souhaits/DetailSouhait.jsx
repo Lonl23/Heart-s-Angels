@@ -345,7 +345,7 @@ function Resume({ s, souhaitId, onVoirRapport }) {
         {tels && <L k="Téléphone" v={tels} />}
         {fmtAdresse(s.beneficiaire_adresse) && (
           <div style={{ marginBottom: 8 }}>
-            <AdresseAffichee label="Adresse légale" value={s.beneficiaire_adresse} wazeMode={mode === 'edit' ? 'planifier' : 'naviguer'} />
+            <AdresseAffichee label="Adresse légale" value={s.beneficiaire_adresse} />
           </div>
         )}
         {s.beneficiaire_contact && <L k="Contact / famille" v={s.beneficiaire_contact} />}
