@@ -12,18 +12,29 @@ const STAFF = ['admin','president','coordinateur','tresorier','secretaire',
                'volontaire_medical','volontaire_non_medical']
 const ADMINS  = ['admin','president']
 
-/** Coordination transport, présidence, informatique : équipages, horaires, ambulances. */
-const ROLES_PROGRAMME_SOUHAIT = [
+/** Équipe autorisée directement à la préparation (sans motif). */
+const ROLES_EQUIPE_PREPARATION = [
+  'recolteur_souhait',
+  'coord_transport', 'coord_transport_adjoint',
+  'resp_logistique', 'resp_logistique_adjoint',
+]
+/** Anciens rôles élargis : voient encore le module, mais motif si hors équipe. */
+const ROLES_VOIR_SOUHAITS = [
   'president', 'vice_president',
   'resp_informatique', 'resp_informatique_adjoint',
   'coord_transport', 'coord_transport_adjoint',
   'resp_logistique', 'resp_logistique_adjoint',
-]
-/** Partie patient (récolte) : récolteur et coordination médicale. */
-const ROLES_PATIENT_SOUHAIT = [
   'recolteur_souhait',
   'coord_medical', 'coord_medical_adjoint', 'coordinateur_medical',
 ]
+const CLE_MOTIF_PREPARATION = 'ha-prep-souhait-motif'
+
+export function aMotifPreparationSession() {
+  try { return sessionStorage.getItem(CLE_MOTIF_PREPARATION) === '1' } catch { return false }
+}
+export function poserMotifPreparationSession() {
+  try { sessionStorage.setItem(CLE_MOTIF_PREPARATION, '1') } catch { /* ignore */ }
+}
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
@@ -174,18 +185,30 @@ export function AuthProvider({ children }) {
   function matriceAutorise(feature) {
     return rolesAsbl().some(r => matrix[`role:${r}:${feature}`] === true)
   }
-  function peutProgrammerSouhait() {
+  function estEquipePreparationSouhait() {
     if (!role || role === 'partenaire') return false
-    if (accesTotal() || role === 'coordinateur') return true
-    return rolesAsbl().some(r => ROLES_PROGRAMME_SOUHAIT.includes(r))
+    if (role === 'coordinateur') return true
+    return rolesAsbl().some(r => ROLES_EQUIPE_PREPARATION.includes(r))
+  }
+  /** Préparer / encoder : équipe récolte·coord·log·transport, ou motif de session. */
+  function peutPreparerSouhait() {
+    return estEquipePreparationSouhait() || aMotifPreparationSession()
+  }
+  function peutProgrammerSouhait() {
+    if (!peutPreparerSouhait()) return false
+    if (role === 'coordinateur' || aMotifPreparationSession()) return true
+    return rolesAsbl().some(r => ['coord_transport', 'coord_transport_adjoint', 'resp_logistique', 'resp_logistique_adjoint'].includes(r))
   }
   function peutEncoderPatientSouhait() {
-    if (!role || role === 'partenaire') return false
+    if (!peutPreparerSouhait()) return false
     if (peutProgrammerSouhait()) return true
-    return rolesAsbl().some(r => ROLES_PATIENT_SOUHAIT.includes(r))
+    return rolesAsbl().includes('recolteur_souhait') || aMotifPreparationSession()
   }
+  /** Voir le module (liste) : équipe + rôles élargis / admin. */
   function peutGererSouhaits() {
-    return peutProgrammerSouhait() || peutEncoderPatientSouhait()
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'coordinateur' || estEquipePreparationSouhait()) return true
+    return rolesAsbl().some(r => ROLES_VOIR_SOUHAITS.includes(r))
   }
   function peutGererFiches() {
     if (accesTotal()) return true
@@ -307,6 +330,7 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
+    estEquipePreparationSouhait, peutPreparerSouhait,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
     peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutPublierActualites, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutGererHelpdesk, peutPersonnaliser, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
     modulesMaintenance, moduleEnMaintenance, messageMaintenance,

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams, useLocation, Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth, aMotifPreparationSession, poserMotifPreparationSession } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, PillFictif, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
@@ -63,11 +63,50 @@ function ChampRechercheNom({ value, onChange, id }) {
   )
 }
 
+function MotifAccesPreparation({ onOk, onCancel }) {
+  const [motif, setMotif] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  async function envoyer() {
+    setBusy(true)
+    setErr(null)
+    const { data, error } = await supabase.rpc('demander_acces_preparation_souhait', { p_motif: motif })
+    setBusy(false)
+    if (error || !data?.ok) {
+      setErr(data?.error || error?.message || 'Impossible d’enregistrer le motif.')
+      return
+    }
+    poserMotifPreparationSession()
+    onOk?.()
+  }
+  return (
+    <Page title="Accès préparation">
+      <Card style={{ maxWidth: 560 }}>
+        <p style={{ marginTop: 0, color: 'var(--text)', fontSize: 14, lineHeight: 1.45 }}>
+          La préparation des souhaits est réservée aux <strong>récolteurs</strong>, au <strong>coordinateur</strong>, à la <strong>logistique</strong> et au <strong>transport</strong>.
+          Indiquez un motif : la présidence est prévenue immédiatement.
+        </p>
+        <TA label="Motif de votre accès" value={motif} set={setMotif} rows={3} placeholder="Pourquoi devez-vous préparer un souhait ?" />
+        {err && <Flash kind="err">{err}</Flash>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          <Btn onClick={envoyer} disabled={busy}>{busy ? '…' : 'Continuer et prévenir la présidence'}</Btn>
+          <Btn kind="soft" onClick={onCancel}>Annuler</Btn>
+        </div>
+      </Card>
+    </Page>
+  )
+}
+
 export default function Souhaits() {
   const nav = useNavigate()
   const { id } = useParams()
   const loc = useLocation()
-  const { peutEncoderPatientSouhait, peutGererSouhaits, profile } = useAuth()
+  const {
+    peutEncoderPatientSouhait, peutGererSouhaits, peutPreparerSouhait,
+    estEquipePreparationSouhait, profile,
+  } = useAuth()
+  const [, setMotifTick] = useState(0)
+  const prepOk = peutPreparerSouhait() || aMotifPreparationSession()
   const encoderPatient = peutEncoderPatientSouhait()
   const gerer = peutGererSouhaits()
   const [tab, setTab] = useState('souhaits')
@@ -75,6 +114,7 @@ export default function Souhaits() {
   const [formationBusy, setFormationBusy] = useState(false)
   const nouveau = loc.pathname.endsWith('/nouveau')
   const preparer = loc.pathname.endsWith('/preparer')
+  const demandeAcces = (nouveau || preparer) && !prepOk && !estEquipePreparationSouhait()
 
   function ouvrirSouhait(s) {
     const id = typeof s === 'string' ? s : s?.id
@@ -98,8 +138,17 @@ export default function Souhaits() {
       .then(({ count }) => setNbDemandes(count || 0))
   }, [id, nouveau, tab, loc.pathname])
 
+  if (demandeAcces) {
+    return (
+      <MotifAccesPreparation
+        onOk={() => setMotifTick(t => t + 1)}
+        onCancel={() => nav('/app/souhaits')}
+      />
+    )
+  }
+
   if (nouveau) {
-    if (!encoderPatient) return <Navigate to="/app/souhaits" replace />
+    if (!encoderPatient && !prepOk) return <Navigate to="/app/souhaits" replace />
     return (
       <FormSouhait onDone={(nid) => {
         if (typeof nid === 'string') nav(`/app/souhaits/${nid}/preparer`)
@@ -119,7 +168,7 @@ export default function Souhaits() {
     <Page fill title="Préparation souhait"
       action={tab==='souhaits' ? (
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          {gerer && (
+          {prepOk && (
             <Btn kind="soft" onClick={ouvrirFormationPrep} disabled={formationBusy}>
               {formationBusy ? '…' : 'Mon souhait de formation'}
             </Btn>
@@ -127,6 +176,11 @@ export default function Souhaits() {
           {encoderPatient && <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn>}
         </div>
       ) : null}>
+      {!estEquipePreparationSouhait() && !prepOk && gerer && (
+        <Flash kind="warn">
+          Consultation seule. Pour préparer un dossier, un motif sera demandé et la présidence prévenue (réservé aux récolteurs, coordinateur, logistique et transport).
+        </Flash>
+      )}
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },

@@ -8,6 +8,7 @@ import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
 import MaterielRequis from './MaterielRequis'
 import DocumentsSejour from './DocumentsSejour'
+import DocsAdresse from './DocsAdresse'
 import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 import EquipePluriForm, { LignesPluri } from './EquipePluri'
 import { RecolteursPicker } from './Recolteurs'
@@ -156,9 +157,9 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
       {cur?.groupes && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           {cur.groupes.map(gid => {
-            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} lecture={lectureOnglet} instDemandeuse={instDemandeuse} />
-            if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} />
-            if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} />
+            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} lecture={lectureOnglet} instDemandeuse={instDemandeuse} souhaitId={souhaitId} />
+            if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} souhaitId={souhaitId} />
+            if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhaitId={souhaitId} />
             if (gid === 'administratif') return <BlocAdministratif key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhait={souhait} />
             const g = grp(gid); if (!g) return null
             return (
@@ -332,7 +333,7 @@ function BlocAdministratif({ m, set, setM, lecture, souhait }) {
   )
 }
 
-function BlocBase({ m, set, lecture }) {
+function BlocBase({ m, set, lecture, souhaitId }) {
   const [bases, setBases] = useState([])
   useEffect(() => {
     supabase.from('bases_depart').select('*').eq('actif', true).order('ordre').then(({ data }) => {
@@ -384,6 +385,13 @@ function BlocBase({ m, set, lecture }) {
       <div style={{ marginTop: 8 }}>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
         <AddressFields value={m.base_adresse} set={v => { if (!lecture) set('base_adresse', v) }} wazeMode="planifier" />
+        <DocsAdresse
+          souhaitId={souhaitId}
+          slotId="base"
+          docs={m.base_docs}
+          onChange={v => { if (!lecture) set('base_docs', v) }}
+          lecture={lecture}
+        />
       </div>
       {(nomMatch?.protocole || m.base_protocole) && !m.base_autre && (
         <TA label="Protocole de mission" value={nomMatch?.protocole || m.base_protocole || ''} set={() => {}} rows={4} />
@@ -430,7 +438,7 @@ function etapesTrajet(m) {
   ]
 }
 
-function BlocDestinations({ m, set, setM, lecture }) {
+function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
   const activites = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
   const [connues, setConnues] = useState([])
   useEffect(() => {
@@ -456,8 +464,15 @@ function BlocDestinations({ m, set, setM, lecture }) {
   }
   async function memoriser(a) {
     if (!a?.nom) return
-    await supabase.from('destinations_frequentes').insert({
-      nom: a.nom,
+    const nom = String(a.nom).trim()
+    const deja = (connues || []).some(d =>
+      String(d.nom || '').trim().toLowerCase() === nom.toLowerCase()
+      && String(d.cp || '') === String(a.adresse?.cp || '')
+      && String(d.localite || '').toLowerCase() === String(a.adresse?.localite || '').toLowerCase()
+    )
+    if (deja) { alert('Cette destination est déjà enregistrée.'); return }
+    const { data, error } = await supabase.from('destinations_frequentes').insert({
+      nom,
       rue: a.adresse?.rue || '',
       numero: a.adresse?.numero || '',
       cp: a.adresse?.cp || '',
@@ -465,24 +480,50 @@ function BlocDestinations({ m, set, setM, lecture }) {
       pays: a.adresse?.pays || 'Belgique',
       telephone: a.telephone || '',
       notes: a.notes || '',
-    })
+    }).select('*').single()
+    if (error) { alert(error.message); return }
+    if (data) setConnues(list => [...list, data])
+  }
+  function ajouterSansDoublon(src) {
+    if (src?.nom) {
+      const existe = activites.some(a =>
+        String(a.nom || '').trim().toLowerCase() === String(src.nom).trim().toLowerCase()
+        && String(a.adresse?.cp || '') === String(src.cp || src.adresse?.cp || '')
+      )
+      if (existe) { alert('Cette activité est déjà dans le trajet.'); return }
+    }
+    ajouter(src)
   }
   return (
     <Card>
       <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Destination</div>
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
       <AddressFields value={m.dest_adresse} set={v => { if (!lecture) set('dest_adresse', v) }} wazeMode="planifier" />
+      <DocsAdresse
+        souhaitId={souhaitId}
+        slotId="destination"
+        docs={m.dest_docs}
+        onChange={v => { if (!lecture) set('dest_docs', v) }}
+        lecture={lecture}
+      />
       <TA label="Précisions" value={m.dest_precisions || ''} set={v => set('dest_precisions', v)} rows={2} />
       <F label="Heure souhaitée sur place" type="datetime-local" value={m.arrivee_destination || ''} set={v => set('arrivee_destination', v)} readOnly={lecture} />
       <LiensTrajet etapes={etapesTrajet(m)} wazeMode="planifier" />
       <div style={{ fontWeight: 700, margin: '8px 0' }}>Sur place</div>
       {activites.map(a => (
         <div key={a.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
-          <F label="Lieu / activité" value={a.nom || ''} set={v => majAct(a.id, { nom: v })} readOnly={lecture} />
+          <F label="Activité" value={a.nom || ''} set={v => majAct(a.id, { nom: v })} readOnly={lecture} />
           <F label="Heure attendue" type="time" value={(a.heure || '').slice(0, 5)} set={v => majAct(a.id, { heure: v })} readOnly={lecture} />
           <F label="Téléphone" value={a.telephone || ''} set={v => majAct(a.id, { telephone: v })} readOnly={lecture} />
           <TA label="Notes" value={a.notes || ''} set={v => majAct(a.id, { notes: v })} rows={2} />
           <AddressFields value={a.adresse} set={v => { if (!lecture) majAct(a.id, { adresse: v }) }} wazeMode="planifier" />
+          <DocsAdresse
+            souhaitId={souhaitId}
+            slotId={a.id}
+            docs={a.documents}
+            onChange={v => { if (!lecture) majAct(a.id, { documents: v }) }}
+            lecture={lecture}
+          />
           {!lecture && (
             <div style={{ display: 'flex', gap: 8 }}>
               <Btn kind="soft" onClick={() => memoriser(a)}>Réutiliser plus tard</Btn>
@@ -493,9 +534,9 @@ function BlocDestinations({ m, set, setM, lecture }) {
       ))}
       {!lecture && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <Btn kind="soft" onClick={() => ajouter(null)}>+ Activité</Btn>
+          <Btn kind="soft" onClick={() => ajouterSansDoublon(null)}>+ Activité</Btn>
           {connues.length > 0 && (
-            <Sel label="Destination connue" value="" set={id => { const d = connues.find(x => x.id === id); if (d) ajouter(d) }} options={[{ v: '', l: '—' }, ...connues.map(d => ({ v: d.id, l: d.nom }))]} />
+            <Sel label="Destination connue" value="" set={id => { const d = connues.find(x => x.id === id); if (d) ajouterSansDoublon(d) }} options={[{ v: '', l: '—' }, ...connues.map(d => ({ v: d.id, l: d.nom }))]} />
           )}
         </div>
       )}
@@ -513,7 +554,7 @@ function AllergiesChamp({ val, set, lecture }) {
   return <ChoixMultiple label="Allergies" options={opts} value={val} onChange={set} lecture={lecture} />
 }
 
-function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
+function PriseEnCharge({ m, set, lecture, instDemandeuse, souhaitId }) {
   const dom = m.pec_type === 'Domicile du patient'
   const inst = m.pec_type === 'Institution'
   const champ = k => grp('prise_en_charge').fields.find(f => f.k === k)
@@ -554,6 +595,13 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
           <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse (domicile du patient — reprise de la fiche bénéficiaire)</div>
           <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— à renseigner sur la fiche bénéficiaire —'}</div>
           {fmtAdresse(m.patient_adresse) && <div style={{ marginTop: 6 }}><LiensGps adresse={m.patient_adresse} wazeMode="planifier" /></div>}
+          <DocsAdresse
+            souhaitId={souhaitId}
+            slotId="pec-domicile"
+            docs={m.pec_docs}
+            onChange={v => { if (!lecture) set('pec_docs', v) }}
+            lecture={lecture}
+          />
         </div>
       )}
       {inst && (
@@ -594,6 +642,15 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
               <Champ f={champ('pec_institution')} val={m.pec_institution} set={v=>set('pec_institution', v)} lecture={lecture} />
               <Champ f={champ('pec_adresse')} val={m.pec_adresse} set={v=>set('pec_adresse', v)} lecture={lecture} />
             </div>
+          )}
+          {(source === 'demandeuse' || source === 'autre') && (
+            <DocsAdresse
+              souhaitId={souhaitId}
+              slotId="pec"
+              docs={m.pec_docs}
+              onChange={v => { if (!lecture) set('pec_docs', v) }}
+              lecture={lecture}
+            />
           )}
           {(source === 'demandeuse' || source === 'autre') && (
             <ServicesInstitution m={m} set={set} lecture={lecture} />

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
+import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, fmtAdresse } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
 import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige, estSouhaitDemo, estSouhaitFormationPrep } from './statuts'
@@ -352,9 +352,8 @@ function Resume({ s, souhaitId, onVoirRapport }) {
         <L k="Souhait" v={s.description} />
         {s.localisation && (
           <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lieu</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Activité</div>
             <div style={{ fontSize: 13.5 }}>{s.localisation}</div>
-            <LiensGps texte={s.localisation} wazeMode={mode === 'edit' ? 'planifier' : 'naviguer'} />
           </div>
         )}
         {(() => {

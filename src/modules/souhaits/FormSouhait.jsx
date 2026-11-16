@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, Btn, F, TA, Sel, PhoneF, AddressFields, Modal, phoneValide, LiensGps } from '@/components/ui'
+import { Card, Btn, F, TA, Sel, PhoneF, AddressFields, Modal, phoneValide } from '@/components/ui'
 import { STATUTS, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } from './statuts'
 import { GenrePicker, NissF } from '@/modules/annuaire/genre'
 import {
@@ -111,6 +111,7 @@ function DatesPossibles({ value, set }) {
   const rowsRef = useRef(rows)
   rowsRef.current = rows
   const drag = useRef(null)
+  const [dragIdx, setDragIdx] = useState(null)
   const [plusieurs, setPlusieurs] = useState(() => rows.some(r => r.fin && r.debut && r.fin > r.debut))
   useEffect(() => {
     if ((value || []).some(r => r.fin && r.debut && r.fin > r.debut)) setPlusieurs(true)
@@ -131,6 +132,7 @@ function DatesPossibles({ value, set }) {
     const [item] = next.splice(from, 1)
     next.splice(to, 0, item)
     drag.current = to
+    setDragIdx(to)
     poser(next)
   }
   function retirer(i) {
@@ -140,9 +142,13 @@ function DatesPossibles({ value, set }) {
     setPlusieurs(on)
     if (!on) poser(rowsRef.current.map(r => ({ ...r, fin: r.debut || '' })))
   }
-  function pointerDown(e, i) {
+  function pointerDownTuile(e, i) {
     if (e.button != null && e.button !== 0) return
+    const tag = e.target?.closest?.('input,button,select,textarea,label,a')
+    if (tag && !e.target?.closest?.('.ha-date-handle')) return
+    e.preventDefault()
     drag.current = i
+    setDragIdx(i)
     const move = ev => {
       if (drag.current == null) return
       const el = document.elementFromPoint(ev.clientX, ev.clientY)
@@ -152,6 +158,7 @@ function DatesPossibles({ value, set }) {
     }
     const up = () => {
       drag.current = null
+      setDragIdx(null)
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
@@ -163,19 +170,23 @@ function DatesPossibles({ value, set }) {
 
   return (
     <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
+        Dates possibles — glissez toute la tuile pour changer la priorité (1 = préférée).
+      </div>
       <label className="ha-check" style={{ marginBottom: 8 }}>
         <input type="checkbox" checked={plusieurs} onChange={e => basculerPlusieurs(e.target.checked)} />
         <span>Plusieurs jours</span>
       </label>
       {rows.map((r, i) => (
-        <div key={r._k || i} className="ha-date-periode" data-date-idx={i}>
+        <div
+          key={r._k || i}
+          className={'ha-date-periode' + (dragIdx === i ? ' is-dragging' : '') + (rows.length > 1 ? ' is-sortable' : '')}
+          data-date-idx={i}
+          onPointerDown={e => rows.length > 1 && pointerDownTuile(e, i)}
+        >
+          <div className="ha-date-prio" aria-label={`Priorité ${i + 1}`}>{i + 1}</div>
           {rows.length > 1 && (
-            <button
-              type="button"
-              className="ha-date-handle"
-              aria-label={`Déplacer la date ${i + 1}`}
-              onPointerDown={e => pointerDown(e, i)}
-            >⋮⋮</button>
+            <span className="ha-date-handle" aria-hidden>⋮⋮</span>
           )}
           {plusieurs ? (
             <>
@@ -542,8 +553,22 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       <Card style={{ marginBottom: 14 }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>Le souhait</div>
         <TA label="Description *" value={f.description} set={v => set('description', v)} rows={3} />
-        <F label="Lieu (affiché au calendrier, sans nom de patient)" value={f.localisation} set={v => set('localisation', v)} />
-        {f.localisation && <div style={{ margin: '-4px 0 10px' }}><LiensGps texte={f.localisation} wazeMode="planifier" /></div>}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
+            Activité (affichée au calendrier, sans nom de patient)
+          </div>
+          {f.localisation ? (
+            <div className="ha-chip-sum" style={{ marginBottom: 8 }}>
+              <div style={{ fontWeight: 700 }}>{f.localisation}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <Btn kind="soft" style={{ padding: '4px 8px' }} onClick={() => setPopup('activite')}>Modifier</Btn>
+                <Btn kind="danger" style={{ padding: '4px 8px' }} onClick={() => set('localisation', '')}>Retirer</Btn>
+              </div>
+            </div>
+          ) : (
+            <Btn kind="soft" onClick={() => setPopup('activite')}>Choisir / encoder l’activité</Btn>
+          )}
+        </div>
         <DatesPossibles value={f.dates_possibles} set={v => set('dates_possibles', v)} />
         <label className="ha-check" style={{ marginBottom: 10 }}>
           <input type="checkbox" checked={!!f.courte_duree} onChange={e => set('courte_duree', e.target.checked)} />
@@ -714,6 +739,13 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
           }}
         />
       )}
+      {popup === 'activite' && (
+        <PopupActivite
+          initial={f.localisation || ''}
+          onClose={() => setPopup(null)}
+          onSave={v => { set('localisation', v); setPopup(null) }}
+        />
+      )}
       {popup === 'pick-inst' && (
         <PickerList
           title="Institution / partenaire"
@@ -781,6 +813,30 @@ function PickerList({ title, load, label, hint, onPick, onClose, empty, onSearch
           {hint?.(r) && <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>{hint(r)}</div>}
         </button>
       ))}
+    </Modal>
+  )
+}
+
+function PopupActivite({ initial, onSave, onClose }) {
+  const [v, setV] = useState(initial || '')
+  function go() {
+    const t = String(v || '').trim()
+    if (!t) { alert('Indiquez l’activité.'); return }
+    onSave(t)
+  }
+  return (
+    <Modal title="Activité (calendrier)" onClose={onClose} footer={
+      <><Btn onClick={go}>Enregistrer</Btn><Btn kind="soft" onClick={onClose}>Annuler</Btn></>
+    }>
+      <F
+        label="Activité"
+        value={v}
+        set={setV}
+        placeholder="ex. Aquarium-Muséum, promenade au parc…"
+      />
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 4px' }}>
+        Ce libellé apparaît au calendrier, sans le nom du patient. Ce n’est pas une adresse GPS.
+      </p>
     </Modal>
   )
 }
