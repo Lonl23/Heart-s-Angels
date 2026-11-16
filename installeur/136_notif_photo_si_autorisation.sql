@@ -24,7 +24,7 @@ begin
 
   -- Uniquement si l’autorisation photos est positive (pas refus / vide).
   auth_photo := lower(trim(coalesce(s.mission->>'autorisation_photos', '')));
-  if auth_photo not in ('oui', 'oui_sauf_presse', 'sans_visage', 'oui_sans_visage') then
+  if auth_photo not in ('oui', 'oui_sauf_presse', 'oui_de_dos', 'sans_visage', 'oui_sans_visage', 'de_dos') then
     return 0;
   end if;
 

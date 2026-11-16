@@ -422,13 +422,15 @@ export const O2_LIGNES = ['B10','B10','B5','B5','B2']
 export const AUTORISATION_PHOTOS = [
   { v:'oui', l:'Oui' },
   { v:'oui_sauf_presse', l:'Oui, sauf presse' },
+  { v:'oui_de_dos', l:'Oui, de dos' },
   { v:'refus', l:'Refus' },
 ]
 
 /** Ancien booléen / anciens libellés → niveaux actuels. */
 export function normaliserAutorisationPhotos(v) {
   if (v === true || v === 'oui' || v === 'true' || v === 'Oui') return 'oui'
-  if (v === 'oui_sauf_presse' || v === 'sauf_presse' || v === 'sans_visage' || v === 'oui_sans_visage' || v === 'sans visage') return 'oui_sauf_presse'
+  if (v === 'oui_sauf_presse' || v === 'sauf_presse') return 'oui_sauf_presse'
+  if (v === 'oui_de_dos' || v === 'de_dos' || v === 'sans_visage' || v === 'oui_sans_visage' || v === 'sans visage') return 'oui_de_dos'
   if (v === false || v === 'non' || v === 'refus' || v === 'false' || v === 'Refus catégorique' || v === 'Refus') return 'refus'
   if (v == null || v === '') return ''
   return 'refus'
