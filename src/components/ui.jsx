@@ -176,18 +176,41 @@ export function PhoneF({ label, value, set, required, placeholder = '+32 xxx.xx.
   )
 }
 
-export function Modal({ title, onClose, children, footer, wide }) {
+/**
+ * Modale applicative.
+ * Par défaut : pas de fermeture au clic sur le fond (évite de perdre une saisie).
+ * Avec footer (Enregistrer / Annuler) : la croix est masquée — il faut enregistrer ou annuler.
+ * Sans footer : la croix reste (ex. listes de choix).
+ * closeOnScrim / showClose forcent le comportement si besoin.
+ */
+export function Modal({ title, onClose, children, footer, wide, closeOnScrim = false, showClose }) {
+  const croix = showClose != null ? !!showClose : !footer
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
   }, [])
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      // Escape = annuler uniquement si croix visible (pas de formulaire à valider).
+      if (croix) onClose?.()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [croix, onClose])
   const noeud = (
-    <div className="ha-modal-scrim" onClick={onClose} role="presentation">
+    <div
+      className="ha-modal-scrim"
+      onClick={closeOnScrim ? onClose : undefined}
+      role="presentation"
+    >
       <div className={'ha-modal' + (wide ? ' is-wide' : '')} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="ha-modal-head">
           <div className="ha-modal-title">{title}</div>
-          <button type="button" className="ha-modal-x" onClick={onClose} aria-label="Fermer">✕</button>
+          {croix && (
+            <button type="button" className="ha-modal-x" onClick={onClose} aria-label="Fermer">✕</button>
+          )}
         </div>
         <div className="ha-modal-body">{children}</div>
         {footer && <div className="ha-modal-foot">{footer}</div>}

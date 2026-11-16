@@ -6,12 +6,15 @@ import { STATUTS, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } fr
 import { GenrePicker, NissF } from '@/modules/annuaire/genre'
 import {
   upsertBeneficiaire, upsertContactRattache, upsertInstitution,
-  listerBeneficiaires, listerContacts, listerPartenairesExternes, chercherDemandeurs,
+  listerBeneficiaires, listerPartenairesExternes, chercherDemandeurs, chercherContactsConnus,
   ficheVersBeneficiaire, ficheVersContact, assurerPartenaireDepuisAnnuaire,
 } from '@/modules/annuaire/annuaireApi'
 import { formaterNiss, normaliserNiss } from '@/modules/annuaire/annuaireSchema'
 import { formaterPrenom, formaterNom } from '@/lib/noms'
 import { periodesDepuisSouhait, normaliserPeriodes, plageGlobale } from './datesSouhait'
+import {
+  LIENS_FAMILLE, LIENS_FAMILLE_GROUPES, libelleLienFamille, genreDepuisLien, lienDepuisGroupeGenre,
+} from './liensFamille'
 
 const sliceDate = v => (v ? String(v).slice(0, 10) : '')
 
@@ -314,16 +317,29 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
         if (!(c.prenom || c.nom)) { contactsMaj.push(c); continue }
         const cPrenom = formaterPrenom(c.prenom)
         const cNom = formaterNom(c.nom)
+        const lienAffiche = c.type === 'famille'
+          ? (libelleLienFamille(c.lien_code, c.lien_precision) || c.lien || '')
+          : (c.lien || '')
         const cid = annuaireId
           ? await upsertContactRattache(annuaireId, {
             id: c.annuaire_id || undefined,
-            prenom: cPrenom, nom: cNom, lien: c.lien, email: c.email,
-            date_naissance: c.date_naissance, niss: c.niss,
+            prenom: cPrenom, nom: cNom, lien: lienAffiche, email: c.email,
+            date_naissance: c.date_naissance, niss: c.niss, genre: c.genre || genreDepuisLien(c.lien_code),
             tel_gsm: c.tel_gsm, tel_fixe: c.tel_fixe,
             adresse: c.adresse, adresse_residence: c.adresse_residence,
+            institution_id: c.institution_id || null,
+            institution_nom: c.institution_nom || '',
+            lien_code: c.lien_code || '',
+            lien_precision: c.lien_precision || '',
           }, { created_by: profile?.id })
           : c.annuaire_id
-        contactsMaj.push({ ...c, prenom: cPrenom, nom: cNom, annuaire_id: cid || c.annuaire_id || null })
+        contactsMaj.push({
+          ...c,
+          prenom: cPrenom,
+          nom: cNom,
+          lien: lienAffiche,
+          annuaire_id: cid || c.annuaire_id || null,
+        })
       }
       if (contactsMaj.length) {
         const fam = contactsMaj.find(c => c.type === 'famille') || contactsMaj[0]
@@ -503,18 +519,23 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
         {(f.contacts || []).map(c => (
           <div key={c.id} className="ha-chip-sum" style={{ marginBottom: 8 }}>
             <div style={{ fontWeight: 700 }}>{nomComplet(c.prenom, c.nom) || 'Contact'} · {c.type === 'demandeur' ? 'Demandeur' : c.type === 'reference' ? 'Référence' : 'Famille'}</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{[c.lien, c.tel_gsm || c.tel_fixe, c.email].filter(Boolean).join(' · ')}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{[
+              c.type === 'famille' ? (libelleLienFamille(c.lien_code, c.lien_precision) || c.lien) : c.lien,
+              c.type === 'demandeur' && c.institution_nom,
+              c.tel_gsm || c.tel_fixe,
+              c.email,
+            ].filter(Boolean).join(' · ')}</div>
             <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
               <Btn kind="soft" onClick={() => { setContactEdit(c); setPopup('new-ctc') }} style={{ padding: '4px 8px' }}>Modifier</Btn>
               <Btn kind="danger" onClick={() => set('contacts', (f.contacts || []).filter(x => x.id !== c.id))} style={{ padding: '4px 8px' }}>Retirer</Btn>
             </div>
           </div>
         ))}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap:'wrap' }}>
           <Btn kind="soft" onClick={() => { setContactEdit({ id: crypto.randomUUID(), type: 'famille' }); setPopup('new-ctc') }}>Famille</Btn>
           <Btn kind="soft" onClick={() => { setContactEdit({ id: crypto.randomUUID(), type: 'demandeur' }); setPopup('new-ctc') }}>Demandeur</Btn>
           <Btn kind="soft" onClick={() => { setContactEdit({ id: crypto.randomUUID(), type: 'reference' }); setPopup('new-ctc') }}>Référence</Btn>
-          <Btn kind="soft" onClick={() => setPopup('pick-ctc')} disabled={!f.beneficiaire_annuaire_id && !benNom}>Connu</Btn>
+          <Btn kind="soft" onClick={() => setPopup('pick-ctc')}>Connu</Btn>
         </div>
       </Card>
 
@@ -611,15 +632,59 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       )}
       {popup === 'pick-ctc' && (
         <PickerList
-          title="Contact connu"
-          load={() => listerContacts(f.beneficiaire_annuaire_id)}
-          empty="Aucun contact rattaché à ce bénéficiaire pour l’instant."
+          title="Contact connu (annuaire)"
+          load={() => chercherContactsConnus('')}
+          onSearch={chercherContactsConnus}
+          empty="Aucun contact trouvé dans l’annuaire."
           label={r => nomComplet(r.prenom, r.nom) || '(sans nom)'}
-          hint={r => [r.lien || r.data?.lien, r.tel_gsm || r.tel_fixe || r.telephone].filter(Boolean).join(' · ')}
-          onPick={r => {
+          hint={r => [
+            r.lien || r.data?.lien,
+            r.beneficiaire_id && r.beneficiaire_id !== f.beneficiaire_annuaire_id ? 'autre bénéficiaire' : null,
+            r.tel_gsm || r.tel_fixe || r.telephone,
+          ].filter(Boolean).join(' · ')}
+          onPick={async r => {
             const c = ficheVersContact(r)
-            const row = { id: c.id || crypto.randomUUID(), type: 'famille', annuaire_id: c.id, ...c, prenom: formaterPrenom(c.prenom), nom: formaterNom(c.nom) }
-            set('contacts', [...(f.contacts || []).filter(x => x.annuaire_id !== c.id), row])
+            const memeBenef = !!(f.beneficiaire_annuaire_id && r.beneficiaire_id === f.beneficiaire_annuaire_id)
+            const row = {
+              id: crypto.randomUUID(),
+              type: 'famille',
+              // Si déjà rattaché à ce bénéficiaire, on garde l’id ; sinon upsert en créera un pour celui-ci.
+              annuaire_id: memeBenef ? (c.id || r.id) : null,
+              source_annuaire_id: c.id || r.id,
+              prenom: formaterPrenom(c.prenom),
+              nom: formaterNom(c.nom),
+              lien: c.lien || '',
+              lien_code: c.lien_code || '',
+              lien_precision: c.lien_precision || '',
+              genre: c.genre || '',
+              email: c.email || '',
+              tel_gsm: c.tel_gsm || '',
+              tel_fixe: c.tel_fixe || '',
+              date_naissance: sliceDate(c.date_naissance),
+              niss: formaterNiss(c.niss || ''),
+              adresse: c.adresse || null,
+              adresse_residence: c.adresse_residence || null,
+              institution_id: c.institution_id || null,
+              institution_nom: c.institution_nom || '',
+            }
+            // Rattache tout de suite au bénéficiaire courant s’il existe déjà en annuaire.
+            if (f.beneficiaire_annuaire_id) {
+              try {
+                const cid = await upsertContactRattache(f.beneficiaire_annuaire_id, {
+                  id: row.annuaire_id || undefined,
+                  prenom: row.prenom, nom: row.nom, lien: row.lien, email: row.email,
+                  date_naissance: row.date_naissance, niss: row.niss, genre: row.genre,
+                  tel_gsm: row.tel_gsm, tel_fixe: row.tel_fixe,
+                  adresse: row.adresse, adresse_residence: row.adresse_residence,
+                  institution_id: row.institution_id, institution_nom: row.institution_nom,
+                  lien_code: row.lien_code, lien_precision: row.lien_precision,
+                }, { created_by: profile?.id })
+                if (cid) row.annuaire_id = cid
+              } catch (e) {
+                alert('Rattachement annuaire : ' + (e.message || e))
+              }
+            }
+            set('contacts', [...(f.contacts || []).filter(x => x.source_annuaire_id !== row.source_annuaire_id && x.annuaire_id !== row.annuaire_id), row])
             setPopup(null)
           }}
           onClose={() => setPopup(null)}
@@ -628,6 +693,7 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       {popup === 'new-ctc' && (
         <PopupContact
           initial={contactEdit || {}}
+          createdBy={profile?.id}
           onClose={() => { setPopup(null); setContactEdit(null) }}
           onSave={c => {
             const id = c.id || contactEdit?.id || crypto.randomUUID()
@@ -637,6 +703,9 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
               id,
               prenom: formaterPrenom(c.prenom),
               nom: formaterNom(c.nom),
+              lien: c.type === 'famille' || (contactEdit?.type || 'famille') === 'famille'
+                ? (libelleLienFamille(c.lien_code, c.lien_precision) || c.lien || '')
+                : (c.lien || ''),
             }
             const list = f.contacts || []
             set('contacts', list.some(x => x.id === id) ? list.map(x => x.id === id ? row : x) : [...list, row])
@@ -791,74 +860,179 @@ function PopupBeneficiaire({ initial, onSave, onClose }) {
   )
 }
 
-function PopupContact({ initial, onSave, onClose }) {
-  const [g, setG] = useState({ prenom: '', nom: '', lien: '', type: 'famille', date_naissance: '', niss: '', tel_gsm: '', tel_fixe: '', email: '', adresse: null, adresse_residence: null, ...initial })
+function PopupContact({ initial, onSave, onClose, createdBy }) {
+  const [g, setG] = useState({
+    prenom: '', nom: '', lien: '', lien_code: '', lien_precision: '', type: 'famille',
+    date_naissance: '', niss: '', genre: '', tel_gsm: '', tel_fixe: '', email: '',
+    adresse: null, adresse_residence: null,
+    institution_id: null, institution_nom: '',
+    ...initial,
+  })
   const [residIdentique, setResidIdentique] = useState(() => memeAdresse(initial?.adresse, initial?.adresse_residence) && !!(initial?.adresse?.cp || initial?.adresse?.localite || initial?.adresse?.rue))
+  const [pickInst, setPickInst] = useState(false)
   const set = (k, v) => setG(s => {
     const next = { ...s, [k]: v }
     if (k === 'adresse' && residIdentique) next.adresse_residence = v
     return next
   })
+  const type = g.type || 'famille'
+  const groupeLien = LIENS_FAMILLE.find(x => x.v === g.lien_code)?.groupe
+    || (g.lien_code === 'autre' ? 'autre' : '')
+  function poserLienGroupe(groupe) {
+    if (groupe === 'autre') {
+      setG(s => ({ ...s, lien_code: 'autre', lien: s.lien_precision || 'Autre' }))
+      return
+    }
+    const genre = g.genre === 'femme' || g.genre === 'homme' ? g.genre : 'homme'
+    const code = lienDepuisGroupeGenre(groupe, genre)
+    setG(s => ({
+      ...s,
+      lien_code: code,
+      genre: genreDepuisLien(code) || s.genre,
+      lien: libelleLienFamille(code, s.lien_precision),
+    }))
+  }
+  function poserLienSexe(genre) {
+    const groupe = LIENS_FAMILLE.find(x => x.v === g.lien_code)?.groupe || groupeLien
+    if (!groupe || groupe === 'autre') {
+      setG(s => ({ ...s, genre }))
+      return
+    }
+    const code = lienDepuisGroupeGenre(groupe, genre)
+    setG(s => ({
+      ...s,
+      genre,
+      lien_code: code,
+      lien: libelleLienFamille(code, s.lien_precision),
+    }))
+  }
   function go() {
     if (!g.nom && !g.prenom) { alert('Nom ou prénom requis.'); return }
+    if (type === 'famille' && !g.lien_code) { alert('Choisissez le lien d’affiliation.'); return }
+    if (type === 'famille' && g.lien_code === 'autre' && !String(g.lien_precision || '').trim()) {
+      alert('Précisez le lien d’affiliation (autre).'); return
+    }
     if (![g.tel_gsm, g.tel_fixe].every(phoneValide)) { alert('Formats téléphone : +32 xxx.xx.xx.xx ou +32 xx.xx.xx.xx'); return }
     onSave({
       ...g,
       prenom: formaterPrenom(g.prenom),
       nom: formaterNom(g.nom),
+      lien: type === 'famille' ? libelleLienFamille(g.lien_code, g.lien_precision) : (g.lien || ''),
+      genre: g.genre || genreDepuisLien(g.lien_code) || '',
       adresse_residence: residIdentique ? (g.adresse || null) : g.adresse_residence,
     })
   }
   return (
-    <Modal title={g.id ? 'Contact rattaché' : 'Nouveau contact'} onClose={onClose} footer={
-      <><Btn onClick={go}>Enregistrer dans l’annuaire</Btn><Btn kind="soft" onClick={onClose}>Annuler</Btn></>
-    }>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
-        <F label="Prénom" value={g.prenom} set={v => set('prenom', v)} />
-        <F label="Nom" value={g.nom} set={v => set('nom', v)} />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
-        <F label="Lien d'affiliation" value={g.lien} set={v => set('lien', v)} placeholder="conjoint, enfant, tuteur…" />
+    <>
+      <Modal title={initial?.prenom || initial?.nom ? 'Contact rattaché' : 'Nouveau contact'} onClose={onClose} footer={
+        <><Btn onClick={go}>Enregistrer</Btn><Btn kind="soft" onClick={onClose}>Annuler</Btn></>
+      }>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
+          <F label="Prénom" value={g.prenom} set={v => set('prenom', v)} />
+          <F label="Nom" value={g.nom} set={v => set('nom', v)} />
+        </div>
+        <Sel label="Rôle" value={type} set={v => set('type', v)} options={[
+          { v: 'famille', l: 'Famille' }, { v: 'demandeur', l: 'Demandeur' }, { v: 'reference', l: 'Personne de référence' },
+        ]} />
+        {type === 'famille' && (
+          <div style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 650, marginBottom: 8 }}>Lien d’affiliation</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {LIENS_FAMILLE_GROUPES.map(gr => (
+                <button
+                  key={gr.v}
+                  type="button"
+                  className={'ha-tab-like' + (groupeLien === gr.v ? ' is-on' : '')}
+                  onClick={() => poserLienGroupe(gr.v)}
+                >{gr.l}</button>
+              ))}
+            </div>
+            {groupeLien && groupeLien !== 'autre' && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                <button type="button" className={'ha-tab-like' + (g.genre === 'homme' ? ' is-on' : '')} onClick={() => poserLienSexe('homme')}>
+                  Masculin · {libelleLienFamille(lienDepuisGroupeGenre(groupeLien, 'homme'))}
+                </button>
+                <button type="button" className={'ha-tab-like' + (g.genre === 'femme' ? ' is-on' : '')} onClick={() => poserLienSexe('femme')}>
+                  Féminin · {libelleLienFamille(lienDepuisGroupeGenre(groupeLien, 'femme'))}
+                </button>
+              </div>
+            )}
+            {g.lien_code === 'autre' && (
+              <F label="Préciser le lien" value={g.lien_precision || ''} set={v => setG(s => ({ ...s, lien_precision: v, lien: v }))} placeholder="tuteur, voisin…" />
+            )}
+            {g.lien_code && g.lien_code !== 'autre' && (
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Enregistré comme : {libelleLienFamille(g.lien_code)}</div>
+            )}
+          </div>
+        )}
+        {type !== 'famille' && (
+          <F label="Lien / qualité" value={g.lien || ''} set={v => set('lien', v)} placeholder="ex. assistant social…" />
+        )}
+        {type === 'demandeur' && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>Institution du demandeur</div>
+            {g.institution_nom ? (
+              <div className="ha-chip-sum" style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 600 }}>{g.institution_nom}</div>
+                <Btn kind="soft" style={{ padding: '4px 8px', marginTop: 6 }} onClick={() => setG(s => ({ ...s, institution_id: null, institution_nom: '' }))}>Retirer</Btn>
+              </div>
+            ) : null}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Btn kind="soft" onClick={() => setPickInst(true)}>Choisir une institution</Btn>
+            </div>
+          </div>
+        )}
         <F label="Date de naissance" type="date" value={g.date_naissance} set={v => set('date_naissance', v)} />
-      </div>
-      <NissF
-        value={g.niss}
-        set={v => set('niss', v)}
-        hint="Facultatif si nationalité étrangère."
-        onDecoded={dec => setG(s => ({
-          ...s,
-          date_naissance: dec.date_naissance,
-        }))}
-      />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
-        <PhoneF label="GSM" value={g.tel_gsm} set={v => set('tel_gsm', v)} />
-        <PhoneF label="Fixe" value={g.tel_fixe} set={v => set('tel_fixe', v)} />
-      </div>
-      <F label="E-mail" value={g.email || ''} set={v => set('email', v)} />
-      <Sel label="Rôle" value={g.type || 'famille'} set={v => set('type', v)} options={[
-        { v: 'famille', l: 'Famille' }, { v: 'demandeur', l: 'Demandeur' }, { v: 'reference', l: 'Personne de référence' },
-      ]} />
-      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse légale</div>
-      <AddressFields value={g.adresse} set={v => set('adresse', v)} />
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, margin: '8px 0 12px', cursor: 'pointer' }}>
-        <input
-          type="checkbox"
-          checked={residIdentique}
-          onChange={e => {
-            const on = e.target.checked
-            setResidIdentique(on)
-            if (on) setG(s => ({ ...s, adresse_residence: s.adresse }))
-          }}
+        <NissF
+          value={g.niss}
+          set={v => set('niss', v)}
+          hint="Facultatif si nationalité étrangère."
+          onDecoded={dec => setG(s => ({
+            ...s,
+            date_naissance: dec.date_naissance,
+            genre: s.genre || dec.genre,
+          }))}
         />
-        Adresse de résidence identique à l’adresse légale
-      </label>
-      {!residIdentique && (
-        <>
-          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
-          <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
-        </>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
+          <PhoneF label="GSM" value={g.tel_gsm} set={v => set('tel_gsm', v)} />
+          <PhoneF label="Fixe" value={g.tel_fixe} set={v => set('tel_fixe', v)} />
+        </div>
+        <F label="E-mail" value={g.email || ''} set={v => set('email', v)} />
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse légale</div>
+        <AddressFields value={g.adresse} set={v => set('adresse', v)} />
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, margin: '8px 0 12px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={residIdentique}
+            onChange={e => {
+              const on = e.target.checked
+              setResidIdentique(on)
+              if (on) setG(s => ({ ...s, adresse_residence: s.adresse }))
+            }}
+          />
+          Adresse de résidence identique à l’adresse légale
+        </label>
+        {!residIdentique && (
+          <>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
+            <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
+          </>
+        )}
+      </Modal>
+      {pickInst && (
+        <PickerList
+          title="Institution du demandeur"
+          load={listerPartenairesExternes}
+          label={r => r.nom}
+          hint={r => [r.categorie === 'institution' ? 'Institution' : 'Partenaire', r.tel].filter(Boolean).join(' · ')}
+          onPick={r => {
+            setG(s => ({ ...s, institution_id: r.annuaire_id || null, institution_nom: r.nom || '' }))
+            setPickInst(false)
+          }}
+          onClose={() => setPickInst(false)}
+        />
       )}
-    </Modal>
+    </>
   )
 }
 
