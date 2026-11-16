@@ -7,12 +7,13 @@ import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
 import { fmtDatesSouhait } from './datesSouhait'
 import { upsertBeneficiaire, upsertContactRattache } from '@/modules/annuaire/annuaireApi'
+import { formaterPrenom, formaterNom } from '@/lib/noms'
 import { BoutonJeRecolte } from './Recolteurs'
 import { nomsRecolteurs } from './missionSchema'
 import {
   STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, peutChangerStatut, statutFige, libelleStatutFige,
-  estSouhaitDemo,
+  estSouhaitDemo, estSouhaitFormationPrep,
 } from './statuts'
 
 export {
@@ -66,10 +67,12 @@ export default function Souhaits() {
   const nav = useNavigate()
   const { id } = useParams()
   const loc = useLocation()
-  const { peutEncoderPatientSouhait } = useAuth()
+  const { peutEncoderPatientSouhait, peutGererSouhaits, profile } = useAuth()
   const encoderPatient = peutEncoderPatientSouhait()
+  const gerer = peutGererSouhaits()
   const [tab, setTab] = useState('souhaits')
   const [nbDemandes, setNbDemandes] = useState(0)
+  const [formationBusy, setFormationBusy] = useState(false)
   const nouveau = loc.pathname.endsWith('/nouveau')
   const preparer = loc.pathname.endsWith('/preparer')
 
@@ -77,8 +80,17 @@ export default function Souhaits() {
     const id = typeof s === 'string' ? s : s?.id
     const statut = typeof s === 'string' ? null : s?.statut
     if (!id) return
-    if ((statut === 'realise' || statut === 'non_realise' || s?.verrouille) && !estSouhaitDemo(s)) nav(`/app/souhaits/${id}`)
+    if ((statut === 'realise' || statut === 'non_realise' || s?.verrouille) && !estSouhaitDemo(s) && !estSouhaitFormationPrep(s)) nav(`/app/souhaits/${id}`)
     else nav(`/app/souhaits/${id}/preparer`)
+  }
+
+  async function ouvrirFormationPrep() {
+    if (formationBusy) return
+    setFormationBusy(true)
+    const { data, error } = await supabase.rpc('assurer_souhait_formation_preparation')
+    setFormationBusy(false)
+    if (error) { alert(error.message || 'Impossible d’ouvrir le souhait de formation.'); return }
+    if (data) nav(`/app/souhaits/${data}/preparer`)
   }
 
   useEffect(() => {
@@ -105,12 +117,21 @@ export default function Souhaits() {
 
   return (
     <Page fill title="Préparation souhait"
-      action={tab==='souhaits' && encoderPatient ? <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn> : null}>
+      action={tab==='souhaits' ? (
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {gerer && (
+            <Btn kind="soft" onClick={ouvrirFormationPrep} disabled={formationBusy}>
+              {formationBusy ? '…' : 'Mon souhait de formation'}
+            </Btn>
+          )}
+          {encoderPatient && <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn>}
+        </div>
+      ) : null}>
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
       ]} />
-      {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} />
+      {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} userId={profile?.id} />
         : <div className="ha-page-scroll"><Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} /></div>}
     </Page>
   )
@@ -126,7 +147,7 @@ function hitCol(x, y) {
   return null
 }
 
-function Kanban({ onOpen }) {
+function Kanban({ onOpen, userId }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
@@ -141,20 +162,27 @@ function Kanban({ onOpen }) {
   itemsRef.current = items
   onOpenRef.current = onOpen
 
+  function visiblePrep(s) {
+    // Camille (terrain) : hors préparation.
+    if (estSouhaitDemo(s)) return false
+    // Formation préparation : uniquement le dossier personnel du préparateur.
+    if (estSouhaitFormationPrep(s)) return !!(userId && s.created_by === userId)
+    return true
+  }
+
   async function charger() {
     const [{ data }, { data: verrouilles }] = await Promise.all([
       supabase.from('souhaits').select('*').order('date_souhaitee', { ascending:true, nullsFirst:false }),
       supabase.rpc('lister_souhaits_verrouilles'),
     ])
-    // Formation (Camille) : hors préparation — progression uniquement via Mes souhaits / session perso.
-    const ouverts = (data || []).filter(s => !estSouhaitDemo(s))
+    const ouverts = (data || []).filter(visiblePrep)
     const ids = new Set(ouverts.map(s => s.id))
     const fermes = (verrouilles || [])
-      .filter(s => !ids.has(s.id) && !estSouhaitDemo(s))
+      .filter(s => !ids.has(s.id) && visiblePrep(s))
       .map(s => ({ ...s, verrouille: true }))
     setItems([...ouverts, ...fermes]); setLoading(false)
   }
-  useEffect(() => { charger() }, [])
+  useEffect(() => { charger() }, [userId])
 
   function flash(t, kind='ok') { setMsg({ t, kind }); setTimeout(()=>setMsg(null), 3200) }
   const flashRef = useRef(flash)
@@ -290,7 +318,7 @@ function Kanban({ onOpen }) {
     <div className="ha-kanban-page">
       <div className="ha-kanban-toolbar" style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-end', gap:12, marginBottom:14 }}>
         <ChampRechercheNom id="recherche-souhaits" value={q} onChange={setQ} />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Les souhaits réalisés ou non réalisés restent verrouillés. Le souhait de formation (Camille) n’apparaît pas ici : chacun le joue dans Mes souhaits, pour son propre compte.</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Les souhaits réalisés ou non réalisés restent verrouillés. Camille (terrain) se joue dans Mes souhaits. « Mon souhait de formation » est un dossier fictif personnel pour s’entraîner à la préparation.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -468,8 +496,8 @@ function Demandes({ onOpen }) {
     let annuaireId = null
     try {
       annuaireId = await upsertBeneficiaire({
-        nom: d.patient_nom,
-        prenom: d.patient_prenom,
+        nom: formaterNom(d.patient_nom),
+        prenom: formaterPrenom(d.patient_prenom),
         date_naissance: d.patient_ddn,
         genre: d.patient_genre,
         tel_gsm: d.patient_tel_gsm,
@@ -479,8 +507,8 @@ function Demandes({ onOpen }) {
       }, { created_by: profile?.id })
       if (annuaireId && (d.contact_prenom || d.contact_nom)) {
         await upsertContactRattache(annuaireId, {
-          prenom: d.contact_prenom,
-          nom: d.contact_nom,
+          prenom: formaterPrenom(d.contact_prenom),
+          nom: formaterNom(d.contact_nom),
           lien: d.contact_relation,
           date_naissance: d.contact_ddn,
           tel_gsm: d.contact_telephone,
@@ -495,8 +523,8 @@ function Demandes({ onOpen }) {
     }
     const medExtra = d.complements?.situation_medicale || ''
     const { data: s, error } = await supabase.from('souhaits').insert({
-      beneficiaire_nom: d.patient_nom, beneficiaire_prenom: d.patient_prenom, beneficiaire_ddn: d.patient_ddn || null,
-      beneficiaire_contact: `${d.contact_prenom || ''} ${d.contact_nom || ''} ${d.contact_telephone || d.contact_email || ''}`.trim(),
+      beneficiaire_nom: formaterNom(d.patient_nom), beneficiaire_prenom: formaterPrenom(d.patient_prenom), beneficiaire_ddn: d.patient_ddn || null,
+      beneficiaire_contact: `${formaterPrenom(d.contact_prenom) || ''} ${formaterNom(d.contact_nom) || ''} ${d.contact_telephone || d.contact_email || ''}`.trim(),
       beneficiaire_annuaire_id: annuaireId,
       beneficiaire_genre: d.patient_genre || null,
       beneficiaire_tel_gsm: d.patient_tel_gsm || null,

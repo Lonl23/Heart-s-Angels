@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse } from '@/components/ui'
+import { Card, Btn, TA, Pill, PillFictif, Tabs, Flash, StatutFlow, Loading, AdresseAffichee, LiensGps, fmtAdresse, URL_WAZE_TRAFIC } from '@/components/ui'
 import { GenreIcon } from '@/modules/annuaire/genre'
 import { fmtTelephones, formaterNiss, libelleGenre } from '@/modules/annuaire/annuaireSchema'
-import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige, estSouhaitDemo } from './statuts'
+import { stInfo, ATTENTE_RAISONS, PIPELINE, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige, estSouhaitDemo, estSouhaitFormationPrep } from './statuts'
 import { fmtDatesSouhait } from './datesSouhait'
 import { medecinPluri, nomPluri, nomsRecolteurs } from './missionSchema'
 import FormSouhait from './FormSouhait'
@@ -46,8 +46,22 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     setManque(false)
     setPinMsg(null)
   }, [id])
+  // Sur PC : ouvrir Waze Live Map une fois à l’entrée en préparation.
   useEffect(() => {
-    if (preparer && s && statutFige(s.statut, s)) onVoir?.()
+    if (!preparer || !id) return undefined
+    if (typeof window === 'undefined') return undefined
+    const estPc = window.matchMedia('(pointer: fine) and (min-width: 900px)').matches
+    if (!estPc) return undefined
+    const cle = `ha-waze-prep-${id}`
+    if (sessionStorage.getItem(cle)) return undefined
+    sessionStorage.setItem(cle, '1')
+    const t = setTimeout(() => {
+      window.open(URL_WAZE_TRAFIC, '_blank', 'noopener,noreferrer')
+    }, 400)
+    return () => clearTimeout(t)
+  }, [preparer, id])
+  useEffect(() => {
+    if (preparer && s && statutFige(s.statut, s) && !estSouhaitFormationPrep(s)) onVoir?.()
   }, [preparer, s?.id, s?.statut])
   async function load() {
     const { data } = await supabase.from('souhaits').select('*').eq('id', id).maybeSingle()
@@ -200,11 +214,12 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
           </div>
         </div>
         <div className="ha-souhait-actions">
+          <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
           <Btn kind="soft" onClick={()=>setFiche(true)}>Imprimer la fiche</Btn>
           {coordinationMedicale && (
             <Btn kind="soft" onClick={() => setDossier(v => !v)}>{dossier ? 'Fermer le rapport médical' : 'Rapport médical'}</Btn>
           )}
-          {statutFige(s.statut, s)
+          {statutFige(s.statut, s) && !estSouhaitFormationPrep(s)
             ? null
             : (
               <Btn kind={mode==='edit'?'ok':'primary'} onClick={()=>mode==='edit' ? onVoir?.() : onPreparer?.()}>
@@ -258,7 +273,9 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
 
       {s.fictif && (
         <Flash kind="warn">
-          {s.mission?.demo_cle
+          {estSouhaitFormationPrep(s)
+            ? 'Souhait de formation préparation — dossier fictif personnel. Vous seul le voyez ; entraînez-vous à l’encodage sans toucher aux vrais souhaits.'
+            : s.mission?.demo_cle
             ? 'Souhait de formation fictif — ce n’est pas un vrai patient. Hors préparation collective : chacun le joue dans Mes souhaits, avec une progression personnelle indépendante des autres. L’encodage du dossier (protocole, trajet, institutions) reste partagé pour le staff.'
             : 'Mission fictive — partenaire de démonstration. Ne pas traiter comme un vrai souhait.'}
         </Flash>

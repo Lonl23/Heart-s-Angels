@@ -28,10 +28,22 @@ export const DEMANDE_STATUTS = {
 export const stInfo = v => STATUTS[v] || STATUTS.en_attente
 
 export const MOTIF_DEMO_NON_REALISE = 'Formation (souhait test)'
+export const DEMO_CLE_TERRAIN = 'formation_detresse'
+export const DEMO_CLE_PREPARATION = 'formation_preparation'
 
-/** Souhait de formation fictif (Camille TEST-Angel, demo_cle), jamais un vrai patient. */
+export function demoCleDe(s) {
+  return String(s?.mission?.demo_cle || s?.demo_cle || '')
+}
+
+/** Formation terrain (Camille) — hors tableau de préparation. */
 export function estSouhaitDemo(s) {
-  return !!(s?.fictif && (s?.mission?.demo_cle || s?.demo_cle))
+  const cle = demoCleDe(s)
+  return !!(s?.fictif && cle && cle !== DEMO_CLE_PREPARATION)
+}
+
+/** Sandbox personnel d’entraînement à la préparation (un par préparateur). */
+export function estSouhaitFormationPrep(s) {
+  return !!(s?.fictif && demoCleDe(s) === DEMO_CLE_PREPARATION)
 }
 
 export function statutFige(statut, souhait) {

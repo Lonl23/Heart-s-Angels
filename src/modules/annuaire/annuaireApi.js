@@ -200,6 +200,22 @@ export async function listerContacts(beneficiaireId) {
   return data || []
 }
 
+/** Recherche large pour un demandeur (demande privée) : accompagnants + bénéficiaires. */
+export async function chercherDemandeurs(q) {
+  const texte = String(q || '').trim()
+  const sel = 'id,nom,prenom,date_naissance,niss,genre,tel_gsm,tel_fixe,telephone,lien,categorie,data,beneficiaire_id'
+  let query = supabase.from('annuaire').select(sel)
+    .in('categorie', ['accompagnant', 'beneficiaire'])
+    .order('nom')
+    .limit(80)
+  if (texte) {
+    query = query.or(`nom.ilike.%${texte}%,prenom.ilike.%${texte}%`)
+  }
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
 export function telGeneralFiche(r) {
   if (!r) return ''
   const d = r.data || {}

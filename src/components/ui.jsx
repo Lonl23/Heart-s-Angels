@@ -316,15 +316,62 @@ export function AddressFields({ value, set }) {
   const a = value && typeof value === 'object' ? value : {}
   const up = (k, v) => set({ ...a, [k]: v })
   const txt = fmtAdresse(a)
+  const [suggestions, setSuggestions] = useState([])
+  const [cpBusy, setCpBusy] = useState(false)
+  const cp = String(a.cp || '').replace(/\D/g, '').slice(0, 4)
+  const localiteVide = !String(a.localite || '').trim()
+
+  useEffect(() => {
+    let stop = false
+    if (cp.length !== 4) {
+      setSuggestions([])
+      setCpBusy(false)
+      return undefined
+    }
+    setCpBusy(true)
+    const t = setTimeout(() => {
+      import('@/lib/codesPostauxBe').then(({ localitesDepuisCp }) => localitesDepuisCp(cp)).then(places => {
+        if (stop) return
+        setSuggestions(places)
+        setCpBusy(false)
+      }).catch(() => { if (!stop) { setSuggestions([]); setCpBusy(false) } })
+    }, 280)
+    return () => { stop = true; clearTimeout(t) }
+  }, [cp])
+
+  useEffect(() => {
+    if (!suggestions.length || cp.length !== 4) return
+    if (suggestions.length === 1 && localiteVide) {
+      const p = suggestions[0]
+      set({ ...a, cp: p.cp, localite: p.localite, pays: a.pays || p.pays || 'Belgique' })
+    } else if (!a.pays && suggestions.length) {
+      set({ ...a, pays: 'Belgique' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fill once when CP resolves
+  }, [suggestions, cp, localiteVide])
+
   return (
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'minmax(0,2fr) minmax(0,1fr)', gap:'0 10px' }}>
         <F label="Rue" value={a.rue||''} set={v=>up('rue',v)} />
         <F label="Numéro" value={a.numero||''} set={v=>up('numero',v)} />
-        <F label="Code postal" value={a.cp||''} set={v=>up('cp',v)} />
-        <F label="Localité" value={a.localite||''} set={v=>up('localite',v)} />
+        <F label="Code postal" value={a.cp||''} set={v=>up('cp', String(v || '').replace(/\D/g, '').slice(0, 4))} />
+        <F label="Localité / sous-localité" value={a.localite||''} set={v=>up('localite',v)} />
         <div style={{ gridColumn:'1 / -1' }}><F label="Pays" value={a.pays||''} set={v=>up('pays',v)} /></div>
       </div>
+      {cpBusy && <div style={{ fontSize:12.5, color:'var(--text-muted)', margin:'-4px 0 8px' }}>Recherche de localité…</div>}
+      {!cpBusy && suggestions.length > 1 && (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, margin:'-4px 0 10px' }}>
+          {suggestions.map(p => (
+            <button
+              key={p.localite}
+              type="button"
+              className={'ha-tab-like' + (a.localite === p.localite ? ' is-on' : '')}
+              onClick={() => set({ ...a, cp: p.cp, localite: p.localite, pays: p.pays || 'Belgique' })}
+            >{p.localite}</button>
+          ))}
+        </div>
+      )}
       {txt && (
         <div style={{ margin: '-4px 0 10px' }}>
           <LiensGps adresse={a} />

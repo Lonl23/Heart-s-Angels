@@ -6,10 +6,11 @@ import { STATUTS, PIPELINE_ENCODE, statutsDisponibles, peutPasserNonRealise } fr
 import { GenrePicker, NissF } from '@/modules/annuaire/genre'
 import {
   upsertBeneficiaire, upsertContactRattache, upsertInstitution,
-  listerBeneficiaires, listerContacts, listerPartenairesExternes,
+  listerBeneficiaires, listerContacts, listerPartenairesExternes, chercherDemandeurs,
   ficheVersBeneficiaire, ficheVersContact, assurerPartenaireDepuisAnnuaire,
 } from '@/modules/annuaire/annuaireApi'
 import { formaterNiss, normaliserNiss } from '@/modules/annuaire/annuaireSchema'
+import { formaterPrenom, formaterNom } from '@/lib/noms'
 import { periodesDepuisSouhait, normaliserPeriodes, plageGlobale } from './datesSouhait'
 
 const sliceDate = v => (v ? String(v).slice(0, 10) : '')
@@ -294,10 +295,12 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
     let partenaireId = f.partenaire_id || null
     let contactsMaj = []
     try {
+      const benPrenom = formaterPrenom(f.beneficiaire_prenom)
+      const benNom = formaterNom(f.beneficiaire_nom)
       annuaireId = await upsertBeneficiaire({
         id: f.beneficiaire_annuaire_id || undefined,
-        nom: f.beneficiaire_nom,
-        prenom: f.beneficiaire_prenom,
+        nom: benNom,
+        prenom: benPrenom,
         date_naissance: f.beneficiaire_ddn,
         niss: f.beneficiaire_niss,
         tel_gsm: f.beneficiaire_tel_gsm,
@@ -309,16 +312,18 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       }, { created_by: profile?.id }) || annuaireId
       for (const c of f.contacts || []) {
         if (!(c.prenom || c.nom)) { contactsMaj.push(c); continue }
+        const cPrenom = formaterPrenom(c.prenom)
+        const cNom = formaterNom(c.nom)
         const cid = annuaireId
           ? await upsertContactRattache(annuaireId, {
             id: c.annuaire_id || undefined,
-            prenom: c.prenom, nom: c.nom, lien: c.lien, email: c.email,
+            prenom: cPrenom, nom: cNom, lien: c.lien, email: c.email,
             date_naissance: c.date_naissance, niss: c.niss,
             tel_gsm: c.tel_gsm, tel_fixe: c.tel_fixe,
             adresse: c.adresse, adresse_residence: c.adresse_residence,
           }, { created_by: profile?.id })
           : c.annuaire_id
-        contactsMaj.push({ ...c, annuaire_id: cid || c.annuaire_id || null })
+        contactsMaj.push({ ...c, prenom: cPrenom, nom: cNom, annuaire_id: cid || c.annuaire_id || null })
       }
       if (contactsMaj.length) {
         const fam = contactsMaj.find(c => c.type === 'famille') || contactsMaj[0]
@@ -340,8 +345,8 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
     dernierDates.current = JSON.stringify(periodes)
     const plage = plageGlobale(periodes)
     const payload = {
-      beneficiaire_prenom: f.beneficiaire_prenom,
-      beneficiaire_nom: f.beneficiaire_nom,
+      beneficiaire_prenom: formaterPrenom(f.beneficiaire_prenom),
+      beneficiaire_nom: formaterNom(f.beneficiaire_nom),
       beneficiaire_ddn: f.beneficiaire_ddn || null,
       beneficiaire_contact: contactLib || f.beneficiaire_contact || null,
       beneficiaire_annuaire_id: annuaireId,
@@ -464,6 +469,17 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
             </div>
           </>
         )}
+        {f.origine === 'prive' && (
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>
+              Demandeur — recherchez une personne déjà connue ou encodez un nouveau contact Demandeur ci-dessous.
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Btn kind="soft" onClick={() => setPopup('pick-demandeur')}>Rechercher le demandeur</Btn>
+              <Btn kind="soft" onClick={() => { setContactEdit({ id: crypto.randomUUID(), type: 'demandeur' }); setPopup('new-ctc') }}>Nouveau demandeur</Btn>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card style={{ marginBottom: 14 }}>
@@ -545,6 +561,42 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
           onClose={() => setPopup(null)}
         />
       )}
+      {popup === 'pick-demandeur' && (
+        <PickerList
+          title="Rechercher le demandeur"
+          load={() => chercherDemandeurs('')}
+          empty="Aucune personne trouvée. Encodez un nouveau demandeur."
+          label={r => nomComplet(r.prenom, r.nom) || '(sans nom)'}
+          hint={r => [
+            r.categorie === 'beneficiaire' ? 'Bénéficiaire' : 'Contact',
+            r.lien || r.data?.lien,
+            r.tel_gsm || r.tel_fixe || r.telephone,
+            r.date_naissance && new Date(r.date_naissance).toLocaleDateString('fr-BE'),
+          ].filter(Boolean).join(' · ')}
+          onSearch={chercherDemandeurs}
+          onPick={r => {
+            const c = ficheVersContact(r)
+            const row = {
+              id: crypto.randomUUID(),
+              type: 'demandeur',
+              annuaire_id: c.id || r.id,
+              prenom: formaterPrenom(c.prenom || r.prenom),
+              nom: formaterNom(c.nom || r.nom),
+              lien: c.lien || r.lien || r.data?.lien || '',
+              email: c.email || '',
+              tel_gsm: c.tel_gsm || r.tel_gsm || '',
+              tel_fixe: c.tel_fixe || r.tel_fixe || '',
+              date_naissance: sliceDate(c.date_naissance || r.date_naissance),
+              niss: formaterNiss(c.niss || r.niss || ''),
+              adresse: c.adresse || null,
+              adresse_residence: c.adresse_residence || null,
+            }
+            set('contacts', [...(f.contacts || []).filter(x => !(x.type === 'demandeur' && x.annuaire_id && x.annuaire_id === row.annuaire_id)), row])
+            setPopup(null)
+          }}
+          onClose={() => setPopup(null)}
+        />
+      )}
       {popup === 'new-ben' && (
         <PopupBeneficiaire
           initial={{
@@ -566,7 +618,7 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
           hint={r => [r.lien || r.data?.lien, r.tel_gsm || r.tel_fixe || r.telephone].filter(Boolean).join(' · ')}
           onPick={r => {
             const c = ficheVersContact(r)
-            const row = { id: c.id || crypto.randomUUID(), type: 'famille', annuaire_id: c.id, ...c }
+            const row = { id: c.id || crypto.randomUUID(), type: 'famille', annuaire_id: c.id, ...c, prenom: formaterPrenom(c.prenom), nom: formaterNom(c.nom) }
             set('contacts', [...(f.contacts || []).filter(x => x.annuaire_id !== c.id), row])
             setPopup(null)
           }}
@@ -579,7 +631,13 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
           onClose={() => { setPopup(null); setContactEdit(null) }}
           onSave={c => {
             const id = c.id || contactEdit?.id || crypto.randomUUID()
-            const row = { type: contactEdit?.type || 'famille', ...c, id }
+            const row = {
+              type: contactEdit?.type || 'famille',
+              ...c,
+              id,
+              prenom: formaterPrenom(c.prenom),
+              nom: formaterNom(c.nom),
+            }
             const list = f.contacts || []
             set('contacts', list.some(x => x.id === id) ? list.map(x => x.id === id ? row : x) : [...list, row])
             setPopup(null)
@@ -626,14 +684,23 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
   )
 }
 
-function PickerList({ title, load, label, hint, onPick, onClose, empty }) {
+function PickerList({ title, load, label, hint, onPick, onClose, empty, onSearch }) {
   const [q, setQ] = useState('')
   const [rows, setRows] = useState([])
   const [err, setErr] = useState(null)
   useEffect(() => {
     load().then(setRows).catch(e => setErr(e.message || String(e)))
   }, [])
-  const filtered = rows.filter(r => !q || `${label(r)} ${hint?.(r) || ''}`.toLowerCase().includes(q.toLowerCase()))
+  useEffect(() => {
+    if (!onSearch) return undefined
+    const t = setTimeout(() => {
+      onSearch(q).then(setRows).catch(e => setErr(e.message || String(e)))
+    }, 220)
+    return () => clearTimeout(t)
+  }, [q, onSearch])
+  const filtered = onSearch
+    ? rows
+    : rows.filter(r => !q || `${label(r)} ${hint?.(r) || ''}`.toLowerCase().includes(q.toLowerCase()))
   return (
     <Modal title={title} onClose={onClose}>
       <input className="ha-search" value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher…" style={{ width: '100%', marginBottom: 10 }} />
@@ -649,13 +716,29 @@ function PickerList({ title, load, label, hint, onPick, onClose, empty }) {
   )
 }
 
+function memeAdresse(a, b) {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  return ['rue', 'numero', 'cp', 'localite', 'pays'].every(k => String(a[k] || '') === String(b[k] || ''))
+}
+
 function PopupBeneficiaire({ initial, onSave, onClose }) {
   const [g, setG] = useState({ prenom: '', nom: '', date_naissance: '', niss: '', genre: '', tel_gsm: '', tel_fixe: '', email: '', adresse: null, adresse_residence: null, ...initial })
-  const set = (k, v) => setG(s => ({ ...s, [k]: v }))
+  const [residIdentique, setResidIdentique] = useState(() => memeAdresse(initial?.adresse, initial?.adresse_residence) && !!(initial?.adresse?.cp || initial?.adresse?.localite || initial?.adresse?.rue))
+  const set = (k, v) => setG(s => {
+    const next = { ...s, [k]: v }
+    if (k === 'adresse' && residIdentique) next.adresse_residence = v
+    return next
+  })
   function go() {
     if (!g.nom) { alert('Nom requis.'); return }
     if (![g.tel_gsm, g.tel_fixe].every(phoneValide)) { alert('Formats téléphone : +32 xxx.xx.xx.xx ou +32 xx.xx.xx.xx'); return }
-    onSave(g)
+    onSave({
+      ...g,
+      prenom: formaterPrenom(g.prenom),
+      nom: formaterNom(g.nom),
+      adresse_residence: residIdentique ? (g.adresse || null) : g.adresse_residence,
+    })
   }
   return (
     <Modal title={g.id ? 'Fiche bénéficiaire' : 'Nouveau bénéficiaire'} onClose={onClose} footer={
@@ -668,7 +751,16 @@ function PopupBeneficiaire({ initial, onSave, onClose }) {
       <GenrePicker value={g.genre} set={v => set('genre', v)} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <F label="Date de naissance" type="date" value={g.date_naissance} set={v => set('date_naissance', v)} />
-        <NissF value={g.niss} set={v => set('niss', v)} />
+        <NissF
+          value={g.niss}
+          set={v => set('niss', v)}
+          hint="Facultatif si nationalité étrangère. Remplit date de naissance et sexe quand le numéro est belge."
+          onDecoded={dec => setG(s => ({
+            ...s,
+            date_naissance: dec.date_naissance,
+            genre: dec.genre,
+          }))}
+        />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <PhoneF label="GSM" value={g.tel_gsm} set={v => set('tel_gsm', v)} />
@@ -677,19 +769,45 @@ function PopupBeneficiaire({ initial, onSave, onClose }) {
       <F label="E-mail" value={g.email || ''} set={v => set('email', v)} />
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse légale</div>
       <AddressFields value={g.adresse} set={v => set('adresse', v)} />
-      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
-      <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, margin: '8px 0 12px', cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={residIdentique}
+          onChange={e => {
+            const on = e.target.checked
+            setResidIdentique(on)
+            if (on) setG(s => ({ ...s, adresse_residence: s.adresse }))
+          }}
+        />
+        Adresse de résidence identique à l’adresse légale
+      </label>
+      {!residIdentique && (
+        <>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
+          <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
+        </>
+      )}
     </Modal>
   )
 }
 
 function PopupContact({ initial, onSave, onClose }) {
   const [g, setG] = useState({ prenom: '', nom: '', lien: '', type: 'famille', date_naissance: '', niss: '', tel_gsm: '', tel_fixe: '', email: '', adresse: null, adresse_residence: null, ...initial })
-  const set = (k, v) => setG(s => ({ ...s, [k]: v }))
+  const [residIdentique, setResidIdentique] = useState(() => memeAdresse(initial?.adresse, initial?.adresse_residence) && !!(initial?.adresse?.cp || initial?.adresse?.localite || initial?.adresse?.rue))
+  const set = (k, v) => setG(s => {
+    const next = { ...s, [k]: v }
+    if (k === 'adresse' && residIdentique) next.adresse_residence = v
+    return next
+  })
   function go() {
     if (!g.nom && !g.prenom) { alert('Nom ou prénom requis.'); return }
     if (![g.tel_gsm, g.tel_fixe].every(phoneValide)) { alert('Formats téléphone : +32 xxx.xx.xx.xx ou +32 xx.xx.xx.xx'); return }
-    onSave(g)
+    onSave({
+      ...g,
+      prenom: formaterPrenom(g.prenom),
+      nom: formaterNom(g.nom),
+      adresse_residence: residIdentique ? (g.adresse || null) : g.adresse_residence,
+    })
   }
   return (
     <Modal title={g.id ? 'Contact rattaché' : 'Nouveau contact'} onClose={onClose} footer={
@@ -703,7 +821,15 @@ function PopupContact({ initial, onSave, onClose }) {
         <F label="Lien d'affiliation" value={g.lien} set={v => set('lien', v)} placeholder="conjoint, enfant, tuteur…" />
         <F label="Date de naissance" type="date" value={g.date_naissance} set={v => set('date_naissance', v)} />
       </div>
-      <NissF value={g.niss} set={v => set('niss', v)} />
+      <NissF
+        value={g.niss}
+        set={v => set('niss', v)}
+        hint="Facultatif si nationalité étrangère."
+        onDecoded={dec => setG(s => ({
+          ...s,
+          date_naissance: dec.date_naissance,
+        }))}
+      />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(150px, 100%),1fr))', gap: 10 }}>
         <PhoneF label="GSM" value={g.tel_gsm} set={v => set('tel_gsm', v)} />
         <PhoneF label="Fixe" value={g.tel_fixe} set={v => set('tel_fixe', v)} />
@@ -714,8 +840,24 @@ function PopupContact({ initial, onSave, onClose }) {
       ]} />
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse légale</div>
       <AddressFields value={g.adresse} set={v => set('adresse', v)} />
-      <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
-      <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, margin: '8px 0 12px', cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={residIdentique}
+          onChange={e => {
+            const on = e.target.checked
+            setResidIdentique(on)
+            if (on) setG(s => ({ ...s, adresse_residence: s.adresse }))
+          }}
+        />
+        Adresse de résidence identique à l’adresse légale
+      </label>
+      {!residIdentique && (
+        <>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse de résidence</div>
+          <AddressFields value={g.adresse_residence} set={v => set('adresse_residence', v)} />
+        </>
+      )}
     </Modal>
   )
 }
