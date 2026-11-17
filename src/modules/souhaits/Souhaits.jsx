@@ -5,6 +5,7 @@ import { useAuth, aMotifPreparationSession, poserMotifPreparationSession } from 
 import { Page, Card, Btn, Pill, PillFictif, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
+import SuiviTerrain from './SuiviTerrain'
 import { fmtDatesSouhait } from './datesSouhait'
 import { upsertBeneficiaire, upsertContactRattache } from '@/modules/annuaire/annuaireApi'
 import { formaterPrenom, formaterNom } from '@/lib/noms'
@@ -184,8 +185,10 @@ export default function Souhaits() {
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
+        ...(gerer ? [{ v: 'suivi', l: 'Suivi terrain' }] : []),
       ]} />
       {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} userId={profile?.id} />
+        : tab === 'suivi' && gerer ? <SuiviTerrain />
         : <div className="ha-page-scroll"><Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} /></div>}
     </Page>
   )

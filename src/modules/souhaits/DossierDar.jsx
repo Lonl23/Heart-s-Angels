@@ -5,6 +5,7 @@ import { htmlDocumentA4, telechargerHtml } from './documentA4'
 import { htmlRapportMedical, texteRapportMedical, SUJET_RAPPORT_MEDICAL } from './rapportMedicalExport.js'
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
 import { injectionsDetresse } from './missionSchema'
+import { ALERTE_CONFIDENTIALITE } from './EnvoiRapportMedical'
 
 const LETTRES = [
   { k: 'donnee', l: 'D', mot: 'Données' },
@@ -243,7 +244,7 @@ export default function DossierDar({
       souhaitId,
       email,
       html,
-      texte: texteRapportMedical(html),
+      texte: `${ALERTE_CONFIDENTIALITE}\n\n${texteRapportMedical(html)}`,
     })
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }
@@ -298,8 +299,14 @@ export default function DossierDar({
       {peutExporter && (
         <section style={{ marginTop: 22, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
           <h2 style={{ marginTop: 0, fontSize: '1.05rem' }}>Exporter le rapport médical</h2>
-          <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Le fichier ne reprend pas les véhicules. L’objet du message est fixé.</p>
+          <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Le fichier ne reprend pas les véhicules. L’objet du message est fixé. Envoi depuis app@heartsangels.be.</p>
           <p style={{ color: '#A32D2D', fontWeight: 800 }}>{SUJET_RAPPORT_MEDICAL}</p>
+          <div style={{
+            background: '#FCEBEB', border: '1px solid #A32D2D', borderRadius: 12,
+            padding: '10px 12px', color: '#7A1F1F', fontSize: 12.5, marginBottom: 12, whiteSpace: 'pre-wrap',
+          }}>
+            {ALERTE_CONFIDENTIALITE}
+          </div>
           <Btn kind="soft" onClick={telecharger}>Télécharger</Btn>
           <form onSubmit={envoyer} style={{ marginTop: 12 }}>
             <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>Adresse du destinataire</label>

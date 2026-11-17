@@ -480,16 +480,35 @@ Deno.serve(async (req) => {
     if (action === 'rapport_medical') {
       const souhaitId = String(body?.souhait_id || '').trim()
       const dest = String(body?.email || '').trim()
-      const html = String(body?.html || '')
-      const texte = String(body?.texte || '').trim() || 'Rapport médical — Heart’s Angels.'
+      const htmlBrut = String(body?.html || '')
+      const texteBrut = String(body?.texte || '').trim() || 'Rapport médical — Heart’s Angels.'
       if (!souhaitId) return json({ error: 'Souhait manquant.' }, 400)
       if (!dest.includes('@')) return json({ error: 'Adresse e-mail manquante.' }, 400)
-      if (!html) return json({ error: 'Rapport vide.' }, 400)
+      if (!htmlBrut) return json({ error: 'Rapport vide.' }, 400)
       const { data: autorise, error: authz } = await admin.rpc('autoriser_envoi_rapport', {
         p_souhait: souhaitId,
         p_user: user.id,
       })
       if (authz || autorise !== true) return json({ error: 'Envoi non autorisé.' }, 403)
+      const alerteTxt =
+        'DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL.\n' +
+        'Ce message est destiné uniquement au destinataire indiqué. S’il vous a été adressé par erreur, ' +
+        'vous devez immédiatement le supprimer (y compris toute copie ou pièce jointe), n’en conserver aucune trace, ' +
+        'et reprendre contact sans délai avec Heart’s Angels en répondant à cet e-mail (app@heartsangels.be).'
+      const alerteHtml =
+        '<div style="background:#FCEBEB;border:2px solid #A32D2D;padding:14px 16px;margin:0 0 18px;color:#7A1F1F;font-family:system-ui,sans-serif;font-size:14px;line-height:1.45">' +
+        '<strong>DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL</strong><br/>' +
+        'Ce message est destiné uniquement au destinataire indiqué. S’il vous a été adressé par erreur, ' +
+        'vous devez <strong>immédiatement le supprimer</strong> (y compris toute copie ou pièce jointe), ' +
+        'n’en conserver aucune trace, et <strong>reprendre contact sans délai</strong> avec Heart’s Angels ' +
+        'en répondant à cet e-mail (<a href="mailto:app@heartsangels.be">app@heartsangels.be</a>).' +
+        '</div>'
+      const html = htmlBrut.includes('DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL')
+        ? htmlBrut
+        : alerteHtml + htmlBrut
+      const texte = texteBrut.includes('DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL')
+        ? texteBrut
+        : `${alerteTxt}\n\n${texteBrut}`
       const sujet = '!!! SECRET MEDICAL !!! – INTERVENTION HEART’S ANGELS'
       await envoyer({ smtp, to: dest, sujet, texte, html, bcc: false })
       const { error: traceErr } = await admin.from('envois_rapport_medical').insert({

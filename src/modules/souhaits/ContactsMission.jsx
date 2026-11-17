@@ -34,17 +34,32 @@ function Carte({ titre, lignes }) {
 export default function ContactsMission({ souhaitId, individuel, onBack }) {
   const [data, setData] = useState(null)
   const [extras, setExtras] = useState([])
+  const [externes, setExternes] = useState([])
   const [err, setErr] = useState(null)
   const [form, setForm] = useState({ libelle: '', nom: '', telephone: '', email: '' })
 
   async function charger() {
-    const [{ data: c, error }, { data: ex, error: exErr }] = await Promise.all([
+    const [{ data: c, error }, { data: ex, error: exErr }, { data: sh }] = await Promise.all([
       supabase.rpc('contacts_mission', { p_souhait: souhaitId }),
       supabase.from('souhait_contacts_extra').select('*').eq('souhait_id', souhaitId).order('created_at'),
+      supabase.from('souhaits').select('mission').eq('id', souhaitId).maybeSingle(),
     ])
     if (error || c?.ok === false) setErr(error?.message || c?.error || 'Contacts inaccessibles.')
     else setData(c)
     if (!exErr) setExtras(ex || [])
+    const hors = []
+    for (const v of (sh?.mission?.vecteurs || [])) {
+      for (const e of (v.externes || [])) {
+        hors.push({
+          id: e.id || `${e.prenom}-${e.nom}-${e.tel}`,
+          nom: [e.prenom, e.nom].filter(Boolean).join(' ') || 'Externe',
+          detail: [lblRoleMission(e.role) || e.role, 'Hors ASBL', v.nom].filter(Boolean).join(' · '),
+          tel: e.tel || e.telephone,
+          equipage: true,
+        })
+      }
+    }
+    setExternes(hors)
   }
 
   useEffect(() => { charger() }, [souhaitId])
@@ -83,13 +98,16 @@ export default function ContactsMission({ souhaitId, individuel, onBack }) {
     detail: [lblRolePluri(r.role), r.type_medecin === 'referent' ? 'Médecin référent' : r.type_medecin].filter(Boolean).join(' · '),
     tel: t.n,
   })))
-  const crew = (data?.equipage || []).map(e => ({
-    id: e.prenom + (e.nom || '') + e.role,
-    nom: [e.prenom, e.nom].filter(Boolean).join(' '),
-    detail: lblRoleMission(e.role) || e.role || 'Équipage',
-    tel: e.telephone,
-    equipage: true,
-  }))
+  const crew = [
+    ...(data?.equipage || []).map(e => ({
+      id: e.prenom + (e.nom || '') + e.role,
+      nom: [e.prenom, e.nom].filter(Boolean).join(' '),
+      detail: lblRoleMission(e.role) || e.role || 'Équipage',
+      tel: e.telephone,
+      equipage: true,
+    })),
+    ...externes,
+  ]
   const coords = (data?.coordinateurs || []).map(c => ({
     id: c.email || c.prenom,
     nom: [c.prenom, c.nom].filter(Boolean).join(' ') || 'Coordination médicale',

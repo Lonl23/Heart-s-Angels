@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, F, TA, Flash } from '@/components/ui'
 import { ChoixMultiple } from './ChoixPopup'
+import DocsAdresse from './DocsAdresse'
 import {
   CHAMPS_CLINIQUES, INTERFACES_O2_DEFAUT, commeListe,
 } from './listesCliniques'
@@ -61,6 +62,25 @@ function AllergiesChamp({ val, set, lecture }) {
   return <ChoixMultiple label="Allergies" options={opts} value={val} onChange={set} lecture={lecture} />
 }
 
+function AntecedentsChamp({ val, set, lecture }) {
+  const [opts, setOpts] = useState([])
+  useEffect(() => {
+    supabase.from('antecedents_referentiel').select('libelle').eq('actif', true).order('ordre')
+      .then(({ data }) => setOpts((data || []).map(r => r.libelle)))
+      .catch(() => {})
+  }, [])
+  return (
+    <ChoixMultiple
+      label="Antécédents"
+      options={opts}
+      value={val}
+      onChange={set}
+      lecture={lecture}
+      allowCustom
+    />
+  )
+}
+
 function InterfaceO2Champ({ val, set, lecture }) {
   const [opts, setOpts] = useState(INTERFACES_O2_DEFAUT)
   useEffect(() => {
@@ -110,7 +130,7 @@ function Toggle({ label, val, set, lecture }) {
 }
 
 /** Infos médicales : pathologies, notes, paramètres en 5 lignes. */
-export default function InfosMedicales({ m, set, lecture, souhait, onNotesMedicales }) {
+export default function InfosMedicales({ m, set, lecture, souhait, souhaitId, onNotesMedicales }) {
   const [busyDoc, setBusyDoc] = useState(false)
   const [msg, setMsg] = useState(null)
   const [notes, setNotes] = useState(souhait?.notes_medicales || '')
@@ -194,9 +214,34 @@ export default function InfosMedicales({ m, set, lecture, souhait, onNotesMedica
         {msg && <div style={{ marginTop: 8 }}><Flash kind={msg.ok ? 'ok' : 'err'}>{msg.t}</Flash></div>}
       </div>
 
-      <Toggle label="Ne pas réanimer" val={!!m.ne_pas_reanimer} set={v => set('ne_pas_reanimer', v)} lecture={lecture} />
+      <Toggle
+        label="Ne pas réanimer"
+        val={!!m.ne_pas_reanimer}
+        set={v => {
+          set('ne_pas_reanimer', v)
+          if (!v) set('ne_pas_reanimer_docs', [])
+        }}
+        lecture={lecture}
+      />
+      {!!m.ne_pas_reanimer && (
+        <DocsAdresse
+          souhaitId={souhaitId || souhait?.id}
+          slotId="ne_pas_reanimer"
+          docs={m.ne_pas_reanimer_docs}
+          onChange={v => { if (!lecture) set('ne_pas_reanimer_docs', v) }}
+          lecture={lecture}
+          label="Document « ne pas réanimer » (joindre immédiatement)"
+        />
+      )}
       <TA label="Détails acharnement" value={m.details_acharnement || ''} set={v => set('details_acharnement', v)} rows={2} readOnly={lecture} />
-      <TA label="Antécédents" value={m.antecedents || ''} set={v => set('antecedents', v)} rows={2} readOnly={lecture} />
+      <AntecedentsChamp
+        val={m.antecedents_liste ?? commeListe(m.antecedents)}
+        set={v => {
+          set('antecedents_liste', v)
+          set('antecedents', Array.isArray(v) ? v.join(', ') : '')
+        }}
+        lecture={lecture}
+      />
       <TA label="Douleurs" value={m.douleurs || ''} set={v => set('douleurs', v)} rows={2} readOnly={lecture} />
 
       <div style={{

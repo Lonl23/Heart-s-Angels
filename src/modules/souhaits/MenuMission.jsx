@@ -9,13 +9,17 @@ import RecapMission from './RecapMission'
 import ContactsMission from './ContactsMission'
 import DossierDar from './DossierDar'
 import MissionExecution from './MissionExecution'
+import DocumentsMission from './DocumentsMission'
+import EnvoiRapportMedical from './EnvoiRapportMedical'
 
 const ROLES_COORD = ['coord_medical', 'coord_medical_adjoint', 'coordinateur_medical']
-const VOLETS = ['recap', 'medical', 'contacts', 'statuts']
+const VOLETS = ['recap', 'medical', 'documents', 'contacts', 'envoyer_rapport', 'statuts']
 const ONGLETS = [
   { v: 'recap', l: 'Récapitulatif' },
   { v: 'medical', l: 'Rapport médical' },
+  { v: 'documents', l: 'Tous les documents' },
   { v: 'contacts', l: 'Contacts' },
+  { v: 'envoyer_rapport', l: 'Envoyer le rapport' },
   { v: 'statuts', l: 'Statuts' },
 ]
 
@@ -102,7 +106,16 @@ export default function MenuMission({ souhaitId, onBack }) {
           meds={meds}
         />
       )}
+      {onglet === 'documents' && <DocumentsMission souhaitId={souhaitId} />}
       {onglet === 'contacts' && <ContactsMission souhaitId={souhaitId} individuel={jouette} />}
+      {onglet === 'envoyer_rapport' && (
+        <EnvoiRapportMedical
+          souhaitId={souhaitId}
+          souhait={meta}
+          meds={meds}
+          peutExporter={peutExporter}
+        />
+      )}
       {onglet === 'statuts' && (
         fenetre.ouvert
           ? (

@@ -199,6 +199,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
                   set={set}
                   lecture={lectureOnglet}
                   souhait={souhait}
+                  souhaitId={souhaitId}
                   onNotesMedicales={lectureOnglet ? null : (async (v) => {
                     setSouhait(s => ({ ...(s || {}), notes_medicales: v }))
                     onSouhait?.({ notes_medicales: v })

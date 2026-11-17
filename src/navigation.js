@@ -56,7 +56,7 @@ export const DEPARTEMENTS = [
       { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Partenaires et accès' },
       { key: 'acces_blocages', to: '/app/acces-blocages', label: 'Blocages d’accès', icon: '🚫', desc: 'Bloquer un compte ou un appareil' },
       { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
-      { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations, allergies, pathologies, interfaces O₂' },
+      { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations, allergies, pathologies, antécédents, interfaces O₂' },
       { key: 'actualites_edition', to: '/app/it/actualites', label: 'Rédaction des actualités', icon: '📰', desc: 'Écrire, dater, publier' },
       { key: 'statistiques', to: '/app/it/statistiques', label: 'Statistiques', icon: '📊', desc: 'Tous les souhaits, graphiques et export Excel' },
       { key: 'modules_menu', to: '/app/it/onglets', label: 'Onglets & mises à jour', icon: '🚧', desc: 'Activer ou couper un onglet pendant une mise à jour' },
