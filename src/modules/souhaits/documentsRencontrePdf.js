@@ -221,19 +221,18 @@ export async function genererPdfConsentement(data = {}) {
   ecrire(page, font, data.lieu || 'Awirs', 81.3, 662.2, 182.9, 673.5, { size: 9 })
   ecrire(page, font, dateBe(data.date), 194.1, 662.2, 260.8, 673.5, { size: 8.5, align: 'center' })
 
-  // Nom / qualité + signature dans la colonne « Patient / tuteur »
+  // Colonne patient : sous les libellés (709–732), zone libre jusqu’au pied — sans recouvrir le modèle.
   const qual = [txt(data.nom), txt(data.qualite || 'Patient')].filter(Boolean).join(' - ')
   if (qual) {
     page.drawText(qual.slice(0, 42), {
       x: 58,
-      y: baseline(702, 1),
+      y: baseline(742, 1),
       size: 7.2,
       font: bold,
       color: INK,
     })
   }
-
-  await poserSignature(pdf, page, data.signature, [58, 705, 175, 768])
+  await poserSignature(pdf, page, data.signature, [58, 744, 180, 772])
 
   return pdf.save()
 }
@@ -294,18 +293,19 @@ export async function genererPdfDroitImage(data = {}) {
   ecrire(page, font, data.lieu || 'Awirs', 81.3, 620.6, 195.1, 631.9, { size: 9 })
   ecrire(page, font, dateBe(data.date), 206.3, 620.6, 272.9, 631.9, { size: 8.5, align: 'center' })
 
+  // Sous la consigne « Signature précédée… » (643–655), jamais par-dessus.
   const qual = [txt(data.nom), txt(data.qualite || 'Patient')].filter(Boolean).join(' - ')
   if (qual) {
     page.drawText(qual.slice(0, 48), {
       x: 56.7,
-      y: baseline(652, 1),
-      size: 7.2,
+      y: baseline(668, 1),
+      size: 7.5,
       font: bold,
       color: INK,
     })
   }
 
-  await poserSignature(pdf, page, data.signature, [56, 655, 230, 760])
+  await poserSignature(pdf, page, data.signature, [56, 672, 250, 765])
 
   return pdf.save()
 }
