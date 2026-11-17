@@ -8,11 +8,34 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Heart's Angels" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/ha-logo-180-v4.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/ha-logo-192-v4.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icons/ha-logo-512-v4.png" />
+    <link rel="manifest" id="ha-manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" id="ha-apple-touch" sizes="180x180" href="/ha-logo-180-v4.png" />
+    <link rel="icon" id="ha-icon-32" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" id="ha-icon-192" type="image/png" sizes="192x192" href="/icons/ha-logo-192-v4.png" />
+    <link rel="icon" id="ha-icon-512" type="image/png" sizes="512x512" href="/icons/ha-logo-512-v4.png" />
+    <script>
+      (function () {
+        var h = (location.hostname || '').toLowerCase()
+        var beta = h === 'appbetaapp.heartsangels.be'
+          || h.indexOf('heart-s-angels--beta') !== -1
+          || h === 'localhost'
+          || h === '127.0.0.1'
+        if (!beta) return
+        var m = document.getElementById('ha-manifest')
+        if (m) m.setAttribute('href', '/manifest-beta.webmanifest')
+        var apple = document.getElementById('ha-apple-touch')
+        if (apple) apple.setAttribute('href', '/ha-logo-180-beta.png')
+        var i192 = document.getElementById('ha-icon-192')
+        if (i192) i192.setAttribute('href', '/icons/ha-logo-192-beta.png')
+        var i512 = document.getElementById('ha-icon-512')
+        if (i512) i512.setAttribute('href', '/icons/ha-logo-512-beta.png')
+        document.title = "Heart's Angels ASBL (Bêta)"
+        var meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+        if (meta) meta.setAttribute('content', 'HA Bêta')
+        var theme = document.querySelector('meta[name="theme-color"]')
+        if (theme) theme.setAttribute('content', '#E86F24')
+      })()
+    </script>
     <script src="/config.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

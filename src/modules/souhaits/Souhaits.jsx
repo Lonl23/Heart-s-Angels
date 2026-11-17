@@ -1,24 +1,26 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useParams, useLocation, Navigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth, aMotifPreparationSession, poserMotifPreparationSession } from '@/hooks/useAuth'
 import { Page, Card, Btn, Pill, PillFictif, Tabs, Empty, Loading, Flash, TA } from '@/components/ui'
 import FormSouhait from './FormSouhait'
 import DetailSouhait from './DetailSouhait'
+import SuiviTerrain from './SuiviTerrain'
 import { fmtDatesSouhait } from './datesSouhait'
 import { upsertBeneficiaire, upsertContactRattache } from '@/modules/annuaire/annuaireApi'
+import { formaterPrenom, formaterNom } from '@/lib/noms'
 import { BoutonJeRecolte } from './Recolteurs'
 import { nomsRecolteurs } from './missionSchema'
 import {
   STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, peutChangerStatut, statutFige, libelleStatutFige,
-  estSouhaitDemo, MOTIF_DEMO_NON_REALISE,
+  estSouhaitDemo, estSouhaitFormationPrep,
 } from './statuts'
 
 export {
   STATUTS, PIPELINE, PIPELINE_ENCODE, KANBAN_COLONNES, ATTENTE_RAISONS, DEMANDE_STATUTS,
   stInfo, peutPasserNonRealise, statutFige, peutChangerStatut, libelleStatutFige,
-  estSouhaitDemo, MOTIF_DEMO_NON_REALISE,
+  estSouhaitDemo,
 }
 export { statutsDisponibles } from './statuts'
 
@@ -62,23 +64,74 @@ function ChampRechercheNom({ value, onChange, id }) {
   )
 }
 
+function MotifAccesPreparation({ onOk, onCancel }) {
+  const [motif, setMotif] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  async function envoyer() {
+    setBusy(true)
+    setErr(null)
+    const { data, error } = await supabase.rpc('demander_acces_preparation_souhait', { p_motif: motif })
+    setBusy(false)
+    if (error || !data?.ok) {
+      setErr(data?.error || error?.message || 'Impossible d’enregistrer le motif.')
+      return
+    }
+    poserMotifPreparationSession()
+    onOk?.()
+  }
+  return (
+    <Page title="Accès préparation">
+      <Card style={{ maxWidth: 560 }}>
+        <p style={{ marginTop: 0, color: 'var(--text)', fontSize: 14, lineHeight: 1.45 }}>
+          La préparation des souhaits est réservée aux <strong>récolteurs</strong>, au <strong>coordinateur</strong>, à la <strong>logistique</strong> et au <strong>transport</strong>.
+          Indiquez un motif : la présidence est prévenue immédiatement.
+        </p>
+        <TA label="Motif de votre accès" value={motif} set={setMotif} rows={3} placeholder="Pourquoi devez-vous préparer un souhait ?" />
+        {err && <Flash kind="err">{err}</Flash>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          <Btn onClick={envoyer} disabled={busy}>{busy ? '…' : 'Continuer et prévenir la présidence'}</Btn>
+          <Btn kind="soft" onClick={onCancel}>Annuler</Btn>
+        </div>
+      </Card>
+    </Page>
+  )
+}
+
 export default function Souhaits() {
   const nav = useNavigate()
   const { id } = useParams()
   const loc = useLocation()
-  const { peutEncoderPatientSouhait } = useAuth()
+  const {
+    peutEncoderPatientSouhait, peutGererSouhaits, peutPreparerSouhait,
+    estEquipePreparationSouhait, profile,
+  } = useAuth()
+  const [, setMotifTick] = useState(0)
+  const prepOk = peutPreparerSouhait() || aMotifPreparationSession()
   const encoderPatient = peutEncoderPatientSouhait()
+  const gerer = peutGererSouhaits()
   const [tab, setTab] = useState('souhaits')
   const [nbDemandes, setNbDemandes] = useState(0)
+  const [formationBusy, setFormationBusy] = useState(false)
   const nouveau = loc.pathname.endsWith('/nouveau')
   const preparer = loc.pathname.endsWith('/preparer')
+  const demandeAcces = (nouveau || preparer) && !prepOk && !estEquipePreparationSouhait()
 
   function ouvrirSouhait(s) {
     const id = typeof s === 'string' ? s : s?.id
     const statut = typeof s === 'string' ? null : s?.statut
     if (!id) return
-    if ((statut === 'realise' || statut === 'non_realise' || s?.verrouille) && !estSouhaitDemo(s)) nav(`/app/souhaits/${id}`)
+    if ((statut === 'realise' || statut === 'non_realise' || s?.verrouille) && !estSouhaitDemo(s) && !estSouhaitFormationPrep(s)) nav(`/app/souhaits/${id}`)
     else nav(`/app/souhaits/${id}/preparer`)
+  }
+
+  async function ouvrirFormationPrep() {
+    if (formationBusy) return
+    setFormationBusy(true)
+    const { data, error } = await supabase.rpc('assurer_souhait_formation_preparation')
+    setFormationBusy(false)
+    if (error) { alert(error.message || 'Impossible d’ouvrir le souhait de formation.'); return }
+    if (data) nav(`/app/souhaits/${data}/preparer`)
   }
 
   useEffect(() => {
@@ -86,8 +139,17 @@ export default function Souhaits() {
       .then(({ count }) => setNbDemandes(count || 0))
   }, [id, nouveau, tab, loc.pathname])
 
+  if (demandeAcces) {
+    return (
+      <MotifAccesPreparation
+        onOk={() => setMotifTick(t => t + 1)}
+        onCancel={() => nav('/app/souhaits')}
+      />
+    )
+  }
+
   if (nouveau) {
-    if (!encoderPatient) return <Navigate to="/app/souhaits" replace />
+    if (!encoderPatient && !prepOk) return <Navigate to="/app/souhaits" replace />
     return (
       <FormSouhait onDone={(nid) => {
         if (typeof nid === 'string') nav(`/app/souhaits/${nid}/preparer`)
@@ -105,12 +167,28 @@ export default function Souhaits() {
 
   return (
     <Page fill title="Préparation souhait"
-      action={tab==='souhaits' && encoderPatient ? <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn> : null}>
+      action={tab==='souhaits' ? (
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {prepOk && (
+            <Btn kind="soft" onClick={ouvrirFormationPrep} disabled={formationBusy}>
+              {formationBusy ? '…' : 'Mon souhait de formation'}
+            </Btn>
+          )}
+          {encoderPatient && <Btn onClick={()=>nav('/app/souhaits/nouveau')}>+ Nouveau souhait</Btn>}
+        </div>
+      ) : null}>
+      {!estEquipePreparationSouhait() && !prepOk && gerer && (
+        <Flash kind="warn">
+          Consultation seule. Pour préparer un dossier, un motif sera demandé et la présidence prévenue (réservé aux récolteurs, coordinateur, logistique et transport).
+        </Flash>
+      )}
       <Tabs value={tab} onChange={setTab} items={[
         { v:'souhaits', l:'Tableau des souhaits' },
         { v:'demandes', l:'Demandes reçues', badge: nbDemandes },
+        ...(gerer ? [{ v: 'suivi', l: 'Suivi terrain' }] : []),
       ]} />
-      {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} />
+      {tab === 'souhaits' ? <Kanban onOpen={ouvrirSouhait} userId={profile?.id} />
+        : tab === 'suivi' && gerer ? <SuiviTerrain />
         : <div className="ha-page-scroll"><Demandes onOpen={sid => nav(`/app/souhaits/${sid}/preparer`)} /></div>}
     </Page>
   )
@@ -126,7 +204,7 @@ function hitCol(x, y) {
   return null
 }
 
-function Kanban({ onOpen }) {
+function Kanban({ onOpen, userId }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
@@ -141,17 +219,27 @@ function Kanban({ onOpen }) {
   itemsRef.current = items
   onOpenRef.current = onOpen
 
+  function visiblePrep(s) {
+    // Camille (terrain) : hors préparation.
+    if (estSouhaitDemo(s)) return false
+    // Formation préparation : hors colonnes — accès uniquement via « Mon souhait de formation ».
+    if (estSouhaitFormationPrep(s)) return false
+    return true
+  }
+
   async function charger() {
     const [{ data }, { data: verrouilles }] = await Promise.all([
       supabase.from('souhaits').select('*').order('date_souhaitee', { ascending:true, nullsFirst:false }),
       supabase.rpc('lister_souhaits_verrouilles'),
     ])
-    const ouverts = data || []
+    const ouverts = (data || []).filter(visiblePrep)
     const ids = new Set(ouverts.map(s => s.id))
-    const fermes = (verrouilles || []).filter(s => !ids.has(s.id)).map(s => ({ ...s, verrouille: true }))
+    const fermes = (verrouilles || [])
+      .filter(s => !ids.has(s.id) && visiblePrep(s))
+      .map(s => ({ ...s, verrouille: true }))
     setItems([...ouverts, ...fermes]); setLoading(false)
   }
-  useEffect(() => { charger() }, [])
+  useEffect(() => { charger() }, [userId])
 
   function flash(t, kind='ok') { setMsg({ t, kind }); setTimeout(()=>setMsg(null), 3200) }
   const flashRef = useRef(flash)
@@ -164,8 +252,14 @@ function Kanban({ onOpen }) {
   async function appliquer(id, col, extra={}) {
     const item = itemsRef.current.find(s => s.id === id)
     if (!item || item.statut === col) return
+    if (estSouhaitDemo(item) || estSouhaitFormationPrep(item)) {
+      flash(estSouhaitFormationPrep(item)
+        ? 'Souhait de formation — hors colonnes, accessible via le bouton Mon souhait de formation.'
+        : libelleStatutFige(item.statut, item), 'warn')
+      return
+    }
     if (!peutChangerStatut(item.statut, col, item)) {
-      if (statutFige(item.statut, item)) flash(libelleStatutFige(item.statut), 'warn')
+      if (statutFige(item.statut, item)) flash(libelleStatutFige(item.statut, item), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }
@@ -188,17 +282,13 @@ function Kanban({ onOpen }) {
   function deposer(s, col) {
     const item = typeof s === 'string' ? itemsRef.current.find(x => x.id === s) : s
     if (!item || !col || item.statut === col) return
-    if (!peutChangerStatut(item.statut, col, item)) {
-      if (statutFige(item.statut, item)) flash(libelleStatutFige(item.statut), 'warn')
+    if (estSouhaitDemo(item) || estSouhaitFormationPrep(item) || !peutChangerStatut(item.statut, col, item)) {
+      if (estSouhaitFormationPrep(item)) flash('Souhait de formation — hors colonnes.', 'warn')
+      else if (estSouhaitDemo(item) || statutFige(item.statut, item)) flash(libelleStatutFige(item.statut, item), 'warn')
       else if (col === 'non_realise') flash('Une fois en cours, le souhait ne peut plus passer en non réalisé.', 'warn')
       return
     }
     if (col === 'non_realise') {
-      if (estSouhaitDemo(item)) {
-        const motif = String(item.mission?.motif_non_realise || '').trim() || MOTIF_DEMO_NON_REALISE
-        appliquer(item.id, col, { mission: { ...(item.mission || {}), motif_non_realise: motif } })
-        return
-      }
       setMotif({ id: item.id, from: item.statut })
       setMotifTxt(item.mission?.motif_non_realise || '')
       return
@@ -230,12 +320,12 @@ function Kanban({ onOpen }) {
       const dist = Math.hypot(e.clientX - o.x, e.clientY - o.y)
       if (!o.started && dist < 8) return
       if (statutFige(o.s.statut, o.s)) {
-        if (!o.started) {
-          o.started = true
-          flashRef.current(libelleStatutFige(o.s.statut), 'warn')
+          if (!o.started) {
+            o.started = true
+            flashRef.current(libelleStatutFige(o.s.statut, o.s), 'warn')
+          }
+          return
         }
-        return
-      }
       if (!o.started) {
         o.started = true
         try { o.el.setPointerCapture(o.pid) } catch { /* */ }
@@ -288,7 +378,7 @@ function Kanban({ onOpen }) {
     <div className="ha-kanban-page">
       <div className="ha-kanban-toolbar" style={{ display:'flex', flexWrap:'wrap', alignItems:'flex-end', gap:12, marginBottom:14 }}>
         <ChampRechercheNom id="recherche-souhaits" value={q} onChange={setQ} />
-        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Le souhait de formation peut être déplacé dans n’importe quelle colonne à tout moment, y compris depuis Réalisé ou Non réalisé. Les autres souhaits réalisés ou non réalisés restent verrouillés.</span>
+        <span style={{ fontSize:12.5, color:'var(--text-muted)', paddingBottom:8 }}>Sur téléphone, touchez le bouton sous la carte. Sur ordinateur, glissez la carte pour changer le statut ; un clic (sans glisser) ouvre le dossier. Les souhaits réalisés ou non réalisés restent verrouillés. Camille (terrain) se joue dans Mes souhaits. « Mon souhait de formation » est un dossier fictif personnel pour s’entraîner à la préparation.</span>
       </div>
       {msg && <Flash kind={msg.kind}>{msg.t}</Flash>}
       {motif && (
@@ -371,7 +461,7 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
     ? (s.statut === 'non_realise'
       ? 'Non réalisé — verrouillé. Ouvrir avec le PIN.'
       : 'Réalisé — verrouillé un mois calendrier après la réalisation. Ouvrir avec le PIN.')
-    : demo ? 'Souhait de formation — glissez pour changer de colonne à tout moment.'
+    : demo ? 'Souhait de formation — hors préparation (progression dans Mes souhaits).'
     : s.statut === 'realise' ? 'Réalisé — le statut ne se change plus. Cliquez pour le rapport.'
     : s.statut === 'non_realise' ? 'Non réalisé — verrouillé.'
     : 'Touchez le bouton. Sur ordinateur, glissez pour changer le statut.'
@@ -416,7 +506,6 @@ function CarteSouhait({ s, dragging, onPointerDown, onOuvrir, onMission }) {
           {s.beneficiaire_prenom} {s.beneficiaire_nom}
           {s.fictif && <PillFictif />}
         </span>
-        {s.priorite >= 4 && <Pill color="#A32D2D" bg="#FCEBEB">Priorité {s.priorite}</Pill>}
       </div>
       <div style={{ fontSize:12.5, color:'var(--text-2)', lineHeight:1.4, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{s.description}</div>
       <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>{dateAffichee}</div>
@@ -448,7 +537,14 @@ function Demandes({ onOpen }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const ch = supabase
+      .channel('ha-demandes-souhaits')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'demandes_souhaits' }, () => { load() })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
   async function load() {
     setLoading(true)
     const { data } = await supabase.from('demandes_souhaits').select('*').order('created_at', { ascending:false })
@@ -459,8 +555,8 @@ function Demandes({ onOpen }) {
     let annuaireId = null
     try {
       annuaireId = await upsertBeneficiaire({
-        nom: d.patient_nom,
-        prenom: d.patient_prenom,
+        nom: formaterNom(d.patient_nom),
+        prenom: formaterPrenom(d.patient_prenom),
         date_naissance: d.patient_ddn,
         genre: d.patient_genre,
         tel_gsm: d.patient_tel_gsm,
@@ -470,8 +566,8 @@ function Demandes({ onOpen }) {
       }, { created_by: profile?.id })
       if (annuaireId && (d.contact_prenom || d.contact_nom)) {
         await upsertContactRattache(annuaireId, {
-          prenom: d.contact_prenom,
-          nom: d.contact_nom,
+          prenom: formaterPrenom(d.contact_prenom),
+          nom: formaterNom(d.contact_nom),
           lien: d.contact_relation,
           date_naissance: d.contact_ddn,
           tel_gsm: d.contact_telephone,
@@ -484,16 +580,23 @@ function Demandes({ onOpen }) {
       alert('Annuaire : ' + (e.message || e))
       return
     }
+    const medExtra = d.complements?.situation_medicale || ''
     const { data: s, error } = await supabase.from('souhaits').insert({
-      beneficiaire_nom: d.patient_nom, beneficiaire_prenom: d.patient_prenom, beneficiaire_ddn: d.patient_ddn || null,
-      beneficiaire_contact: `${d.contact_prenom || ''} ${d.contact_nom || ''} ${d.contact_telephone || d.contact_email || ''}`.trim(),
+      beneficiaire_nom: formaterNom(d.patient_nom), beneficiaire_prenom: formaterPrenom(d.patient_prenom), beneficiaire_ddn: d.patient_ddn || null,
+      beneficiaire_contact: `${formaterPrenom(d.contact_prenom) || ''} ${formaterNom(d.contact_nom) || ''} ${d.contact_telephone || d.contact_email || ''}`.trim(),
       beneficiaire_annuaire_id: annuaireId,
       beneficiaire_genre: d.patient_genre || null,
       beneficiaire_tel_gsm: d.patient_tel_gsm || null,
       beneficiaire_tel_fixe: d.patient_tel_fixe || null,
       beneficiaire_adresse: d.patient_adresse || null,
       description: d.souhait_description, localisation: d.souhait_lieu, besoins_specifiques: d.equipement_medical,
-      notes_medicales: [d.mobilite && `Mobilité: ${d.mobilite}`, d.allergies && `Allergies: ${d.allergies}`].filter(Boolean).join(' · '),
+      notes_medicales: [
+        d.mobilite && `Mobilité: ${d.mobilite}`,
+        d.allergies && `Allergies: ${d.allergies}`,
+        medExtra,
+        d.medecin_referent && `Médecin: ${d.medecin_referent}`,
+        d.etablissement && `Séjour: ${d.etablissement}`,
+      ].filter(Boolean).join('\n'),
       date_souhaitee: d.souhait_date || null, statut: 'nouveau', created_by: profile?.id,
       dates_possibles: d.souhait_date ? [{ debut: d.souhait_date, fin: d.souhait_date }] : [],
       origine: (d.partenaire_id || d.source === 'partenaire') ? 'institution' : 'prive',
@@ -526,13 +629,19 @@ function Demandes({ onOpen }) {
                 {d.fictif && <PillFictif />}
               </div>
               <div style={{ fontSize:12.5, color:'var(--text-muted)' }}>Par {d.contact_prenom} {d.contact_nom} · {d.contact_email}
-                {d.source === 'partenaire' && ' · Partenaire'}{d.source === 'externe' && ' · Formulaire public'}
+                {d.source === 'partenaire' && ' · Partenaire'}
+                {(d.source === 'externe' || d.complements?.origine === 'wordpress') && ' · Site web'}
                 {d.fictif && ' · Mission fictive'}
               </div>
             </div>
             <Pill>{DEMANDE_STATUTS[d.statut]?.l || d.statut}</Pill>
           </div>
           <div style={{ fontSize:13.5, color:'var(--text-2)', lineHeight:1.5, marginBottom:10 }}>{d.souhait_description}</div>
+          {d.complements?.situation_medicale && (
+            <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:8, whiteSpace:'pre-wrap' }}>
+              Situation médicale : {d.complements.situation_medicale}
+            </div>
+          )}
           {d.statut === 'acceptee'
             ? <Pill color="#3B6D11" bg="#EAF3DE">Souhait créé — ouvrez-le dans le tableau</Pill>
             : <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}><Btn kind="ok" onClick={()=>accepter(d)}>Accepter et créer le souhait</Btn><Btn kind="danger" onClick={()=>refuser(d)}>Refuser</Btn></div>}

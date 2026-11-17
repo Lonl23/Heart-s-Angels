@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, Btn, F, Sel, inp, lbl } from '@/components/ui'
+import { Card, Btn, F, Sel, Flash, inp, lbl } from '@/components/ui'
 import { recalcPerfusion, debitLabel, LIQUIDES } from './medCalc'
+import { analyserDocumentMedical, medicamentsDepuisAnalyse } from './analyserDocumentMedical'
+import { uploadDocSejour } from './sejour'
 
 const HEURES = Array.from({ length:24 }, (_,i) => String(i).padStart(2,'0') + ':00')
 const aPerfusion = m => { const p = m.perfusion||{}; return !!(p.debit_ml_h || p.debit_gttes_min || p.volume_ml || p.type_liquide || p.quantite_med) }
@@ -11,6 +13,8 @@ export default function Traitements({ souhaitId, readOnly=false }) {
   const [partenaire, setPartenaire] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(null)
+  const [busyImport, setBusyImport] = useState(false)
+  const [msgImport, setMsgImport] = useState(null)
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -38,6 +42,39 @@ export default function Traitements({ souhaitId, readOnly=false }) {
   async function supprimer(m) { if (!confirm('Supprimer ce traitement ?')) return; await supabase.from('souhait_medicaments').delete().eq('id', m.id); load() }
   function editer(m) { setForm({ ...m, horaires: Array.isArray(m.horaires)?m.horaires:[], perfusion:m.perfusion||{}, estPerf: aPerfusion(m) }) }
 
+  async function importerFeuille(file) {
+    if (!file || readOnly) return
+    setBusyImport(true)
+    setMsgImport(null)
+    try {
+      await uploadDocSejour(souhaitId, 'feuille-traitements', file).catch(() => null)
+      const data = await analyserDocumentMedical(file, 'traitements')
+      const rows = medicamentsDepuisAnalyse(data)
+      if (!rows.length) {
+        setMsgImport({ ok: false, t: 'Aucune ligne de traitement détectée. Encodez à la main.' })
+      } else {
+        const payloads = rows.map(r => ({
+          souhait_id: souhaitId,
+          medicament: r.medicament,
+          dosage: r.dosage,
+          voie: r.voie,
+          type_admin: r.type_admin,
+          horaires: r.type_admin === 'programme' ? (r.horaires || []) : null,
+          perfusion: {},
+          posologie_max: r.type_admin === 'si_necessaire' ? r.posologie_max : null,
+          notes: r.notes,
+        }))
+        const { error } = await supabase.from('souhait_medicaments').insert(payloads)
+        if (error) throw error
+        setMsgImport({ ok: true, t: `${rows.length} traitement(s) importés — vérifiez dosages et horaires.` })
+        load()
+      }
+    } catch (e) {
+      setMsgImport({ ok: false, t: e.message || 'Import impossible.' })
+    }
+    setBusyImport(false)
+  }
+
   if (loading) return <p style={{ color:'var(--text-muted)' }}>Chargement…</p>
 
   return (
@@ -49,10 +86,26 @@ export default function Traitements({ souhaitId, readOnly=false }) {
         </Card>
       )}
 
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10, gap: 10, flexWrap: 'wrap' }}>
         <div style={{ fontWeight:600, color:'var(--heading)' }}>Traitements (interne)</div>
-        {!readOnly && <Btn onClick={()=>setForm({ type_admin:'programme', horaires:[], perfusion:{}, estPerf:false })}>+ Ajouter</Btn>}
+        {!readOnly && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <label style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+              Importer une feuille
+              <input
+                type="file"
+                accept="application/pdf,image/*"
+                disabled={busyImport}
+                style={{ display: 'block', marginTop: 4 }}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importerFeuille(f) }}
+              />
+            </label>
+            <Btn onClick={()=>setForm({ type_admin:'programme', horaires:[], perfusion:{}, estPerf:false })}>+ Ajouter</Btn>
+          </div>
+        )}
       </div>
+      {busyImport && <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>Analyse de la feuille…</div>}
+      {msgImport && <Flash kind={msgImport.ok ? 'ok' : 'err'}>{msgImport.t}</Flash>}
       {form && <FormMed form={form} setForm={setForm} onSave={save} />}
 
       {internes.length === 0 ? <Card>Aucun traitement interne.</Card> : (

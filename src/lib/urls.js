@@ -29,6 +29,12 @@ export function urlAccesPartenaire() {
   return `${urlLiens()}/login/partenaire`
 }
 
+/** Lien public d’inscription à une soirée / ouverture (Facebook, WhatsApp…). */
+export function urlEvenementOuvert(token) {
+  const t = String(token || '').trim()
+  return t ? `${urlBasePublique()}/soiree/${encodeURIComponent(t)}` : `${urlBasePublique()}/soiree`
+}
+
 /** Lien d’inscription : le destinataire n’a plus qu’à choisir son mot de passe. */
 export function urlInvitation(code, email, { partenaire = false } = {}) {
   const params = new URLSearchParams()

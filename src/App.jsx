@@ -18,6 +18,8 @@ const Defraiements = lazy(() => import('@/modules/defraiements/Defraiements'))
 const Souhaits = lazy(() => import('@/modules/souhaits/Souhaits'))
 const Disponibilites = lazy(() => import('@/modules/Disponibilites'))
 const EvenementsInternes = lazy(() => import('@/modules/EvenementsInternes'))
+const EvenementsOuverts = lazy(() => import('@/modules/EvenementsOuverts'))
+const InscriptionSoiree = lazy(() => import('@/pages/InscriptionSoiree'))
 const Stock = lazy(() => import('@/modules/Stock'))
 const Volontaires = lazy(() => import('@/modules/volontaires/Volontaires'))
 const Admin = lazy(() => import('@/modules/Admin'))
@@ -28,15 +30,18 @@ const Departement = lazy(() => import('@/pages/Departement'))
 const Organigramme = lazy(() => import('@/modules/rh/Organigramme'))
 const OrganigrammeEdition = lazy(() => import('@/modules/it/OrganigrammeEdition'))
 const ConfigurationSouhaits = lazy(() => import('@/modules/it/ConfigurationSouhaits'))
+const AccesBlocages = lazy(() => import('@/modules/acces/AccesBlocages'))
 const Tresorerie = lazy(() => import('@/modules/Tresorerie'))
 const Actualites = lazy(() => import('@/modules/actualites/Actualites'))
 const Statistiques = lazy(() => import('@/modules/it/Statistiques'))
 const Helpdesk = lazy(() => import('@/modules/it/Helpdesk'))
 const Personnalisation = lazy(() => import('@/modules/it/Personnalisation'))
+const ModulesMenu = lazy(() => import('@/modules/it/ModulesMenu'))
 const ActivitesSecours = lazy(() => import('@/modules/secours/ActivitesSecours'))
 const FicheActivite = lazy(() => import('@/modules/secours/FicheActivite'))
 const ConventionsDps = lazy(() => import('@/modules/secours/ConventionsDps'))
 const Flotte = lazy(() => import('@/modules/logistique/Flotte'))
+const DemandesVolontariat = lazy(() => import('@/modules/rh/DemandesVolontariat'))
 
 function EcranChargement() {
   return (
@@ -56,6 +61,7 @@ export default function App() {
         <Route path="/demande" element={<DemandeSouhait />} />
         <Route path="/inscription" element={<Inscription />} />
         <Route path="/inscription/partenaire" element={<Inscription />} />
+        <Route path="/soiree/:token" element={<InscriptionSoiree />} />
 
         <Route path="/app" element={<RequireStaff><Layout /></RequireStaff>}>
           <Route index element={<Dashboard />} />
@@ -75,12 +81,15 @@ export default function App() {
           <Route path="it/actualites" element={<RequireAcces feature="actualites_edition"><Actualites /></RequireAcces>} />
           <Route path="it/helpdesk" element={<RequireAcces feature="helpdesk"><Helpdesk /></RequireAcces>} />
           <Route path="it/personnalisation" element={<RequireAcces feature="personnalisation"><Personnalisation /></RequireAcces>} />
+          <Route path="it/onglets" element={<RequireAcces feature="modules_menu"><ModulesMenu /></RequireAcces>} />
           <Route path="it/statistiques" element={<RequireAcces feature="statistiques"><Statistiques /></RequireAcces>} />
           <Route path="statistiques" element={<Navigate to="/app/it/statistiques" replace />} />
           <Route path="evenements/nouveau" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id/editer" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements/:id" element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
           <Route path="evenements"     element={<RequireAcces feature="evenements"><EvenementsInternes /></RequireAcces>} />
+          <Route path="ouvertures/:id" element={<RequireAcces feature="evenements"><EvenementsOuverts /></RequireAcces>} />
+          <Route path="ouvertures"     element={<RequireAcces feature="evenements"><EvenementsOuverts /></RequireAcces>} />
           <Route path="secours/activites/:id" element={<RequireAcces feature="activites_secours"><FicheActivite /></RequireAcces>} />
           <Route path="secours/activites" element={<RequireAcces feature="activites_secours"><ActivitesSecours /></RequireAcces>} />
           <Route path="secours/conventions" element={<RequireAcces feature="conventions_dps"><ConventionsDps /></RequireAcces>} />
@@ -88,9 +97,11 @@ export default function App() {
           <Route path="flotte"         element={<RequireAcces feature="stock"><Flotte /></RequireAcces>} />
           <Route path="annuaire"       element={<RequireAcces feature="annuaire"><Annuaire /></RequireAcces>} />
           <Route path="volontaires"    element={<RequireAcces feature="fiches"><Volontaires /></RequireAcces>} />
+          <Route path="rh/candidatures" element={<RequireAcces feature="candidatures_volontariat"><DemandesVolontariat /></RequireAcces>} />
           <Route path="rh/organigramme" element={<RequireAcces feature="organigramme"><Organigramme /></RequireAcces>} />
           <Route path="it/organigramme" element={<RequireAcces feature="organigramme_edition"><OrganigrammeEdition /></RequireAcces>} />
           <Route path="it/configuration" element={<RequireAcces feature="config_souhaits"><ConfigurationSouhaits /></RequireAcces>} />
+          <Route path="acces-blocages" element={<RequireStaff><AccesBlocages /></RequireStaff>} />
           <Route path="tresorerie"     element={<RequireAcces feature="tresorerie"><Tresorerie /></RequireAcces>} />
           <Route path="admin"          element={<RequireAcces feature="admin"><Admin /></RequireAcces>} />
           <Route path="profil"         element={<FicheVolontaire />} />

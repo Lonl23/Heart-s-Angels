@@ -36,6 +36,46 @@ export function estMateriel(article) {
   return natureDepuisMode(article?.mode, article?.nature) === 'materiel'
 }
 
+/** Traçabilité inventaire : lot et/ou DLC selon le type d’article. */
+export function gestionLot(article) {
+  if (!article) return true
+  if (typeof article.gestion_lot === 'boolean') return article.gestion_lot
+  if (article.mode === 'durable') return false
+  if (article.mode === 'oxygene') return true
+  if (estMateriel(article) && article.mode === 'piece') return false
+  return true
+}
+
+export function gestionDlc(article) {
+  if (!article) return true
+  if (typeof article.gestion_dlc === 'boolean') return article.gestion_dlc
+  if (article.mode === 'durable' || article.mode === 'oxygene') return false
+  if (estMateriel(article) && article.mode === 'piece') return false
+  return true
+}
+
+export function libelleTracabilite(article) {
+  const lot = gestionLot(article)
+  const dlc = gestionDlc(article)
+  if (lot && dlc) return 'Lot + péremption'
+  if (lot) return 'Lot (sans DLC)'
+  if (dlc) return 'Péremption seule'
+  return 'Sans lot ni DLC'
+}
+
+/** Étiquette QR : 1 QR par pièce/boîte/bouteille. Sinon stock quantité/lot sans étiquette. */
+export function gestionQr(article) {
+  if (!article) return true
+  if (typeof article.gestion_qr === 'boolean') return article.gestion_qr
+  // O₂ et durable : QR par défaut
+  if (article.mode === 'oxygene' || article.mode === 'durable') return true
+  return true
+}
+
+export function libelleQr(article) {
+  return gestionQr(article) ? 'QR par pièce' : 'Sans QR (quantité / lot)'
+}
+
 export const TYPES_ENTRETIEN = [
   { v: 'controle', l: 'Contrôle' },
   { v: 'remplacement', l: 'Remplacement' },

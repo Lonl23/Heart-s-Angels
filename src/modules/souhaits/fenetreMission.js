@@ -1,4 +1,5 @@
 import { normaliserPeriodes, periodesDepuisSouhait } from './datesSouhait.js'
+import { estSouhaitDemo } from './statuts.js'
 
 function lendemain(iso) {
   const t = new Date(iso + 'T12:00:00')
@@ -18,8 +19,22 @@ export function jourBruxelles(date = new Date()) {
   }).format(date)
 }
 
-/** Les statuts et checklists ne s’ouvrent que pendant le souhait et le jour qui suit. */
+/**
+ * Statuts / checklists terrain.
+ * — Souhait de formation (Camille / fictif + demo_cle) : toujours ouvert, session individuelle.
+ * — Vrais souhaits : uniquement le jour du souhait et le lendemain.
+ */
 export function fenetreStatuts(souhait, aujourdHui = jourBruxelles()) {
+  if (estSouhaitDemo(souhait) || souhait?.fictif || souhait?.mission?.demo_cle || souhait?.demo_cle) {
+    return {
+      ouvert: true,
+      debut: null,
+      fin: null,
+      limite: null,
+      raison: '',
+      individuel: true,
+    }
+  }
   const periodes = normaliserPeriodes(periodesDepuisSouhait(souhait)).filter(p => p.debut)
   if (!periodes.length) {
     return {

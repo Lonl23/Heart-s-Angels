@@ -32,6 +32,7 @@ export default defineConfig({
           const p = id.replace(/\\/g, '/')
           if (!p.includes('/node_modules/')) return
           if (p.includes('/qrcode/')) return 'vendor-qrcode'
+          if (p.includes('/pdfjs-dist/')) return 'vendor-pdfjs'
           if (p.includes('/@supabase/')) return 'vendor-supabase'
           if (p.includes('/react-dom/') || p.includes('/react-router') || p.includes('/react/')) return 'vendor-react'
           return 'vendor'

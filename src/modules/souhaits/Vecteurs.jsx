@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, F, Sel, inp, lbl, Flash } from '@/components/ui'
+import { Btn, F, Sel, inp, lbl, Flash, Modal } from '@/components/ui'
 import {
   ROLES_MISSION, lblRoleMission, teinteDepuisQuals, roleSuggere, qualsImplicites, mentionChauffeur,
   rolesRequisEffectifs, rolesRequisVecteur, phraseIlManque, rolesEncoreManquants,
@@ -22,6 +22,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
   const [periodeSel, setPeriodeSel] = useState(null)
   const [valideMsg, setValideMsg] = useState('')
   const [validation, setValidation] = useState(false)
+  const [dispoOuverte, setDispoOuverte] = useState(false)
 
   const cleVecteurs = (m.vecteurs || []).map(v => v.id).join('|')
   useEffect(() => { charger() }, [souhaitId, cleVecteurs])
@@ -212,6 +213,7 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
     setValideMsg((publies || []).length
       ? 'Date retenue. Équipage à prévoir est décoché. Les volontaires ont reçu leur mission.'
       : 'Date retenue. Équipage à prévoir est décoché.')
+    await supabase.rpc('notifier_photographes_souhait', { p_souhait: souhaitId })
     await charger()
   }
   async function retenirJour() {
@@ -347,6 +349,11 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
 
       <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', marginBottom:12, gap:10, flexWrap:'wrap' }}>
         {!lecture && (
+          <Btn kind="soft" onClick={() => setDispoOuverte(true)}>
+            + Disponibilité
+          </Btn>
+        )}
+        {!lecture && (
           <Btn onClick={valider} disabled={validation}>
             {validation ? 'Validation…' : 'Valider'}
           </Btn>
@@ -429,6 +436,14 @@ export default function Vecteurs({ souhaitId, m, setM, lecture=false, onJourRete
           )
         })}
       </div>
+      {dispoOuverte && (
+        <PopupDispoVolontaire
+          dates={dates}
+          periodeSel={periodeSel}
+          onClose={() => setDispoOuverte(false)}
+          onDone={async () => { setDispoOuverte(false); await charger() }}
+        />
+      )}
     </div>
   )
 }
@@ -737,18 +752,125 @@ function ChampPlaque({ value, set, lecture }) {
   )
 }
 
+const DEMI_DISPO = [
+  { v: 'journee_complete', l: 'Journée complète' },
+  { v: 'matin', l: 'Matin' },
+  { v: 'apres_midi', l: 'Après-midi' },
+]
+
 function AjoutExterne({ onAdd }) {
   const [ouvert, setOuvert] = useState(false)
   const [g, setG] = useState({ prenom: '', nom: '', role: 'ambulancier', tel: '' })
-  if (!ouvert) return <Btn kind="soft" onClick={() => setOuvert(true)} style={{ marginTop: 8 }}>Personne hors association</Btn>
+  function reset() { setG({ prenom: '', nom: '', role: 'ambulancier', tel: '' }); setOuvert(false) }
+  if (!ouvert) {
+    return (
+      <Btn kind="soft" onClick={() => setOuvert(true)} style={{ marginTop: 8 }}>
+        + Membre hors ASBL
+      </Btn>
+    )
+  }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8, marginTop: 8 }}>
-      <F label="Prénom" value={g.prenom} set={v => setG(s => ({ ...s, prenom: v }))} />
-      <F label="Nom" value={g.nom} set={v => setG(s => ({ ...s, nom: v }))} />
-      <Sel label="Rôle" value={g.role} set={v => setG(s => ({ ...s, role: v }))} options={ROLES_MISSION.map(r => ({ v: r.v, l: r.l }))} />
-      <F label="Téléphone" value={g.tel} set={v => setG(s => ({ ...s, tel: v }))} />
-      <Btn onClick={() => { if (g.prenom || g.nom) { onAdd(g); setG({ prenom: '', nom: '', role: 'ambulancier', tel: '' }); setOuvert(false) } }} style={{ alignSelf: 'end', marginBottom: 10 }}>Ajouter</Btn>
-    </div>
+    <Modal
+      title="Membre d’équipage hors ASBL"
+      onClose={reset}
+      footer={(
+        <>
+          <Btn onClick={() => {
+            if (!(g.prenom || g.nom)) { alert('Indiquez au moins le prénom ou le nom.'); return }
+            onAdd(g)
+            reset()
+          }}>Ajouter</Btn>
+          <Btn kind="soft" onClick={reset}>Annuler</Btn>
+        </>
+      )}
+    >
+      <p style={{ margin: '0 0 10px', fontSize: 13.5, color: 'var(--text-muted)' }}>
+        Personne externe (famille, autre ASBL, prestataire…) qui monte à bord pour ce souhait.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 8 }}>
+        <F label="Prénom" value={g.prenom} set={v => setG(s => ({ ...s, prenom: v }))} />
+        <F label="Nom" value={g.nom} set={v => setG(s => ({ ...s, nom: v }))} />
+        <Sel label="Rôle" value={g.role} set={v => setG(s => ({ ...s, role: v }))} options={ROLES_MISSION.map(r => ({ v: r.v, l: r.l }))} />
+        <F label="Téléphone" value={g.tel} set={v => setG(s => ({ ...s, tel: v }))} />
+      </div>
+    </Modal>
+  )
+}
+
+function PopupDispoVolontaire({ dates, periodeSel, onClose, onDone }) {
+  const debutDef = periodeSel?.debut || dates?.d0 || ''
+  const finDef = periodeSel?.fin || dates?.d1 || debutDef
+  const [equipe, setEquipe] = useState([])
+  const [form, setForm] = useState({
+    user_id: '',
+    date_debut: debutDef || '',
+    date_fin: finDef || debutDef || '',
+    demi_journee: 'journee_complete',
+    commentaire: '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    supabase.from('profiles')
+      .select('id,prenom,nom,actif,role,fiche')
+      .neq('role', 'partenaire')
+      .order('prenom')
+      .then(({ data }) => setEquipe((data || []).filter(p => p.actif !== false)))
+  }, [])
+
+  async function sauver() {
+    if (!form.user_id) { setErr('Choisissez un volontaire.'); return }
+    if (!form.date_debut) { setErr('Indiquez la date de début.'); return }
+    setBusy(true)
+    setErr(null)
+    const fin = form.date_fin && form.date_fin >= form.date_debut ? form.date_fin : form.date_debut
+    const { error } = await supabase.from('disponibilites').insert({
+      user_id: form.user_id,
+      date_debut: form.date_debut,
+      date_fin: fin,
+      qualification: '',
+      demi_journee: DEMI_DISPO.some(d => d.v === form.demi_journee) ? form.demi_journee : 'journee_complete',
+      commentaire: form.commentaire || null,
+    })
+    setBusy(false)
+    if (error) { setErr(error.message); return }
+    await onDone?.()
+  }
+
+  return (
+    <Modal
+      title="Ajouter une disponibilité"
+      onClose={onClose}
+      footer={(
+        <>
+          <Btn onClick={sauver} disabled={busy}>{busy ? '…' : 'Enregistrer'}</Btn>
+          <Btn kind="soft" onClick={onClose}>Annuler</Btn>
+        </>
+      )}
+    >
+      <p style={{ margin: '0 0 10px', fontSize: 13.5, color: 'var(--text-muted)' }}>
+        Encodez une dispo depuis la préparation du souhait, sans quitter cette page.
+      </p>
+      {err && <Flash kind="err">{err}</Flash>}
+      <Sel
+        label="Volontaire"
+        value={form.user_id}
+        set={v => setForm(s => ({ ...s, user_id: v }))}
+        options={[{ v: '', l: '— Choisir —' }, ...equipe.map(p => ({ v: p.id, l: `${p.prenom || ''} ${p.nom || ''}`.trim() }))]}
+      />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <F label="Du" type="date" value={form.date_debut} set={v => setForm(s => ({ ...s, date_debut: v }))} />
+        <F label="Au" type="date" value={form.date_fin || form.date_debut} set={v => setForm(s => ({ ...s, date_fin: v }))} />
+      </div>
+      <Sel
+        label="Créneau"
+        value={form.demi_journee}
+        set={v => setForm(s => ({ ...s, demi_journee: v }))}
+        options={DEMI_DISPO}
+      />
+      <F label="Commentaire (optionnel)" value={form.commentaire} set={v => setForm(s => ({ ...s, commentaire: v }))} />
+    </Modal>
   )
 }
 

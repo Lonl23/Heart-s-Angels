@@ -6,6 +6,7 @@ import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
 import { fmtDatesSouhait } from './datesSouhait'
+import { lblPrioriteSouhait } from './listesCliniques'
 import { htmlDocumentA4, imprimerHtml, telechargerHtml, imprimerApercuIframe } from './documentA4'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
@@ -120,7 +121,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : ''} wide />
             {med && <Fld l="Registre national" v={m.registre_national} />}
             <Fld l="Récolteur de souhait" v={nomsRecolteurs(m)} />
-            <Fld l="Priorité élevée" v={m.priorite_elevee ? 'Oui' : ''} />
+            <Fld l="Priorité" v={lblPrioriteSouhait(s.priorite)} />
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
             {med && <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />}
             <Fld l="Autorisation photos" v={lblAutorisationPhotos(m.autorisation_photos)} />
@@ -202,7 +203,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
               <Sec t="📊 Paramètres">
                 <Fld l="Cible SpO₂" v={m.cible_saturation_o2} third />
                 <Fld l="Débit O₂" v={m.debit_o2} third />
-                <Fld l="Apport O₂" v={m.apport_o2} third />
+                <Fld l="Interface O₂" v={Array.isArray(m.interface_o2) ? m.interface_o2.join(' · ') : (m.interface_o2 || m.apport_o2)} third />
                 <Fld l="Cible TA" v={m.cible_ta} third />
                 <Fld l="Cible FC" v={m.cible_fc} third />
               </Sec>

@@ -1,31 +1,30 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, TA, LiensGps, LiensTrajet, Btn, AdresseAffichee } from '@/components/ui'
+import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, TA, LiensGps, LiensTrajet, Btn } from '@/components/ui'
 import config from '@/app.config'
-import { GROUPES, AUTORISATION_PHOTOS, normaliserAutorisationPhotos, lblAutorisationPhotos, equipePluri, nomsRecolteurs } from './missionSchema'
+import { GROUPES, AUTORISATION_PHOTOS, normaliserAutorisationPhotos, lblAutorisationPhotos, equipePluri } from './missionSchema'
 import Traitements from './Traitements'
 import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
 import MaterielRequis from './MaterielRequis'
 import DocumentsSejour from './DocumentsSejour'
+import DocsAdresse, { fusionnerDocs } from './DocsAdresse'
 import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 import EquipePluriForm, { LignesPluri } from './EquipePluri'
-import { RecolteursPicker } from './Recolteurs'
 import { useAuth } from '@/hooks/useAuth'
-import { GenreIcon } from '@/modules/annuaire/genre'
-import { formaterNiss, fmtTelephones, libelleGenre } from '@/modules/annuaire/annuaireSchema'
-import { ficheVersBeneficiaire } from '@/modules/annuaire/annuaireApi'
-import DocumentsRencontre from './DocumentsRencontre'
 import JournalDossier from './JournalDossier'
+import InfosMedicales from './InfosMedicales'
 import { journaliser, clesModifiees } from './journal'
-import { ChoixMultiple } from './ChoixPopup'
-import { CHAMPS_CLINIQUES, PATHOLOGIES, ACTIVITES_SOUHAIT } from './listesCliniques'
 
 const grp = id => GROUPES.find(g => g.id === id)
-const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'priorite_elevee', 'date_demande', 'date_rencontre', 'consignes_equipage']
+
+/** Champs mission tenus par la 1ʳᵉ partie (FormSouhait) — ne pas écraser depuis ce formulaire. */
+const MISSION_PREMIERE_PARTIE = [
+  'recolteurs', 'recolteur', 'date_demande', 'date_rencontre', 'consignes_equipage',
+  'rencontre', 'consentement', 'autorisation_photos', 'categories',
+]
 
 const TABS = [
-  { id:'administratif', label:'Administratif', groupes:['administratif'], zone:'patient' },
   { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'], zone:'programme' },
   { id:'sejour',        label:'Séjour & documents', zone:'programme' },
   { id:'vecteurs',      label:'Vecteurs & équipages', zone:'programme' },
@@ -44,7 +43,11 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
   const [m, setM] = useState(null)
   const [souhait, setSouhait] = useState(souhaitProp || null)
   const [instDemandeuse, setInstDemandeuse] = useState(null)
-  const [tab, setTab] = useState(() => sessionStorage.getItem(`encodage-tab-${souhaitId}`) || 'administratif')
+  const [tab, setTab] = useState(() => {
+    const saved = sessionStorage.getItem(`encodage-tab-${souhaitId}`)
+    if (saved === 'administratif') return 'sejour'
+    return saved || 'trajet'
+  })
   const [status, setStatus] = useState('')
   const chargee = useRef(false)
   const timer = useRef()
@@ -90,6 +93,27 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
     souhaitProp?.annuaire_externe_id,
   ])
 
+  // Resynchronise les champs tenus par FormSouhait pour ne pas les écraser à l’enregistrement.
+  const missionPrepCle = JSON.stringify(
+    Object.fromEntries(MISSION_PREMIERE_PARTIE.map(k => [k, souhaitProp?.mission?.[k]]))
+  )
+  useEffect(() => {
+    const src = souhaitProp?.mission
+    if (!src || !chargee.current) return
+    setM(o => {
+      if (!o) return o
+      let changed = false
+      const next = { ...o }
+      for (const k of MISSION_PREMIERE_PARTIE) {
+        if (JSON.stringify(next[k]) !== JSON.stringify(src[k])) {
+          next[k] = src[k]
+          changed = true
+        }
+      }
+      return changed ? next : o
+    })
+  }, [missionPrepCle])
+
   useEffect(() => {
     if (m === null) return
     if (!chargee.current) { chargee.current = true; return }
@@ -97,10 +121,17 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
       const avant = precedent.current
-      await supabase.from('souhaits').update({ mission: m }).eq('id', souhaitId)
-      const cles = clesModifiees(avant, m)
+      // Préserver les champs 1ʳᵉ partie éventuellement plus frais en base.
+      const { data: cur } = await supabase.from('souhaits').select('mission').eq('id', souhaitId).maybeSingle()
+      const remote = (cur?.mission && typeof cur.mission === 'object') ? cur.mission : {}
+      const mission = { ...m }
+      for (const k of MISSION_PREMIERE_PARTIE) {
+        if (remote[k] !== undefined) mission[k] = remote[k]
+      }
+      await supabase.from('souhaits').update({ mission }).eq('id', souhaitId)
+      const cles = clesModifiees(avant, mission)
       if (cles.length) journaliser(souhaitId, 'modification', { cles }, profile)
-      precedent.current = m
+      precedent.current = mission
       setStatus('saved'); setTimeout(() => setStatus(s => s === 'saved' ? '' : s), 1500)
     }, 600)
     return () => clearTimeout(timer.current)
@@ -156,24 +187,42 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
       {cur?.groupes && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           {cur.groupes.map(gid => {
-            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} lecture={lectureOnglet} instDemandeuse={instDemandeuse} />
-            if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} />
-            if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} />
-            if (gid === 'administratif') return <BlocAdministratif key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhait={souhait} />
+            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} instDemandeuse={instDemandeuse} souhaitId={souhaitId} souhait={souhait} />
+            if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} souhaitId={souhaitId} souhait={souhait} />
+            if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhaitId={souhaitId} souhait={souhait} />
+            if (gid === 'retour') return <BlocRetour key={gid} m={m} set={set} lecture={lectureOnglet} souhait={souhait} />
+            if (gid === 'medical') {
+              return (
+                <InfosMedicales
+                  key={gid}
+                  m={m}
+                  set={set}
+                  lecture={lectureOnglet}
+                  souhait={souhait}
+                  souhaitId={souhaitId}
+                  onNotesMedicales={lectureOnglet ? null : (async (v) => {
+                    setSouhait(s => ({ ...(s || {}), notes_medicales: v }))
+                    onSouhait?.({ notes_medicales: v })
+                    await supabase.from('souhaits').update({ notes_medicales: v || null }).eq('id', souhaitId)
+                  })}
+                />
+              )
+            }
             const g = grp(gid); if (!g) return null
             return (
               <Card key={gid}>
                 <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-                  {g.fields.filter(f => f.k !== 'allergies' && !CHAMPS_CLINIQUES.some(c => c.k === f.k)).map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lectureOnglet} />)}
-                  {gid === 'medical' && (
-                    <>
-                      <AllergiesChamp val={m.allergies} set={v => set('allergies', v)} lecture={lectureOnglet} />
-                      {CHAMPS_CLINIQUES.map(c => (
-                        <ChoixMultiple key={c.k} label={c.l} options={c.options} value={m[c.k]} onChange={v => set(c.k, v)} lecture={lectureOnglet} />
-                      ))}
-                    </>
-                  )}
+                  {g.fields.map(f => (
+                    <Champ
+                      key={f.k}
+                      f={f}
+                      val={m[f.k]}
+                      set={v => set(f.k, v)}
+                      lecture={lectureOnglet}
+                      jourDefaut={jourSouhaitDefaut(souhait, m)}
+                    />
+                  ))}
                 </div>
               </Card>
             )
@@ -257,83 +306,55 @@ async function chargerInstitutionDemandeuse(s) {
   return null
 }
 
-function BlocAdministratif({ m, set, setM, lecture, souhait }) {
-  const g = grp('administratif')
-  const [fiche, setFiche] = useState(null)
-  useEffect(() => {
-    if (!souhait?.beneficiaire_annuaire_id) { setFiche(null); return }
-    supabase.from('annuaire').select('*').eq('id', souhait.beneficiaire_annuaire_id).maybeSingle()
-      .then(({ data }) => setFiche(data || null))
-  }, [souhait?.beneficiaire_annuaire_id])
+function jourSouhaitDefaut(souhait, m) {
+  return String(souhait?.date_souhaitee || m?.jour_retenu || '').slice(0, 10)
+}
 
-  const b = fiche ? ficheVersBeneficiaire(fiche) : {}
-  const prenom = souhait?.beneficiaire_prenom || b.prenom || ''
-  const nom = souhait?.beneficiaire_nom || b.nom || ''
-  const ddn = souhait?.beneficiaire_ddn || b.date_naissance || ''
-  const genre = souhait?.beneficiaire_genre || b.genre || ''
-  const niss = souhait?.beneficiaire_niss || b.niss || m.registre_national || ''
-  const gsm = souhait?.beneficiaire_tel_gsm || b.tel_gsm || ''
-  const fixe = souhait?.beneficiaire_tel_fixe || b.tel_fixe || ''
-  const adresse = (fmtAdresse(souhait?.beneficiaire_adresse) && souhait.beneficiaire_adresse)
-    || (fmtAdresse(b.adresse) && b.adresse)
-    || m.patient_adresse
-  const tels = fmtTelephones({ tel_gsm: gsm, tel_fixe: fixe })
-  const manqueAdresse = adresseVide(adresse)
-  const originLib = souhait?.origine === 'institution' ? 'Institution' : (souhait?.origine ? 'Demande privée' : (m.origine || ''))
+function sliceHeure(v) {
+  const s = String(v || '')
+  const m = s.match(/T(\d{2}:\d{2})/)
+  if (m) return m[1]
+  if (/^\d{2}:\d{2}/.test(s)) return s.slice(0, 5)
+  return ''
+}
 
+/** Jour (défaut = jour du souhait) + heure, stockés en datetime-local. */
+function JourHeure({
+  label = 'Horaire',
+  labelJour = 'Jour',
+  labelHeure = 'Heure',
+  value,
+  set,
+  lecture = false,
+  jourDefaut = '',
+}) {
+  const jourVal = String(value || '').slice(0, 10)
+  const heureVal = sliceHeure(value)
+  const jourAffiche = jourVal || String(jourDefaut || '').slice(0, 10)
+  function maj(jour, heure) {
+    if (lecture) return
+    const j = String(jour || '').slice(0, 10)
+    const h = String(heure || '').slice(0, 5)
+    if (!j && !h) { set(''); return }
+    const jj = j || String(jourDefaut || '').slice(0, 10)
+    if (!jj) { set(h || ''); return }
+    if (!h) { set(`${jj}T00:00`); return }
+    set(`${jj}T${h}`)
+  }
   return (
-    <Card>
-      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
-      {lecture ? (
-        <div style={{ margin: '8px 0 12px' }}>
-          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Récolteurs de souhait</div>
-          <div style={{ fontSize: 14, color: 'var(--text)' }}>{nomsRecolteurs(m) || '—'}</div>
-        </div>
-      ) : (
-        <RecolteursPicker m={m} setM={setM} />
-      )}
-
-      <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'12px 14px', margin:'4px 0 14px' }}>
-        <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>Repris de la fiche bénéficiaire</div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6 }}>
-          {genre && <GenreIcon genre={genre} size={22} title={libelleGenre(genre)} />}
-          <div style={{ fontWeight:700, fontSize:15, color:'var(--heading)' }}>{prenom} {nom}{!prenom && !nom ? '—' : ''}</div>
-        </div>
-        <div style={{ fontSize:13.5, color:'var(--text-2)', lineHeight:1.55 }}>
-          {ddn && <div>Né(e) le {new Date(ddn).toLocaleDateString('fr-BE')}</div>}
-          {niss && <div>Registre national {formaterNiss(niss)}</div>}
-          {tels && <div>{tels}</div>}
-          {originLib && <div>Origine : {originLib}</div>}
-        </div>
-        {fmtAdresse(adresse)
-          ? <div style={{ marginTop:8 }}><AdresseAffichee label="Adresse légale" value={adresse} /></div>
-          : <div style={{ marginTop:8, fontSize:13, color:'var(--text-muted)' }}>Aucune adresse sur la fiche — complétez-la ci-dessous.</div>}
+    <div style={{ margin: '8px 0' }}>
+      {label && <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10 }}>
+        <F label={labelJour} type="date" value={jourAffiche} set={v => maj(v, heureVal)} readOnly={lecture} />
+        <F label={labelHeure} type="time" value={heureVal} set={v => maj(jourAffiche, v)} readOnly={lecture} />
       </div>
-
-      {manqueAdresse && (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse du domicile du patient</div>
-          <AddressFields value={m.patient_adresse} set={v => { if (!lecture) set('patient_adresse', v) }} />
-        </div>
-      )}
-      {!niss && (
-        <Champ f={grp('administratif').fields.find(f => f.k === 'registre_national')} val={m.registre_national} set={v => set('registre_national', v)} lecture={lecture} />
-      )}
-
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        {g.fields.filter(f => ADMIN_MISSION.includes(f.k) && f.k !== 'consentement' && f.k !== 'autorisation_photos').map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lecture} />)}
-      </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        <ChoixMultiple label="Pathologies" options={PATHOLOGIES} value={m.categories?.pathologies} onChange={v => setM(o => ({ ...o, categories: { ...(o.categories || {}), pathologies: v } }))} lecture={lecture} />
-        <ChoixMultiple label="Activités" options={ACTIVITES_SOUHAIT} value={m.categories?.activites} onChange={v => setM(o => ({ ...o, categories: { ...(o.categories || {}), activites: v } }))} lecture={lecture} />
-      </div>
-      <DocumentsRencontre m={m} setM={setM} lecture={lecture} souhait={souhait} />
-    </Card>
+    </div>
   )
 }
 
-function BlocBase({ m, set, lecture }) {
+function BlocBase({ m, set, lecture, souhaitId, souhait }) {
   const [bases, setBases] = useState([])
+  const jourDefaut = jourSouhaitDefaut(souhait, m)
   useEffect(() => {
     supabase.from('bases_depart').select('*').eq('actif', true).order('ordre').then(({ data }) => {
       const rows = (data || []).map(b => ({
@@ -383,21 +404,35 @@ function BlocBase({ m, set, lecture }) {
       )}
       <div style={{ marginTop: 8 }}>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
-        <AddressFields value={m.base_adresse} set={v => { if (!lecture) set('base_adresse', v) }} />
+        <AddressFields value={m.base_adresse} set={v => { if (!lecture) set('base_adresse', v) }} wazeMode="planifier" />
+        <DocsAdresse
+          souhaitId={souhaitId}
+          slotId="base"
+          docs={m.base_docs}
+          onChange={v => { if (!lecture) set('base_docs', v) }}
+          lecture={lecture}
+        />
       </div>
       {(nomMatch?.protocole || m.base_protocole) && !m.base_autre && (
         <TA label="Protocole de mission" value={nomMatch?.protocole || m.base_protocole || ''} set={() => {}} rows={4} />
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: '0 24px' }}>
-        <Champ f={grp('base').fields.find(f => f.k === 'rdv_base')} val={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} />
-        <Champ f={grp('base').fields.find(f => f.k === 'depart_base')} val={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} />
+        <JourHeure label="Rendez-vous" value={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} jourDefaut={jourDefaut} />
+        <JourHeure label="Départ" value={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} jourDefaut={jourDefaut} />
       </div>
+      <LiensTrajet
+        etapes={[
+          { label: 'Base', adresse: m.base_adresse },
+          { label: 'Prise en charge', adresse: adressePec(m) },
+        ]}
+        wazeMode="planifier"
+      />
     </Card>
   )
 }
 
 function OngletTiming({ m, set, lecture, souhait }) {
-  const jour = (souhait?.date_souhaitee || m.jour_retenu || '').slice(0, 10)
+  const jour = jourSouhaitDefaut(souhait, m)
   const lib = jour
     ? new Date(jour + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : '—'
@@ -408,31 +443,81 @@ function OngletTiming({ m, set, lecture, souhait }) {
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Jour du souhait</div>
         <div style={{ fontSize: 18, fontWeight: 700 }}>{lib}</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '0 16px' }}>
-        <Champ f={{ k:'rdv_base', l:'Rendez-vous base', t:'datetime' }} val={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} />
-        <Champ f={{ k:'depart_base', l:'Départ base', t:'datetime' }} val={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} />
-        <Champ f={{ k:'arrivee_pec', l:'Prise en charge', t:'datetime' }} val={m.arrivee_pec} set={v => set('arrivee_pec', v)} lecture={lecture} />
-        <Champ f={{ k:'arrivee_destination', l:'Sur place', t:'datetime' }} val={m.arrivee_destination} set={v => set('arrivee_destination', v)} lecture={lecture} />
-        <Champ f={{ k:'retour_heure', l:'Retour', t:'datetime' }} val={m.retour_heure} set={v => set('retour_heure', v)} lecture={lecture} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: '0 16px' }}>
+        <JourHeure label="Rendez-vous base" value={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} jourDefaut={jour} />
+        <JourHeure label="Départ base" value={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} jourDefaut={jour} />
+        <JourHeure label="Prise en charge" value={m.arrivee_pec} set={v => set('arrivee_pec', v)} lecture={lecture} jourDefaut={jour} />
+        <JourHeure label="Sur place" value={m.arrivee_destination} set={v => set('arrivee_destination', v)} lecture={lecture} jourDefaut={jour} />
+        <JourHeure label="Retour" value={m.retour_heure} set={v => set('retour_heure', v)} lecture={lecture} jourDefaut={jour} />
       </div>
     </Card>
   )
 }
 
-function etapesTrajet(m) {
-  const pec = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
-  const extras = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
-  return [
-    { label: 'Base', adresse: m.base_adresse },
-    { label: 'Prise en charge', adresse: pec },
-    { label: 'Destination', adresse: m.dest_adresse },
-    ...extras.map((a, i) => ({ label: a.nom || `Activité ${i + 1}`, adresse: a.adresse })),
-  ]
+function derniereEtapeAller(m) {
+  const acts = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
+  if (acts.length) {
+    const a = acts[acts.length - 1]
+    return { label: a.nom || 'Dernière activité', adresse: a.adresse }
+  }
+  if (fmtAdresse(m.dest_adresse)) return { label: m.dest_nom || 'Destination', adresse: m.dest_adresse }
+  return { label: 'Prise en charge', adresse: adressePec(m) }
 }
 
-function BlocDestinations({ m, set, setM, lecture }) {
+function BlocRetour({ m, set, lecture, souhait }) {
+  const jourDefaut = jourSouhaitDefaut(souhait, m)
+  const derniere = derniereEtapeAller(m)
+  const pec = { label: 'Prise en charge', adresse: adressePec(m) }
+  const base = { label: 'Base', adresse: m.base_adresse }
+  return (
+    <Card>
+      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Retour</div>
+      <Champ f={grp('retour').fields.find(f => f.k === 'retour_type')} val={m.retour_type} set={v => set('retour_type', v)} lecture={lecture} />
+      <JourHeure label="Heure attendue" value={m.retour_heure} set={v => set('retour_heure', v)} lecture={lecture} jourDefaut={jourDefaut} />
+      <Champ f={grp('retour').fields.find(f => f.k === 'retour_precisions')} val={m.retour_precisions} set={v => set('retour_precisions', v)} lecture={lecture} />
+      <LiensTrajet
+        etapes={[derniere, pec, base]}
+        wazeMode="planifier"
+      />
+    </Card>
+  )
+}
+
+function adressePec(m) {
+  return m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
+}
+
+function adresseDepuisLieu(src) {
+  if (!src) return { pays: 'Belgique' }
+  if (src.adresse && typeof src.adresse === 'object') {
+    return {
+      rue: src.adresse.rue || '',
+      numero: src.adresse.numero || '',
+      cp: src.adresse.cp || '',
+      localite: src.adresse.localite || '',
+      pays: src.adresse.pays || 'Belgique',
+    }
+  }
+  return {
+    rue: src.rue || '',
+    numero: src.numero || '',
+    cp: src.cp || '',
+    localite: src.localite || '',
+    pays: src.pays || 'Belgique',
+  }
+}
+
+function docsDepuisLieu(src) {
+  if (Array.isArray(src?.documents)) return src.documents
+  if (Array.isArray(src?.data?.documents)) return src.data.documents
+  return []
+}
+
+function BlocDestinations({ m, set, setM, lecture, souhaitId, souhait }) {
   const activites = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
   const [connues, setConnues] = useState([])
+  const jourDefaut = jourSouhaitDefaut(souhait, m)
+  const destMode = m.dest_privee === false || m.dest_annuaire_id || m.dest_frequente_id ? 'connue' : 'privee'
   useEffect(() => {
     supabase.from('destinations_frequentes').select('*').eq('actif', true).order('nom').then(({ data }) => setConnues(data || []))
   }, [])
@@ -442,6 +527,28 @@ function BlocDestinations({ m, set, setM, lecture }) {
       activites_sur_place: (o.activites_sur_place || []).map(a => a.id === id ? { ...a, ...patch } : a),
     }))
   }
+  function setDestMode(mode) {
+    if (lecture) return
+    if (mode === 'privee') {
+      setM(o => ({ ...o, dest_privee: true, dest_annuaire_id: null, dest_frequente_id: null, dest_nom: o.dest_nom || '' }))
+      return
+    }
+    setM(o => ({ ...o, dest_privee: false }))
+  }
+  function appliquerDestinationConnue(src) {
+    if (lecture || !src) return
+    const adresse = adresseDepuisLieu(src)
+    const docs = fusionnerDocs(m.dest_docs, docsDepuisLieu(src))
+    setM(o => ({
+      ...o,
+      dest_privee: false,
+      dest_nom: src.nom || o.dest_nom || '',
+      dest_adresse: adresse,
+      dest_docs: docs,
+      dest_annuaire_id: src.via === 'Annuaire' || src.categorie ? (src.id || null) : (src.annuaire_id || null),
+      dest_frequente_id: src.via === 'Fréquente' || (!src.categorie && !src.via) ? (src.id || null) : null,
+    }))
+  }
   function ajouter(src) {
     const id = crypto.randomUUID ? crypto.randomUUID() : 'a' + Date.now()
     const row = {
@@ -449,53 +556,166 @@ function BlocDestinations({ m, set, setM, lecture }) {
       nom: src?.nom || '',
       heure: '',
       notes: src?.notes || '',
-      telephone: src?.telephone || '',
-      adresse: src ? { rue: src.rue || '', numero: src.numero || '', cp: src.cp || '', localite: src.localite || '', pays: src.pays || 'Belgique' } : { pays: 'Belgique' },
+      telephone: src?.telephone || src?.tel || '',
+      adresse: adresseDepuisLieu(src),
+      documents: docsDepuisLieu(src),
+      annuaire_id: src?.categorie || src?.via === 'Annuaire' ? src.id : (src?.annuaire_id || null),
+      frequente_id: src?.via === 'Fréquente' || (!src?.categorie && src?.id && !src?.via) ? src.id : null,
     }
     setM(o => ({ ...o, activites_sur_place: [...(o.activites_sur_place || []), row] }))
   }
-  async function memoriser(a) {
-    if (!a?.nom) return
-    await supabase.from('destinations_frequentes').insert({
-      nom: a.nom,
-      rue: a.adresse?.rue || '',
-      numero: a.adresse?.numero || '',
-      cp: a.adresse?.cp || '',
-      localite: a.adresse?.localite || '',
-      pays: a.adresse?.pays || 'Belgique',
-      telephone: a.telephone || '',
-      notes: a.notes || '',
-    })
+  async function memoriser(a, { dansAnnuaire = false } = {}) {
+    const nom = String(a?.nom || '').trim()
+    if (!nom) { alert('Indiquez un nom pour ce lieu.'); return }
+    const adresse = a.adresse || {}
+    const telephone = a.telephone || ''
+    const notes = a.notes || ''
+    const documents = Array.isArray(a.documents) ? a.documents : []
+    if (dansAnnuaire) {
+      const { data, error } = await supabase.from('annuaire').insert({
+        categorie: 'institution',
+        nom,
+        telephone: telephone || null,
+        data: { adresse, documents, notes },
+      }).select('id').single()
+      if (error) { alert(error.message); return }
+      if (a.id) majAct(a.id, { annuaire_id: data.id, documents })
+      else setM(o => ({ ...o, dest_annuaire_id: data.id, dest_privee: false, dest_nom: nom, dest_docs: documents }))
+      alert('Lieu enregistré dans l’annuaire.')
+      return
+    }
+    const deja = (connues || []).some(d =>
+      String(d.nom || '').trim().toLowerCase() === nom.toLowerCase()
+      && String(d.cp || '') === String(adresse?.cp || '')
+      && String(d.localite || '').toLowerCase() === String(adresse?.localite || '').toLowerCase()
+    )
+    if (deja) { alert('Cette destination est déjà enregistrée.'); return }
+    const { data, error } = await supabase.from('destinations_frequentes').insert({
+      nom,
+      rue: adresse?.rue || '',
+      numero: adresse?.numero || '',
+      cp: adresse?.cp || '',
+      localite: adresse?.localite || '',
+      pays: adresse?.pays || 'Belgique',
+      telephone,
+      notes,
+      documents,
+      annuaire_id: a.annuaire_id || null,
+    }).select('*').single()
+    if (error) { alert(error.message); return }
+    if (data) setConnues(list => [...list, data])
+    alert('Lieu connu enregistré.')
   }
+  function ajouterSansDoublon(src) {
+    if (src?.nom) {
+      const existe = activites.some(x =>
+        String(x.nom || '').trim().toLowerCase() === String(src.nom).trim().toLowerCase()
+        && String(x.adresse?.cp || '') === String(src.cp || src.adresse?.cp || '')
+      )
+      if (existe) { alert('Cette activité est déjà dans le trajet.'); return }
+    }
+    ajouter(src)
+  }
+  const pec = adressePec(m)
   return (
     <Card>
       <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Destination</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        {[
+          { v: 'privee', l: 'Privée' },
+          { v: 'connue', l: 'Lieu connu (annuaire)' },
+        ].map(o => (
+          <button
+            key={o.v}
+            type="button"
+            className={'ha-tab-like' + (destMode === o.v ? ' is-on' : '')}
+            disabled={lecture}
+            onClick={() => setDestMode(o.v)}
+          >{o.l}</button>
+        ))}
+      </div>
+      {destMode === 'connue' && !lecture && (
+        <RechercheLieu
+          label="Rechercher un lieu (annuaire + destinations connues)"
+          onPick={appliquerDestinationConnue}
+          connues={connues}
+        />
+      )}
+      {destMode === 'connue' && (
+        <F label="Nom du lieu" value={m.dest_nom || ''} set={v => set('dest_nom', v)} readOnly={lecture} />
+      )}
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
-      <AddressFields value={m.dest_adresse} set={v => { if (!lecture) set('dest_adresse', v) }} />
+      <AddressFields value={m.dest_adresse} set={v => { if (!lecture) set('dest_adresse', v) }} wazeMode="planifier" />
+      <DocsAdresse
+        souhaitId={souhaitId}
+        slotId="destination"
+        docs={m.dest_docs}
+        onChange={v => { if (!lecture) set('dest_docs', v) }}
+        lecture={lecture}
+      />
       <TA label="Précisions" value={m.dest_precisions || ''} set={v => set('dest_precisions', v)} rows={2} />
-      <F label="Heure souhaitée sur place" type="datetime-local" value={m.arrivee_destination || ''} set={v => set('arrivee_destination', v)} readOnly={lecture} />
-      <LiensTrajet etapes={etapesTrajet(m)} />
-      <div style={{ fontWeight: 700, margin: '8px 0' }}>Sur place</div>
-      {activites.map(a => (
-        <div key={a.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
-          <F label="Lieu / activité" value={a.nom || ''} set={v => majAct(a.id, { nom: v })} readOnly={lecture} />
-          <F label="Heure attendue" type="time" value={(a.heure || '').slice(0, 5)} set={v => majAct(a.id, { heure: v })} readOnly={lecture} />
-          <F label="Téléphone" value={a.telephone || ''} set={v => majAct(a.id, { telephone: v })} readOnly={lecture} />
-          <TA label="Notes" value={a.notes || ''} set={v => majAct(a.id, { notes: v })} rows={2} />
-          <AddressFields value={a.adresse} set={v => { if (!lecture) majAct(a.id, { adresse: v }) }} />
-          {!lecture && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Btn kind="soft" onClick={() => memoriser(a)}>Réutiliser plus tard</Btn>
-              <Btn kind="danger" onClick={() => setM(o => ({ ...o, activites_sur_place: (o.activites_sur_place || []).filter(x => x.id !== a.id) }))}>Retirer</Btn>
-            </div>
-          )}
+      <JourHeure label="Sur place" value={m.arrivee_destination} set={v => set('arrivee_destination', v)} lecture={lecture} jourDefaut={jourDefaut} />
+      {!lecture && destMode === 'connue' && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          <Btn kind="soft" onClick={() => memoriser({ nom: m.dest_nom, adresse: m.dest_adresse, documents: m.dest_docs, annuaire_id: m.dest_annuaire_id })}>
+            Enregistrer comme lieu fréquent
+          </Btn>
+          <Btn kind="soft" onClick={() => memoriser({ nom: m.dest_nom, adresse: m.dest_adresse, documents: m.dest_docs }, { dansAnnuaire: true })}>
+            Enregistrer dans l’annuaire
+          </Btn>
         </div>
-      ))}
+      )}
+      <LiensTrajet
+        etapes={[
+          { label: 'Prise en charge', adresse: pec },
+          { label: 'Destination', adresse: m.dest_adresse },
+        ]}
+        wazeMode="planifier"
+      />
+      <div style={{ fontWeight: 700, margin: '8px 0' }}>Sur place</div>
+      {activites.map((a, i) => {
+        const prev = i === 0
+          ? { label: 'Destination', adresse: m.dest_adresse }
+          : { label: activites[i - 1].nom || `Activité ${i}`, adresse: activites[i - 1].adresse }
+        return (
+          <div key={a.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
+            <F label="Activité" value={a.nom || ''} set={v => majAct(a.id, { nom: v })} readOnly={lecture} />
+            <F label="Heure attendue" type="time" value={(a.heure || '').slice(0, 5)} set={v => majAct(a.id, { heure: v })} readOnly={lecture} />
+            <F label="Téléphone" value={a.telephone || ''} set={v => majAct(a.id, { telephone: v })} readOnly={lecture} />
+            <TA label="Notes" value={a.notes || ''} set={v => majAct(a.id, { notes: v })} rows={2} />
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
+            <AddressFields value={a.adresse} set={v => { if (!lecture) majAct(a.id, { adresse: v }) }} wazeMode="planifier" />
+            <DocsAdresse
+              souhaitId={souhaitId}
+              slotId={a.id}
+              docs={a.documents}
+              onChange={v => { if (!lecture) majAct(a.id, { documents: v }) }}
+              lecture={lecture}
+            />
+            <LiensTrajet
+              etapes={[prev, { label: a.nom || `Activité ${i + 1}`, adresse: a.adresse }]}
+              wazeMode="planifier"
+            />
+            {!lecture && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Btn kind="soft" onClick={() => memoriser(a)}>Enregistrer comme lieu fréquent</Btn>
+                <Btn kind="soft" onClick={() => memoriser(a, { dansAnnuaire: true })}>Enregistrer dans l’annuaire</Btn>
+                <Btn kind="danger" onClick={() => setM(o => ({ ...o, activites_sur_place: (o.activites_sur_place || []).filter(x => x.id !== a.id) }))}>Retirer</Btn>
+              </div>
+            )}
+          </div>
+        )
+      })}
       {!lecture && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <Btn kind="soft" onClick={() => ajouter(null)}>+ Activité</Btn>
+          <Btn kind="soft" onClick={() => ajouterSansDoublon(null)}>+ Activité</Btn>
           {connues.length > 0 && (
-            <Sel label="Destination connue" value="" set={id => { const d = connues.find(x => x.id === id); if (d) ajouter(d) }} options={[{ v: '', l: '—' }, ...connues.map(d => ({ v: d.id, l: d.nom }))]} />
+            <Sel
+              label="Lieu connu"
+              value=""
+              set={id => { const d = connues.find(x => x.id === id); if (d) ajouterSansDoublon({ ...d, via: 'Fréquente' }) }}
+              options={[{ v: '', l: '—' }, ...connues.map(d => ({ v: d.id, l: d.nom }))]}
+            />
           )}
         </div>
       )}
@@ -503,17 +723,7 @@ function BlocDestinations({ m, set, setM, lecture }) {
   )
 }
 
-function AllergiesChamp({ val, set, lecture }) {
-  const [opts, setOpts] = useState([])
-  useEffect(() => {
-    supabase.from('allergies_referentiel').select('libelle').eq('actif', true).order('ordre').then(({ data }) => {
-      setOpts((data || []).map(r => r.libelle))
-    })
-  }, [])
-  return <ChoixMultiple label="Allergies" options={opts} value={val} onChange={set} lecture={lecture} />
-}
-
-function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
+function PriseEnCharge({ m, set, setM, lecture, instDemandeuse, souhaitId, souhait }) {
   const dom = m.pec_type === 'Domicile du patient'
   const inst = m.pec_type === 'Institution'
   const champ = k => grp('prise_en_charge').fields.find(f => f.k === k)
@@ -538,11 +748,23 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
       set('pec_adresse', null)
     }
   }
-  function appliquerRecherche(hit) {
+  async function appliquerRecherche(hit) {
     if (lecture) return
     set('pec_inst_source', 'autre')
     set('pec_institution', hit.nom || '')
     if (hit.adresse) set('pec_adresse', hit.adresse)
+    let docsInst = docsDepuisLieu(hit)
+    if (!docsInst.length && hit.via === 'Référentiel' && hit.id) {
+      const { data } = await supabase.from('referentiel_institutions').select('documents').eq('id', hit.id).maybeSingle()
+      docsInst = Array.isArray(data?.documents) ? data.documents : []
+    }
+    if (!docsInst.length && hit.via === 'Annuaire' && hit.id) {
+      const { data } = await supabase.from('annuaire').select('data').eq('id', hit.id).maybeSingle()
+      docsInst = Array.isArray(data?.data?.documents) ? data.data.documents : []
+    }
+    if (docsInst.length) {
+      setM?.(o => ({ ...o, pec_docs: fusionnerDocs(o.pec_docs, docsInst) }))
+    }
   }
 
   return (
@@ -552,8 +774,15 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
       {dom && (
         <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'10px 12px', margin:'6px 0' }}>
           <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse (domicile du patient — reprise de la fiche bénéficiaire)</div>
-          <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— à renseigner sur la fiche bénéficiaire —'}</div>
-          {fmtAdresse(m.patient_adresse) && <div style={{ marginTop: 6 }}><LiensGps adresse={m.patient_adresse} /></div>}
+          <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— À renseigner sur la fiche bénéficiaire —'}</div>
+          {fmtAdresse(m.patient_adresse) && <div style={{ marginTop: 6 }}><LiensGps adresse={m.patient_adresse} wazeMode="planifier" /></div>}
+          <DocsAdresse
+            souhaitId={souhaitId}
+            slotId="pec-domicile"
+            docs={m.pec_docs}
+            onChange={v => { if (!lecture) set('pec_docs', v) }}
+            lecture={lecture}
+          />
         </div>
       )}
       {inst && (
@@ -582,7 +811,7 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
               <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(instDemandeuse.adresse) || fmtAdresse(m.pec_adresse) || '—'}</div>
               {instDemandeuse.tel && <div style={{ fontSize:13, color:'var(--text-muted)', marginTop:4 }}>{instDemandeuse.tel}</div>}
               {fmtAdresse(instDemandeuse.adresse || m.pec_adresse) && (
-                <div style={{ marginTop:6 }}><LiensGps adresse={instDemandeuse.adresse || m.pec_adresse} /></div>
+                <div style={{ marginTop:6 }}><LiensGps adresse={instDemandeuse.adresse || m.pec_adresse} wazeMode="planifier" /></div>
               )}
             </div>
           )}
@@ -592,7 +821,22 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
           {source === 'autre' && (
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
               <Champ f={champ('pec_institution')} val={m.pec_institution} set={v=>set('pec_institution', v)} lecture={lecture} />
-              <Champ f={champ('pec_adresse')} val={m.pec_adresse} set={v=>set('pec_adresse', v)} lecture={lecture} />
+              <Champ f={{ ...champ('pec_adresse'), l: 'Adresse' }} val={m.pec_adresse} set={v=>set('pec_adresse', v)} lecture={lecture} souhaitId={souhaitId} slotId="pec-adresse" docs={m.pec_adresse_docs} onDocs={v => set('pec_adresse_docs', v)} />
+            </div>
+          )}
+          {(source === 'demandeuse' || source === 'autre') && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Plans du site & documents d’accès</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
+                Plans, accès parking, consignes — visibles par l’équipe terrain.
+              </div>
+              <DocsAdresse
+                souhaitId={souhaitId}
+                slotId="pec"
+                docs={m.pec_docs}
+                onChange={v => { if (!lecture) set('pec_docs', v) }}
+                lecture={lecture}
+              />
             </div>
           )}
           {(source === 'demandeuse' || source === 'autre') && (
@@ -609,10 +853,17 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse }) {
         </div>
       )}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        <Champ f={champ('arrivee_pec')} val={m.arrivee_pec} set={v=>set('arrivee_pec', v)} lecture={lecture} />
-        <Champ f={champ('depart_pec')} val={m.depart_pec} set={v=>set('depart_pec', v)} lecture={lecture} />
+        <JourHeure label="Prise en charge souhaitée" value={m.arrivee_pec} set={v => set('arrivee_pec', v)} lecture={lecture} jourDefaut={jourSouhaitDefaut(souhait, m)} />
+        <JourHeure label="Départ souhaité" value={m.depart_pec} set={v => set('depart_pec', v)} lecture={lecture} jourDefaut={jourSouhaitDefaut(souhait, m)} />
       </div>
       <Champ f={champ('pec_precisions')} val={m.pec_precisions} set={v=>set('pec_precisions', v)} lecture={lecture} />
+      <LiensTrajet
+        etapes={[
+          { label: 'Prise en charge', adresse: adressePec(m) },
+          { label: m.dest_nom || 'Destination', adresse: m.dest_adresse },
+        ]}
+        wazeMode="planifier"
+      />
     </Card>
   )
 }
@@ -644,6 +895,27 @@ function ServicesInstitution({ m, set, lecture }) {
 }
 
 function RechercheInstitution({ lecture, onPick }) {
+  return (
+    <RechercheLieu
+      lecture={lecture}
+      onPick={onPick}
+      label="Rechercher l’institution (annuaire + internet)"
+      categories={['institution', 'externe_souhait']}
+      avecReferentiel
+      avecPhoton
+    />
+  )
+}
+
+function RechercheLieu({
+  lecture = false,
+  onPick,
+  label = 'Rechercher un lieu',
+  categories = ['institution', 'externe_souhait'],
+  connues = [],
+  avecReferentiel = false,
+  avecPhoton = false,
+}) {
   const [q, setQ] = useState('')
   const [hits, setHits] = useState([])
   const [busy, setBusy] = useState(false)
@@ -657,76 +929,104 @@ function RechercheInstitution({ lecture, onPick }) {
     const locaux = []
     let web = []
     let msg = null
+    const needleLow = needle.toLowerCase()
+    for (const r of connues || []) {
+      if (!String(r.nom || '').toLowerCase().includes(needleLow)) continue
+      locaux.push({
+        ...r,
+        adresse: adresseDepuisLieu(r),
+        documents: Array.isArray(r.documents) ? r.documents : [],
+        via: 'Fréquente',
+      })
+    }
     try {
       const { data } = await supabase.from('annuaire')
         .select('id,nom,telephone,data,categorie')
-        .in('categorie', ['institution', 'externe_souhait'])
+        .in('categorie', categories)
         .ilike('nom', `%${needle}%`)
         .limit(8)
-      const { data: refs } = await supabase.from('referentiel_institutions')
-        .select('id,nom,telephone,rue,numero,cp,localite,pays')
-        .ilike('nom', `%${needle}%`)
-        .eq('actif', true)
-        .limit(8)
-      for (const r of refs || []) {
-        locaux.push({
-          id: r.id,
-          nom: r.nom,
-          adresse: { rue: r.rue || '', numero: r.numero || '', cp: r.cp || '', localite: r.localite || '', pays: r.pays || 'Belgique' },
-          tel: r.telephone || '',
-          via: 'Référentiel',
-        })
-      }
       for (const r of data || []) {
         locaux.push({
           id: r.id,
           nom: r.nom,
+          categorie: r.categorie,
           adresse: r.data?.adresse || null,
+          documents: Array.isArray(r.data?.documents) ? r.data.documents : [],
           tel: r.telephone || r.data?.telephone || '',
           via: 'Annuaire',
         })
       }
+      if (avecReferentiel) {
+        const { data: refs } = await supabase.from('referentiel_institutions')
+          .select('id,nom,telephone,rue,numero,cp,localite,pays,documents')
+          .ilike('nom', `%${needle}%`)
+          .eq('actif', true)
+          .limit(8)
+        for (const r of refs || []) {
+          locaux.push({
+            id: r.id,
+            nom: r.nom,
+            adresse: { rue: r.rue || '', numero: r.numero || '', cp: r.cp || '', localite: r.localite || '', pays: r.pays || 'Belgique' },
+            documents: Array.isArray(r.documents) ? r.documents : [],
+            tel: r.telephone || '',
+            via: 'Référentiel',
+          })
+        }
+      }
     } catch { /* annuaire optionnel */ }
-    try {
-      web = await chercherPhoton(needle)
-    } catch {
-      msg = 'La recherche internet n’a pas abouti. Essayez Google Maps ci-dessous, ou encodez l’adresse à la main.'
+    if (avecPhoton) {
+      try {
+        web = await chercherPhoton(needle)
+      } catch {
+        msg = 'La recherche internet n’a pas abouti. Essayez Google Maps ci-dessous, ou encodez l’adresse à la main.'
+      }
     }
-    const vus = new Set(locaux.map(x => (x.nom || '').toLowerCase()))
-    const fusion = [...locaux, ...web.filter(x => !vus.has((x.nom || '').toLowerCase()))]
+    const vus = new Set(locaux.map(x => `${(x.nom || '').toLowerCase()}|${x.via}`))
+    const fusion = [
+      ...locaux,
+      ...web.filter(x => !vus.has(`${(x.nom || '').toLowerCase()}|${x.via || 'Internet'}`)),
+    ]
     setHits(fusion)
     setBusy(false)
-    if (!fusion.length) setErr(msg || 'Aucun résultat. Affinez le nom, ou ouvrez Google Maps.')
+    if (!fusion.length) setErr(msg || 'Aucun résultat. Affinez le nom, ou encodez l’adresse à la main.')
     else setErr(msg)
   }
 
-  const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q.trim() || 'institution Belgique')}`
+  const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q.trim() || 'Belgique')}`
 
   return (
-    <div style={{ marginBottom:12 }}>
-      <form onSubmit={chercher} style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'flex-end' }}>
-        <div style={{ flex:'1 1 220px' }}>
-          <F label="Rechercher l’institution (annuaire + internet)" value={q} set={setQ} />
+    <div style={{ marginBottom: 12 }}>
+      <form onSubmit={chercher} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ flex: '1 1 220px' }}>
+          <F label={label} value={q} set={setQ} />
         </div>
-        <Btn onClick={chercher} disabled={lecture || busy} style={{ marginBottom:10 }}>{busy ? 'Recherche…' : 'Rechercher'}</Btn>
-        <a href={maps} target="_blank" rel="noopener noreferrer" className="ha-gps-btn" style={{ marginBottom:12, alignSelf:'center' }}>Google Maps</a>
+        <Btn onClick={chercher} disabled={lecture || busy} style={{ marginBottom: 10 }}>{busy ? 'Recherche…' : 'Rechercher'}</Btn>
+        {avecPhoton && (
+          <a href={maps} target="_blank" rel="noopener noreferrer" className="ha-gps-btn" style={{ marginBottom: 12, alignSelf: 'center' }}>Google Maps</a>
+        )}
       </form>
-      {err && <div style={{ fontSize:13, color:'#8A6D1B', marginBottom:8 }}>{err}</div>}
+      {err && <div style={{ fontSize: 13, color: '#8A6D1B', marginBottom: 8 }}>{err}</div>}
       {hits.length > 0 && (
-        <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
           {hits.map((h, i) => (
             <button
-              key={h.id || `${h.nom}-${i}`}
+              key={h.id || `${h.nom}-${h.via}-${i}`}
               type="button"
               disabled={lecture}
               onClick={() => onPick(h)}
               style={{
-                textAlign:'left', padding:'10px 12px', borderRadius:10, cursor:'pointer',
-                border:'1px solid var(--border)', background:'var(--card)', fontFamily:'inherit',
+                textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                border: '1px solid var(--border)', background: 'var(--card)', fontFamily: 'inherit',
               }}
             >
-              <div style={{ fontWeight:600, color:'var(--text)' }}>{h.nom || 'Sans nom'}{h.via ? <span style={{ fontWeight:500, color:'var(--text-muted)', fontSize:12 }}> · {h.via}</span> : null}</div>
-              <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>{fmtAdresse(h.adresse) || 'Adresse non renseignée'}</div>
+              <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                {h.nom || 'Sans nom'}
+                {h.via ? <span style={{ fontWeight: 500, color: 'var(--text-muted)', fontSize: 12 }}> · {h.via}</span> : null}
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                {fmtAdresse(h.adresse) || 'Adresse non renseignée'}
+                {docsDepuisLieu(h).length ? ` · ${docsDepuisLieu(h).length} document(s)` : ''}
+              </div>
             </button>
           ))}
         </div>
@@ -756,10 +1056,26 @@ async function chercherPhoton(q) {
   }).filter(x => fmtAdresse(x.adresse) || x.nom)
 }
 
-function Champ({ f, val, set, lecture }) {
+function Champ({ f, val, set, lecture, souhaitId, slotId, docs, onDocs, jourDefaut = '' }) {
   if (!f) return null
   const lock = !!lecture
-  if (f.t === 'address') return <div style={{ gridColumn:'1 / -1', margin:'8px 0' }}><label style={lbl}>{f.l}</label><AddressFields value={val} set={lock ? (()=>{}) : set} /></div>
+  if (f.t === 'address') {
+    return (
+      <div style={{ gridColumn:'1 / -1', margin:'8px 0' }}>
+        <label style={lbl}>{f.l}</label>
+        <AddressFields value={val} set={lock ? (()=>{}) : set} wazeMode="planifier" />
+        {(souhaitId && slotId) && (
+          <DocsAdresse
+            souhaitId={souhaitId}
+            slotId={slotId}
+            docs={docs}
+            onChange={v => { if (!lock) onDocs?.(v) }}
+            lecture={lock}
+          />
+        )}
+      </div>
+    )
+  }
   if (f.t === 'sep') return <div style={{ gridColumn:'1 / -1', fontSize:12, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:.5, margin:'14px 0 6px' }}>{f.l.replace(/—/g,'').trim()}</div>
   if (f.t === 'toggle') return (
     <div style={{ display:'flex', alignItems:'center', gap:10, margin:'12px 0' }}>
@@ -797,6 +1113,16 @@ function Champ({ f, val, set, lecture }) {
   const wrap = c => <div style={{ margin:'8px 0' }}><label style={lbl}>{f.l}</label>{c}</div>
   if (f.t === 'textarea') return <div style={{ gridColumn:'1 / -1' }}>{wrap(<textarea value={val||''} onChange={e=>{ if (!lock) set(e.target.value) }} readOnly={lock} rows={f.rows||2} style={{ ...inp, resize:'vertical' }} />)}</div>
   if (f.t === 'select') return wrap(<select value={val||''} onChange={e=>{ if (!lock) set(e.target.value) }} disabled={lock} style={inp}>{f.options.map(o=><option key={o} value={o}>{o||'—'}</option>)}</select>)
-  const type = f.t === 'datetime' ? 'datetime-local' : f.t
-  return wrap(<input type={type} value={val||''} onChange={e=>{ if (!lock) set(e.target.value) }} readOnly={lock} style={inp} />)
+  if (f.t === 'datetime') {
+    return (
+      <JourHeure
+        label={f.l}
+        value={val}
+        set={v => { if (!lock) set(v) }}
+        lecture={lock}
+        jourDefaut={jourDefaut}
+      />
+    )
+  }
+  return wrap(<input type={f.t || 'text'} value={val||''} onChange={e=>{ if (!lock) set(e.target.value) }} readOnly={lock} style={inp} />)
 }

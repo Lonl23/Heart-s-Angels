@@ -19,6 +19,8 @@ export const TYPES_NOTIF = [
   { v: 'helpdesk_nouveau', l: 'Nouveau bug ou suggestion', icon: '🛠️' },
   { v: 'dispo_retiree', l: 'Disponibilité retirée', icon: '📆' },
   { v: 'echeance_staff', l: 'Sélection médicale d’un volontaire', icon: '📋' },
+  { v: 'acces_preparation_souhait', l: 'Accès préparation souhait (hors équipe)', icon: '🛂' },
+  { v: 'souhait_pret_photographe', l: 'Souhait prêt (photographes)', icon: '📷' },
 ]
 
 export const PREFS_VIDES = Object.fromEntries(TYPES_NOTIF.map(t => [t.v, true]))

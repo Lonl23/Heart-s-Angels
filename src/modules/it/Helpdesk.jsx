@@ -2,12 +2,23 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { Page, Card, Btn, F, TA, Loading, Empty, Flash } from '@/components/ui'
+import { compressImage } from '@/modules/souhaits/TerrainPhotos'
+import { envoyerMailBugHelpdesk } from '@/lib/envoyerInvitation'
+
+const BUCKET = 'helpdesk-captures'
+const MAX_CAPTURES = 5
 
 const STATUTS = {
   ouvert: { l: 'Ouvert', c: '#BA7517', bg: '#FAEEDA' },
   en_cours: { l: 'En cours', c: '#185FA5', bg: '#E6F1FB' },
   resolu: { l: 'Résolu', c: '#0F6E56', bg: '#E1F5EE' },
   ferme: { l: 'Fermé', c: '#7A7470', bg: '#F0EFED' },
+}
+/** Statuts que l’IT peut choisir (fermé = auto après 48 h en résolu). */
+const STATUTS_IT = ['ouvert', 'en_cours', 'resolu']
+
+function dossierFerme(t) {
+  return t?.statut === 'ferme'
 }
 
 function refTicket(t) {
@@ -27,6 +38,123 @@ function Pastille({ statut }) {
   return <span style={{ fontSize: 12, fontWeight: 700, color: s.c, background: s.bg, borderRadius: 99, padding: '2px 8px' }}>{s.l}</span>
 }
 
+function CapturesListe({ pieces }) {
+  const [urls, setUrls] = useState({})
+  useEffect(() => {
+    let alive = true
+    async function charger() {
+      const next = {}
+      for (const p of pieces || []) {
+        if (!p?.path) continue
+        const { data } = await supabase.storage.from(BUCKET).createSignedUrl(p.path, 3600)
+        if (data?.signedUrl) next[p.path] = data.signedUrl
+      }
+      if (alive) setUrls(next)
+    }
+    if ((pieces || []).length) charger()
+    else setUrls({})
+    return () => { alive = false }
+  }, [pieces])
+  if (!pieces?.length) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '10px 0 14px' }}>
+      {pieces.map(p => (
+        <a key={p.id || p.path} href={urls[p.path] || '#'} target="_blank" rel="noreferrer" style={{ display: 'block', width: 96, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--bg-alt)' }}>
+          {urls[p.path]
+            ? <img src={urls[p.path]} alt={p.nom || 'Capture'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'grid', placeItems: 'center', height: '100%' }}>…</span>}
+        </a>
+      ))}
+    </div>
+  )
+}
+
+function ChampCaptures({ fichiers, setFichiers, disabled }) {
+  async function onPick(e) {
+    const chosen = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (!chosen.length) return
+    const reste = MAX_CAPTURES - fichiers.length
+    if (reste <= 0) return
+    const ajouts = []
+    for (const file of chosen.slice(0, reste)) {
+      if (!file.type?.startsWith('image/')) continue
+      try {
+        const blob = await compressImage(file)
+        const preview = URL.createObjectURL(blob)
+        ajouts.push({
+          id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+          blob,
+          nom: file.name || 'capture.jpg',
+          preview,
+        })
+      } catch { /* image illisible */ }
+    }
+    if (ajouts.length) setFichiers(xs => [...xs, ...ajouts].slice(0, MAX_CAPTURES))
+  }
+
+  function retirer(id) {
+    setFichiers(xs => {
+      const gone = xs.find(f => f.id === id)
+      if (gone?.preview) URL.revokeObjectURL(gone.preview)
+      return xs.filter(f => f.id !== id)
+    })
+  }
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>
+        Captures d’écran <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optionnel, {MAX_CAPTURES} max)</span>
+      </div>
+      {fichiers.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          {fichiers.map(f => (
+            <div key={f.id} style={{ position: 'relative', width: 88, height: 66, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <img src={f.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <button type="button" onClick={() => retirer(f.id)} disabled={disabled}
+                style={{ position: 'absolute', top: 2, right: 2, width: 22, height: 22, border: 'none', borderRadius: 99, background: 'rgba(0,0,0,.55)', color: '#fff', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {fichiers.length < MAX_CAPTURES && (
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 9, border: '1px dashed var(--border)', background: 'var(--bg-alt)', cursor: disabled ? 'default' : 'pointer', fontSize: 13, color: 'var(--text-2)' }}>
+          Ajouter une capture
+          <input type="file" accept="image/*" multiple capture="environment" onChange={onPick} disabled={disabled} style={{ display: 'none' }} />
+        </label>
+      )}
+    </div>
+  )
+}
+
+async function uploaderCaptures(ticketId, fichiers) {
+  const pieces = []
+  for (const f of fichiers) {
+    const id = crypto.randomUUID?.() || String(Date.now())
+    const path = `${ticketId}/${id}.jpg`
+    const { error } = await supabase.storage.from(BUCKET).upload(path, f.blob, {
+      contentType: 'image/jpeg',
+      upsert: false,
+    })
+    if (error) throw new Error(error.message || 'Upload impossible.')
+    pieces.push({
+      path,
+      nom: f.nom || 'capture.jpg',
+      mime: 'image/jpeg',
+      taille: f.blob?.size || 0,
+    })
+  }
+  if (!pieces.length) return []
+  const { data, error } = await supabase.rpc('lier_pieces_helpdesk', {
+    p_ticket: ticketId,
+    p_pieces: pieces,
+  })
+  if (error || data?.ok === false) throw new Error(error?.message || data?.error || 'Pièces impossibles à lier.')
+  return pieces
+}
+
 export default function Helpdesk() {
   const { peutGererHelpdesk } = useAuth()
   const info = peutGererHelpdesk()
@@ -41,6 +169,7 @@ function MesDemandes() {
   const [type, setType] = useState('bug')
   const [titre, setTitre] = useState('')
   const [description, setDescription] = useState('')
+  const [fichiers, setFichiers] = useState([])
   const [tickets, setTickets] = useState(null)
   const [ouvert, setOuvert] = useState(null)
   const [msg, setMsg] = useState('')
@@ -53,19 +182,56 @@ function MesDemandes() {
     if (error) setErr(error.message)
     else setTickets(Array.isArray(data) ? data : [])
   }
-  useEffect(() => { charger() }, [])
+  useEffect(() => {
+    charger()
+    const ch = supabase
+      .channel('ha-helpdesk-moi')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'helpdesk_tickets' }, () => { charger() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'helpdesk_suivi' }, () => { charger() })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   async function envoyer(e) {
     e.preventDefault()
     if (!titre.trim() || !description.trim()) { setErr('Indiquez un titre et une description.'); return }
     setBusy(true)
     setErr(null)
+    setMsg('')
     const { data, error } = await supabase.rpc('deposer_ticket', { p_type: type, p_titre: titre, p_description: description })
+    if (error || data?.ok === false) {
+      setBusy(false)
+      setErr(error?.message || data?.error || 'Envoi impossible.')
+      return
+    }
+    const ticketId = data.id
+    try {
+      if (fichiers.length) await uploaderCaptures(ticketId, fichiers)
+    } catch (upErr) {
+      setBusy(false)
+      setErr(upErr.message || 'Captures non envoyées.')
+      await charger()
+      return
+    }
+    if (type === 'bug') {
+      const mail = await envoyerMailBugHelpdesk(ticketId)
+      if (!mail.ok) {
+        setBusy(false)
+        setErr(`Bug enregistré, mais le mail prioritaire n’est pas parti : ${mail.error}`)
+        setTitre('')
+        setDescription('')
+        fichiers.forEach(f => f.preview && URL.revokeObjectURL(f.preview))
+        setFichiers([])
+        await charger()
+        return
+      }
+    }
     setBusy(false)
-    if (error || data?.ok === false) { setErr(error?.message || data?.error || 'Envoi impossible.'); return }
     setTitre('')
     setDescription('')
-    setMsg(type === 'suggestion' ? 'Suggestion envoyée.' : 'Bug signalé.')
+    fichiers.forEach(f => f.preview && URL.revokeObjectURL(f.preview))
+    setFichiers([])
+    setMsg(type === 'suggestion' ? 'Suggestion envoyée.' : 'Bug signalé. Un mail prioritaire a été envoyé à l’informatique.')
     await charger()
   }
 
@@ -94,6 +260,7 @@ function MesDemandes() {
         <form onSubmit={envoyer}>
           <F label="Titre" value={titre} set={setTitre} required />
           <TA label="Description" value={description} set={setDescription} rows={5} required />
+          <ChampCaptures fichiers={fichiers} setFichiers={setFichiers} disabled={busy} />
           <Btn type="submit" disabled={busy}>{busy ? '…' : 'Envoyer'}</Btn>
         </form>
       </Card>
@@ -116,6 +283,7 @@ function MesDemandes() {
             <Pastille statut={courant.statut} />
           </div>
           <p style={{ whiteSpace: 'pre-wrap' }}>{courant.description}</p>
+          <CapturesListe pieces={courant.pieces} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
             {(courant.messages || []).map((m, i) => (
               <div key={i} style={{ background: 'var(--bg-alt)', borderRadius: 8, padding: '8px 10px' }}>
@@ -124,10 +292,14 @@ function MesDemandes() {
               </div>
             ))}
           </div>
-          <form onSubmit={repondre}>
-            <TA label="Ajouter un message" value={reponse} set={setReponse} rows={3} />
-            <Btn type="submit" disabled={busy}>Envoyer</Btn>
-          </form>
+          {dossierFerme(courant) ? (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Dossier fermé — plus de message possible.</p>
+          ) : (
+            <form onSubmit={repondre}>
+              <TA label="Ajouter un message" value={reponse} set={setReponse} rows={3} />
+              <Btn type="submit" disabled={busy}>Envoyer</Btn>
+            </form>
+          )}
         </Card>
       )}
     </div>
@@ -149,10 +321,19 @@ function FileInformatique() {
     if (error || data?.ok === false) setErr(error?.message || data?.error || 'File inaccessible.')
     else setFile(data)
   }
-  useEffect(() => { charger() }, [])
+  useEffect(() => {
+    charger()
+    const ch = supabase
+      .channel('ha-helpdesk-it')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'helpdesk_tickets' }, () => { charger() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'helpdesk_suivi' }, () => { charger() })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   const tickets = (file?.tickets || []).filter(t => t.type === type)
   const courant = tickets.find(t => t.id === ouvert) || (file?.tickets || []).find(t => t.id === ouvert) || null
+  const ferme = dossierFerme(courant)
 
   function basculer(id) {
     setCoches(xs => xs.includes(id) ? xs.filter(x => x !== id) : [...xs, id])
@@ -179,6 +360,7 @@ function FileInformatique() {
 
   async function noter(e, interne) {
     e.preventDefault()
+    if (ferme) { alert('Dossier fermé — plus de note possible.'); return }
     const texte = interne ? noteInterne : notePublique
     setBusy(true)
     const { data, error } = await supabase.rpc('helpdesk_note', { p_id: courant.id, p_message: texte, p_interne: interne })
@@ -208,7 +390,7 @@ function FileInformatique() {
                 <input type="checkbox" checked={coches.includes(t.id)} onChange={() => basculer(t.id)} />
                 <button type="button" onClick={() => setOuvert(t.id)} style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', color: 'inherit' }}>
                   <strong>{refTicket(t)} · {t.titre}</strong>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t.auteur_nom || 'Volontaire'} · {quand(t.created_at)}{t.n_lies > 0 ? ` · ${t.n_lies} signalement${t.n_lies > 1 ? 's' : ''} lié${t.n_lies > 1 ? 's' : ''}` : ''}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{t.auteur_nom || 'Volontaire'} · {quand(t.created_at)}{t.n_lies > 0 ? ` · ${t.n_lies} signalement${t.n_lies > 1 ? 's' : ''} lié${t.n_lies > 1 ? 's' : ''}` : ''}{(t.pieces || []).length ? ` · ${(t.pieces || []).length} capture${(t.pieces || []).length > 1 ? 's' : ''}` : ''}</div>
                 </button>
               </label>
               <Pastille statut={t.statut} />
@@ -221,14 +403,24 @@ function FileInformatique() {
       </div>
       {courant && (
         <Card style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <h2 style={{ margin: 0, fontSize: '1.1rem' }}>{refTicket(courant)} · {courant.titre}</h2>
-            <select value={courant.statut} onChange={e => statut(e.target.value)} disabled={busy}>
-              {Object.entries(STATUTS).map(([v, s]) => <option key={v} value={v}>{s.l}</option>)}
-            </select>
+            {ferme ? (
+              <Pastille statut="ferme" />
+            ) : (
+              <select value={courant.statut === 'ferme' ? 'resolu' : courant.statut} onChange={e => statut(e.target.value)} disabled={busy}>
+                {STATUTS_IT.map(v => <option key={v} value={v}>{STATUTS[v].l}</option>)}
+              </select>
+            )}
           </div>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{courant.auteur_nom}</p>
+          {courant.statut === 'resolu' && courant.resolu_le && (
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+              Passera en fermé automatiquement 48 h après le passage en résolu ({quand(courant.resolu_le)}).
+            </p>
+          )}
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{courant.auteur_nom}{courant.auteur_email ? ` · ${courant.auteur_email}` : ''}</p>
           <p style={{ whiteSpace: 'pre-wrap' }}>{courant.description}</p>
+          <CapturesListe pieces={courant.pieces} />
           {(courant.lies || []).length > 0 && (
             <div style={{ marginBottom: 12 }}>
               <strong>Signalements liés</strong>
@@ -248,14 +440,20 @@ function FileInformatique() {
               </div>
             ))}
           </div>
-          <form onSubmit={e => noter(e, false)} style={{ marginBottom: 10 }}>
-            <TA label="Réponse visible par l’auteur" value={notePublique} set={setNotePublique} rows={3} />
-            <Btn type="submit" disabled={busy}>Publier la réponse</Btn>
-          </form>
-          <form onSubmit={e => noter(e, true)}>
-            <TA label="Note interne, invisible pour les auteurs" value={noteInterne} set={setNoteInterne} rows={2} />
-            <Btn kind="soft" type="submit" disabled={busy}>Enregistrer la note</Btn>
-          </form>
+          {ferme ? (
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>Dossier fermé — plus de note possible.</p>
+          ) : (
+            <>
+              <form onSubmit={e => noter(e, false)} style={{ marginBottom: 10 }}>
+                <TA label="Réponse visible par l’auteur" value={notePublique} set={setNotePublique} rows={3} />
+                <Btn type="submit" disabled={busy}>Publier la réponse</Btn>
+              </form>
+              <form onSubmit={e => noter(e, true)}>
+                <TA label="Note interne, invisible pour les auteurs" value={noteInterne} set={setNoteInterne} rows={2} />
+                <Btn kind="soft" type="submit" disabled={busy}>Enregistrer la note</Btn>
+              </form>
+            </>
+          )}
         </Card>
       )}
     </div>

@@ -35,3 +35,4 @@ ios/App/App.xcodeproj/xcuserdata
 ios/App/App.xcodeproj/project.xcworkspace/xcuserdata
 *.ipa
 *.dSYM.zip
+supabase/.temp/

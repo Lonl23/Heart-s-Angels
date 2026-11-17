@@ -109,12 +109,21 @@ export async function upsertContactRattache(beneficiaireId, f, { created_by } = 
     telephone: ident.telephone || '',
     tel_gsm: ident.tel_gsm || '',
     tel_fixe: ident.tel_fixe || '',
+    institution_id: f.institution_id || null,
+    institution_nom: f.institution_nom || '',
+    lien_code: f.lien_code || '',
+    lien_precision: f.lien_precision || '',
   }
   const nom = (f.nom || '').trim()
   const prenom = (f.prenom || '').trim()
-  let existing = f.id
-    ? (await supabase.from('annuaire').select('id,data,niss').eq('id', f.id).maybeSingle()).data
-    : null
+  // Ne réutiliser f.id que s’il est déjà rattaché à CE bénéficiaire
+  // (sinon on crée / retrouve une fiche pour le bénéficiaire courant).
+  let existing = null
+  if (f.id) {
+    const { data } = await supabase.from('annuaire').select('id,data,niss,beneficiaire_id')
+      .eq('id', f.id).maybeSingle()
+    if (data && data.beneficiaire_id === beneficiaireId) existing = data
+  }
   const niss = normaliserNiss(f.niss)
   if (!existing && niss) {
     const { data } = await supabase.from('annuaire').select('id,data,niss')
@@ -175,14 +184,20 @@ export function ficheVersContact(r) {
     nom: r.nom || '',
     prenom: r.prenom || '',
     lien: r.lien || d.lien || '',
+    lien_code: d.lien_code || '',
+    lien_precision: d.lien_precision || '',
     date_naissance: r.date_naissance ? String(r.date_naissance).slice(0, 10) : '',
     niss: r.niss || d.niss || '',
+    genre: r.genre || d.genre || '',
     tel_gsm: r.tel_gsm || d.tel_gsm || '',
     tel_fixe: r.tel_fixe || d.tel_fixe || '',
     adresse: d.adresse || null,
     adresse_residence: d.adresse_residence || null,
     email: d.email || '',
     telephone: r.telephone || d.telephone || '',
+    institution_id: d.institution_id || r.institution_id || null,
+    institution_nom: d.institution_nom || '',
+    beneficiaire_id: r.beneficiaire_id || null,
   }
 }
 
@@ -196,6 +211,38 @@ export async function listerContacts(beneficiaireId) {
   if (!beneficiaireId) return []
   const { data, error } = await supabase.from('annuaire').select('*')
     .eq('categorie', 'accompagnant').eq('beneficiaire_id', beneficiaireId).order('nom')
+  if (error) throw error
+  return data || []
+}
+
+/** Recherche large pour un demandeur (demande privée) : accompagnants + bénéficiaires. */
+export async function chercherDemandeurs(q) {
+  const texte = String(q || '').trim()
+  const sel = 'id,nom,prenom,date_naissance,niss,genre,tel_gsm,tel_fixe,telephone,lien,categorie,data,beneficiaire_id'
+  let query = supabase.from('annuaire').select(sel)
+    .in('categorie', ['accompagnant', 'beneficiaire'])
+    .order('nom')
+    .limit(80)
+  if (texte) {
+    query = query.or(`nom.ilike.%${texte}%,prenom.ilike.%${texte}%`)
+  }
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+/** Recherche contacts connus dans tout l’annuaire (accompagnants). */
+export async function chercherContactsConnus(q) {
+  const texte = String(q || '').trim()
+  const sel = 'id,nom,prenom,date_naissance,niss,genre,tel_gsm,tel_fixe,telephone,lien,categorie,data,beneficiaire_id'
+  let query = supabase.from('annuaire').select(sel)
+    .eq('categorie', 'accompagnant')
+    .order('nom')
+    .limit(80)
+  if (texte) {
+    query = query.or(`nom.ilike.%${texte}%,prenom.ilike.%${texte}%`)
+  }
+  const { data, error } = await query
   if (error) throw error
   return data || []
 }

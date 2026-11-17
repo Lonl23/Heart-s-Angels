@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { supabase } from '@/lib/supabase'
 import { estResponsableAsblDepuisFiche, peutEditerEvenementsInternesDepuisFiche, peutEncoderDisposPourAutruiDepuisFiche } from '@/modules/fiche/ficheSchema'
 import { poserPreuve } from '@/lib/deuxFacteurs'
+import { poserPreuveWebauthn } from '@/lib/webauthn'
+import { activiteFraiche, toucherActivite, effacerConfiance } from '@/lib/sessionApp'
+import { cleAppareil } from '@/lib/appareil'
 
 const AuthContext = createContext(null)
 
@@ -10,18 +13,31 @@ const STAFF = ['admin','president','coordinateur','tresorier','secretaire',
                'volontaire_medical','volontaire_non_medical']
 const ADMINS  = ['admin','president']
 
-/** Coordination transport, présidence, informatique : équipages, horaires, ambulances. */
-const ROLES_PROGRAMME_SOUHAIT = [
+/** Équipe autorisée directement à la préparation (sans motif). */
+const ROLES_EQUIPE_PREPARATION = [
+  'recolteur_souhait',
+  'coord_transport', 'coord_transport_adjoint',
+  'resp_logistique', 'resp_logistique_adjoint',
+  // Informatique : souhait de formation (et tests) toujours accessible.
+  'resp_informatique', 'resp_informatique_adjoint',
+]
+/** Anciens rôles élargis : voient encore le module, mais motif si hors équipe. */
+const ROLES_VOIR_SOUHAITS = [
   'president', 'vice_president',
   'resp_informatique', 'resp_informatique_adjoint',
   'coord_transport', 'coord_transport_adjoint',
   'resp_logistique', 'resp_logistique_adjoint',
-]
-/** Partie patient (récolte) : récolteur et coordination médicale. */
-const ROLES_PATIENT_SOUHAIT = [
   'recolteur_souhait',
   'coord_medical', 'coord_medical_adjoint', 'coordinateur_medical',
 ]
+const CLE_MOTIF_PREPARATION = 'ha-prep-souhait-motif'
+
+export function aMotifPreparationSession() {
+  try { return sessionStorage.getItem(CLE_MOTIF_PREPARATION) === '1' } catch { return false }
+}
+export function poserMotifPreparationSession() {
+  try { sessionStorage.setItem(CLE_MOTIF_PREPARATION, '1') } catch { /* ignore */ }
+}
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
@@ -29,14 +45,27 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [matrix, setMatrix] = useState({})
   const [matrixCount, setMatrixCount] = useState(0)
+  const [modulesMaintenance, setModulesMaintenance] = useState({})
   const pret = useRef(false)
   const uid = useRef(null)
   const profileRef = useRef(null)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      if (data.session) loadProfile(data.session.user.id)
+    supabase.auth.getSession().then(async ({ data }) => {
+      const s = data.session
+      // Plus de 48 h sans utilisation → tout recommencer (mot de passe + 2FA).
+      if (s && !activiteFraiche(s.user.id)) {
+        try { sessionStorage.setItem('ha_session_expiree', '1') } catch { /* */ }
+        effacerConfiance()
+        poserPreuve('')
+        poserPreuveWebauthn('')
+        await supabase.auth.signOut()
+        pret.current = true
+        setLoading(false)
+        return
+      }
+      setSession(s)
+      if (s) loadProfile(s.user.id)
       else { pret.current = true; setLoading(false) }
     })
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
@@ -44,10 +73,14 @@ export function AuthProvider({ children }) {
       // TOKEN_REFRESHED, SIGNED_IN, voire un SIGNED_OUT transitoire : ne jamais
       // démonter l'écran ni envoyer vers /login.
       if (event === 'TOKEN_REFRESHED') {
-        if (s) setSession(s)
+        if (s) {
+          setSession(s)
+          if (activiteFraiche(s.user.id)) toucherActivite(s.user.id)
+        }
         return
       }
       if (event === 'SIGNED_OUT') {
+        effacerConfiance()
         setSession(null)
         setProfile(null)
         profileRef.current = null
@@ -55,6 +88,7 @@ export function AuthProvider({ children }) {
         pret.current = true
         setMatrix({})
         setMatrixCount(0)
+        setModulesMaintenance({})
         setLoading(false)
         return
       }
@@ -67,22 +101,66 @@ export function AuthProvider({ children }) {
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  // Prolongation de la fenêtre 48 h tant que l’app est utilisée.
+  useEffect(() => {
+    if (!session?.user?.id) return undefined
+    const uidActuel = session.user.id
+    function prolonger() {
+      if (document.visibilityState === 'hidden') return
+      if (activiteFraiche(uidActuel)) toucherActivite(uidActuel)
+    }
+    const id = window.setInterval(prolonger, 5 * 60 * 1000)
+    document.addEventListener('visibilitychange', prolonger)
+    window.addEventListener('focus', prolonger)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', prolonger)
+      window.removeEventListener('focus', prolonger)
+    }
+  }, [session?.user?.id])
+
   async function loadMatrix() {
     const { data } = await supabase.from('acces_config').select('*')
     const map = {}; (data||[]).forEach(r => { map[`${r.dimension}:${r.sujet}:${r.acces}`] = r.autorise })
     setMatrix(map); setMatrixCount((data||[]).length)
   }
 
+  async function loadModulesMaintenance() {
+    const { data } = await supabase.from('app_modules_maintenance').select('module_key,actif,message')
+    const map = {}
+    ;(data || []).forEach(r => {
+      map[r.module_key] = { actif: r.actif !== false, message: r.message || null }
+    })
+    setModulesMaintenance(map)
+  }
+
   async function loadProfile(userId) {
     const silencieux = pret.current && uid.current === userId && !!profileRef.current
     if (!silencieux) setLoading(true)
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+    const appareil = cleAppareil()
+    const { data: bloque } = await supabase.rpc('est_acces_bloque', {
+      p_user: userId,
+      p_appareil: appareil || null,
+    })
+    if (bloque === true) {
+      effacerConfiance()
+      setProfile(null)
+      profileRef.current = null
+      uid.current = null
+      pret.current = true
+      setLoading(false)
+      await supabase.auth.signOut()
+      try { sessionStorage.setItem('ha_acces_bloque', '1') } catch { /* */ }
+      return
+    }
     setProfile(data || null)
     profileRef.current = data || null
     uid.current = userId
     pret.current = true
     setLoading(false)
     loadMatrix()
+    loadModulesMaintenance()
   }
 
   const role = profile?.role || null
@@ -126,18 +204,46 @@ export function AuthProvider({ children }) {
   function matriceAutorise(feature) {
     return rolesAsbl().some(r => matrix[`role:${r}:${feature}`] === true)
   }
-  function peutProgrammerSouhait() {
+  function peutBloquerAcces() {
     if (!role || role === 'partenaire') return false
     if (accesTotal() || role === 'coordinateur') return true
-    return rolesAsbl().some(r => ROLES_PROGRAMME_SOUHAIT.includes(r))
+    return rolesAsbl().some(r => [
+      'president', 'vice_president',
+      'resp_informatique', 'resp_informatique_adjoint',
+      'recolteur_souhait',
+      'coord_transport', 'coord_transport_adjoint',
+      'resp_logistique', 'resp_logistique_adjoint',
+      'coord_medical', 'coord_medical_adjoint', 'coordinateur_medical',
+    ].includes(r))
+  }
+  function estEquipePreparationSouhait() {
+    if (!role || role === 'partenaire') return false
+    if (role === 'coordinateur') return true
+    return rolesAsbl().some(r => ROLES_EQUIPE_PREPARATION.includes(r))
+  }
+  /** Préparer / encoder : équipe récolte·coord·log·transport, ou motif de session. */
+  function peutPreparerSouhait() {
+    return estEquipePreparationSouhait() || aMotifPreparationSession()
+  }
+  function peutProgrammerSouhait() {
+    if (!peutPreparerSouhait()) return false
+    if (role === 'coordinateur' || aMotifPreparationSession()) return true
+    return rolesAsbl().some(r => [
+      'coord_transport', 'coord_transport_adjoint',
+      'resp_logistique', 'resp_logistique_adjoint',
+      'resp_informatique', 'resp_informatique_adjoint',
+    ].includes(r))
   }
   function peutEncoderPatientSouhait() {
-    if (!role || role === 'partenaire') return false
+    if (!peutPreparerSouhait()) return false
     if (peutProgrammerSouhait()) return true
-    return rolesAsbl().some(r => ROLES_PATIENT_SOUHAIT.includes(r))
+    return rolesAsbl().includes('recolteur_souhait') || aMotifPreparationSession()
   }
+  /** Voir le module (liste) : équipe + rôles élargis / admin. */
   function peutGererSouhaits() {
-    return peutProgrammerSouhait() || peutEncoderPatientSouhait()
+    if (!role || role === 'partenaire') return false
+    if (accesTotal() || role === 'coordinateur' || estEquipePreparationSouhait()) return true
+    return rolesAsbl().some(r => ROLES_VOIR_SOUHAITS.includes(r))
   }
   function peutGererFiches() {
     if (accesTotal()) return true
@@ -209,6 +315,16 @@ export function AuthProvider({ children }) {
     const roles = profile?.fiche?.roles_asbl || []
     return roles.some(r => ['resp_informatique', 'resp_informatique_adjoint'].includes(r))
   }
+  /** Onglet coupé pour les volontaires (l’IT continue de voir le contenu). */
+  function moduleEnMaintenance(key) {
+    if (!key) return false
+    const row = modulesMaintenance?.[key]
+    if (!row) return false
+    return row.actif === false
+  }
+  function messageMaintenance(key) {
+    return modulesMaintenance?.[key]?.message || null
+  }
   /** Suppression définitive d’une note : équipe informatique (et accès total). */
   function peutSupprimerNoteFrais() {
     if (!role || role === 'partenaire') return false
@@ -241,16 +357,21 @@ export function AuthProvider({ children }) {
 
   async function signOut() {
     poserPreuve('')
+    poserPreuveWebauthn('')
+    effacerConfiance()
     await supabase.auth.signOut()
   }
 
   const value = useMemo(() => ({
     session, user: session?.user || null, profile, role, loading,
     can, canAccess, accesTotal, peutGererApp, estMedical, peutGererSouhaits,
+    estEquipePreparationSouhait, peutPreparerSouhait, peutBloquerAcces,
     peutProgrammerSouhait, peutEncoderPatientSouhait,
     peutGererFiches, peutVoirToutesDispos, peutGererDispos, peutEncoderDisposPourAutrui, peutPublierActualites, peutGererEvenementsInternes, peutVoirInscritsEvenements, peutGererStock, peutGererDefraiements, peutSupprimerNoteFrais, peutGererHelpdesk, peutPersonnaliser, peutOuvrirArchives, peutReglerNotifications, estVolontaireNonMedical, estRecolteurSouhait,
-    reloadMatrix: loadMatrix, signOut, reload: () => session && loadProfile(session.user.id),
-  }), [session, profile, role, loading, matrix, matrixCount])
+    modulesMaintenance, moduleEnMaintenance, messageMaintenance,
+    reloadMatrix: loadMatrix, reloadModulesMaintenance: loadModulesMaintenance,
+    signOut, reload: () => session && loadProfile(session.user.id),
+  }), [session, profile, role, loading, matrix, matrixCount, modulesMaintenance])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

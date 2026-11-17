@@ -221,15 +221,30 @@ Heart's Angels ASBL`
 
 async function smtpAuth(admin: ReturnType<typeof createClient>) {
   let user = (Deno.env.get('SMTP_USER') || CCI).trim()
-  let pass = (Deno.env.get('SMTP_PASS') || '').trim()
+  const envPass = (Deno.env.get('SMTP_PASS') || '').trim()
+  let pass = envPass
+  let source: 'env' | 'vault' | 'none' = envPass ? 'env' : 'none'
   if (!pass) {
-    const { data: cfg } = await admin.rpc('smtp_mail_config')
+    const { data: cfg, error: cfgErr } = await admin.rpc('smtp_mail_config')
+    if (cfgErr) {
+      console.error('smtp_mail_config', cfgErr.message)
+    }
     if (cfg?.ok && cfg.pass) {
       user = String(cfg.user || user).trim()
       pass = String(cfg.pass).trim()
+      source = 'vault'
     }
   }
-  return { user, pass, from: DEPUIS, replyTo: REPONSE }
+  return { user, pass, from: DEPUIS, replyTo: REPONSE, source }
+}
+
+function transporteur(smtp: { user: string; pass: string }) {
+  return nodemailer.createTransport({
+    host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
+    port: Number(Deno.env.get('SMTP_PORT') || 465),
+    secure: true,
+    auth: { user: smtp.user, pass: smtp.pass },
+  })
 }
 
 async function envoyer(opts: {
@@ -239,16 +254,13 @@ async function envoyer(opts: {
   texte: string
   html: string
   bcc?: boolean
+  priority?: 'high' | 'normal'
+  attachments?: { filename: string; content: Uint8Array; contentType?: string }[]
 }) {
-  const transporter = nodemailer.createTransport({
-    host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
-    port: Number(Deno.env.get('SMTP_PORT') || 465),
-    secure: true,
-    auth: { user: opts.smtp.user, pass: opts.smtp.pass },
-  })
   const dest = String(opts.to || '').trim()
   const bcc = opts.bcc === false || dest.toLowerCase() === CCI.toLowerCase() ? undefined : CCI
-  await transporter.sendMail({
+  const high = opts.priority === 'high'
+  await transporteur(opts.smtp).sendMail({
     from: opts.smtp.from,
     replyTo: opts.smtp.replyTo,
     to: dest,
@@ -256,7 +268,60 @@ async function envoyer(opts: {
     subject: opts.sujet,
     text: opts.texte,
     html: opts.html,
+    priority: high ? 'high' : undefined,
+    headers: high
+      ? { 'X-Priority': '1', 'X-MSMail-Priority': 'High', Importance: 'high' }
+      : undefined,
+    attachments: (opts.attachments || []).map((a) => ({
+      filename: a.filename,
+      content: a.content,
+      contentType: a.contentType || 'application/octet-stream',
+    })),
   })
+}
+
+function mailBugHelpdesk(opts: {
+  numero: number
+  titre: string
+  description: string
+  auteurNom: string
+  auteurEmail: string
+  nPieces: number
+  pub: string
+}) {
+  const ref = `B-${opts.numero}`
+  const qui = opts.auteurNom || 'Volontaire'
+  const mailQui = opts.auteurEmail ? ` (${opts.auteurEmail})` : ''
+  const sujet = `[PRIORITÉ] Bug ${ref} — ${opts.titre}`
+  const texte = [
+    `Bug ${ref} signalé dans le helpdesk.`,
+    `Signalé par : ${qui}${mailQui}`,
+    '',
+    opts.titre,
+    '',
+    opts.description,
+    '',
+    opts.nPieces > 0
+      ? `${opts.nPieces} capture${opts.nPieces > 1 ? 's' : ''} en pièce jointe.`
+      : 'Aucune capture jointe.',
+    '',
+    `Ouvrir le helpdesk : ${opts.pub}/app/it/helpdesk`,
+  ].join('\n')
+  const html = cadreHtml(`
+    <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#B42318;letter-spacing:.04em">BUG PRIORITAIRE</p>
+    <h1 style="margin:0 0 12px;font-size:22px;line-height:1.25">${esc(ref)} — ${esc(opts.titre)}</h1>
+    <p style="margin:0 0 16px;color:#4A5C61;font-size:15px">
+      Signalé par <strong>${esc(qui)}</strong>${opts.auteurEmail ? ` &lt;${esc(opts.auteurEmail)}&gt;` : ''}
+    </p>
+    <div style="margin:0 0 18px;padding:14px 14px;background:#F7FBFB;border-radius:10px;border:1px solid #E3EBEC;white-space:pre-wrap">${esc(opts.description)}</div>
+    <p style="margin:0 0 8px;color:#4A5C61;font-size:14px">
+      ${opts.nPieces > 0
+        ? `${opts.nPieces} capture${opts.nPieces > 1 ? 's' : ''} en pièce jointe.`
+        : 'Aucune capture jointe.'}
+    </p>
+    ${boutonHtml(`${opts.pub}/app/it/helpdesk`, 'Ouvrir le helpdesk')}
+  `)
+  return { sujet, texte, html }
 }
 
 Deno.serve(async (req) => {
@@ -272,8 +337,11 @@ Deno.serve(async (req) => {
       email?: string
       code?: string
       souhait_id?: string
+      ticket_id?: string
       html?: string
       texte?: string
+      destinataire_prenom?: string
+      destinataire_nom?: string
     }
     const pub = urlPublique()
     const action = String(body?.action || 'invitation').trim()
@@ -281,6 +349,7 @@ Deno.serve(async (req) => {
     if (!smtp.pass) {
       return json({
         error: 'Envoi automatique pas encore branché.',
+        detail: 'Mot de passe SMTP absent (secret Edge SMTP_PASS ou Vault ha_smtp_pass).',
       }, 503)
     }
 
@@ -324,6 +393,36 @@ Deno.serve(async (req) => {
       user = (await asCaller.auth.getUser(jwt)).data.user
     }
     if (!user) return json({ error: 'Non authentifié.' }, 401)
+
+    // Diagnostic IT : vérifie l’auth Gmail sans envoyer de message.
+    if (action === 'ping_smtp') {
+      const { data: profPing } = await admin.from('profiles').select('role,fiche,actif').eq('id', user.id).maybeSingle()
+      if (!profPing || profPing.actif === false || !peutGererApp(profPing.role, profPing.fiche)) {
+        return json({ error: 'Accès refusé.' }, 403)
+      }
+      try {
+        await transporteur(smtp).verify()
+        return json({
+          ok: true,
+          action: 'ping_smtp',
+          user: smtp.user,
+          from: smtp.from,
+          source: smtp.source,
+          host: Deno.env.get('SMTP_HOST') || 'smtp.gmail.com',
+        })
+      } catch (envoi) {
+        const msg = envoi instanceof Error ? envoi.message : String(envoi)
+        console.error('ping_smtp', smtp.source, smtp.user, msg)
+        return json({
+          ok: false,
+          action: 'ping_smtp',
+          user: smtp.user,
+          from: smtp.from,
+          source: smtp.source,
+          error: msg,
+        }, 500)
+      }
+    }
 
     if (action === 'code_2fa') {
       const { data: prof } = await admin.from('profiles')
@@ -383,25 +482,110 @@ Deno.serve(async (req) => {
     if (action === 'rapport_medical') {
       const souhaitId = String(body?.souhait_id || '').trim()
       const dest = String(body?.email || '').trim()
-      const html = String(body?.html || '')
-      const texte = String(body?.texte || '').trim() || 'Rapport médical — Heart’s Angels.'
+      const destinatairePrenom = String(body?.destinataire_prenom || '').trim()
+      const destinataireNom = String(body?.destinataire_nom || '').trim()
+      const htmlBrut = String(body?.html || '')
+      const texteBrut = String(body?.texte || '').trim() || 'Rapport médical — Heart’s Angels.'
       if (!souhaitId) return json({ error: 'Souhait manquant.' }, 400)
       if (!dest.includes('@')) return json({ error: 'Adresse e-mail manquante.' }, 400)
-      if (!html) return json({ error: 'Rapport vide.' }, 400)
+      if (!destinatairePrenom || !destinataireNom) {
+        return json({ error: 'Indiquez le prénom et le nom du destinataire.' }, 400)
+      }
+      if (!htmlBrut) return json({ error: 'Rapport vide.' }, 400)
       const { data: autorise, error: authz } = await admin.rpc('autoriser_envoi_rapport', {
         p_souhait: souhaitId,
         p_user: user.id,
       })
       if (authz || autorise !== true) return json({ error: 'Envoi non autorisé.' }, 403)
+      const alerteTxt =
+        'DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL.\n' +
+        'Ce message est destiné uniquement au destinataire indiqué. S’il vous a été adressé par erreur, ' +
+        'vous devez immédiatement le supprimer (y compris toute copie ou pièce jointe), n’en conserver aucune trace, ' +
+        'et reprendre contact sans délai avec Heart’s Angels en répondant à cet e-mail (app@heartsangels.be).'
+      const alerteHtml =
+        '<div style="background:#FCEBEB;border:2px solid #A32D2D;padding:14px 16px;margin:0 0 18px;color:#7A1F1F;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45">' +
+        '<strong>DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL</strong><br/>' +
+        'Ce message est destiné uniquement au destinataire indiqué. S’il vous a été adressé par erreur, ' +
+        'vous devez <strong>immédiatement le supprimer</strong> (y compris toute copie ou pièce jointe), ' +
+        'n’en conserver aucune trace, et <strong>reprendre contact sans délai</strong> avec Heart’s Angels ' +
+        'en répondant à cet e-mail (<a href="mailto:app@heartsangels.be">app@heartsangels.be</a>).' +
+        '</div>'
+      // Toujours injecter dans <body> — jamais avant <!doctype>, sinon Gmail casse le HTML.
+      const html = (() => {
+        if (htmlBrut.includes('DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL')) return htmlBrut
+        const bodyOpen = htmlBrut.match(/<body[^>]*>/i)
+        if (bodyOpen && bodyOpen.index != null) {
+          const i = bodyOpen.index + bodyOpen[0].length
+          return htmlBrut.slice(0, i) + alerteHtml + htmlBrut.slice(i)
+        }
+        return `<!doctype html><html lang="fr"><head><meta charset="utf-8"></head><body>${alerteHtml}${htmlBrut}</body></html>`
+      })()
+      const texte = texteBrut.includes('DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL')
+        ? texteBrut
+        : `${alerteTxt}\n\n${texteBrut}`
       const sujet = '!!! SECRET MEDICAL !!! – INTERVENTION HEART’S ANGELS'
       await envoyer({ smtp, to: dest, sujet, texte, html, bcc: false })
       const { error: traceErr } = await admin.from('envois_rapport_medical').insert({
         souhait_id: souhaitId,
         expediteur_id: user.id,
         email: dest,
+        destinataire_prenom: destinatairePrenom,
+        destinataire_nom: destinataireNom,
       })
       if (traceErr) return json({ error: 'Le message est parti, la trace n’a pas pu être enregistrée.' }, 500)
       return json({ ok: true, action: 'rapport_medical' })
+    }
+
+    // Bug helpdesk → mail prioritaire à Laurent, avec captures en PJ.
+    if (action === 'helpdesk_bug') {
+      const ticketId = String(body?.ticket_id || '').trim()
+      if (!ticketId) return json({ error: 'Ticket manquant.' }, 400)
+      const { data: detail, error: detErr } = await admin.rpc('helpdesk_bug_pour_mail', {
+        p_ticket: ticketId,
+        p_user: user.id,
+      })
+      if (detErr || !detail?.ok) {
+        return json({ error: detail?.error || detErr?.message || 'Ticket inaccessible.' }, 403)
+      }
+      const pieces = Array.isArray(detail.pieces) ? detail.pieces : []
+      const attachments: { filename: string; content: Uint8Array; contentType?: string }[] = []
+      for (let i = 0; i < pieces.length; i++) {
+        const pe = pieces[i] as { path?: string; nom?: string; mime?: string }
+        const path = String(pe?.path || '').trim()
+        if (!path) continue
+        const { data: blob, error: dlErr } = await admin.storage.from('helpdesk-captures').download(path)
+        if (dlErr || !blob) {
+          console.error('helpdesk_bug download', path, dlErr?.message)
+          continue
+        }
+        const buf = new Uint8Array(await blob.arrayBuffer())
+        const base = String(pe?.nom || `capture-${i + 1}.jpg`).replace(/[^\w.\- ()àâäéèêëïîôùûüç]+/gi, '_')
+        attachments.push({
+          filename: base || `capture-${i + 1}.jpg`,
+          content: buf,
+          contentType: String(pe?.mime || 'image/jpeg'),
+        })
+      }
+      const mail = mailBugHelpdesk({
+        numero: Number(detail.numero) || 0,
+        titre: String(detail.titre || ''),
+        description: String(detail.description || ''),
+        auteurNom: String(detail.auteur_nom || ''),
+        auteurEmail: String(detail.auteur_email || user.email || ''),
+        nPieces: attachments.length,
+        pub,
+      })
+      await envoyer({
+        smtp,
+        to: CCI,
+        sujet: mail.sujet,
+        texte: mail.texte,
+        html: mail.html,
+        bcc: false,
+        priority: 'high',
+        attachments,
+      })
+      return json({ ok: true, action: 'helpdesk_bug', pieces: attachments.length })
     }
 
     const { data: prof } = await admin.from('profiles').select('role,fiche,actif').eq('id', user.id).maybeSingle()

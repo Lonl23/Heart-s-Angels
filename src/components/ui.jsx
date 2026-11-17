@@ -50,8 +50,22 @@ export function F({ label, value, set, type='text', placeholder, required, disab
   const lock = disabled || readOnly
   return <div style={{ marginBottom:10 }}><label style={lbl}>{label}{required&&' *'}</label><input type={type} value={value??''} onChange={e=>{ if (!lock && set) set(e.target.value) }} placeholder={placeholder} required={required} disabled={disabled} readOnly={!!readOnly} style={{ ...inp, opacity: disabled ? .65 : 1 }} /></div>
 }
-export function TA({ label, value, set, rows=3, placeholder }) {
-  return <div style={{ marginBottom:10 }}><label style={lbl}>{label}</label><textarea value={value??''} onChange={e=>set(e.target.value)} rows={rows} placeholder={placeholder} style={{ ...inp, resize:'vertical' }} /></div>
+export function TA({ label, value, set, rows=3, placeholder, readOnly, disabled }) {
+  const lock = !!(disabled || readOnly)
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label style={lbl}>{label}</label>
+      <textarea
+        value={value ?? ''}
+        onChange={e => { if (!lock && set) set(e.target.value) }}
+        rows={rows}
+        placeholder={placeholder}
+        readOnly={lock}
+        disabled={!!disabled}
+        style={{ ...inp, resize: 'vertical', opacity: disabled ? 0.65 : 1 }}
+      />
+    </div>
+  )
 }
 export function Sel({ label, value, set, options, disabled }) {
   return <div style={{ marginBottom:10 }}><label style={lbl}>{label}</label><select value={value??''} onChange={e=>set(e.target.value)} disabled={disabled} style={{ ...inp, opacity: disabled ? .65 : 1 }}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>
@@ -176,18 +190,41 @@ export function PhoneF({ label, value, set, required, placeholder = '+32 xxx.xx.
   )
 }
 
-export function Modal({ title, onClose, children, footer, wide }) {
+/**
+ * Modale applicative.
+ * Par défaut : pas de fermeture au clic sur le fond (évite de perdre une saisie).
+ * Avec footer (Enregistrer / Annuler) : la croix est masquée — il faut enregistrer ou annuler.
+ * Sans footer : la croix reste (ex. listes de choix).
+ * closeOnScrim / showClose forcent le comportement si besoin.
+ */
+export function Modal({ title, onClose, children, footer, wide, closeOnScrim = false, showClose }) {
+  const croix = showClose != null ? !!showClose : !footer
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
   }, [])
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return
+      // Escape = annuler uniquement si croix visible (pas de formulaire à valider).
+      if (croix) onClose?.()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [croix, onClose])
   const noeud = (
-    <div className="ha-modal-scrim" onClick={onClose} role="presentation">
+    <div
+      className="ha-modal-scrim"
+      onClick={closeOnScrim ? onClose : undefined}
+      role="presentation"
+    >
       <div className={'ha-modal' + (wide ? ' is-wide' : '')} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true">
         <div className="ha-modal-head">
           <div className="ha-modal-title">{title}</div>
-          <button type="button" className="ha-modal-x" onClick={onClose} aria-label="Fermer">✕</button>
+          {croix && (
+            <button type="button" className="ha-modal-x" onClick={onClose} aria-label="Fermer">✕</button>
+          )}
         </div>
         <div className="ha-modal-body">{children}</div>
         {footer && <div className="ha-modal-foot">{footer}</div>}
@@ -217,10 +254,18 @@ export function urlGoogleMaps(a) {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`
 }
 
+export const URL_WAZE_TRAFIC = 'https://www.waze.com/fr/live-map'
+
 export function urlWaze(a) {
   const q = texteGps(a)
   if (!q) return ''
   return `https://waze.com/ul?q=${encodeURIComponent(q)}&navigate=yes`
+}
+
+/** Planification trajet (Live Map PC) vs navigation app. */
+export function hrefWaze(a, mode = 'naviguer') {
+  if (mode === 'planifier') return URL_WAZE_TRAFIC
+  return urlWaze(a)
 }
 
 export function urlItineraireMaps(etapes) {
@@ -233,9 +278,7 @@ export function urlItineraireMaps(etapes) {
   return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving${waypoints}`
 }
 
-export const URL_WAZE_TRAFIC = 'https://www.waze.com/fr/live-map'
-
-export function LiensTrajet({ etapes }) {
+export function LiensTrajet({ etapes, wazeMode = 'naviguer' }) {
   const pts = (etapes || []).map(e => ({ label: e.label, q: texteGps(e.adresse || e.texte) })).filter(e => e.q)
   const cle = pts.map(p => p.q).join('\n')
   const [legs, setLegs] = useState(null)
@@ -268,66 +311,125 @@ export function LiensTrajet({ etapes }) {
             <span style={{ fontSize: 13, color: 'var(--text)' }}>{p.label} → {dest.label}</span>
             {mesure && (
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>
-                {mesure}{pts.length === 2 ? ' · conditions normales' : ''}
+                {mesure}{pts.length === 2 ? ' · Conditions normales' : ''}
               </span>
             )}
             {attente && !mesure && <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>…</span>}
             {leg && <a className="ha-gps-btn" href={leg} target="_blank" rel="noopener noreferrer">Google Maps</a>}
-            <a className="ha-gps-btn is-waze" href={urlWaze(dest.q)} target="_blank" rel="noopener noreferrer">Waze</a>
+            <a className="ha-gps-btn is-waze" href={hrefWaze(dest.q, wazeMode)} target="_blank" rel="noopener noreferrer" title={wazeMode === 'planifier' ? 'Planifier sur Waze Live Map' : 'Ouvrir dans Waze'}>Waze</a>
           </div>
         )
       })}
       {total && pts.length > 2 && (
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>Total {fmtMesure(total)} · conditions normales</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>Total {fmtMesure(total)} · Conditions normales</div>
       )}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {maps && <a className="ha-gps-btn" href={maps} target="_blank" rel="noopener noreferrer">Itinéraire complet</a>}
-        <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
-      </div>
+      {pts.length > 2 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {maps && <a className="ha-gps-btn" href={maps} target="_blank" rel="noopener noreferrer">Itinéraire complet</a>}
+          {wazeMode === 'planifier' ? null : (
+            <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-export function LiensGps({ adresse, texte, onClick }) {
+export function LiensGps({ adresse, texte, onClick, wazeMode = 'naviguer' }) {
   const q = texte || texteGps(adresse)
   if (!q) return null
   const stop = e => { e.stopPropagation(); onClick?.(e) }
+  const wazeHref = hrefWaze(q, wazeMode)
   return (
     <span className="ha-gps" onClick={stop}>
       <a className="ha-gps-btn" href={urlGoogleMaps(q)} target="_blank" rel="noopener noreferrer" onClick={stop}>Google Maps</a>
-      <a className="ha-gps-btn is-waze" href={urlWaze(q)} target="_blank" rel="noopener noreferrer" onClick={stop}>Waze</a>
+      <a
+        className="ha-gps-btn is-waze"
+        href={wazeHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={stop}
+        title={wazeMode === 'planifier' ? 'Planifier le trajet sur Waze Live Map' : 'Ouvrir dans Waze'}
+      >Waze</a>
     </span>
   )
 }
 
-export function AdresseAffichee({ value, texte, label, compact }) {
+export function AdresseAffichee({ value, texte, label, compact, wazeMode = 'naviguer' }) {
   const t = texte || texteGps(value)
   if (!t) return null
   return (
     <div className={'ha-addr' + (compact ? ' is-compact' : '')}>
       {label && <div className="ha-addr-lab">{label}</div>}
       <div className="ha-addr-txt">{t}</div>
-      <LiensGps adresse={value} texte={t} />
+      <LiensGps adresse={value} texte={t} wazeMode={wazeMode} />
     </div>
   )
 }
 
-export function AddressFields({ value, set }) {
+export function AddressFields({ value, set, wazeMode = 'naviguer' }) {
   const a = value && typeof value === 'object' ? value : {}
   const up = (k, v) => set({ ...a, [k]: v })
   const txt = fmtAdresse(a)
+  const [suggestions, setSuggestions] = useState([])
+  const [cpBusy, setCpBusy] = useState(false)
+  const cp = String(a.cp || '').replace(/\D/g, '').slice(0, 4)
+  const localiteVide = !String(a.localite || '').trim()
+
+  useEffect(() => {
+    let stop = false
+    if (cp.length !== 4) {
+      setSuggestions([])
+      setCpBusy(false)
+      return undefined
+    }
+    setCpBusy(true)
+    const t = setTimeout(() => {
+      import('@/lib/codesPostauxBe').then(({ localitesDepuisCp }) => localitesDepuisCp(cp)).then(places => {
+        if (stop) return
+        setSuggestions(places)
+        setCpBusy(false)
+      }).catch(() => { if (!stop) { setSuggestions([]); setCpBusy(false) } })
+    }, 280)
+    return () => { stop = true; clearTimeout(t) }
+  }, [cp])
+
+  useEffect(() => {
+    if (!suggestions.length || cp.length !== 4) return
+    if (suggestions.length === 1 && localiteVide) {
+      const p = suggestions[0]
+      set({ ...a, cp: p.cp, localite: p.localite, pays: a.pays || p.pays || 'Belgique' })
+    } else if (!a.pays && suggestions.length) {
+      set({ ...a, pays: 'Belgique' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fill once when CP resolves
+  }, [suggestions, cp, localiteVide])
+
   return (
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'minmax(0,2fr) minmax(0,1fr)', gap:'0 10px' }}>
         <F label="Rue" value={a.rue||''} set={v=>up('rue',v)} />
         <F label="Numéro" value={a.numero||''} set={v=>up('numero',v)} />
-        <F label="Code postal" value={a.cp||''} set={v=>up('cp',v)} />
-        <F label="Localité" value={a.localite||''} set={v=>up('localite',v)} />
+        <F label="Code postal" value={a.cp||''} set={v=>up('cp', String(v || '').replace(/\D/g, '').slice(0, 4))} />
+        <F label="Localité / sous-localité" value={a.localite||''} set={v=>up('localite',v)} />
         <div style={{ gridColumn:'1 / -1' }}><F label="Pays" value={a.pays||''} set={v=>up('pays',v)} /></div>
       </div>
+      {cpBusy && <div style={{ fontSize:12.5, color:'var(--text-muted)', margin:'-4px 0 8px' }}>Recherche de localité…</div>}
+      {!cpBusy && suggestions.length > 1 && (
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, margin:'-4px 0 10px' }}>
+          {suggestions.map(p => (
+            <button
+              key={p.localite}
+              type="button"
+              className={'ha-tab-like' + (a.localite === p.localite ? ' is-on' : '')}
+              onClick={() => set({ ...a, cp: p.cp, localite: p.localite, pays: p.pays || 'Belgique' })}
+            >{p.localite}</button>
+          ))}
+        </div>
+      )}
       {txt && (
         <div style={{ margin: '-4px 0 10px' }}>
-          <LiensGps adresse={a} />
+          <LiensGps adresse={a} wazeMode={wazeMode} />
         </div>
       )}
     </div>

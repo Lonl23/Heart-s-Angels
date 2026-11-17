@@ -11,6 +11,7 @@ function isVolatile(pathname) {
   return (
     pathname === '/sw.js' ||
     pathname === '/manifest.webmanifest' ||
+    pathname === '/manifest-beta.webmanifest' ||
     pathname.startsWith('/icons/') ||
     pathname.startsWith('/apple-touch-icon') ||
     pathname.startsWith('/ha-logo-') ||

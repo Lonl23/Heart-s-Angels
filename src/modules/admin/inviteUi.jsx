@@ -57,12 +57,22 @@ export function BtnEnvoyerInvitation({ code, onDone, style }) {
   )
 }
 
-export function CodeBox({ code, email, prenom, partenaire, nomInstitution, typeBenevole, embedded }) {
+export function CodeBox({ code, email, prenom, partenaire, nomInstitution, typeBenevole, embedded, mailEnvoye, mailErreur }) {
   const [copie, setCopie] = useState(null)
   const lien = urlInvitation(code, email, { partenaire })
   const message = messageInvitation({ prenom, lien, partenaire, nomInstitution, typeBenevole })
   const inner = (
     <>
+      {mailEnvoye && (
+        <div style={{ fontSize: 13, color: '#3B6D11', fontWeight: 600, marginBottom: 8 }}>
+          Mail envoyé à {email}.
+        </div>
+      )}
+      {mailErreur && (
+        <div style={{ fontSize: 13, color: '#C8435A', marginBottom: 8, lineHeight: 1.4 }}>
+          Le mail n’est pas parti : {mailErreur}
+        </div>
+      )}
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
         {partenaire
           ? 'Envoi depuis app@heartsangels.be : bouton « Activer l’accès » (valable 7 jours), vers app.heartsangels.be. Copier le lien reste possible.'

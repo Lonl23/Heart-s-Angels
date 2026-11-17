@@ -70,8 +70,71 @@ export function htmlRapportMedical({ souhait, dar, cibles, meds, injections }) {
 
 export function texteRapportMedical(html) {
   return String(html || '')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|h1|h2|h3|li|tr)>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
     .trim()
+}
+
+export const ALERTE_CONFIDENTIALITE_MAIL = `DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL.
+Ce message est destiné uniquement au destinataire indiqué. S’il vous a été adressé par erreur, vous devez immédiatement le supprimer (y compris toute copie ou pièce jointe), n’en conserver aucune trace, et reprendre contact sans délai avec Heart’s Angels en répondant à cet e-mail (app@heartsangels.be).`
+
+/** HTML léger pour l’e-mail (pas de papier A4 / images base64). */
+export function htmlEmailRapportMedical({ souhait, dar, cibles, meds, injections, destinatairePrenom, destinataireNom }) {
+  const qui = [destinatairePrenom, destinataireNom].filter(Boolean).join(' ').trim()
+  const inner = htmlRapportMedical({ souhait, dar, cibles, meds, injections })
+  const alerte = `<div style="background:#FCEBEB;border:2px solid #A32D2D;padding:14px 16px;margin:0 0 18px;color:#7A1F1F;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45">
+  <strong>DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL</strong><br/>
+  Ce message est destiné uniquement au destinataire indiqué${qui ? ` (${escHtml(qui)})` : ''}.
+  S’il vous a été adressé par erreur, vous devez <strong>immédiatement le supprimer</strong>
+  (y compris toute copie ou pièce jointe), n’en conserver aucune trace, et
+  <strong>reprendre contact sans délai</strong> avec Heart’s Angels en répondant à cet e-mail
+  (<a href="mailto:app@heartsangels.be">app@heartsangels.be</a>).
+</div>`
+  const salut = qui
+    ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222">Bonjour ${escHtml(qui)},</p>`
+    : ''
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rapport médical</title>
+<style>
+  body{margin:0;padding:16px;background:#fff;color:#222;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45}
+  h1{font-size:18px;color:#0E4A5A;margin:16px 0 8px}
+  h2,h3{font-size:14px;color:#0E4A5A;margin:14px 0 6px}
+  .secret{color:#A32D2D;font-weight:800}
+  table{width:100%;border-collapse:collapse;margin:8px 0}
+  td,th{border:1px solid #e5e5e5;text-align:left;padding:6px;font-size:13px;vertical-align:top}
+  th{width:2rem;text-align:center;background:#f7f7f7}
+  ul{margin:6px 0 12px 18px;padding:0}
+  p{margin:0 0 10px}
+</style></head><body>
+${alerte}
+${salut}
+${inner}
+<p style="margin-top:24px;font-size:12px;color:#666">Heart’s Angels ASBL — message envoyé depuis app@heartsangels.be</p>
+</body></html>`
+}
+
+export function texteEmailRapportMedical(opts) {
+  const qui = [opts?.destinatairePrenom, opts?.destinataireNom].filter(Boolean).join(' ').trim()
+  const corps = texteRapportMedical(htmlRapportMedical(opts))
+  return [
+    ALERTE_CONFIDENTIALITE_MAIL,
+    '',
+    qui ? `Bonjour ${qui},` : null,
+    qui ? '' : null,
+    corps,
+    '',
+    'Heart’s Angels ASBL — message envoyé depuis app@heartsangels.be',
+  ].filter(x => x != null).join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }

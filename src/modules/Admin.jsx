@@ -93,20 +93,39 @@ function Partenaires() {
       partenaire_id: f.partenaire_id,
     })
     if (error) { flash(error.message, false); return }
-    setCptForm(null); setLastInvite({ code, email, prenom: f.prenom || org?.nom || 'Institution', partenaire: true, nomInstitution: org?.nom }); load()
+    const { envoyerInvitationEmail } = await import('@/lib/envoyerInvitation')
+    const envoi = await envoyerInvitationEmail(code)
+    setCptForm(null)
+    setLastInvite({
+      code,
+      email,
+      prenom: f.prenom || org?.nom || 'Institution',
+      partenaire: true,
+      nomInstitution: org?.nom,
+      mailEnvoye: !!envoi.ok,
+      mailErreur: envoi.ok ? null : (envoi.error || 'Envoi impossible.'),
+    })
+    if (envoi.ok) flash(`Invitation créée et mail envoyé à ${email}.`)
+    else flash(`Invitation créée, mais le mail n’est pas parti : ${envoi.error || 'erreur d’envoi'}. Utilisez « Envoyer le mail ».`, false)
+    load()
   }
   async function toggle(u) { const { error } = await supabase.from('profiles').update({ actif: !u.actif }).eq('id', u.id); if (error) flash(error.message, false); else load() }
   async function accepterDemande(id) {
     const { data, error } = await supabase.rpc('accepter_demande_partenaire', { p_id: id })
     if (error || !data?.ok) { flash(error?.message || data?.error || 'Impossible d’accepter.', false); return }
+    const { envoyerInvitationEmail } = await import('@/lib/envoyerInvitation')
+    const envoi = await envoyerInvitationEmail(data.code)
     setLastInvite({
       code: data.code,
       email: data.email,
       prenom: data.prenom,
       partenaire: true,
       nomInstitution: data.nom,
+      mailEnvoye: !!envoi.ok,
+      mailErreur: envoi.ok ? null : (envoi.error || 'Envoi impossible.'),
     })
-    flash('Demande acceptée. Envoyez le mail d’activation à l’institution.')
+    if (envoi.ok) flash(`Demande acceptée. Mail d’activation envoyé à ${data.email}.`)
+    else flash(`Demande acceptée, mais le mail n’est pas parti : ${envoi.error || 'erreur d’envoi'}. Utilisez « Envoyer le mail ».`, false)
     load()
   }
   async function refuserDemande(id) {
@@ -123,7 +142,17 @@ function Partenaires() {
   return (
     <div>
       {msg && <Msg msg={msg} />}
-      {lastInvite && <CodeBox code={lastInvite.code} email={lastInvite.email} prenom={lastInvite.prenom} partenaire={!!lastInvite.partenaire} nomInstitution={lastInvite.nomInstitution} />}
+      {lastInvite && (
+        <CodeBox
+          code={lastInvite.code}
+          email={lastInvite.email}
+          prenom={lastInvite.prenom}
+          partenaire={!!lastInvite.partenaire}
+          nomInstitution={lastInvite.nomInstitution}
+          mailEnvoye={lastInvite.mailEnvoye}
+          mailErreur={lastInvite.mailErreur}
+        />
+      )}
 
       <Card style={{ marginBottom: 16, background: '#E6F7FA', border: '1px solid rgba(27,176,206,.3)' }}>
         <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 6 }}>Adresse HTML de l’accès partenaire</div>

@@ -34,13 +34,30 @@ export function estGrosPreventif(activiteOuPlaces, dispositifs) {
   return places >= SEUIL_GROS_PREVENTIF_PLACES || eqs.length >= 2
 }
 
+/** Provinces belges — pour le lien RescueTrack sur les préventifs. */
+export const PROVINCES_BE = [
+  'Anvers',
+  'Brabant flamand',
+  'Brabant wallon',
+  'Bruxelles-Capitale',
+  'Flandre occidentale',
+  'Flandre orientale',
+  'Hainaut',
+  'Liège',
+  'Limbourg',
+  'Luxembourg',
+  'Namur',
+]
+
 /** Compose le libellé adresse (affichage / cartes). */
-export function composerAdresse({ mode, rue, numero, cp, ville } = {}) {
+export function composerAdresse({ mode, rue, numero, cp, ville, province } = {}) {
   const m = mode === 'approximative' ? 'approximative' : 'exacte'
   const villeL = [cp, ville].filter(Boolean).join(' ').trim()
-  if (m === 'approximative') return villeL || ''
-  const voie = [rue, numero].filter(Boolean).join(' ').trim()
-  return [voie, villeL].filter(Boolean).join(', ')
+  const base = m === 'approximative'
+    ? (villeL || '')
+    : [([rue, numero].filter(Boolean).join(' ').trim()), villeL].filter(Boolean).join(', ')
+  if (!province) return base
+  return base ? `${base} (${province})` : province
 }
 
 export function estResponsableDpsProfil(profile) {

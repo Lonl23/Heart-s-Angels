@@ -28,6 +28,7 @@ const vide = {
 
 export default function FicheVolontaire({ userId, onBack }) {
   const { user, profile: moi, role: monRole, reload, peutGererFiches, peutOuvrirArchives, peutReglerNotifications } = useAuth()
+  const peutAlignerTypeRole = peutGererFiches()
   const uid = userId || user?.id
   const gestionQualif = peutGererFiches()   // type + qualifications
   const gestionRoles = peutGererFiches()    // rôles ASBL : accès total ou coord. bénévoles
@@ -115,11 +116,24 @@ export default function FicheVolontaire({ userId, onBack }) {
   }, [uid])
 
   const set = (k,v) => setF(s => ({ ...s, [k]:v }))
-  const setTypeBenevole = (v) => setF(s => ({
-    ...s,
-    type_benevole: v,
-    qualifications: qualificationsCompatibles(v, s.qualifications),
-  }))
+  const setTypeBenevole = (v) => {
+    setF(s => ({
+      ...s,
+      type_benevole: v,
+      qualifications: qualificationsCompatibles(v, s.qualifications),
+    }))
+    // Le rôle de compte médical / non médical suit le type de bénévole.
+    setProf(p => {
+      if (!p || p.role === 'partenaire') return p
+      if (v === 'medical' && (p.role === 'volontaire_non_medical' || p.role === 'volontaire_medical')) {
+        return { ...p, role: 'volontaire_medical' }
+      }
+      if (v === 'non_medical' && (p.role === 'volontaire_non_medical' || p.role === 'volontaire_medical')) {
+        return { ...p, role: 'volontaire_non_medical' }
+      }
+      return p
+    })
+  }
   function setRoleCompte(v) {
     setProf(p => ({ ...p, role: v }))
     if (v === 'volontaire_medical') setTypeBenevole('medical')
@@ -202,7 +216,25 @@ export default function FicheVolontaire({ userId, onBack }) {
     )
     const fiche = { ...f, qualifications, roles_asbl: rolesAsbl }
     const patch = { prenom:prof.prenom, nom:prof.nom, fiche }
-    if (peutChangerRoleCompte && prof.role && prof.role !== 'partenaire') patch.role = prof.role
+    // Aligne le rôle de compte sur le type médical / non médical (coordinateurs inclus).
+    let roleSauve = prof.role
+    if (
+      (peutChangerRoleCompte || peutAlignerTypeRole)
+      && (roleSauve === 'volontaire_medical' || roleSauve === 'volontaire_non_medical' || !roleSauve)
+    ) {
+      if (f.type_benevole === 'medical') roleSauve = 'volontaire_medical'
+      else if (f.type_benevole === 'non_medical') roleSauve = 'volontaire_non_medical'
+    }
+    if (peutChangerRoleCompte && roleSauve && roleSauve !== 'partenaire') {
+      patch.role = roleSauve
+    } else if (
+      peutAlignerTypeRole
+      && (prof.role === 'volontaire_medical' || prof.role === 'volontaire_non_medical')
+      && roleSauve
+      && roleSauve !== prof.role
+    ) {
+      patch.role = roleSauve
+    }
     const { data, error } = await supabase.from('profiles')
       .update(patch)
       .eq('id', uid)
@@ -248,9 +280,13 @@ export default function FicheVolontaire({ userId, onBack }) {
     { v: 'document', l: 'Document' },
     { v: 'compte', l: 'Compte' },
   ]
+  // Pastille ASBL (président, IT…) ; on n’affiche pas le rôle de compte
+  // médical / non médical ici — déjà porté par type_benevole.
   const rolePill = aRoleAsblParticulier(f.roles_asbl)
     ? (libellesRolesAsblPropres(f.roles_asbl)[0] || 'Rôle dans l’ASBL')
-    : lblRoleCompte(prof.role)
+    : (['volontaire_medical', 'volontaire_non_medical'].includes(prof.role)
+      ? null
+      : lblRoleCompte(prof.role))
 
   function donneesLivret() {
     const a = config.bases?.[0]?.adresse || {}

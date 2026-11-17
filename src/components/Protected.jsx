@@ -1,8 +1,9 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import ChangePassword from '@/pages/ChangePassword'
-import { moduleAutorise } from '@/navigation'
+import { moduleAutorise, doitVoirMaintenance, cleMaintenance, DEPARTEMENTS } from '@/navigation'
 import { PorteDeuxFacteurs } from '@/components/DeuxFacteurs'
+import PageMaintenance from '@/components/PageMaintenance'
 
 function Splash({ text }) {
   return <div className="ha-shell" style={{ display:'grid', placeItems:'center', color:'var(--text-muted)', fontFamily:'DM Sans,sans-serif' }}>{text}</div>
@@ -23,11 +24,28 @@ export function RequireStaff({ children }) {
   return children
 }
 
+function libelleModule(feature) {
+  for (const d of DEPARTEMENTS) {
+    const m = d.modules.find(x => x.key === feature)
+    if (m) return m.label
+  }
+  return null
+}
+
 // Module interne : masqué si le volontaire n'a pas le droit de l'ouvrir.
+// En maintenance : page d’attente pour tous sauf l’équipe informatique.
 export function RequireAcces({ feature, children }) {
   const auth = useAuth()
   if (auth.loading && !auth.profile) return <Splash text="Chargement…" />
   if (!moduleAutorise(feature, auth)) return <Navigate to="/app" replace />
+  if (doitVoirMaintenance(feature, auth)) {
+    return (
+      <PageMaintenance
+        titre={libelleModule(feature)}
+        message={auth.messageMaintenance?.(cleMaintenance(feature))}
+      />
+    )
+  }
   return children
 }
 

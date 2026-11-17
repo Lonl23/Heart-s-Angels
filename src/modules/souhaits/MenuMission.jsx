@@ -9,18 +9,22 @@ import RecapMission from './RecapMission'
 import ContactsMission from './ContactsMission'
 import DossierDar from './DossierDar'
 import MissionExecution from './MissionExecution'
+import DocumentsMission from './DocumentsMission'
+import EnvoiRapportMedical from './EnvoiRapportMedical'
 
 const ROLES_COORD = ['coord_medical', 'coord_medical_adjoint', 'coordinateur_medical']
-const VOLETS = ['recap', 'medical', 'contacts', 'statuts']
+const VOLETS = ['recap', 'medical', 'documents', 'contacts', 'envoyer_rapport', 'statuts']
 const ONGLETS = [
   { v: 'recap', l: 'Récapitulatif' },
   { v: 'medical', l: 'Rapport médical' },
+  { v: 'documents', l: 'Tous les documents' },
   { v: 'contacts', l: 'Contacts' },
+  { v: 'envoyer_rapport', l: 'Envoyer le rapport' },
   { v: 'statuts', l: 'Statuts' },
 ]
 
 export default function MenuMission({ souhaitId, onBack }) {
-  const { user, profile } = useAuth()
+  const { user, profile, accesTotal, estMedical, role } = useAuth()
   const [params] = useSearchParams()
   const [meta, setMeta] = useState(null)
   const [meds, setMeds] = useState([])
@@ -49,7 +53,11 @@ export default function MenuMission({ souhaitId, onBack }) {
       .eq('souhait_id', souhaitId)
       .eq('user_id', user.id)
       .maybeSingle()
-    setMeta({ ...data, role_mission: me?.role_mission || null })
+    setMeta({
+      ...data,
+      role_mission: me?.role_mission || null,
+      sur_equipage: !!me,
+    })
     const { data: ints } = await supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId)
     setMeds(ints || [])
   }
@@ -70,10 +78,12 @@ export default function MenuMission({ souhaitId, onBack }) {
     role_mission: meta.role_mission,
     role: profile?.role,
     fiche: profile?.fiche,
-  })
+  }) || estMedical?.()
+  const staffTest = jouette && (accesTotal?.() || role === 'coordinateur' || role === 'admin' || role === 'president')
   const fenetre = fenetreStatuts(meta)
-  const peutEcrire = medical || coordination
-  const peutExporter = !jouette && (coordination || (medical && !!meta.role_mission))
+  const peutEcrire = medical || coordination || staffTest
+  // Vrais souhaits : médicaux de l’équipage. Test/formation : médical, coordination, ou staff (pas d’équipage à poser).
+  const peutExporter = coordination || staffTest || (medical && (!!meta.sur_equipage || jouette))
 
   return (
     <div>
@@ -102,10 +112,30 @@ export default function MenuMission({ souhaitId, onBack }) {
           meds={meds}
         />
       )}
+      {onglet === 'documents' && <DocumentsMission souhaitId={souhaitId} />}
       {onglet === 'contacts' && <ContactsMission souhaitId={souhaitId} individuel={jouette} />}
+      {onglet === 'envoyer_rapport' && (
+        <EnvoiRapportMedical
+          souhaitId={souhaitId}
+          souhait={meta}
+          meds={meds}
+          peutExporter={peutExporter}
+        />
+      )}
       {onglet === 'statuts' && (
         fenetre.ouvert
-          ? <MissionExecution souhaitId={souhaitId} onBack={() => setOnglet('recap')} />
+          ? (
+            <>
+              {jouette && (
+                <div style={{ padding: '0 16px 8px' }}>
+                  <Flash kind="ok">
+                    Formation Camille — vos statuts sont personnels et disponibles à tout moment (indépendants des autres volontaires).
+                  </Flash>
+                </div>
+              )}
+              <MissionExecution souhaitId={souhaitId} onBack={() => setOnglet('recap')} />
+            </>
+          )
           : (
             <div style={{ padding: 16 }}>
               <Flash kind="warn">{fenetre.raison}</Flash>

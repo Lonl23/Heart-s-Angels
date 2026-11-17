@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { lbl, inp } from '@/components/ui'
 import { GENRES, formaterNiss } from './annuaireSchema'
+import { decoderNiss } from '@/lib/niss'
 
 function SvgVenus() {
   return (
@@ -72,9 +73,16 @@ export function GenrePicker({ label = 'Genre', value, set }) {
   )
 }
 
-export function NissF({ label = 'Numéro national', value, set }) {
+export function NissF({ label = 'Numéro national', value, set, onDecoded, hint }) {
   const [v, setV] = useState(value ?? '')
   useEffect(() => { setV(value ?? '') }, [value])
+  function appliquer(brut) {
+    const f = formaterNiss(brut)
+    setV(f)
+    set(f)
+    const dec = decoderNiss(f)
+    if (dec) onDecoded?.(dec)
+  }
   return (
     <div style={{ marginBottom: 10 }}>
       <label style={lbl}>{label}</label>
@@ -82,11 +90,12 @@ export function NissF({ label = 'Numéro national', value, set }) {
         inputMode="numeric"
         autoComplete="off"
         value={v}
-        placeholder="00.00.00-000.00"
+        placeholder="00.00.00-000.00 (facultatif si étranger)"
         onChange={e => setV(e.target.value)}
-        onBlur={() => { const f = formaterNiss(v); setV(f); set(f) }}
+        onBlur={() => appliquer(v)}
         style={inp}
       />
+      {hint && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{hint}</div>}
     </div>
   )
 }

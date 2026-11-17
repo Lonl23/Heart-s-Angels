@@ -1040,28 +1040,43 @@ function Itineraire({ d, compact, only }) {
         <Ligne k="Heure souhaitée" v={fmtDt(d.pec?.heure)} />
         <Ligne k="Départ souhaité" v={fmtDt(d.pec?.depart)} />
         {d.pec?.precisions && <Ligne k="Précisions" v={d.pec.precisions} />}
+        <LiensTrajet etapes={[
+          { label: 'Base', adresse: d.base?.adresse },
+          { label: 'Prise en charge', adresse: d.pec?.adresse },
+        ]} />
       </Bloc>}
       {show('destination') && <Bloc titre="Destination">
         {fmtAdresse(d.destination?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.destination.adresse} />} /> : null}
         {d.destination?.precisions && <Ligne k="Précisions" v={d.destination.precisions} />}
         <Ligne k="Heure souhaitée" v={fmtDt(d.destination?.heure)} />
-        {(d.activites || []).map(a => (
-          <div key={a.id} style={{ marginTop: 8 }}>
-            <Ligne k={a.nom || 'Activité'} v={[a.heure, a.telephone, a.notes].filter(Boolean).join(' · ')} />
-            {fmtAdresse(a.adresse) ? <AdresseAffichee value={a.adresse} compact /> : null}
-          </div>
-        ))}
         <LiensTrajet etapes={[
-          { label: 'Base', adresse: d.base?.adresse },
           { label: 'Prise en charge', adresse: d.pec?.adresse },
           { label: 'Destination', adresse: d.destination?.adresse },
-          ...(d.activites || []).map(a => ({ label: a.nom || 'Activité', adresse: a.adresse })),
         ]} />
+        {(d.activites || []).map((a, i) => {
+          const prev = i === 0
+            ? { label: 'Destination', adresse: d.destination?.adresse }
+            : { label: d.activites[i - 1].nom || 'Activité', adresse: d.activites[i - 1].adresse }
+          return (
+            <div key={a.id} style={{ marginTop: 8 }}>
+              <Ligne k={a.nom || 'Activité'} v={[a.heure, a.telephone, a.notes].filter(Boolean).join(' · ')} />
+              {fmtAdresse(a.adresse) ? <AdresseAffichee value={a.adresse} compact /> : null}
+              <LiensTrajet etapes={[prev, { label: a.nom || 'Activité', adresse: a.adresse }]} />
+            </div>
+          )
+        })}
       </Bloc>}
       {show('retour') && <Bloc titre="Retour">
         <Ligne k="Type" v={d.retour?.type} />
         {d.retour?.heure && <Ligne k="Heure attendue" v={fmtDt(d.retour.heure)} />}
         {d.retour?.precisions && <Ligne k="Précisions" v={d.retour.precisions} />}
+        <LiensTrajet etapes={[
+          (d.activites || []).length
+            ? { label: d.activites[d.activites.length - 1].nom || 'Dernière activité', adresse: d.activites[d.activites.length - 1].adresse }
+            : { label: 'Destination', adresse: d.destination?.adresse },
+          { label: 'Prise en charge', adresse: d.pec?.adresse },
+          { label: 'Base', adresse: d.base?.adresse },
+        ]} />
       </Bloc>}
     </div>
   )

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Card, Btn, F, Sel, TA, Modal } from '@/components/ui'
+import { Card, Btn, F, Sel, TA, Modal, Flash } from '@/components/ui'
 import {
   VOIES_DETRESSE, lblVoieDetresse, protocoleDetresse, dosesLigne, injectionsDetresse, maintenantIso,
 } from './missionSchema'
 import { uploadDocSejour, signedDocSejour } from './sejour'
+import { analyserDocumentMedical, lignesDepuisAnalyseProtocole } from './analyserDocumentMedical'
 
 function nid() {
   return (crypto.randomUUID && crypto.randomUUID()) || ('d-' + Math.random().toString(36).slice(2, 10))
@@ -18,6 +19,8 @@ function ligneVide() {
 export function ProtocoleDetresseForm({ souhaitId, m, setM }) {
   const proto = protocoleDetresse(m)
   const lignes = proto.lignes.length ? proto.lignes : [ligneVide()]
+  const [busyAnalyse, setBusyAnalyse] = useState(false)
+  const [msgAnalyse, setMsgAnalyse] = useState(null)
 
   function poser(next) {
     setM(o => ({ ...o, protocole_detresse: { document: proto.document, ...next } }))
@@ -35,8 +38,28 @@ export function ProtocoleDetresseForm({ souhaitId, m, setM }) {
   }
   async function joindre(file) {
     if (!file || !souhaitId) return
-    const doc = await uploadDocSejour(souhaitId, 'protocole-detresse', file)
-    poser({ lignes, notes: proto.notes, document: doc })
+    setMsgAnalyse(null)
+    setBusyAnalyse(true)
+    try {
+      const doc = await uploadDocSejour(souhaitId, 'protocole-detresse', file)
+      let nextLignes = lignes
+      let nextNotes = proto.notes
+      try {
+        const data = await analyserDocumentMedical(file, 'protocole_detresse')
+        const extraites = lignesDepuisAnalyseProtocole(data)
+        if (extraites.length) nextLignes = extraites
+        if (data.notes) nextNotes = String(data.notes)
+        setMsgAnalyse({ ok: true, t: extraites.length
+          ? `${extraites.length} ligne(s) de protocole extraites — vérifiez les dosages.`
+          : 'Document enregistré. Aucune ligne claire détectée : encodez à la main.' })
+      } catch (e) {
+        setMsgAnalyse({ ok: false, t: `Document enregistré. Analyse auto : ${e.message || 'indisponible'}` })
+      }
+      poser({ lignes: nextLignes, notes: nextNotes, document: doc })
+    } catch (e) {
+      setMsgAnalyse({ ok: false, t: e.message || 'Envoi du document impossible.' })
+    }
+    setBusyAnalyse(false)
   }
 
   return (
@@ -45,11 +68,18 @@ export function ProtocoleDetresseForm({ souhaitId, m, setM }) {
         Protocole de détresse
       </div>
       <div style={{ marginBottom: 12 }}>
-        <label style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Document</label>
+        <label style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Document (analyse locale gratuite du PDF texte)</label>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="file" accept="application/pdf,image/*" onChange={e => joindre(e.target.files?.[0])} />
+          <input
+            type="file"
+            accept="application/pdf,image/*"
+            disabled={busyAnalyse}
+            onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) joindre(f) }}
+          />
           {proto.document?.nom && <DocLien doc={proto.document} />}
+          {busyAnalyse && <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Analyse…</span>}
         </div>
+        {msgAnalyse && <div style={{ marginTop: 8 }}><Flash kind={msgAnalyse.ok ? 'ok' : 'err'}>{msgAnalyse.t}</Flash></div>}
       </div>
       {lignes.map((r, i) => (
         <LigneEdition key={r.id || i} r={r} onChange={patch => majLigne(i, patch)} onRetirer={lignes.length > 1 ? () => retirer(i) : null} />

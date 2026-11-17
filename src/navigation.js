@@ -14,10 +14,12 @@ export const DEPARTEMENTS = [
     modules: [
       { key: 'ma_fiche', to: '/app/profil', label: 'Ma fiche', icon: '🪪', desc: 'Identité, compétences, et le livret d’activité à récupérer' },
       { key: 'fiches', to: '/app/volontaires', label: 'Fiches volontaires', icon: '🗂️', desc: 'Invitations, membres et fiches' },
+      { key: 'candidatures_volontariat', to: '/app/rh/candidatures', label: 'Demandes de volontariat', icon: '🤝', desc: 'Candidatures du site → fiche et accès' },
       { key: 'defraiements', to: '/app/defraiements', label: 'Défraiements', icon: '🧾', desc: 'Note de frais : forfait et km' },
       { key: 'annuaire', to: '/app/annuaire', label: 'Annuaire', icon: '📇', desc: 'Bénéficiaires, contacts rattachés, institutions' },
       { key: 'organigramme', to: '/app/rh/organigramme', label: 'Organigramme', icon: '🌳', desc: 'N+1, téléphone et e-mail des responsables' },
       { key: 'evenements', to: '/app/evenements', label: 'Événements internes', icon: '📣', desc: 'Vignettes ASBL : page d’inscription dans l’app' },
+      { key: 'ouvertures', to: '/app/ouvertures', label: 'Inscriptions ouvertes', icon: '🔗', desc: 'Liens Facebook / soirées d’info → liste puis accès app' },
       { key: 'actualites', to: '/app/actualites', label: 'Actualités', icon: '📰', desc: 'Les nouvelles de l’ASBL' },
     ],
   },
@@ -52,10 +54,12 @@ export const DEPARTEMENTS = [
       { key: 'helpdesk', to: '/app/it/helpdesk', label: 'Helpdesk', icon: '🛠️', desc: 'Signaler un bug ou une suggestion' },
       { key: 'personnalisation', to: '/app/it/personnalisation', label: 'Personnalisation', icon: '🖼️', desc: 'Photos de fond de chaque page et de chaque module' },
       { key: 'admin', to: '/app/admin', label: 'Administration', icon: '🔐', desc: 'Partenaires et accès' },
+      { key: 'acces_blocages', to: '/app/acces-blocages', label: 'Blocages d’accès', icon: '🚫', desc: 'Bloquer un compte ou un appareil' },
       { key: 'organigramme_edition', to: '/app/it/organigramme', label: 'Organigramme', icon: '🌳', desc: 'Choisir les personnes et leur N+1' },
-      { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations' },
+      { key: 'config_souhaits', to: '/app/it/configuration', label: 'Configuration souhaits', icon: '⚙️', desc: 'Bases, institutions, matériel, plaques, destinations, allergies, pathologies, antécédents, interfaces O₂' },
       { key: 'actualites_edition', to: '/app/it/actualites', label: 'Rédaction des actualités', icon: '📰', desc: 'Écrire, dater, publier' },
       { key: 'statistiques', to: '/app/it/statistiques', label: 'Statistiques', icon: '📊', desc: 'Tous les souhaits, graphiques et export Excel' },
+      { key: 'modules_menu', to: '/app/it/onglets', label: 'Onglets & mises à jour', icon: '🚧', desc: 'Activer ou couper un onglet pendant une mise à jour' },
     ],
   },
   {
@@ -82,8 +86,10 @@ export const DEPARTEMENTS = [
 export function moduleAutorise(key, auth) {
   if (!auth?.can?.('staff')) return false
   if (key === 'ma_fiche') return auth.can('staff') && !auth.peutGererFiches()
-  if (key === 'fiches') return auth.peutGererFiches()
+  if (key === 'fiches' || key === 'candidatures_volontariat') return auth.peutGererFiches()
   if (key === 'admin' || key === 'organigramme_edition' || key === 'config_souhaits' || key === 'statistiques') return auth.peutGererApp()
+  if (key === 'acces_blocages') return auth.peutBloquerAcces?.()
+  if (key === 'modules_menu') return auth.peutGererHelpdesk?.()
   if (key === 'personnalisation') return auth.peutPersonnaliser()
   if (key === 'helpdesk' || key === 'activites_secours') return auth.can('staff')
   if (key === 'conventions_dps') {
@@ -97,7 +103,23 @@ export function moduleAutorise(key, auth) {
   if (key === 'organigramme') return true
   if (key === 'tresorerie') return auth.peutGererDefraiements()
   if (key === 'flotte') return auth.canAccess('stock')
+  if (key === 'ouvertures') return auth.canAccess('evenements')
   return auth.canAccess(key)
+}
+
+/** Clé partagée pour les routes qui réutilisent un même droit d’accès. */
+export function cleMaintenance(key) {
+  if (key === 'ouvertures') return 'evenements'
+  if (key === 'flotte') return 'stock'
+  return key
+}
+
+/** Volontaires : page d’attente. Informatique : contenu réel (bypass). */
+export function doitVoirMaintenance(key, auth) {
+  const cle = cleMaintenance(key)
+  if (!cle || !auth?.moduleEnMaintenance?.(cle)) return false
+  if (auth.peutGererHelpdesk?.()) return false
+  return true
 }
 
 export function cheminDepartement(departement) {
