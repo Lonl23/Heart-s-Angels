@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Page, Card, Btn, F, TA, Tabs, AddressFields, fmtAdresse, PhoneF } from '@/components/ui'
+import DocsAdresse from '@/modules/souhaits/DocsAdresse'
 
 const ONGLETS = [
   { v: 'bases', l: 'Bases de départ' },
@@ -118,6 +119,7 @@ function Institutions() {
       telephone: edit.telephone || '',
       email: edit.email || '',
       rue: edit.rue || '', numero: edit.numero || '', cp: edit.cp || '', localite: edit.localite || '', pays: edit.pays || 'Belgique',
+      documents: Array.isArray(edit.documents) ? edit.documents : [],
       ordre: Number(edit.ordre) || 0,
       actif: edit.actif !== false,
     }
@@ -142,9 +144,14 @@ function Institutions() {
     setServices(data || [])
   }
   return (
-    <Bloc err={err} onAdd={() => setEdit({ nom: '', pays: 'Belgique', ordre: (rows.length + 1) * 10, actif: true })}>
+    <Bloc err={err} onAdd={() => setEdit({ nom: '', pays: 'Belgique', ordre: (rows.length + 1) * 10, actif: true, documents: [] })}>
       {rows.map(r => (
-        <Ligne key={r.id} titre={r.nom} sous={services.filter(s => s.institution_id === r.id).map(s => s.nom).join(' · ')} onEdit={() => setEdit({ ...r, ...adr(r) })} />
+        <Ligne
+          key={r.id}
+          titre={r.nom}
+          sous={[services.filter(s => s.institution_id === r.id).map(s => s.nom).join(' · '), Array.isArray(r.documents) && r.documents.length ? `${r.documents.length} doc.` : ''].filter(Boolean).join(' · ')}
+          onEdit={() => setEdit({ ...r, ...adr(r), documents: Array.isArray(r.documents) ? r.documents : [] })}
+        />
       ))}
       {edit && (
         <Card style={{ marginTop: 12 }}>
@@ -152,6 +159,12 @@ function Institutions() {
           <PhoneF label="Téléphone" value={edit.telephone || ''} set={v => setEdit(s => ({ ...s, telephone: v }))} />
           <F label="E-mail" value={edit.email || ''} set={v => setEdit(s => ({ ...s, email: v }))} />
           <AddressFields value={adr(edit)} set={a => setEdit(s => ({ ...s, ...a }))} />
+          <DocsAdresse
+            lieuCle={edit.id ? `inst-${edit.id}` : 'inst-nouveau'}
+            docs={edit.documents}
+            onChange={v => setEdit(s => ({ ...s, documents: v }))}
+            label="Plans du site & documents d’accès"
+          />
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <Btn onClick={sauver}>Enregistrer</Btn>
             <Btn kind="soft" onClick={() => setEdit(null)}>Fermer</Btn>
@@ -242,6 +255,7 @@ function Destinations() {
       rue: edit.rue || '', numero: edit.numero || '', cp: edit.cp || '', localite: edit.localite || '', pays: edit.pays || 'Belgique',
       telephone: edit.telephone || '',
       notes: edit.notes || '',
+      documents: Array.isArray(edit.documents) ? edit.documents : [],
       actif: true,
     }
     if (!row.nom) return
@@ -253,16 +267,28 @@ function Destinations() {
     setEdit(null); load()
   }
   return (
-    <Bloc err={err} onAdd={() => setEdit({ nom: '', pays: 'Belgique' })}>
+    <Bloc err={err} onAdd={() => setEdit({ nom: '', pays: 'Belgique', documents: [] })}>
       {rows.map(r => (
-        <Ligne key={r.id} titre={r.nom} sous={[fmtAdresse(adr(r)), r.telephone].filter(Boolean).join(' · ')} onEdit={() => setEdit({ ...r, ...adr(r) })} extra={
-          <Btn kind="danger" style={{ padding: '4px 8px' }} onClick={async () => { await supabase.from('destinations_frequentes').delete().eq('id', r.id); load() }}>Retirer</Btn>
-        } />
+        <Ligne
+          key={r.id}
+          titre={r.nom}
+          sous={[fmtAdresse(adr(r)), r.telephone, Array.isArray(r.documents) && r.documents.length ? `${r.documents.length} doc.` : ''].filter(Boolean).join(' · ')}
+          onEdit={() => setEdit({ ...r, ...adr(r), documents: Array.isArray(r.documents) ? r.documents : [] })}
+          extra={
+            <Btn kind="danger" style={{ padding: '4px 8px' }} onClick={async () => { await supabase.from('destinations_frequentes').delete().eq('id', r.id); load() }}>Retirer</Btn>
+          }
+        />
       ))}
       {edit && (
         <Card style={{ marginTop: 12 }}>
           <F label="Nom" value={edit.nom || ''} set={v => setEdit(s => ({ ...s, nom: v }))} />
           <AddressFields value={adr(edit)} set={a => setEdit(s => ({ ...s, ...a }))} />
+          <DocsAdresse
+            lieuCle={edit.id ? `dest-${edit.id}` : 'dest-nouveau'}
+            docs={edit.documents}
+            onChange={v => setEdit(s => ({ ...s, documents: v }))}
+            label="Documents / plans du lieu"
+          />
           <PhoneF label="Téléphone" value={edit.telephone || ''} set={v => setEdit(s => ({ ...s, telephone: v }))} />
           <TA label="Notes" value={edit.notes || ''} set={v => setEdit(s => ({ ...s, notes: v }))} rows={2} />
           <div style={{ display: 'flex', gap: 8 }}>

@@ -22,21 +22,7 @@ function extFichier(nom, mime) {
   return 'bin'
 }
 
-export async function uploadDocSejour(souhaitId, lieuId, file) {
-  if (!file) throw new Error('Aucun fichier.')
-  if (file.size > TAILLE_MAX_DOC_SEJOUR) throw new Error('Fichier trop lourd (15 Mo max).')
-  const mime = file.type || ''
-  if (mime && !MIME_OK.has(mime) && !mime.startsWith('image/')) {
-    throw new Error('PDF ou image uniquement.')
-  }
-  const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now())
-  const ext = extFichier(file.name, mime)
-  const path = `${souhaitId}/${lieuId}/${id}.${ext}`
-  const { error } = await supabase.storage.from(BUCKET_DOCS_SEJOUR).upload(path, file, {
-    contentType: mime || undefined,
-    upsert: false,
-  })
-  if (error) throw error
+function metaDoc(id, path, file, mime, ext) {
   return {
     id,
     path,
@@ -45,6 +31,36 @@ export async function uploadDocSejour(souhaitId, lieuId, file) {
     size: file.size,
     at: new Date().toISOString(),
   }
+}
+
+async function uploadMissionDoc(pathPrefix, file) {
+  if (!file) throw new Error('Aucun fichier.')
+  if (file.size > TAILLE_MAX_DOC_SEJOUR) throw new Error('Fichier trop lourd (15 Mo max).')
+  const mime = file.type || ''
+  if (mime && !MIME_OK.has(mime) && !mime.startsWith('image/')) {
+    throw new Error('PDF ou image uniquement.')
+  }
+  const id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now())
+  const ext = extFichier(file.name, mime)
+  const path = `${pathPrefix}/${id}.${ext}`
+  const { error } = await supabase.storage.from(BUCKET_DOCS_SEJOUR).upload(path, file, {
+    contentType: mime || undefined,
+    upsert: false,
+  })
+  if (error) throw error
+  return metaDoc(id, path, file, mime, ext)
+}
+
+export async function uploadDocSejour(souhaitId, lieuId, file) {
+  if (!souhaitId || !lieuId) throw new Error('Emplacement document manquant.')
+  return uploadMissionDoc(`${souhaitId}/${lieuId}`, file)
+}
+
+/** Documents d’un lieu connu (destination / institution), indépendants d’un souhait. */
+export async function uploadDocLieu(lieuCle, file) {
+  const cle = String(lieuCle || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80)
+  if (!cle) throw new Error('Lieu document manquant.')
+  return uploadMissionDoc(`lieux/${cle}`, file)
 }
 
 export async function signedDocSejour(path) {

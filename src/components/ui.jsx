@@ -311,7 +311,7 @@ export function LiensTrajet({ etapes, wazeMode = 'naviguer' }) {
             <span style={{ fontSize: 13, color: 'var(--text)' }}>{p.label} → {dest.label}</span>
             {mesure && (
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>
-                {mesure}{pts.length === 2 ? ' · conditions normales' : ''}
+                {mesure}{pts.length === 2 ? ' · Conditions normales' : ''}
               </span>
             )}
             {attente && !mesure && <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>…</span>}
@@ -321,14 +321,16 @@ export function LiensTrajet({ etapes, wazeMode = 'naviguer' }) {
         )
       })}
       {total && pts.length > 2 && (
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>Total {fmtMesure(total)} · conditions normales</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--heading)' }}>Total {fmtMesure(total)} · Conditions normales</div>
       )}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {maps && <a className="ha-gps-btn" href={maps} target="_blank" rel="noopener noreferrer">Itinéraire complet</a>}
-        {wazeMode === 'planifier' ? null : (
-          <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
-        )}
-      </div>
+      {pts.length > 2 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {maps && <a className="ha-gps-btn" href={maps} target="_blank" rel="noopener noreferrer">Itinéraire complet</a>}
+          {wazeMode === 'planifier' ? null : (
+            <a className="ha-gps-btn is-waze" href={URL_WAZE_TRAFIC} target="_blank" rel="noopener noreferrer">Trafic Waze</a>
+          )}
+        </div>
+      )}
     </div>
   )
 }

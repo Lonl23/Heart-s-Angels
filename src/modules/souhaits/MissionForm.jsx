@@ -8,7 +8,7 @@ import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
 import MaterielRequis from './MaterielRequis'
 import DocumentsSejour from './DocumentsSejour'
-import DocsAdresse from './DocsAdresse'
+import DocsAdresse, { fusionnerDocs } from './DocsAdresse'
 import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 import EquipePluriForm, { LignesPluri } from './EquipePluri'
 import { useAuth } from '@/hooks/useAuth'
@@ -187,7 +187,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
       {cur?.groupes && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           {cur.groupes.map(gid => {
-            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} lecture={lectureOnglet} instDemandeuse={instDemandeuse} souhaitId={souhaitId} />
+            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} instDemandeuse={instDemandeuse} souhaitId={souhaitId} />
             if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} souhaitId={souhaitId} />
             if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhaitId={souhaitId} />
             if (gid === 'medical') {
@@ -389,20 +389,40 @@ function OngletTiming({ m, set, lecture, souhait }) {
   )
 }
 
-function etapesTrajet(m) {
-  const pec = m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
-  const extras = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
-  return [
-    { label: 'Base', adresse: m.base_adresse },
-    { label: 'Prise en charge', adresse: pec },
-    { label: 'Destination', adresse: m.dest_adresse },
-    ...extras.map((a, i) => ({ label: a.nom || `Activité ${i + 1}`, adresse: a.adresse })),
-  ]
+function adressePec(m) {
+  return m.pec_type === 'Domicile du patient' ? m.patient_adresse : m.pec_adresse
+}
+
+function adresseDepuisLieu(src) {
+  if (!src) return { pays: 'Belgique' }
+  if (src.adresse && typeof src.adresse === 'object') {
+    return {
+      rue: src.adresse.rue || '',
+      numero: src.adresse.numero || '',
+      cp: src.adresse.cp || '',
+      localite: src.adresse.localite || '',
+      pays: src.adresse.pays || 'Belgique',
+    }
+  }
+  return {
+    rue: src.rue || '',
+    numero: src.numero || '',
+    cp: src.cp || '',
+    localite: src.localite || '',
+    pays: src.pays || 'Belgique',
+  }
+}
+
+function docsDepuisLieu(src) {
+  if (Array.isArray(src?.documents)) return src.documents
+  if (Array.isArray(src?.data?.documents)) return src.data.documents
+  return []
 }
 
 function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
   const activites = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
   const [connues, setConnues] = useState([])
+  const destMode = m.dest_privee === false || m.dest_annuaire_id || m.dest_frequente_id ? 'connue' : 'privee'
   useEffect(() => {
     supabase.from('destinations_frequentes').select('*').eq('actif', true).order('nom').then(({ data }) => setConnues(data || []))
   }, [])
@@ -412,6 +432,28 @@ function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
       activites_sur_place: (o.activites_sur_place || []).map(a => a.id === id ? { ...a, ...patch } : a),
     }))
   }
+  function setDestMode(mode) {
+    if (lecture) return
+    if (mode === 'privee') {
+      setM(o => ({ ...o, dest_privee: true, dest_annuaire_id: null, dest_frequente_id: null, dest_nom: o.dest_nom || '' }))
+      return
+    }
+    setM(o => ({ ...o, dest_privee: false }))
+  }
+  function appliquerDestinationConnue(src) {
+    if (lecture || !src) return
+    const adresse = adresseDepuisLieu(src)
+    const docs = fusionnerDocs(m.dest_docs, docsDepuisLieu(src))
+    setM(o => ({
+      ...o,
+      dest_privee: false,
+      dest_nom: src.nom || o.dest_nom || '',
+      dest_adresse: adresse,
+      dest_docs: docs,
+      dest_annuaire_id: src.via === 'Annuaire' || src.categorie ? (src.id || null) : (src.annuaire_id || null),
+      dest_frequente_id: src.via === 'Fréquente' || (!src.categorie && !src.via) ? (src.id || null) : null,
+    }))
+  }
   function ajouter(src) {
     const id = crypto.randomUUID ? crypto.randomUUID() : 'a' + Date.now()
     const row = {
@@ -419,46 +461,94 @@ function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
       nom: src?.nom || '',
       heure: '',
       notes: src?.notes || '',
-      telephone: src?.telephone || '',
-      adresse: src ? { rue: src.rue || '', numero: src.numero || '', cp: src.cp || '', localite: src.localite || '', pays: src.pays || 'Belgique' } : { pays: 'Belgique' },
+      telephone: src?.telephone || src?.tel || '',
+      adresse: adresseDepuisLieu(src),
+      documents: docsDepuisLieu(src),
+      annuaire_id: src?.categorie || src?.via === 'Annuaire' ? src.id : (src?.annuaire_id || null),
+      frequente_id: src?.via === 'Fréquente' || (!src?.categorie && src?.id && !src?.via) ? src.id : null,
     }
     setM(o => ({ ...o, activites_sur_place: [...(o.activites_sur_place || []), row] }))
   }
-  async function memoriser(a) {
-    if (!a?.nom) return
-    const nom = String(a.nom).trim()
+  async function memoriser(a, { dansAnnuaire = false } = {}) {
+    const nom = String(a?.nom || '').trim()
+    if (!nom) { alert('Indiquez un nom pour ce lieu.'); return }
+    const adresse = a.adresse || {}
+    const telephone = a.telephone || ''
+    const notes = a.notes || ''
+    const documents = Array.isArray(a.documents) ? a.documents : []
+    if (dansAnnuaire) {
+      const { data, error } = await supabase.from('annuaire').insert({
+        categorie: 'institution',
+        nom,
+        telephone: telephone || null,
+        data: { adresse, documents, notes },
+      }).select('id').single()
+      if (error) { alert(error.message); return }
+      if (a.id) majAct(a.id, { annuaire_id: data.id, documents })
+      else setM(o => ({ ...o, dest_annuaire_id: data.id, dest_privee: false, dest_nom: nom, dest_docs: documents }))
+      alert('Lieu enregistré dans l’annuaire.')
+      return
+    }
     const deja = (connues || []).some(d =>
       String(d.nom || '').trim().toLowerCase() === nom.toLowerCase()
-      && String(d.cp || '') === String(a.adresse?.cp || '')
-      && String(d.localite || '').toLowerCase() === String(a.adresse?.localite || '').toLowerCase()
+      && String(d.cp || '') === String(adresse?.cp || '')
+      && String(d.localite || '').toLowerCase() === String(adresse?.localite || '').toLowerCase()
     )
     if (deja) { alert('Cette destination est déjà enregistrée.'); return }
     const { data, error } = await supabase.from('destinations_frequentes').insert({
       nom,
-      rue: a.adresse?.rue || '',
-      numero: a.adresse?.numero || '',
-      cp: a.adresse?.cp || '',
-      localite: a.adresse?.localite || '',
-      pays: a.adresse?.pays || 'Belgique',
-      telephone: a.telephone || '',
-      notes: a.notes || '',
+      rue: adresse?.rue || '',
+      numero: adresse?.numero || '',
+      cp: adresse?.cp || '',
+      localite: adresse?.localite || '',
+      pays: adresse?.pays || 'Belgique',
+      telephone,
+      notes,
+      documents,
+      annuaire_id: a.annuaire_id || null,
     }).select('*').single()
     if (error) { alert(error.message); return }
     if (data) setConnues(list => [...list, data])
+    alert('Lieu connu enregistré.')
   }
   function ajouterSansDoublon(src) {
     if (src?.nom) {
-      const existe = activites.some(a =>
-        String(a.nom || '').trim().toLowerCase() === String(src.nom).trim().toLowerCase()
-        && String(a.adresse?.cp || '') === String(src.cp || src.adresse?.cp || '')
+      const existe = activites.some(x =>
+        String(x.nom || '').trim().toLowerCase() === String(src.nom).trim().toLowerCase()
+        && String(x.adresse?.cp || '') === String(src.cp || src.adresse?.cp || '')
       )
       if (existe) { alert('Cette activité est déjà dans le trajet.'); return }
     }
     ajouter(src)
   }
+  const pec = adressePec(m)
   return (
     <Card>
       <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Destination</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        {[
+          { v: 'privee', l: 'Privée' },
+          { v: 'connue', l: 'Lieu connu (annuaire)' },
+        ].map(o => (
+          <button
+            key={o.v}
+            type="button"
+            className={'ha-tab-like' + (destMode === o.v ? ' is-on' : '')}
+            disabled={lecture}
+            onClick={() => setDestMode(o.v)}
+          >{o.l}</button>
+        ))}
+      </div>
+      {destMode === 'connue' && !lecture && (
+        <RechercheLieu
+          label="Rechercher un lieu (annuaire + destinations connues)"
+          onPick={appliquerDestinationConnue}
+          connues={connues}
+        />
+      )}
+      {destMode === 'connue' && (
+        <F label="Nom du lieu" value={m.dest_nom || ''} set={v => set('dest_nom', v)} readOnly={lecture} />
+      )}
       <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
       <AddressFields value={m.dest_adresse} set={v => { if (!lecture) set('dest_adresse', v) }} wazeMode="planifier" />
       <DocsAdresse
@@ -470,35 +560,67 @@ function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
       />
       <TA label="Précisions" value={m.dest_precisions || ''} set={v => set('dest_precisions', v)} rows={2} />
       <F label="Heure souhaitée sur place" type="datetime-local" value={m.arrivee_destination || ''} set={v => set('arrivee_destination', v)} readOnly={lecture} />
-      <LiensTrajet etapes={etapesTrajet(m)} wazeMode="planifier" />
-      <div style={{ fontWeight: 700, margin: '8px 0' }}>Sur place</div>
-      {activites.map(a => (
-        <div key={a.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
-          <F label="Activité" value={a.nom || ''} set={v => majAct(a.id, { nom: v })} readOnly={lecture} />
-          <F label="Heure attendue" type="time" value={(a.heure || '').slice(0, 5)} set={v => majAct(a.id, { heure: v })} readOnly={lecture} />
-          <F label="Téléphone" value={a.telephone || ''} set={v => majAct(a.id, { telephone: v })} readOnly={lecture} />
-          <TA label="Notes" value={a.notes || ''} set={v => majAct(a.id, { notes: v })} rows={2} />
-          <AddressFields value={a.adresse} set={v => { if (!lecture) majAct(a.id, { adresse: v }) }} wazeMode="planifier" />
-          <DocsAdresse
-            souhaitId={souhaitId}
-            slotId={a.id}
-            docs={a.documents}
-            onChange={v => { if (!lecture) majAct(a.id, { documents: v }) }}
-            lecture={lecture}
-          />
-          {!lecture && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Btn kind="soft" onClick={() => memoriser(a)}>Réutiliser plus tard</Btn>
-              <Btn kind="danger" onClick={() => setM(o => ({ ...o, activites_sur_place: (o.activites_sur_place || []).filter(x => x.id !== a.id) }))}>Retirer</Btn>
-            </div>
-          )}
+      {!lecture && destMode === 'connue' && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          <Btn kind="soft" onClick={() => memoriser({ nom: m.dest_nom, adresse: m.dest_adresse, documents: m.dest_docs, annuaire_id: m.dest_annuaire_id })}>
+            Enregistrer comme lieu fréquent
+          </Btn>
+          <Btn kind="soft" onClick={() => memoriser({ nom: m.dest_nom, adresse: m.dest_adresse, documents: m.dest_docs }, { dansAnnuaire: true })}>
+            Enregistrer dans l’annuaire
+          </Btn>
         </div>
-      ))}
+      )}
+      <LiensTrajet
+        etapes={[
+          { label: 'Prise en charge', adresse: pec },
+          { label: 'Destination', adresse: m.dest_adresse },
+        ]}
+        wazeMode="planifier"
+      />
+      <div style={{ fontWeight: 700, margin: '8px 0' }}>Sur place</div>
+      {activites.map((a, i) => {
+        const prev = i === 0
+          ? { label: 'Destination', adresse: m.dest_adresse }
+          : { label: activites[i - 1].nom || `Activité ${i}`, adresse: activites[i - 1].adresse }
+        return (
+          <div key={a.id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
+            <F label="Activité" value={a.nom || ''} set={v => majAct(a.id, { nom: v })} readOnly={lecture} />
+            <F label="Heure attendue" type="time" value={(a.heure || '').slice(0, 5)} set={v => majAct(a.id, { heure: v })} readOnly={lecture} />
+            <F label="Téléphone" value={a.telephone || ''} set={v => majAct(a.id, { telephone: v })} readOnly={lecture} />
+            <TA label="Notes" value={a.notes || ''} set={v => majAct(a.id, { notes: v })} rows={2} />
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Adresse</div>
+            <AddressFields value={a.adresse} set={v => { if (!lecture) majAct(a.id, { adresse: v }) }} wazeMode="planifier" />
+            <DocsAdresse
+              souhaitId={souhaitId}
+              slotId={a.id}
+              docs={a.documents}
+              onChange={v => { if (!lecture) majAct(a.id, { documents: v }) }}
+              lecture={lecture}
+            />
+            <LiensTrajet
+              etapes={[prev, { label: a.nom || `Activité ${i + 1}`, adresse: a.adresse }]}
+              wazeMode="planifier"
+            />
+            {!lecture && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Btn kind="soft" onClick={() => memoriser(a)}>Enregistrer comme lieu fréquent</Btn>
+                <Btn kind="soft" onClick={() => memoriser(a, { dansAnnuaire: true })}>Enregistrer dans l’annuaire</Btn>
+                <Btn kind="danger" onClick={() => setM(o => ({ ...o, activites_sur_place: (o.activites_sur_place || []).filter(x => x.id !== a.id) }))}>Retirer</Btn>
+              </div>
+            )}
+          </div>
+        )
+      })}
       {!lecture && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <Btn kind="soft" onClick={() => ajouterSansDoublon(null)}>+ Activité</Btn>
           {connues.length > 0 && (
-            <Sel label="Destination connue" value="" set={id => { const d = connues.find(x => x.id === id); if (d) ajouterSansDoublon(d) }} options={[{ v: '', l: '—' }, ...connues.map(d => ({ v: d.id, l: d.nom }))]} />
+            <Sel
+              label="Lieu connu"
+              value=""
+              set={id => { const d = connues.find(x => x.id === id); if (d) ajouterSansDoublon({ ...d, via: 'Fréquente' }) }}
+              options={[{ v: '', l: '—' }, ...connues.map(d => ({ v: d.id, l: d.nom }))]}
+            />
           )}
         </div>
       )}
@@ -506,7 +628,7 @@ function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
   )
 }
 
-function PriseEnCharge({ m, set, lecture, instDemandeuse, souhaitId }) {
+function PriseEnCharge({ m, set, setM, lecture, instDemandeuse, souhaitId }) {
   const dom = m.pec_type === 'Domicile du patient'
   const inst = m.pec_type === 'Institution'
   const champ = k => grp('prise_en_charge').fields.find(f => f.k === k)
@@ -531,11 +653,23 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse, souhaitId }) {
       set('pec_adresse', null)
     }
   }
-  function appliquerRecherche(hit) {
+  async function appliquerRecherche(hit) {
     if (lecture) return
     set('pec_inst_source', 'autre')
     set('pec_institution', hit.nom || '')
     if (hit.adresse) set('pec_adresse', hit.adresse)
+    let docsInst = docsDepuisLieu(hit)
+    if (!docsInst.length && hit.via === 'Référentiel' && hit.id) {
+      const { data } = await supabase.from('referentiel_institutions').select('documents').eq('id', hit.id).maybeSingle()
+      docsInst = Array.isArray(data?.documents) ? data.documents : []
+    }
+    if (!docsInst.length && hit.via === 'Annuaire' && hit.id) {
+      const { data } = await supabase.from('annuaire').select('data').eq('id', hit.id).maybeSingle()
+      docsInst = Array.isArray(data?.data?.documents) ? data.data.documents : []
+    }
+    if (docsInst.length) {
+      setM?.(o => ({ ...o, pec_docs: fusionnerDocs(o.pec_docs, docsInst) }))
+    }
   }
 
   return (
@@ -545,7 +679,7 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse, souhaitId }) {
       {dom && (
         <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'10px 12px', margin:'6px 0' }}>
           <div style={{ fontSize:12, color:'var(--text-muted)' }}>Adresse (domicile du patient — reprise de la fiche bénéficiaire)</div>
-          <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— à renseigner sur la fiche bénéficiaire —'}</div>
+          <div style={{ fontSize:14, color:'var(--text)' }}>{fmtAdresse(m.patient_adresse) || '— À renseigner sur la fiche bénéficiaire —'}</div>
           {fmtAdresse(m.patient_adresse) && <div style={{ marginTop: 6 }}><LiensGps adresse={m.patient_adresse} wazeMode="planifier" /></div>}
           <DocsAdresse
             souhaitId={souhaitId}
@@ -592,7 +726,7 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse, souhaitId }) {
           {source === 'autre' && (
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
               <Champ f={champ('pec_institution')} val={m.pec_institution} set={v=>set('pec_institution', v)} lecture={lecture} />
-              <Champ f={champ('pec_adresse')} val={m.pec_adresse} set={v=>set('pec_adresse', v)} lecture={lecture} />
+              <Champ f={{ ...champ('pec_adresse'), l: 'Adresse' }} val={m.pec_adresse} set={v=>set('pec_adresse', v)} lecture={lecture} souhaitId={souhaitId} slotId="pec-adresse" docs={m.pec_adresse_docs} onDocs={v => set('pec_adresse_docs', v)} />
             </div>
           )}
           {(source === 'demandeuse' || source === 'autre') && (
@@ -628,6 +762,13 @@ function PriseEnCharge({ m, set, lecture, instDemandeuse, souhaitId }) {
         <Champ f={champ('depart_pec')} val={m.depart_pec} set={v=>set('depart_pec', v)} lecture={lecture} />
       </div>
       <Champ f={champ('pec_precisions')} val={m.pec_precisions} set={v=>set('pec_precisions', v)} lecture={lecture} />
+      <LiensTrajet
+        etapes={[
+          { label: 'Base', adresse: m.base_adresse },
+          { label: 'Prise en charge', adresse: adressePec(m) },
+        ]}
+        wazeMode="planifier"
+      />
     </Card>
   )
 }
@@ -659,6 +800,27 @@ function ServicesInstitution({ m, set, lecture }) {
 }
 
 function RechercheInstitution({ lecture, onPick }) {
+  return (
+    <RechercheLieu
+      lecture={lecture}
+      onPick={onPick}
+      label="Rechercher l’institution (annuaire + internet)"
+      categories={['institution', 'externe_souhait']}
+      avecReferentiel
+      avecPhoton
+    />
+  )
+}
+
+function RechercheLieu({
+  lecture = false,
+  onPick,
+  label = 'Rechercher un lieu',
+  categories = ['institution', 'externe_souhait'],
+  connues = [],
+  avecReferentiel = false,
+  avecPhoton = false,
+}) {
   const [q, setQ] = useState('')
   const [hits, setHits] = useState([])
   const [busy, setBusy] = useState(false)
@@ -672,76 +834,104 @@ function RechercheInstitution({ lecture, onPick }) {
     const locaux = []
     let web = []
     let msg = null
+    const needleLow = needle.toLowerCase()
+    for (const r of connues || []) {
+      if (!String(r.nom || '').toLowerCase().includes(needleLow)) continue
+      locaux.push({
+        ...r,
+        adresse: adresseDepuisLieu(r),
+        documents: Array.isArray(r.documents) ? r.documents : [],
+        via: 'Fréquente',
+      })
+    }
     try {
       const { data } = await supabase.from('annuaire')
         .select('id,nom,telephone,data,categorie')
-        .in('categorie', ['institution', 'externe_souhait'])
+        .in('categorie', categories)
         .ilike('nom', `%${needle}%`)
         .limit(8)
-      const { data: refs } = await supabase.from('referentiel_institutions')
-        .select('id,nom,telephone,rue,numero,cp,localite,pays')
-        .ilike('nom', `%${needle}%`)
-        .eq('actif', true)
-        .limit(8)
-      for (const r of refs || []) {
-        locaux.push({
-          id: r.id,
-          nom: r.nom,
-          adresse: { rue: r.rue || '', numero: r.numero || '', cp: r.cp || '', localite: r.localite || '', pays: r.pays || 'Belgique' },
-          tel: r.telephone || '',
-          via: 'Référentiel',
-        })
-      }
       for (const r of data || []) {
         locaux.push({
           id: r.id,
           nom: r.nom,
+          categorie: r.categorie,
           adresse: r.data?.adresse || null,
+          documents: Array.isArray(r.data?.documents) ? r.data.documents : [],
           tel: r.telephone || r.data?.telephone || '',
           via: 'Annuaire',
         })
       }
+      if (avecReferentiel) {
+        const { data: refs } = await supabase.from('referentiel_institutions')
+          .select('id,nom,telephone,rue,numero,cp,localite,pays,documents')
+          .ilike('nom', `%${needle}%`)
+          .eq('actif', true)
+          .limit(8)
+        for (const r of refs || []) {
+          locaux.push({
+            id: r.id,
+            nom: r.nom,
+            adresse: { rue: r.rue || '', numero: r.numero || '', cp: r.cp || '', localite: r.localite || '', pays: r.pays || 'Belgique' },
+            documents: Array.isArray(r.documents) ? r.documents : [],
+            tel: r.telephone || '',
+            via: 'Référentiel',
+          })
+        }
+      }
     } catch { /* annuaire optionnel */ }
-    try {
-      web = await chercherPhoton(needle)
-    } catch {
-      msg = 'La recherche internet n’a pas abouti. Essayez Google Maps ci-dessous, ou encodez l’adresse à la main.'
+    if (avecPhoton) {
+      try {
+        web = await chercherPhoton(needle)
+      } catch {
+        msg = 'La recherche internet n’a pas abouti. Essayez Google Maps ci-dessous, ou encodez l’adresse à la main.'
+      }
     }
-    const vus = new Set(locaux.map(x => (x.nom || '').toLowerCase()))
-    const fusion = [...locaux, ...web.filter(x => !vus.has((x.nom || '').toLowerCase()))]
+    const vus = new Set(locaux.map(x => `${(x.nom || '').toLowerCase()}|${x.via}`))
+    const fusion = [
+      ...locaux,
+      ...web.filter(x => !vus.has(`${(x.nom || '').toLowerCase()}|${x.via || 'Internet'}`)),
+    ]
     setHits(fusion)
     setBusy(false)
-    if (!fusion.length) setErr(msg || 'Aucun résultat. Affinez le nom, ou ouvrez Google Maps.')
+    if (!fusion.length) setErr(msg || 'Aucun résultat. Affinez le nom, ou encodez l’adresse à la main.')
     else setErr(msg)
   }
 
-  const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q.trim() || 'institution Belgique')}`
+  const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q.trim() || 'Belgique')}`
 
   return (
-    <div style={{ marginBottom:12 }}>
-      <form onSubmit={chercher} style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'flex-end' }}>
-        <div style={{ flex:'1 1 220px' }}>
-          <F label="Rechercher l’institution (annuaire + internet)" value={q} set={setQ} />
+    <div style={{ marginBottom: 12 }}>
+      <form onSubmit={chercher} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ flex: '1 1 220px' }}>
+          <F label={label} value={q} set={setQ} />
         </div>
-        <Btn onClick={chercher} disabled={lecture || busy} style={{ marginBottom:10 }}>{busy ? 'Recherche…' : 'Rechercher'}</Btn>
-        <a href={maps} target="_blank" rel="noopener noreferrer" className="ha-gps-btn" style={{ marginBottom:12, alignSelf:'center' }}>Google Maps</a>
+        <Btn onClick={chercher} disabled={lecture || busy} style={{ marginBottom: 10 }}>{busy ? 'Recherche…' : 'Rechercher'}</Btn>
+        {avecPhoton && (
+          <a href={maps} target="_blank" rel="noopener noreferrer" className="ha-gps-btn" style={{ marginBottom: 12, alignSelf: 'center' }}>Google Maps</a>
+        )}
       </form>
-      {err && <div style={{ fontSize:13, color:'#8A6D1B', marginBottom:8 }}>{err}</div>}
+      {err && <div style={{ fontSize: 13, color: '#8A6D1B', marginBottom: 8 }}>{err}</div>}
       {hits.length > 0 && (
-        <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
           {hits.map((h, i) => (
             <button
-              key={h.id || `${h.nom}-${i}`}
+              key={h.id || `${h.nom}-${h.via}-${i}`}
               type="button"
               disabled={lecture}
               onClick={() => onPick(h)}
               style={{
-                textAlign:'left', padding:'10px 12px', borderRadius:10, cursor:'pointer',
-                border:'1px solid var(--border)', background:'var(--card)', fontFamily:'inherit',
+                textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                border: '1px solid var(--border)', background: 'var(--card)', fontFamily: 'inherit',
               }}
             >
-              <div style={{ fontWeight:600, color:'var(--text)' }}>{h.nom || 'Sans nom'}{h.via ? <span style={{ fontWeight:500, color:'var(--text-muted)', fontSize:12 }}> · {h.via}</span> : null}</div>
-              <div style={{ fontSize:12.5, color:'var(--text-muted)', marginTop:2 }}>{fmtAdresse(h.adresse) || 'Adresse non renseignée'}</div>
+              <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                {h.nom || 'Sans nom'}
+                {h.via ? <span style={{ fontWeight: 500, color: 'var(--text-muted)', fontSize: 12 }}> · {h.via}</span> : null}
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                {fmtAdresse(h.adresse) || 'Adresse non renseignée'}
+                {docsDepuisLieu(h).length ? ` · ${docsDepuisLieu(h).length} document(s)` : ''}
+              </div>
             </button>
           ))}
         </div>
@@ -771,10 +961,26 @@ async function chercherPhoton(q) {
   }).filter(x => fmtAdresse(x.adresse) || x.nom)
 }
 
-function Champ({ f, val, set, lecture }) {
+function Champ({ f, val, set, lecture, souhaitId, slotId, docs, onDocs }) {
   if (!f) return null
   const lock = !!lecture
-  if (f.t === 'address') return <div style={{ gridColumn:'1 / -1', margin:'8px 0' }}><label style={lbl}>{f.l}</label><AddressFields value={val} set={lock ? (()=>{}) : set} wazeMode="planifier" /></div>
+  if (f.t === 'address') {
+    return (
+      <div style={{ gridColumn:'1 / -1', margin:'8px 0' }}>
+        <label style={lbl}>{f.l}</label>
+        <AddressFields value={val} set={lock ? (()=>{}) : set} wazeMode="planifier" />
+        {(souhaitId && slotId) && (
+          <DocsAdresse
+            souhaitId={souhaitId}
+            slotId={slotId}
+            docs={docs}
+            onChange={v => { if (!lock) onDocs?.(v) }}
+            lecture={lock}
+          />
+        )}
+      </div>
+    )
+  }
   if (f.t === 'sep') return <div style={{ gridColumn:'1 / -1', fontSize:12, fontWeight:700, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:.5, margin:'14px 0 6px' }}>{f.l.replace(/—/g,'').trim()}</div>
   if (f.t === 'toggle') return (
     <div style={{ display:'flex', alignItems:'center', gap:10, margin:'12px 0' }}>
