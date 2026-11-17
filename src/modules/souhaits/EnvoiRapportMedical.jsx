@@ -120,7 +120,7 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
       {err && <Flash kind="err">{err}</Flash>}
       {info && <Flash>{info}</Flash>}
       {!peutExporter ? (
-        <Flash kind="warn">Seul le personnel médical autorisé ou la coordination médicale peut envoyer ce rapport.</Flash>
+        <Flash kind="warn">Seuls les volontaires médicaux affectés à ce souhait (ou la coordination médicale) peuvent envoyer ce rapport.</Flash>
       ) : (
         <form onSubmit={envoyer} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>

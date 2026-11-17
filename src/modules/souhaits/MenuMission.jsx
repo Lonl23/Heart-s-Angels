@@ -53,7 +53,11 @@ export default function MenuMission({ souhaitId, onBack }) {
       .eq('souhait_id', souhaitId)
       .eq('user_id', user.id)
       .maybeSingle()
-    setMeta({ ...data, role_mission: me?.role_mission || null })
+    setMeta({
+      ...data,
+      role_mission: me?.role_mission || null,
+      sur_equipage: !!me,
+    })
     const { data: ints } = await supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId)
     setMeds(ints || [])
   }
@@ -77,7 +81,8 @@ export default function MenuMission({ souhaitId, onBack }) {
   })
   const fenetre = fenetreStatuts(meta)
   const peutEcrire = medical || coordination
-  const peutExporter = !jouette && (coordination || (medical && !!meta.role_mission))
+  // Tous les volontaires médicaux affectés au souhait (+ coordination médicale).
+  const peutExporter = !jouette && (coordination || (medical && !!meta.sur_equipage))
 
   return (
     <div>
