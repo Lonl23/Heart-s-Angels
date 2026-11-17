@@ -81,8 +81,8 @@ export default function MenuMission({ souhaitId, onBack }) {
   })
   const fenetre = fenetreStatuts(meta)
   const peutEcrire = medical || coordination
-  // Tous les volontaires médicaux affectés au souhait (+ coordination médicale).
-  const peutExporter = !jouette && (coordination || (medical && !!meta.sur_equipage))
+  // Vrais souhaits : médicaux de l’équipage. Souhaits de test/formation : tout médical (pas d’équipage à poser).
+  const peutExporter = coordination || (medical && (!!meta.sur_equipage || jouette))
 
   return (
     <div>
