@@ -6,7 +6,7 @@
 /**
  * Plugin Name: Heart's Angels — Demandes de souhait
  * Description: Quand les formulaires Contact Form 7 « Demande de souhait » et « Devenir bénévole » sont envoyés, ils sont aussi enregistrés dans la base de l'application (en plus de l'e-mail).
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Heart's Angels ASBL
  * Requires Plugins: contact-form-7
  */
@@ -158,6 +158,7 @@ function ha_demandes_field($posted, $key) {
 }
 
 function ha_demandes_split_nom($full) {
+    // Le formulaire écrit « Nom et prénom » : le premier mot est le nom de famille.
     $full = trim(preg_replace('/\s+/u', ' ', (string) $full));
     if ($full === '') {
         return array('', '');
@@ -172,7 +173,7 @@ function ha_demandes_split_nom($full) {
     if (count($parts) === 1) {
         return array($parts[0], $parts[0]);
     }
-    $nom = array_pop($parts);
+    $nom = array_shift($parts);
     return array(implode(' ', $parts), $nom);
 }
 
@@ -201,6 +202,14 @@ function ha_demandes_adresse($rue, $cp_localite) {
     if (preg_match('/^(\d{4})\s+(.+)$/u', $cp_localite, $m)) {
         $cp = $m[1];
         $localite = trim($m[2]);
+    }
+    if ($cp !== '' && $localite !== '' && $rue !== '') {
+        $rue = preg_replace(
+            '/\s*[-–,]?\s*' . preg_quote($cp, '/') . '\s+' . preg_quote($localite, '/') . '\s*$/iu',
+            '',
+            $rue
+        );
+        $rue = trim($rue, " \t,-");
     }
     return array(
         'rue'      => $rue,
@@ -276,7 +285,8 @@ function ha_demandes_map($posted) {
             'registre'  => ha_demandes_field($posted, 'registre'),
         ),
         'contact_secondaire' => array(
-            'nom'       => trim($autre_prenom . ' ' . $autre_nom),
+            'prenom'    => $autre_prenom,
+            'nom'       => $autre_nom,
             'email'     => ha_demandes_field($posted, 'email-926'),
             'telephone' => ha_demandes_field($posted, 'tel-397'),
         ),

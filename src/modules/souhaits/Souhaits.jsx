@@ -277,7 +277,8 @@ function Demandes({ onOpen }) {
     const c = d.complements && typeof d.complements === 'object' ? d.complements : {}
     const sejour = c.sejour || {}
     const medecin = [c.medecin?.nom || d.medecin_referent, c.medecin?.telephone, c.medecin?.email].filter(Boolean).join(' · ')
-    const autre = [c.contact_secondaire?.nom, c.contact_secondaire?.telephone, c.contact_secondaire?.email].filter(Boolean).join(' ')
+    const autreNom = [c.contact_secondaire?.prenom, c.contact_secondaire?.nom].filter(Boolean).join(' ') || c.contact_secondaire?.nom
+    const autre = [autreNom, c.contact_secondaire?.telephone, c.contact_secondaire?.email].filter(Boolean).join(' ')
     const { data: s, error } = await supabase.from('souhaits').insert({
       beneficiaire_nom:d.patient_nom, beneficiaire_prenom:d.patient_prenom, beneficiaire_ddn:d.patient_ddn||null,
       beneficiaire_contact:[`${d.contact_prenom||''} ${d.contact_nom||''}`.trim(), d.contact_telephone, d.contact_email, autre && `Autre contact : ${autre}`].filter(Boolean).join(' · '),
@@ -292,9 +293,10 @@ function Demandes({ onOpen }) {
         date_demande: new Date().toISOString().slice(0, 10),
         pathologies: c.situation_medicale || '',
         pec_type: sejour.type === 'Domicile' ? 'Domicile du patient' : (sejour.type ? 'Institution' : ''),
-        pec_institution: sejour.type && sejour.type !== 'Domicile' ? sejour.type : '',
+        pec_institution: sejour.type && sejour.type !== 'Domicile' ? (sejour.adresse?.rue || sejour.type) : '',
         pec_adresse: sejour.adresse || null,
-        pec_precisions: sejour.telephone ? `Tél. lieu : ${sejour.telephone}` : '',
+        pec_precisions: [sejour.telephone && `Tél. lieu : ${sejour.telephone}`, medecin && `Médecin : ${medecin}`].filter(Boolean).join('\n'),
+        dest_precisions: d.souhait_description || '',
       },
     }).select().single()
     if (error) { alert('Erreur : ' + error.message); return }
@@ -341,7 +343,7 @@ function DossierDemande({ d }) {
     ['E-mail du bénéficiaire', c.beneficiaire?.email],
     ['Lieu de séjour', [sejour.type, fmtAdresse(sejour.adresse), sejour.telephone && `tél. ${sejour.telephone}`].filter(Boolean).join(' · ')],
     ['Médecin', [d.medecin_referent, c.medecin?.telephone, c.medecin?.email].filter(Boolean).join(' · ')],
-    ['Autre contact', [c.contact_secondaire?.nom, c.contact_secondaire?.telephone, c.contact_secondaire?.email].filter(Boolean).join(' · ')],
+    ['Autre contact', [[c.contact_secondaire?.prenom, c.contact_secondaire?.nom].filter(Boolean).join(' ') || c.contact_secondaire?.nom, c.contact_secondaire?.telephone, c.contact_secondaire?.email].filter(Boolean).join(' · ')],
     ['Situation médicale', c.situation_medicale],
     ['Fichier joint (reçu par e-mail)', c.fichier],
   ].filter(([, v]) => v)
