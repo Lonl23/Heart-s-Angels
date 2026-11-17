@@ -187,9 +187,10 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
       {cur?.groupes && (
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           {cur.groupes.map(gid => {
-            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} instDemandeuse={instDemandeuse} souhaitId={souhaitId} />
-            if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} souhaitId={souhaitId} />
-            if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhaitId={souhaitId} />
+            if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} instDemandeuse={instDemandeuse} souhaitId={souhaitId} souhait={souhait} />
+            if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} souhaitId={souhaitId} souhait={souhait} />
+            if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhaitId={souhaitId} souhait={souhait} />
+            if (gid === 'retour') return <BlocRetour key={gid} m={m} set={set} lecture={lectureOnglet} souhait={souhait} />
             if (gid === 'medical') {
               return (
                 <InfosMedicales
@@ -211,7 +212,16 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
               <Card key={gid}>
                 <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-                  {g.fields.map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lectureOnglet} />)}
+                  {g.fields.map(f => (
+                    <Champ
+                      key={f.k}
+                      f={f}
+                      val={m[f.k]}
+                      set={v => set(f.k, v)}
+                      lecture={lectureOnglet}
+                      jourDefaut={jourSouhaitDefaut(souhait, m)}
+                    />
+                  ))}
                 </div>
               </Card>
             )
@@ -295,8 +305,55 @@ async function chargerInstitutionDemandeuse(s) {
   return null
 }
 
-function BlocBase({ m, set, lecture, souhaitId }) {
+function jourSouhaitDefaut(souhait, m) {
+  return String(souhait?.date_souhaitee || m?.jour_retenu || '').slice(0, 10)
+}
+
+function sliceHeure(v) {
+  const s = String(v || '')
+  const m = s.match(/T(\d{2}:\d{2})/)
+  if (m) return m[1]
+  if (/^\d{2}:\d{2}/.test(s)) return s.slice(0, 5)
+  return ''
+}
+
+/** Jour (défaut = jour du souhait) + heure, stockés en datetime-local. */
+function JourHeure({
+  label = 'Horaire',
+  labelJour = 'Jour',
+  labelHeure = 'Heure',
+  value,
+  set,
+  lecture = false,
+  jourDefaut = '',
+}) {
+  const jourVal = String(value || '').slice(0, 10)
+  const heureVal = sliceHeure(value)
+  const jourAffiche = jourVal || String(jourDefaut || '').slice(0, 10)
+  function maj(jour, heure) {
+    if (lecture) return
+    const j = String(jour || '').slice(0, 10)
+    const h = String(heure || '').slice(0, 5)
+    if (!j && !h) { set(''); return }
+    const jj = j || String(jourDefaut || '').slice(0, 10)
+    if (!jj) { set(h || ''); return }
+    if (!h) { set(`${jj}T00:00`); return }
+    set(`${jj}T${h}`)
+  }
+  return (
+    <div style={{ margin: '8px 0' }}>
+      {label && <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10 }}>
+        <F label={labelJour} type="date" value={jourAffiche} set={v => maj(v, heureVal)} readOnly={lecture} />
+        <F label={labelHeure} type="time" value={heureVal} set={v => maj(jourAffiche, v)} readOnly={lecture} />
+      </div>
+    </div>
+  )
+}
+
+function BlocBase({ m, set, lecture, souhaitId, souhait }) {
   const [bases, setBases] = useState([])
+  const jourDefaut = jourSouhaitDefaut(souhait, m)
   useEffect(() => {
     supabase.from('bases_depart').select('*').eq('actif', true).order('ordre').then(({ data }) => {
       const rows = (data || []).map(b => ({
@@ -359,15 +416,22 @@ function BlocBase({ m, set, lecture, souhaitId }) {
         <TA label="Protocole de mission" value={nomMatch?.protocole || m.base_protocole || ''} set={() => {}} rows={4} />
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: '0 24px' }}>
-        <Champ f={grp('base').fields.find(f => f.k === 'rdv_base')} val={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} />
-        <Champ f={grp('base').fields.find(f => f.k === 'depart_base')} val={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} />
+        <JourHeure label="Rendez-vous" value={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} jourDefaut={jourDefaut} />
+        <JourHeure label="Départ" value={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} jourDefaut={jourDefaut} />
       </div>
+      <LiensTrajet
+        etapes={[
+          { label: 'Base', adresse: m.base_adresse },
+          { label: 'Prise en charge', adresse: adressePec(m) },
+        ]}
+        wazeMode="planifier"
+      />
     </Card>
   )
 }
 
 function OngletTiming({ m, set, lecture, souhait }) {
-  const jour = (souhait?.date_souhaitee || m.jour_retenu || '').slice(0, 10)
+  const jour = jourSouhaitDefaut(souhait, m)
   const lib = jour
     ? new Date(jour + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : '—'
@@ -378,13 +442,25 @@ function OngletTiming({ m, set, lecture, souhait }) {
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Jour du souhait</div>
         <div style={{ fontSize: 18, fontWeight: 700 }}>{lib}</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '0 16px' }}>
-        <Champ f={{ k:'rdv_base', l:'Rendez-vous base', t:'datetime' }} val={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} />
-        <Champ f={{ k:'depart_base', l:'Départ base', t:'datetime' }} val={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} />
-        <Champ f={{ k:'arrivee_pec', l:'Prise en charge', t:'datetime' }} val={m.arrivee_pec} set={v => set('arrivee_pec', v)} lecture={lecture} />
-        <Champ f={{ k:'arrivee_destination', l:'Sur place', t:'datetime' }} val={m.arrivee_destination} set={v => set('arrivee_destination', v)} lecture={lecture} />
-        <Champ f={{ k:'retour_heure', l:'Retour', t:'datetime' }} val={m.retour_heure} set={v => set('retour_heure', v)} lecture={lecture} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: '0 16px' }}>
+        <JourHeure label="Rendez-vous base" value={m.rdv_base} set={v => set('rdv_base', v)} lecture={lecture} jourDefaut={jour} />
+        <JourHeure label="Départ base" value={m.depart_base} set={v => set('depart_base', v)} lecture={lecture} jourDefaut={jour} />
+        <JourHeure label="Prise en charge" value={m.arrivee_pec} set={v => set('arrivee_pec', v)} lecture={lecture} jourDefaut={jour} />
+        <JourHeure label="Sur place" value={m.arrivee_destination} set={v => set('arrivee_destination', v)} lecture={lecture} jourDefaut={jour} />
+        <JourHeure label="Retour" value={m.retour_heure} set={v => set('retour_heure', v)} lecture={lecture} jourDefaut={jour} />
       </div>
+    </Card>
+  )
+}
+
+function BlocRetour({ m, set, lecture, souhait }) {
+  const jourDefaut = jourSouhaitDefaut(souhait, m)
+  return (
+    <Card>
+      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Retour</div>
+      <Champ f={grp('retour').fields.find(f => f.k === 'retour_type')} val={m.retour_type} set={v => set('retour_type', v)} lecture={lecture} />
+      <JourHeure label="Heure attendue" value={m.retour_heure} set={v => set('retour_heure', v)} lecture={lecture} jourDefaut={jourDefaut} />
+      <Champ f={grp('retour').fields.find(f => f.k === 'retour_precisions')} val={m.retour_precisions} set={v => set('retour_precisions', v)} lecture={lecture} />
     </Card>
   )
 }
@@ -419,9 +495,10 @@ function docsDepuisLieu(src) {
   return []
 }
 
-function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
+function BlocDestinations({ m, set, setM, lecture, souhaitId, souhait }) {
   const activites = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
   const [connues, setConnues] = useState([])
+  const jourDefaut = jourSouhaitDefaut(souhait, m)
   const destMode = m.dest_privee === false || m.dest_annuaire_id || m.dest_frequente_id ? 'connue' : 'privee'
   useEffect(() => {
     supabase.from('destinations_frequentes').select('*').eq('actif', true).order('nom').then(({ data }) => setConnues(data || []))
@@ -559,7 +636,7 @@ function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
         lecture={lecture}
       />
       <TA label="Précisions" value={m.dest_precisions || ''} set={v => set('dest_precisions', v)} rows={2} />
-      <F label="Heure souhaitée sur place" type="datetime-local" value={m.arrivee_destination || ''} set={v => set('arrivee_destination', v)} readOnly={lecture} />
+      <JourHeure label="Sur place" value={m.arrivee_destination} set={v => set('arrivee_destination', v)} lecture={lecture} jourDefaut={jourDefaut} />
       {!lecture && destMode === 'connue' && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           <Btn kind="soft" onClick={() => memoriser({ nom: m.dest_nom, adresse: m.dest_adresse, documents: m.dest_docs, annuaire_id: m.dest_annuaire_id })}>
@@ -628,7 +705,7 @@ function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
   )
 }
 
-function PriseEnCharge({ m, set, setM, lecture, instDemandeuse, souhaitId }) {
+function PriseEnCharge({ m, set, setM, lecture, instDemandeuse, souhaitId, souhait }) {
   const dom = m.pec_type === 'Domicile du patient'
   const inst = m.pec_type === 'Institution'
   const champ = k => grp('prise_en_charge').fields.find(f => f.k === k)
@@ -758,17 +835,10 @@ function PriseEnCharge({ m, set, setM, lecture, instDemandeuse, souhaitId }) {
         </div>
       )}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        <Champ f={champ('arrivee_pec')} val={m.arrivee_pec} set={v=>set('arrivee_pec', v)} lecture={lecture} />
-        <Champ f={champ('depart_pec')} val={m.depart_pec} set={v=>set('depart_pec', v)} lecture={lecture} />
+        <JourHeure label="Prise en charge souhaitée" value={m.arrivee_pec} set={v => set('arrivee_pec', v)} lecture={lecture} jourDefaut={jourSouhaitDefaut(souhait, m)} />
+        <JourHeure label="Départ souhaité" value={m.depart_pec} set={v => set('depart_pec', v)} lecture={lecture} jourDefaut={jourSouhaitDefaut(souhait, m)} />
       </div>
       <Champ f={champ('pec_precisions')} val={m.pec_precisions} set={v=>set('pec_precisions', v)} lecture={lecture} />
-      <LiensTrajet
-        etapes={[
-          { label: 'Base', adresse: m.base_adresse },
-          { label: 'Prise en charge', adresse: adressePec(m) },
-        ]}
-        wazeMode="planifier"
-      />
     </Card>
   )
 }
@@ -961,7 +1031,7 @@ async function chercherPhoton(q) {
   }).filter(x => fmtAdresse(x.adresse) || x.nom)
 }
 
-function Champ({ f, val, set, lecture, souhaitId, slotId, docs, onDocs }) {
+function Champ({ f, val, set, lecture, souhaitId, slotId, docs, onDocs, jourDefaut = '' }) {
   if (!f) return null
   const lock = !!lecture
   if (f.t === 'address') {
@@ -1018,6 +1088,16 @@ function Champ({ f, val, set, lecture, souhaitId, slotId, docs, onDocs }) {
   const wrap = c => <div style={{ margin:'8px 0' }}><label style={lbl}>{f.l}</label>{c}</div>
   if (f.t === 'textarea') return <div style={{ gridColumn:'1 / -1' }}>{wrap(<textarea value={val||''} onChange={e=>{ if (!lock) set(e.target.value) }} readOnly={lock} rows={f.rows||2} style={{ ...inp, resize:'vertical' }} />)}</div>
   if (f.t === 'select') return wrap(<select value={val||''} onChange={e=>{ if (!lock) set(e.target.value) }} disabled={lock} style={inp}>{f.options.map(o=><option key={o} value={o}>{o||'—'}</option>)}</select>)
-  const type = f.t === 'datetime' ? 'datetime-local' : f.t
-  return wrap(<input type={type} value={val||''} onChange={e=>{ if (!lock) set(e.target.value) }} readOnly={lock} style={inp} />)
+  if (f.t === 'datetime') {
+    return (
+      <JourHeure
+        label={f.l}
+        value={val}
+        set={v => { if (!lock) set(v) }}
+        lecture={lock}
+        jourDefaut={jourDefaut}
+      />
+    )
+  }
+  return wrap(<input type={f.t || 'text'} value={val||''} onChange={e=>{ if (!lock) set(e.target.value) }} readOnly={lock} style={inp} />)
 }
