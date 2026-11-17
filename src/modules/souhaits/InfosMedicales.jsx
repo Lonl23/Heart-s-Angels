@@ -182,7 +182,7 @@ export default function InfosMedicales({ m, set, lecture, souhait, onNotesMedica
 
       <div style={{ margin: '10px 0 14px' }}>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 6 }}>
-          Importer une fiche / courrier médical (analyse automatique)
+          Importer une fiche / courrier médical (analyse locale du PDF texte)
         </div>
         <input
           type="file"

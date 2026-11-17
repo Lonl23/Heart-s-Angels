@@ -68,7 +68,7 @@ export function ProtocoleDetresseForm({ souhaitId, m, setM }) {
         Protocole de détresse
       </div>
       <div style={{ marginBottom: 12 }}>
-        <label style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Document (analyse automatique à l’envoi)</label>
+        <label style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Document (analyse locale gratuite du PDF texte)</label>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             type="file"
