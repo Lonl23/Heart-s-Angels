@@ -1070,6 +1070,13 @@ function Itineraire({ d, compact, only }) {
         <Ligne k="Type" v={d.retour?.type} />
         {d.retour?.heure && <Ligne k="Heure attendue" v={fmtDt(d.retour.heure)} />}
         {d.retour?.precisions && <Ligne k="Précisions" v={d.retour.precisions} />}
+        <LiensTrajet etapes={[
+          (d.activites || []).length
+            ? { label: d.activites[d.activites.length - 1].nom || 'Dernière activité', adresse: d.activites[d.activites.length - 1].adresse }
+            : { label: 'Destination', adresse: d.destination?.adresse },
+          { label: 'Prise en charge', adresse: d.pec?.adresse },
+          { label: 'Base', adresse: d.base?.adresse },
+        ]} />
       </Bloc>}
     </div>
   )

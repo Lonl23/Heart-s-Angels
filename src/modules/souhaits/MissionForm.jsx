@@ -454,14 +454,31 @@ function OngletTiming({ m, set, lecture, souhait }) {
   )
 }
 
+function derniereEtapeAller(m) {
+  const acts = Array.isArray(m.activites_sur_place) ? m.activites_sur_place : []
+  if (acts.length) {
+    const a = acts[acts.length - 1]
+    return { label: a.nom || 'Dernière activité', adresse: a.adresse }
+  }
+  if (fmtAdresse(m.dest_adresse)) return { label: m.dest_nom || 'Destination', adresse: m.dest_adresse }
+  return { label: 'Prise en charge', adresse: adressePec(m) }
+}
+
 function BlocRetour({ m, set, lecture, souhait }) {
   const jourDefaut = jourSouhaitDefaut(souhait, m)
+  const derniere = derniereEtapeAller(m)
+  const pec = { label: 'Prise en charge', adresse: adressePec(m) }
+  const base = { label: 'Base', adresse: m.base_adresse }
   return (
     <Card>
       <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Retour</div>
       <Champ f={grp('retour').fields.find(f => f.k === 'retour_type')} val={m.retour_type} set={v => set('retour_type', v)} lecture={lecture} />
       <JourHeure label="Heure attendue" value={m.retour_heure} set={v => set('retour_heure', v)} lecture={lecture} jourDefaut={jourDefaut} />
       <Champ f={grp('retour').fields.find(f => f.k === 'retour_precisions')} val={m.retour_precisions} set={v => set('retour_precisions', v)} lecture={lecture} />
+      <LiensTrajet
+        etapes={[derniere, pec, base]}
+        wazeMode="planifier"
+      />
     </Card>
   )
 }
@@ -840,6 +857,13 @@ function PriseEnCharge({ m, set, setM, lecture, instDemandeuse, souhaitId, souha
         <JourHeure label="Départ souhaité" value={m.depart_pec} set={v => set('depart_pec', v)} lecture={lecture} jourDefaut={jourSouhaitDefaut(souhait, m)} />
       </div>
       <Champ f={champ('pec_precisions')} val={m.pec_precisions} set={v=>set('pec_precisions', v)} lecture={lecture} />
+      <LiensTrajet
+        etapes={[
+          { label: 'Prise en charge', adresse: adressePec(m) },
+          { label: m.dest_nom || 'Destination', adresse: m.dest_adresse },
+        ]}
+        wazeMode="planifier"
+      />
     </Card>
   )
 }

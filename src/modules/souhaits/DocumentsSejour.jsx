@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, Btn, F, Sel, TA, AddressFields, Flash, fmtAdresse, Modal } from '@/components/ui'
+import { Card, Btn, F, Sel, TA, AddressFields, Flash, fmtAdresse, Modal, LiensTrajet } from '@/components/ui'
 import { TYPES_LIEU_ANNEXE, lblTypeLieu, lieuxAnnexes } from './missionSchema'
 import { uploadDocSejour, signedDocSejour, supprimerFichierSejour, TAILLE_MAX_DOC_SEJOUR } from './sejour'
 
@@ -154,7 +154,14 @@ export default function DocumentsSejour({ souhaitId, m, setM, lecture = false })
         </Card>
       )}
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        {lieux.map(l => (
+        {lieux.map((l, i) => {
+          const prev = i === 0
+            ? (fmtAdresse(m.dest_adresse)
+              ? { label: m.dest_nom || 'Destination', adresse: m.dest_adresse }
+              : (fmtAdresse(m.base_adresse) ? { label: 'Base', adresse: m.base_adresse } : null))
+            : { label: lieux[i - 1].nom || lblTypeLieu(lieux[i - 1].type), adresse: lieux[i - 1].adresse }
+          const ici = { label: l.nom || lblTypeLieu(l.type), adresse: l.adresse }
+          return (
           <Card key={l.id}>
             <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'flex-start', marginBottom:8 }}>
               <div style={{ fontWeight:700, color:'var(--heading)' }}>{lblTypeLieu(l.type)}</div>
@@ -211,8 +218,12 @@ export default function DocumentsSejour({ souhaitId, m, setM, lecture = false })
               ))}
             </div>
             {!lecture && <AjoutFichier busy={busy === l.id} onFile={f => ajouterFichier(l, f)} />}
+            {prev && fmtAdresse(prev.adresse) && fmtAdresse(ici.adresse) && (
+              <LiensTrajet etapes={[prev, ici]} wazeMode="planifier" />
+            )}
           </Card>
-        ))}
+          )
+        })}
       </div>
       {picker && (
         <PickerLieuConnu
