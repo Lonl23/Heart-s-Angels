@@ -16,7 +16,7 @@ import {
   LIENS_FAMILLE, LIENS_FAMILLE_GROUPES, libelleLienFamille, genreDepuisLien, lienDepuisGroupeGenre,
 } from './liensFamille'
 import { ChoixMultiple } from './ChoixPopup'
-import { PATHOLOGIES, ACTIVITES_SOUHAIT, commeListe } from './listesCliniques'
+import { PATHOLOGIES, ACTIVITES_SOUHAIT, PRIORITES_SOUHAIT, commeListe, normaliserPrioriteSouhait } from './listesCliniques'
 
 const sliceDate = v => (v ? String(v).slice(0, 10) : '')
 
@@ -64,6 +64,7 @@ function depuisSouhait(s) {
     dates_possibles: periodesDepuisSouhait(s),
     categories_pathologies: commeListe(cats.pathologies),
     activites,
+    priorite: normaliserPrioriteSouhait(s.priorite),
   }
 }
 
@@ -417,7 +418,7 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       courte_duree: !!f.courte_duree,
       heure_depart: f.courte_duree && f.heure_depart ? f.heure_depart : null,
       heure_retour: f.courte_duree && f.heure_retour ? f.heure_retour : null,
-      priorite: 2,
+      priorite: normaliserPrioriteSouhait(f.priorite),
     }
     if (statut !== undefined) payload.statut = statut
     async function mergerMission(sid) {
@@ -607,6 +608,12 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10 }}>
           {!inline && !f.id && <Sel label="Statut" value={f.statut} set={v => set('statut', v)} options={PIPELINE_ENCODE.map(k => ({ v: k, l: STATUTS[k].l }))} />}
           {!inline && f.id && <Sel label="Statut" value={f.statut} set={v => set('statut', v)} options={statutsDisponibles(initial?.statut || f.statut, initial || f).map(k => ({ v: k, l: STATUTS[k].l }))} />}
+          <Sel
+            label="Priorité"
+            value={String(normaliserPrioriteSouhait(f.priorite))}
+            set={v => set('priorite', normaliserPrioriteSouhait(v))}
+            options={PRIORITES_SOUHAIT.map(p => ({ v: String(p.v), l: p.l }))}
+          />
         </div>
       </Card>
 

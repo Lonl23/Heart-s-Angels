@@ -26,9 +26,8 @@ const grp = id => GROUPES.find(g => g.id === id)
 const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'date_demande', 'date_rencontre', 'consignes_equipage']
 
 const TABS = [
-  { id:'administratif', label:'Administratif', groupes:['administratif'], zone:'patient' },
   { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'], zone:'programme' },
-  { id:'sejour',        label:'Séjour & documents', zone:'programme' },
+  { id:'sejour',        label:'Séjour & documents', zone:'commun' },
   { id:'vecteurs',      label:'Vecteurs & équipages', zone:'programme' },
   { id:'materiel',      label:'Matériel & checklists', zone:'programme' },
   { id:'medical',       label:'Médical', groupes:['medical'], zone:'patient' },
@@ -45,7 +44,11 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
   const [m, setM] = useState(null)
   const [souhait, setSouhait] = useState(souhaitProp || null)
   const [instDemandeuse, setInstDemandeuse] = useState(null)
-  const [tab, setTab] = useState(() => sessionStorage.getItem(`encodage-tab-${souhaitId}`) || 'administratif')
+  const [tab, setTab] = useState(() => {
+    const saved = sessionStorage.getItem(`encodage-tab-${souhaitId}`)
+    if (saved === 'administratif') return 'sejour'
+    return saved || 'trajet'
+  })
   const [status, setStatus] = useState('')
   const chargee = useRef(false)
   const timer = useRef()
@@ -141,7 +144,22 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
         extra={<span style={{ fontSize:12, color: status==='saved'?'#3B6D11':'var(--text-faint)' }}>{lectureOnglet ? 'Lecture seule' : status==='saving' ? 'Enregistrement…' : status==='saved' ? 'Enregistré' : 'Enregistrement automatique'}</span>}
       />
 
-      {cur.id === 'sejour' && <DocumentsSejour souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} />}
+      {cur.id === 'sejour' && (
+        <>
+          <DocumentsSejour souhaitId={souhaitId} m={m} setM={programme ? setM : (() => {})} lecture={!programme} />
+          <BlocAdministratif
+            m={m}
+            set={(k, v) => { if (!patient && !programme) return; setM(o => ({ ...o, [k]: v })) }}
+            setM={(fn) => {
+              if (!patient && !programme) return
+              setM(fn)
+            }}
+            lectureProgramme={!programme}
+            lecturePatient={!patient}
+            souhait={souhait}
+          />
+        </>
+      )}
       {cur.id === 'vecteurs' && (
         <Vecteurs souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} onJourRetenu={(periode, mission) => {
           const patch = { date_souhaitee: periode.debut, date_fin: periode.fin, dates_possibles: [periode], mission }
@@ -160,7 +178,6 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
             if (gid === 'prise_en_charge') return <PriseEnCharge key={gid} m={m} set={set} lecture={lectureOnglet} instDemandeuse={instDemandeuse} souhaitId={souhaitId} />
             if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} souhaitId={souhaitId} />
             if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhaitId={souhaitId} />
-            if (gid === 'administratif') return <BlocAdministratif key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhait={souhait} />
             if (gid === 'medical') {
               return (
                 <InfosMedicales
@@ -266,7 +283,7 @@ async function chargerInstitutionDemandeuse(s) {
   return null
 }
 
-function BlocAdministratif({ m, set, setM, lecture, souhait }) {
+function BlocAdministratif({ m, set, setM, lectureProgramme, lecturePatient, souhait }) {
   const g = grp('administratif')
   const [fiche, setFiche] = useState(null)
   useEffect(() => {
@@ -289,11 +306,13 @@ function BlocAdministratif({ m, set, setM, lecture, souhait }) {
   const tels = fmtTelephones({ tel_gsm: gsm, tel_fixe: fixe })
   const manqueAdresse = adresseVide(adresse)
   const originLib = souhait?.origine === 'institution' ? 'Institution' : (souhait?.origine ? 'Demande privée' : (m.origine || ''))
+  const lectureFiche = lecturePatient
+  const lectureDates = lectureProgramme
 
   return (
     <Card>
-      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
-      {lecture ? (
+      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Rencontre & documents</div>
+      {lectureDates ? (
         <div style={{ margin: '8px 0 12px' }}>
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Récolteurs de souhait</div>
           <div style={{ fontSize: 14, color: 'var(--text)' }}>{nomsRecolteurs(m) || '—'}</div>
@@ -322,15 +341,17 @@ function BlocAdministratif({ m, set, setM, lecture, souhait }) {
       {manqueAdresse && (
         <div style={{ marginBottom: 8 }}>
           <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse du domicile du patient</div>
-          <AddressFields value={m.patient_adresse} set={v => { if (!lecture) set('patient_adresse', v) }} wazeMode="planifier" />
+          <AddressFields value={m.patient_adresse} set={v => { if (!lectureFiche) set('patient_adresse', v) }} wazeMode="planifier" />
         </div>
       )}
       {!niss && (
-        <Champ f={grp('administratif').fields.find(f => f.k === 'registre_national')} val={m.registre_national} set={v => set('registre_national', v)} lecture={lecture} />
+        <Champ f={grp('administratif').fields.find(f => f.k === 'registre_national')} val={m.registre_national} set={v => set('registre_national', v)} lecture={lectureFiche} />
       )}
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        {g.fields.filter(f => ADMIN_MISSION.includes(f.k) && f.k !== 'consentement' && f.k !== 'autorisation_photos' && f.k !== 'priorite_elevee').map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lecture} />)}
+        {g.fields.filter(f => ADMIN_MISSION.includes(f.k) && f.k !== 'consentement' && f.k !== 'autorisation_photos').map(f => (
+          <Champ key={f.k} f={f} val={m[f.k]} set={v => set(f.k, v)} lecture={lectureDates} />
+        ))}
       </div>
       {(commeListe(m.categories?.pathologies).length > 0 || commeListe(m.categories?.activites).length > 0) && (
         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
@@ -342,7 +363,7 @@ function BlocAdministratif({ m, set, setM, lecture, souhait }) {
           )}
         </div>
       )}
-      <DocumentsRencontre m={m} setM={setM} lecture={lecture} souhait={souhait} />
+      <DocumentsRencontre m={m} setM={setM} lecture={lectureFiche} souhait={souhait} />
     </Card>
   )
 }

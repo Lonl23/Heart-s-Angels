@@ -6,6 +6,7 @@ import { personneEstMedicale } from '@/modules/fiche/ficheSchema'
 import { debitLabel } from './medCalc'
 import { libelleRequis } from '@/modules/stock/materielRequis'
 import { fmtDatesSouhait } from './datesSouhait'
+import { lblPrioriteSouhait } from './listesCliniques'
 import { htmlDocumentA4, imprimerHtml, telechargerHtml, imprimerApercuIframe } from './documentA4'
 
 const dt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }).replace(' ', ' · ') : ''
@@ -120,6 +121,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
             <Fld l="Dates" v={fmtDatesSouhait(s) !== 'Date à définir' ? fmtDatesSouhait(s) : ''} wide />
             {med && <Fld l="Registre national" v={m.registre_national} />}
             <Fld l="Récolteur de souhait" v={nomsRecolteurs(m)} />
+            <Fld l="Priorité" v={lblPrioriteSouhait(s.priorite)} />
             <Fld l="Date de rencontre" v={dt(m.date_rencontre)} />
             {med && <Fld l="Consentement" v={m.consentement ? 'Oui' : ''} />}
             <Fld l="Autorisation photos" v={lblAutorisationPhotos(m.autorisation_photos)} />

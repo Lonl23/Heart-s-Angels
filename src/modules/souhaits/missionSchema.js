@@ -8,7 +8,6 @@ export const GROUPES = [
     { k:'patient_adresse', l:'Adresse du domicile du patient', t:'address' },
     { k:'consentement', l:'Consentement', t:'toggle' },
     { k:'autorisation_photos', l:'Autorisation photos', t:'photos' },
-    { k:'priorite_elevee', l:'Priorité élevée', t:'toggle' },
     { k:'date_demande', l:'Date demande', t:'date' },
     { k:'origine', l:'Origine', t:'text' },
     { k:'date_rencontre', l:'Date rencontre', t:'datetime' },

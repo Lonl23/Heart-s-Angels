@@ -7,6 +7,26 @@ export const MOBILISATIONS = ['Autonome', 'Aide', 'Tient debout', 'Fauteuil', 'L
 export const COMMUNICATION = ['Normale', 'Faible', 'Confuse', 'Écrite', 'Occulaire', 'Autre']
 export const INTERFACES_O2_DEFAUT = ['Lunettes', 'Masque 60%', 'Masque 100%']
 
+/** Stades de priorité du souhait (préparation). Ancien 5 → ramené à 4. */
+export const PRIORITES_SOUHAIT = [
+  { v: 1, l: '1 · Basse' },
+  { v: 2, l: '2 · Normale' },
+  { v: 3, l: '3 · Haute' },
+  { v: 4, l: '4 · Urgente' },
+]
+
+export function normaliserPrioriteSouhait(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n) || n < 1) return 2
+  if (n >= 5) return 4 // ancien « Critique »
+  return Math.min(4, Math.round(n))
+}
+
+export function lblPrioriteSouhait(v) {
+  const n = normaliserPrioriteSouhait(v)
+  return PRIORITES_SOUHAIT.find(p => p.v === n)?.l || String(n)
+}
+
 export const PATHOLOGIES = [
   'Cancérologie', 'Neurologie', 'Cardiologie', 'Pneumologie',
   'Soins palliatifs', 'Pédiatrie', 'Handicap', 'Gériatrie', 'Psychiatrie',
