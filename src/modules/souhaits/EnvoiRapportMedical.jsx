@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, Loading, Flash, inp, F } from '@/components/ui'
-import { htmlDocumentA4 } from './documentA4'
-import { htmlRapportMedical, texteRapportMedical, SUJET_RAPPORT_MEDICAL } from './rapportMedicalExport.js'
+import {
+  htmlEmailRapportMedical, texteEmailRapportMedical,
+  SUJET_RAPPORT_MEDICAL, ALERTE_CONFIDENTIALITE_MAIL,
+} from './rapportMedicalExport.js'
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
 import { injectionsDetresse } from './missionSchema'
 
-const ALERTE_CONFIDENTIALITE = `DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL.
-Ce message est destiné uniquement au destinataire indiqué. S’il vous a été adressé par erreur, vous devez immédiatement le supprimer (y compris toute copie ou pièce jointe), n’en conserver aucune trace, et reprendre contact sans délai avec Heart’s Angels en répondant à cet e-mail (app@heartsangels.be).`
+const ALERTE_CONFIDENTIALITE = ALERTE_CONFIDENTIALITE_MAIL
 
 function heure(v) {
   return v ? new Date(v).toLocaleString('fr-BE', { dateStyle: 'short', timeStyle: 'short' }) : ''
@@ -58,24 +59,25 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
 
   useEffect(() => { charger() }, [souhaitId, peutExporter])
 
-  async function htmlComplet() {
+  function payloadMail() {
     const dar = (notes || []).map(r => ({
       ...r,
       auteur_prenom: r.profiles?.prenom,
       auteur_nom: r.profiles?.nom,
     }))
-    const inner = htmlRapportMedical({
+    const opts = {
       souhait,
       dar,
       cibles: cibles || [],
       meds,
       injections: injectionsDetresse(souhait?.mission),
-    })
-    return htmlDocumentA4(
-      'Rapport médical',
-      inner,
-      'h1{font-size:18px;color:#0E4A5A} h2,h3{font-size:13px;color:#0E4A5A} .secret{color:#A32D2D;font-weight:800} table{width:100%;border-collapse:collapse} td,th{border:1px solid #e5e5e5;text-align:left;padding:4px;font-size:12px;vertical-align:top} th{width:2rem;text-align:center}',
-    )
+      destinatairePrenom: form.prenom,
+      destinataireNom: form.nom,
+    }
+    return {
+      html: htmlEmailRapportMedical(opts),
+      texte: texteEmailRapportMedical(opts),
+    }
   }
 
   async function envoyer(e) {
@@ -84,14 +86,14 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
     setBusy(true)
     setErr(null)
     setInfo(null)
-    const html = await htmlComplet()
+    const { html, texte } = payloadMail()
     const res = await envoyerRapportMedical({
       souhaitId,
       email: form.email,
       destinatairePrenom: form.prenom,
       destinataireNom: form.nom,
       html,
-      texte: `${ALERTE_CONFIDENTIALITE}\n\n${texteRapportMedical(html)}`,
+      texte,
     })
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }

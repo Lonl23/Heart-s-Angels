@@ -24,7 +24,7 @@ const ONGLETS = [
 ]
 
 export default function MenuMission({ souhaitId, onBack }) {
-  const { user, profile } = useAuth()
+  const { user, profile, accesTotal, estMedical, role } = useAuth()
   const [params] = useSearchParams()
   const [meta, setMeta] = useState(null)
   const [meds, setMeds] = useState([])
@@ -78,11 +78,12 @@ export default function MenuMission({ souhaitId, onBack }) {
     role_mission: meta.role_mission,
     role: profile?.role,
     fiche: profile?.fiche,
-  })
+  }) || estMedical?.()
+  const staffTest = jouette && (accesTotal?.() || role === 'coordinateur' || role === 'admin' || role === 'president')
   const fenetre = fenetreStatuts(meta)
-  const peutEcrire = medical || coordination
-  // Vrais souhaits : médicaux de l’équipage. Souhaits de test/formation : tout médical (pas d’équipage à poser).
-  const peutExporter = coordination || (medical && (!!meta.sur_equipage || jouette))
+  const peutEcrire = medical || coordination || staffTest
+  // Vrais souhaits : médicaux de l’équipage. Test/formation : médical, coordination, ou staff (pas d’équipage à poser).
+  const peutExporter = coordination || staffTest || (medical && (!!meta.sur_equipage || jouette))
 
   return (
     <div>

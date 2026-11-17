@@ -503,16 +503,23 @@ Deno.serve(async (req) => {
         'vous devez immédiatement le supprimer (y compris toute copie ou pièce jointe), n’en conserver aucune trace, ' +
         'et reprendre contact sans délai avec Heart’s Angels en répondant à cet e-mail (app@heartsangels.be).'
       const alerteHtml =
-        '<div style="background:#FCEBEB;border:2px solid #A32D2D;padding:14px 16px;margin:0 0 18px;color:#7A1F1F;font-family:system-ui,sans-serif;font-size:14px;line-height:1.45">' +
+        '<div style="background:#FCEBEB;border:2px solid #A32D2D;padding:14px 16px;margin:0 0 18px;color:#7A1F1F;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.45">' +
         '<strong>DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL</strong><br/>' +
         'Ce message est destiné uniquement au destinataire indiqué. S’il vous a été adressé par erreur, ' +
         'vous devez <strong>immédiatement le supprimer</strong> (y compris toute copie ou pièce jointe), ' +
         'n’en conserver aucune trace, et <strong>reprendre contact sans délai</strong> avec Heart’s Angels ' +
         'en répondant à cet e-mail (<a href="mailto:app@heartsangels.be">app@heartsangels.be</a>).' +
         '</div>'
-      const html = htmlBrut.includes('DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL')
-        ? htmlBrut
-        : alerteHtml + htmlBrut
+      // Toujours injecter dans <body> — jamais avant <!doctype>, sinon Gmail casse le HTML.
+      const html = (() => {
+        if (htmlBrut.includes('DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL')) return htmlBrut
+        const bodyOpen = htmlBrut.match(/<body[^>]*>/i)
+        if (bodyOpen && bodyOpen.index != null) {
+          const i = bodyOpen.index + bodyOpen[0].length
+          return htmlBrut.slice(0, i) + alerteHtml + htmlBrut.slice(i)
+        }
+        return `<!doctype html><html lang="fr"><head><meta charset="utf-8"></head><body>${alerteHtml}${htmlBrut}</body></html>`
+      })()
       const texte = texteBrut.includes('DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL')
         ? texteBrut
         : `${alerteTxt}\n\n${texteBrut}`

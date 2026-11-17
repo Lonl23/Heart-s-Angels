@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Btn, Loading, Flash, inp, F } from '@/components/ui'
 import { htmlDocumentA4, telechargerHtml } from './documentA4'
-import { htmlRapportMedical, texteRapportMedical, SUJET_RAPPORT_MEDICAL } from './rapportMedicalExport.js'
+import {
+  htmlRapportMedical, htmlEmailRapportMedical, texteEmailRapportMedical,
+  SUJET_RAPPORT_MEDICAL, ALERTE_CONFIDENTIALITE_MAIL,
+} from './rapportMedicalExport.js'
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
 import { injectionsDetresse } from './missionSchema'
-import { ALERTE_CONFIDENTIALITE } from './EnvoiRapportMedical'
 
 const LETTRES = [
   { k: 'donnee', l: 'D', mot: 'Données' },
@@ -213,25 +215,35 @@ export default function DossierDar({
     charger()
   }
 
-  async function htmlComplet() {
-    const dar = (notes || []).map(r => ({
+  function darRows() {
+    return (notes || []).map(r => ({
       ...r,
       auteur_prenom: r.profiles?.prenom,
       auteur_nom: r.profiles?.nom,
     }))
-    const inner = htmlRapportMedical({
+  }
+
+  function payloadRapport(destinataire = {}) {
+    return {
       souhait,
-      dar,
+      dar: darRows(),
       cibles: cibles || [],
       meds,
       injections: injectionsDetresse(souhait?.mission),
-    })
-    return htmlDocumentA4('Rapport médical', inner, 'h1{font-size:18px;color:#0E4A5A} h2,h3{font-size:13px;color:#0E4A5A} .secret{color:#A32D2D;font-weight:800} table{width:100%;border-collapse:collapse} td,th{border:1px solid #e5e5e5;text-align:left;padding:4px;font-size:12px;vertical-align:top} th{width:2rem;text-align:center}')
+      destinatairePrenom: destinataire.prenom,
+      destinataireNom: destinataire.nom,
+    }
   }
 
   async function telecharger() {
+    const inner = htmlRapportMedical(payloadRapport())
+    const html = htmlDocumentA4(
+      'Rapport médical',
+      inner,
+      'h1{font-size:18px;color:#0E4A5A} h2,h3{font-size:13px;color:#0E4A5A} .secret{color:#A32D2D;font-weight:800} table{width:100%;border-collapse:collapse} td,th{border:1px solid #e5e5e5;text-align:left;padding:4px;font-size:12px;vertical-align:top} th{width:2rem;text-align:center}',
+    )
     const nom = 'Rapport-medical-' + (souhait?.beneficiaire_prenom || 'mission') + '.html'
-    telechargerHtml(nom.replace(/[^\p{L}\p{N}.-]+/gu, '-'), await htmlComplet())
+    telechargerHtml(nom.replace(/[^\p{L}\p{N}.-]+/gu, '-'), html)
   }
 
   async function envoyer(e) {
@@ -239,14 +251,14 @@ export default function DossierDar({
     setBusy(true)
     setErr(null)
     setInfo(null)
-    const html = await htmlComplet()
+    const opts = payloadRapport(envoi)
     const res = await envoyerRapportMedical({
       souhaitId,
       email: envoi.email,
       destinatairePrenom: envoi.prenom,
       destinataireNom: envoi.nom,
-      html,
-      texte: `${ALERTE_CONFIDENTIALITE}\n\n${texteRapportMedical(html)}`,
+      html: htmlEmailRapportMedical(opts),
+      texte: texteEmailRapportMedical(opts),
     })
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }
@@ -308,7 +320,7 @@ export default function DossierDar({
             background: '#FCEBEB', border: '1px solid #A32D2D', borderRadius: 12,
             padding: '10px 12px', color: '#7A1F1F', fontSize: 12.5, marginBottom: 12, whiteSpace: 'pre-wrap',
           }}>
-            {ALERTE_CONFIDENTIALITE}
+            {ALERTE_CONFIDENTIALITE_MAIL}
           </div>
           <Btn kind="soft" onClick={telecharger}>Télécharger</Btn>
           <form onSubmit={envoyer} style={{ marginTop: 12 }}>
