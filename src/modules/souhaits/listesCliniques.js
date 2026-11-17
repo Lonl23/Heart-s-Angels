@@ -7,18 +7,21 @@ export const MOBILISATIONS = ['Autonome', 'Aide', 'Tient debout', 'Fauteuil', 'L
 export const COMMUNICATION = ['Normale', 'Faible', 'Confuse', 'Écrite', 'Occulaire', 'Autre']
 export const INTERFACES_O2_DEFAUT = ['Lunettes', 'Masque 60%', 'Masque 100%']
 
-/** Stades de priorité du souhait (préparation). Ancien 5 → ramené à 4. */
+/** Stades de priorité du souhait (préparation). */
 export const PRIORITES_SOUHAIT = [
   { v: 1, l: '1 · Basse' },
   { v: 2, l: '2 · Normale' },
-  { v: 3, l: '3 · Haute' },
-  { v: 4, l: '4 · Urgente' },
+  { v: 3, l: '3 · Urgente' },
+  { v: 4, l: '4 · Critique' },
 ]
 
 export function normaliserPrioriteSouhait(v) {
   const n = Number(v)
   if (!Number.isFinite(n) || n < 1) return 2
-  if (n >= 5) return 4 // ancien « Critique »
+  // Ancien barème (Basse/Normale/Haute/Urgente[/Critique]) → nouveau sans Haute
+  if (n >= 5) return 4 // ancien Critique (5)
+  if (n === 4) return 3 // ancienne Urgente (4) → 3
+  if (n === 3) return 2 // ancienne Haute retirée → Normale
   return Math.min(4, Math.round(n))
 }
 
