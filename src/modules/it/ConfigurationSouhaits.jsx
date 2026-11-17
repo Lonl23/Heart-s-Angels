@@ -11,6 +11,7 @@ const ONGLETS = [
   { v: 'allergies', l: 'Allergies' },
   { v: 'activites', l: 'Activités' },
   { v: 'pathologies', l: 'Pathologies' },
+  { v: 'interfaces_o2', l: 'Interfaces O₂' },
 ]
 
 function adr(row) {
@@ -36,6 +37,7 @@ export default function ConfigurationSouhaits() {
       {tab === 'allergies' && <Libelles table="allergies_referentiel" champ="libelle" />}
       {tab === 'activites' && <Libelles table="activites_souhait_referentiel" champ="libelle" />}
       {tab === 'pathologies' && <Libelles table="pathologies_referentiel" champ="libelle" />}
+      {tab === 'interfaces_o2' && <Libelles table="interfaces_o2_referentiel" champ="libelle" />}
     </Page>
   )
 }

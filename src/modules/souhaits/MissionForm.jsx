@@ -18,9 +18,9 @@ import { formaterNiss, fmtTelephones, libelleGenre } from '@/modules/annuaire/an
 import { ficheVersBeneficiaire } from '@/modules/annuaire/annuaireApi'
 import DocumentsRencontre from './DocumentsRencontre'
 import JournalDossier from './JournalDossier'
+import InfosMedicales from './InfosMedicales'
 import { journaliser, clesModifiees } from './journal'
-import { ChoixMultiple } from './ChoixPopup'
-import { CHAMPS_CLINIQUES, commeListe } from './listesCliniques'
+import { commeListe } from './listesCliniques'
 
 const grp = id => GROUPES.find(g => g.id === id)
 const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'date_demande', 'date_rencontre', 'consignes_equipage']
@@ -161,20 +161,28 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
             if (gid === 'base') return <BlocBase key={gid} m={m} set={set} lecture={lectureOnglet} souhaitId={souhaitId} />
             if (gid === 'destination') return <BlocDestinations key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhaitId={souhaitId} />
             if (gid === 'administratif') return <BlocAdministratif key={gid} m={m} set={set} setM={setMSi} lecture={lectureOnglet} souhait={souhait} />
+            if (gid === 'medical') {
+              return (
+                <InfosMedicales
+                  key={gid}
+                  m={m}
+                  set={set}
+                  lecture={lectureOnglet}
+                  souhait={souhait}
+                  onNotesMedicales={lectureOnglet ? null : (async (v) => {
+                    setSouhait(s => ({ ...(s || {}), notes_medicales: v }))
+                    onSouhait?.({ notes_medicales: v })
+                    await supabase.from('souhaits').update({ notes_medicales: v || null }).eq('id', souhaitId)
+                  })}
+                />
+              )
+            }
             const g = grp(gid); if (!g) return null
             return (
               <Card key={gid}>
                 <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>{g.label}</div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-                  {g.fields.filter(f => f.k !== 'allergies' && f.k !== 'pathologies' && !CHAMPS_CLINIQUES.some(c => c.k === f.k)).map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lectureOnglet} />)}
-                  {gid === 'medical' && (
-                    <>
-                      <AllergiesChamp val={m.allergies} set={v => set('allergies', v)} lecture={lectureOnglet} />
-                      {CHAMPS_CLINIQUES.map(c => (
-                        <ChoixMultiple key={c.k} label={c.l} options={c.options} value={m[c.k]} onChange={v => set(c.k, v)} lecture={lectureOnglet} />
-                      ))}
-                    </>
-                  )}
+                  {g.fields.map(f => <Champ key={f.k} f={f} val={m[f.k]} set={v=>set(f.k, v)} lecture={lectureOnglet} />)}
                 </div>
               </Card>
             )
@@ -334,30 +342,8 @@ function BlocAdministratif({ m, set, setM, lecture, souhait }) {
           )}
         </div>
       )}
-      <PathologiesNomsChamp
-        val={m.pathologies_noms}
-        set={v => set('pathologies_noms', v)}
-        lecture={lecture}
-      />
       <DocumentsRencontre m={m} setM={setM} lecture={lecture} souhait={souhait} />
     </Card>
-  )
-}
-
-function PathologiesNomsChamp({ val, set, lecture }) {
-  const [opts, setOpts] = useState([])
-  useEffect(() => {
-    supabase.from('pathologies_referentiel').select('libelle').eq('actif', true).order('ordre')
-      .then(({ data }) => setOpts((data || []).map(r => r.libelle)))
-  }, [])
-  return (
-    <ChoixMultiple
-      label="Pathologies (noms — ex. glioblastome, SLA…)"
-      options={opts}
-      value={val}
-      onChange={set}
-      lecture={lecture}
-    />
   )
 }
 
@@ -570,16 +556,6 @@ function BlocDestinations({ m, set, setM, lecture, souhaitId }) {
       )}
     </Card>
   )
-}
-
-function AllergiesChamp({ val, set, lecture }) {
-  const [opts, setOpts] = useState([])
-  useEffect(() => {
-    supabase.from('allergies_referentiel').select('libelle').eq('actif', true).order('ordre').then(({ data }) => {
-      setOpts((data || []).map(r => r.libelle))
-    })
-  }, [])
-  return <ChoixMultiple label="Allergies" options={opts} value={val} onChange={set} lecture={lecture} />
 }
 
 function PriseEnCharge({ m, set, lecture, instDemandeuse, souhaitId }) {

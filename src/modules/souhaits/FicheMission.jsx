@@ -201,7 +201,7 @@ function FicheVecteur({ s, m, f, med, meds, total, first, appel }) {
               <Sec t="📊 Paramètres">
                 <Fld l="Cible SpO₂" v={m.cible_saturation_o2} third />
                 <Fld l="Débit O₂" v={m.debit_o2} third />
-                <Fld l="Apport O₂" v={m.apport_o2} third />
+                <Fld l="Interface O₂" v={Array.isArray(m.interface_o2) ? m.interface_o2.join(' · ') : (m.interface_o2 || m.apport_o2)} third />
                 <Fld l="Cible TA" v={m.cible_ta} third />
                 <Fld l="Cible FC" v={m.cible_fc} third />
               </Sec>

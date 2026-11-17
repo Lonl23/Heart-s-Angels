@@ -5,6 +5,7 @@ export const CONTINENCE_FECALE = ['Autonome', 'Aide', 'Protection', 'Stomie']
 export const VOIES_ACCES = ['Périphérique', 'Voie centrale', 'Pic-line', 'Mid-line', 'Port-à-cath', 'S/C']
 export const MOBILISATIONS = ['Autonome', 'Aide', 'Tient debout', 'Fauteuil', 'Lit', 'Lit strict', 'Quelques pas']
 export const COMMUNICATION = ['Normale', 'Faible', 'Confuse', 'Écrite', 'Occulaire', 'Autre']
+export const INTERFACES_O2_DEFAUT = ['Lunettes', 'Masque 60%', 'Masque 100%']
 
 export const PATHOLOGIES = [
   'Cancérologie', 'Neurologie', 'Cardiologie', 'Pneumologie',

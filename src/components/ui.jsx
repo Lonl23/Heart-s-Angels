@@ -50,8 +50,22 @@ export function F({ label, value, set, type='text', placeholder, required, disab
   const lock = disabled || readOnly
   return <div style={{ marginBottom:10 }}><label style={lbl}>{label}{required&&' *'}</label><input type={type} value={value??''} onChange={e=>{ if (!lock && set) set(e.target.value) }} placeholder={placeholder} required={required} disabled={disabled} readOnly={!!readOnly} style={{ ...inp, opacity: disabled ? .65 : 1 }} /></div>
 }
-export function TA({ label, value, set, rows=3, placeholder }) {
-  return <div style={{ marginBottom:10 }}><label style={lbl}>{label}</label><textarea value={value??''} onChange={e=>set(e.target.value)} rows={rows} placeholder={placeholder} style={{ ...inp, resize:'vertical' }} /></div>
+export function TA({ label, value, set, rows=3, placeholder, readOnly, disabled }) {
+  const lock = !!(disabled || readOnly)
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <label style={lbl}>{label}</label>
+      <textarea
+        value={value ?? ''}
+        onChange={e => { if (!lock && set) set(e.target.value) }}
+        rows={rows}
+        placeholder={placeholder}
+        readOnly={lock}
+        disabled={!!disabled}
+        style={{ ...inp, resize: 'vertical', opacity: disabled ? 0.65 : 1 }}
+      />
+    </div>
+  )
 }
 export function Sel({ label, value, set, options, disabled }) {
   return <div style={{ marginBottom:10 }}><label style={lbl}>{label}</label><select value={value??''} onChange={e=>set(e.target.value)} disabled={disabled} style={{ ...inp, opacity: disabled ? .65 : 1 }}>{options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}</select></div>

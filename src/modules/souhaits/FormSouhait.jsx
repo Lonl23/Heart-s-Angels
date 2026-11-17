@@ -611,7 +611,7 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
       </Card>
 
       <Card style={{ marginBottom: 14 }}>
-        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>Médical & besoins</div>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>Catégorie médicale & besoins</div>
         <ChoixMultiple
           label="Catégories de pathologies"
           options={optsCatPatho}
@@ -619,7 +619,9 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
           onChange={v => set('categories_pathologies', v)}
           allowCustom={false}
         />
-        <TA label="Notes médicales (confidentiel)" value={f.notes_medicales} set={v => set('notes_medicales', v)} rows={2} />
+        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '4px 0 10px' }}>
+          Les pathologies précises, notes et paramètres cliniques se complètent dans Préparer le dossier → Médical.
+        </p>
         <TA label="Besoins spécifiques (matériel, logistique…)" value={f.besoins_specifiques} set={v => set('besoins_specifiques', v)} rows={2} />
       </Card>
 
