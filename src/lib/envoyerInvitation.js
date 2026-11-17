@@ -80,14 +80,19 @@ export async function envoyerMailBugHelpdesk(ticketId) {
 }
 
 /** Rapport médical uniquement. L’objet est imposé côté serveur, sans copie cachée. */
-export async function envoyerRapportMedical({ souhaitId, email, html, texte }) {
+export async function envoyerRapportMedical({ souhaitId, email, destinatairePrenom, destinataireNom, html, texte }) {
   const adresse = String(email || '').trim()
+  const prenom = String(destinatairePrenom || '').trim()
+  const nom = String(destinataireNom || '').trim()
   if (!souhaitId) return { ok: false, error: 'Souhait manquant.' }
   if (!adresse.includes('@')) return { ok: false, error: 'Adresse e-mail manquante.' }
+  if (!prenom || !nom) return { ok: false, error: 'Indiquez le prénom et le nom du destinataire.' }
   const { data, error } = await invokeEnvoyerInvitation({
     action: 'rapport_medical',
     souhait_id: souhaitId,
     email: adresse,
+    destinataire_prenom: prenom,
+    destinataire_nom: nom,
     html,
     texte,
   })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, Loading, Flash, inp } from '@/components/ui'
+import { Btn, Loading, Flash, inp, F } from '@/components/ui'
 import { htmlDocumentA4 } from './documentA4'
 import { htmlRapportMedical, texteRapportMedical, SUJET_RAPPORT_MEDICAL } from './rapportMedicalExport.js'
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
@@ -13,11 +13,20 @@ function heure(v) {
   return v ? new Date(v).toLocaleString('fr-BE', { dateStyle: 'short', timeStyle: 'short' }) : ''
 }
 
+function libelleDestinataire(t) {
+  const nom = [t?.destinataire_prenom, t?.destinataire_nom].filter(Boolean).join(' ')
+  return nom || 'Destinataire'
+}
+
+function libelleExpediteur(t) {
+  return [t?.profiles?.prenom, t?.profiles?.nom].filter(Boolean).join(' ') || 'Compte'
+}
+
 export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peutExporter, onBack }) {
   const [cibles, setCibles] = useState(null)
   const [notes, setNotes] = useState([])
   const [traces, setTraces] = useState([])
-  const [email, setEmail] = useState('')
+  const [form, setForm] = useState({ prenom: '', nom: '', email: '' })
   const [err, setErr] = useState(null)
   const [info, setInfo] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -40,7 +49,7 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
     if (peutExporter) {
       const { data: tr } = await supabase
         .from('envois_rapport_medical')
-        .select('id, email, envoye_le, profiles:expediteur_id(prenom, nom)')
+        .select('id, email, destinataire_prenom, destinataire_nom, envoye_le, profiles:expediteur_id(prenom, nom)')
         .eq('souhait_id', souhaitId)
         .order('envoye_le', { ascending: false })
       setTraces(tr || [])
@@ -78,14 +87,17 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
     const html = await htmlComplet()
     const res = await envoyerRapportMedical({
       souhaitId,
-      email,
+      email: form.email,
+      destinatairePrenom: form.prenom,
+      destinataireNom: form.nom,
       html,
       texte: `${ALERTE_CONFIDENTIALITE}\n\n${texteRapportMedical(html)}`,
     })
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }
-    setInfo(`Rapport envoyé à ${email.trim()} depuis app@heartsangels.be.`)
-    setEmail('')
+    const qui = [form.prenom, form.nom].filter(Boolean).join(' ')
+    setInfo(`Rapport envoyé à ${qui} <${form.email.trim()}> depuis app@heartsangels.be.`)
+    setForm({ prenom: '', nom: '', email: '' })
     charger()
   }
 
@@ -96,7 +108,7 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
       {onBack && <Btn kind="soft" onClick={onBack}>← Menu de la mission</Btn>}
       <h1 style={{ fontSize: '1.45rem', color: 'var(--heading)', margin: '12px 0 4px' }}>Envoyer le rapport médical</h1>
       <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-        L’e-mail part de <strong>app@heartsangels.be</strong> vers toute adresse (hôpital, famille, médecin…).
+        L’e-mail part de <strong>app@heartsangels.be</strong>. Chaque envoi est tracé (qui a envoyé, destinataire, adresse).
       </p>
       <div style={{
         background: '#FCEBEB', border: '1.5px solid #A32D2D', borderRadius: 14,
@@ -111,12 +123,16 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
         <Flash kind="warn">Seul le personnel médical autorisé ou la coordination médicale peut envoyer ce rapport.</Flash>
       ) : (
         <form onSubmit={envoyer} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
-          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>Adresse du destinataire</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
+            <F label="Prénom du destinataire" value={form.prenom} set={v => setForm(s => ({ ...s, prenom: v }))} required />
+            <F label="Nom du destinataire" value={form.nom} set={v => setForm(s => ({ ...s, nom: v }))} required />
+          </div>
+          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>Adresse e-mail</label>
           <input
             type="email"
             required
-            value={email}
-            onChange={e => setEmail(e.target.value)}
+            value={form.email}
+            onChange={e => setForm(s => ({ ...s, email: e.target.value }))}
             placeholder="ex. medecin@hopital.be"
             style={{ ...inp, margin: '6px 0 10px' }}
           />
@@ -124,13 +140,17 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
         </form>
       )}
       {traces.length > 0 && (
-        <ul style={{ paddingLeft: 18, fontSize: 13.5, marginTop: 16 }}>
-          {traces.map(t => (
-            <li key={t.id}>
-              {[t.profiles?.prenom, t.profiles?.nom].filter(Boolean).join(' ') || 'Compte'} → {t.email} · {heure(t.envoye_le)}
-            </li>
-          ))}
-        </ul>
+        <section style={{ marginTop: 18 }}>
+          <h2 style={{ fontSize: '1.02rem', color: 'var(--heading)', margin: '0 0 8px' }}>Traçabilité des envois</h2>
+          <ul style={{ paddingLeft: 18, fontSize: 13.5, margin: 0 }}>
+            {traces.map(t => (
+              <li key={t.id} style={{ marginBottom: 6 }}>
+                {heure(t.envoye_le)} — envoyé par <strong>{libelleExpediteur(t)}</strong>
+                {' '}à <strong>{libelleDestinataire(t)}</strong> ({t.email})
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   )

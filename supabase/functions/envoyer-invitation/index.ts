@@ -340,6 +340,8 @@ Deno.serve(async (req) => {
       ticket_id?: string
       html?: string
       texte?: string
+      destinataire_prenom?: string
+      destinataire_nom?: string
     }
     const pub = urlPublique()
     const action = String(body?.action || 'invitation').trim()
@@ -480,10 +482,15 @@ Deno.serve(async (req) => {
     if (action === 'rapport_medical') {
       const souhaitId = String(body?.souhait_id || '').trim()
       const dest = String(body?.email || '').trim()
+      const destinatairePrenom = String(body?.destinataire_prenom || '').trim()
+      const destinataireNom = String(body?.destinataire_nom || '').trim()
       const htmlBrut = String(body?.html || '')
       const texteBrut = String(body?.texte || '').trim() || 'Rapport médical — Heart’s Angels.'
       if (!souhaitId) return json({ error: 'Souhait manquant.' }, 400)
       if (!dest.includes('@')) return json({ error: 'Adresse e-mail manquante.' }, 400)
+      if (!destinatairePrenom || !destinataireNom) {
+        return json({ error: 'Indiquez le prénom et le nom du destinataire.' }, 400)
+      }
       if (!htmlBrut) return json({ error: 'Rapport vide.' }, 400)
       const { data: autorise, error: authz } = await admin.rpc('autoriser_envoi_rapport', {
         p_souhait: souhaitId,
@@ -515,6 +522,8 @@ Deno.serve(async (req) => {
         souhait_id: souhaitId,
         expediteur_id: user.id,
         email: dest,
+        destinataire_prenom: destinatairePrenom,
+        destinataire_nom: destinataireNom,
       })
       if (traceErr) return json({ error: 'Le message est parti, la trace n’a pas pu être enregistrée.' }, 500)
       return json({ ok: true, action: 'rapport_medical' })

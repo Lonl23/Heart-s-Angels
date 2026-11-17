@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, Loading, Flash, inp } from '@/components/ui'
+import { Btn, Loading, Flash, inp, F } from '@/components/ui'
 import { htmlDocumentA4, telechargerHtml } from './documentA4'
 import { htmlRapportMedical, texteRapportMedical, SUJET_RAPPORT_MEDICAL } from './rapportMedicalExport.js'
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
@@ -116,7 +116,7 @@ export default function DossierDar({
   const [traces, setTraces] = useState([])
   const [probleme, setProbleme] = useState('')
   const [note, setNote] = useState('')
-  const [email, setEmail] = useState('')
+  const [envoi, setEnvoi] = useState({ prenom: '', nom: '', email: '' })
   const [err, setErr] = useState(null)
   const [info, setInfo] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -140,7 +140,7 @@ export default function DossierDar({
     if (peutExporter) {
       const { data: tr } = await supabase
         .from('envois_rapport_medical')
-        .select('id, email, envoye_le, profiles:expediteur_id(prenom, nom)')
+        .select('id, email, destinataire_prenom, destinataire_nom, envoye_le, profiles:expediteur_id(prenom, nom)')
         .eq('souhait_id', souhaitId)
         .order('envoye_le', { ascending: false })
       setTraces(tr || [])
@@ -242,14 +242,17 @@ export default function DossierDar({
     const html = await htmlComplet()
     const res = await envoyerRapportMedical({
       souhaitId,
-      email,
+      email: envoi.email,
+      destinatairePrenom: envoi.prenom,
+      destinataireNom: envoi.nom,
       html,
       texte: `${ALERTE_CONFIDENTIALITE}\n\n${texteRapportMedical(html)}`,
     })
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }
-    setInfo(`Rapport envoyé à ${email.trim()}.`)
-    setEmail('')
+    const qui = [envoi.prenom, envoi.nom].filter(Boolean).join(' ')
+    setInfo(`Rapport envoyé à ${qui} <${envoi.email.trim()}>.`)
+    setEnvoi({ prenom: '', nom: '', email: '' })
     charger()
   }
 
@@ -309,15 +312,20 @@ export default function DossierDar({
           </div>
           <Btn kind="soft" onClick={telecharger}>Télécharger</Btn>
           <form onSubmit={envoyer} style={{ marginTop: 12 }}>
-            <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>Adresse du destinataire</label>
-            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} style={{ ...inp, margin: '6px 0 10px' }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
+              <F label="Prénom du destinataire" value={envoi.prenom} set={v => setEnvoi(s => ({ ...s, prenom: v }))} required />
+              <F label="Nom du destinataire" value={envoi.nom} set={v => setEnvoi(s => ({ ...s, nom: v }))} required />
+            </div>
+            <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>Adresse e-mail</label>
+            <input type="email" required value={envoi.email} onChange={e => setEnvoi(s => ({ ...s, email: e.target.value }))} style={{ ...inp, margin: '6px 0 10px' }} />
             <Btn type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Envoyer le rapport'}</Btn>
           </form>
           {traces.length > 0 && (
             <ul style={{ paddingLeft: 18, fontSize: 13.5 }}>
               {traces.map(t => (
                 <li key={t.id}>
-                  {[t.profiles?.prenom, t.profiles?.nom].filter(Boolean).join(' ') || 'Compte'} → {t.email} · {heure(t.envoye_le)}
+                  {heure(t.envoye_le)} — {[t.profiles?.prenom, t.profiles?.nom].filter(Boolean).join(' ') || 'Compte'}
+                  {' '}→ {[t.destinataire_prenom, t.destinataire_nom].filter(Boolean).join(' ') || 'Destinataire'} ({t.email})
                 </li>
               ))}
             </ul>
