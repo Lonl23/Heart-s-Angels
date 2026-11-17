@@ -17,6 +17,8 @@ import {
 } from './liensFamille'
 import { ChoixMultiple } from './ChoixPopup'
 import { PATHOLOGIES, ACTIVITES_SOUHAIT, PRIORITES_SOUHAIT, commeListe, normaliserPrioriteSouhait } from './listesCliniques'
+import { RecolteursPicker } from './Recolteurs'
+import DocumentsRencontre from './DocumentsRencontre'
 
 const sliceDate = v => (v ? String(v).slice(0, 10) : '')
 
@@ -36,6 +38,7 @@ function etatVide() {
     statut: 'nouveau', priorite: 2,
     categories_pathologies: [],
     activites: [],
+    mission: {},
   }
 }
 
@@ -43,6 +46,7 @@ function depuisSouhait(s) {
   if (!s) return etatVide()
   const cats = s.mission?.categories || {}
   const activites = commeListe(cats.activites?.length ? cats.activites : (s.localisation ? [s.localisation] : []))
+  const mission = (s.mission && typeof s.mission === 'object') ? { ...s.mission } : {}
   return {
     ...etatVide(),
     ...s,
@@ -65,6 +69,7 @@ function depuisSouhait(s) {
     categories_pathologies: commeListe(cats.pathologies),
     activites,
     priorite: normaliserPrioriteSouhait(s.priorite),
+    mission,
   }
 }
 
@@ -219,6 +224,12 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
   const { profile } = useAuth()
   const [f, setF] = useState(() => depuisSouhait(initial))
   const set = (k, v) => setF(s => ({ ...s, [k]: v }))
+  const setMission = (fn) => setF(s => {
+    const prev = (s.mission && typeof s.mission === 'object') ? s.mission : {}
+    const next = typeof fn === 'function' ? fn(prev) : (fn || {})
+    return { ...s, mission: next }
+  })
+  const setMissionChamp = (k, v) => setMission(m => ({ ...m, [k]: v }))
   const [saving, setSaving] = useState(false)
   const [popup, setPopup] = useState(null)
   const [contactEdit, setContactEdit] = useState(null)
@@ -423,10 +434,14 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
     if (statut !== undefined) payload.statut = statut
     async function mergerMission(sid) {
       const { data: cur } = await supabase.from('souhaits').select('mission').eq('id', sid).maybeSingle()
+      const prev = (cur?.mission && typeof cur.mission === 'object') ? cur.mission : {}
+      const local = (f.mission && typeof f.mission === 'object') ? f.mission : {}
       const mission = {
-        ...(cur?.mission && typeof cur.mission === 'object' ? cur.mission : {}),
+        ...prev,
+        ...local,
         categories: {
-          ...((cur?.mission && cur.mission.categories) || {}),
+          ...(prev.categories || {}),
+          ...(local.categories || {}),
           pathologies: commeListe(f.categories_pathologies),
           activites: commeListe(f.activites),
         },
@@ -615,6 +630,37 @@ export default function FormSouhait({ initial, onDone, onPatch, inline = false }
             options={PRIORITES_SOUHAIT.map(p => ({ v: String(p.v), l: p.l }))}
           />
         </div>
+      </Card>
+
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ fontWeight: 600, color: 'var(--heading)', marginBottom: 10 }}>Rencontre & documents</div>
+        <RecolteursPicker m={f.mission || {}} setM={setMission} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10 }}>
+          <F
+            label="Date demande"
+            type="date"
+            value={sliceDate((f.mission || {}).date_demande)}
+            set={v => setMissionChamp('date_demande', v || null)}
+          />
+          <F
+            label="Date rencontre"
+            type="datetime-local"
+            value={(f.mission || {}).date_rencontre || ''}
+            set={v => setMissionChamp('date_rencontre', v || null)}
+          />
+        </div>
+        <TA
+          label="Consignes pour l'équipage (lues sur le terrain)"
+          value={(f.mission || {}).consignes_equipage || ''}
+          set={v => setMissionChamp('consignes_equipage', v)}
+          rows={3}
+        />
+        <DocumentsRencontre
+          m={f.mission || {}}
+          setM={setMission}
+          lecture={false}
+          souhait={f}
+        />
       </Card>
 
       <Card style={{ marginBottom: 14 }}>

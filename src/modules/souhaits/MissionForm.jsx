@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, TA, LiensGps, LiensTrajet, Btn, AdresseAffichee } from '@/components/ui'
+import { Card, AddressFields, fmtAdresse, inp, lbl, Tabs, Loading, Flash, Sel, F, TA, LiensGps, LiensTrajet, Btn } from '@/components/ui'
 import config from '@/app.config'
-import { GROUPES, AUTORISATION_PHOTOS, normaliserAutorisationPhotos, lblAutorisationPhotos, equipePluri, nomsRecolteurs } from './missionSchema'
+import { GROUPES, AUTORISATION_PHOTOS, normaliserAutorisationPhotos, lblAutorisationPhotos, equipePluri } from './missionSchema'
 import Traitements from './Traitements'
 import Vecteurs from './Vecteurs'
 import Suivi from './Suivi'
@@ -11,23 +11,22 @@ import DocumentsSejour from './DocumentsSejour'
 import DocsAdresse from './DocsAdresse'
 import { ProtocoleDetresseForm } from './ProtocoleDetresse'
 import EquipePluriForm, { LignesPluri } from './EquipePluri'
-import { RecolteursPicker } from './Recolteurs'
 import { useAuth } from '@/hooks/useAuth'
-import { GenreIcon } from '@/modules/annuaire/genre'
-import { formaterNiss, fmtTelephones, libelleGenre } from '@/modules/annuaire/annuaireSchema'
-import { ficheVersBeneficiaire } from '@/modules/annuaire/annuaireApi'
-import DocumentsRencontre from './DocumentsRencontre'
 import JournalDossier from './JournalDossier'
 import InfosMedicales from './InfosMedicales'
 import { journaliser, clesModifiees } from './journal'
-import { commeListe } from './listesCliniques'
 
 const grp = id => GROUPES.find(g => g.id === id)
-const ADMIN_MISSION = ['consentement', 'autorisation_photos', 'date_demande', 'date_rencontre', 'consignes_equipage']
+
+/** Champs mission tenus par la 1ʳᵉ partie (FormSouhait) — ne pas écraser depuis ce formulaire. */
+const MISSION_PREMIERE_PARTIE = [
+  'recolteurs', 'recolteur', 'date_demande', 'date_rencontre', 'consignes_equipage',
+  'rencontre', 'consentement', 'autorisation_photos', 'categories',
+]
 
 const TABS = [
   { id:'trajet',        label:'Trajet', groupes:['base','prise_en_charge','destination','retour'], zone:'programme' },
-  { id:'sejour',        label:'Séjour & documents', zone:'commun' },
+  { id:'sejour',        label:'Séjour & documents', zone:'programme' },
   { id:'vecteurs',      label:'Vecteurs & équipages', zone:'programme' },
   { id:'materiel',      label:'Matériel & checklists', zone:'programme' },
   { id:'medical',       label:'Médical', groupes:['medical'], zone:'patient' },
@@ -94,6 +93,27 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
     souhaitProp?.annuaire_externe_id,
   ])
 
+  // Resynchronise les champs tenus par FormSouhait pour ne pas les écraser à l’enregistrement.
+  const missionPrepCle = JSON.stringify(
+    Object.fromEntries(MISSION_PREMIERE_PARTIE.map(k => [k, souhaitProp?.mission?.[k]]))
+  )
+  useEffect(() => {
+    const src = souhaitProp?.mission
+    if (!src || !chargee.current) return
+    setM(o => {
+      if (!o) return o
+      let changed = false
+      const next = { ...o }
+      for (const k of MISSION_PREMIERE_PARTIE) {
+        if (JSON.stringify(next[k]) !== JSON.stringify(src[k])) {
+          next[k] = src[k]
+          changed = true
+        }
+      }
+      return changed ? next : o
+    })
+  }, [missionPrepCle])
+
   useEffect(() => {
     if (m === null) return
     if (!chargee.current) { chargee.current = true; return }
@@ -101,10 +121,17 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
     clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
       const avant = precedent.current
-      await supabase.from('souhaits').update({ mission: m }).eq('id', souhaitId)
-      const cles = clesModifiees(avant, m)
+      // Préserver les champs 1ʳᵉ partie éventuellement plus frais en base.
+      const { data: cur } = await supabase.from('souhaits').select('mission').eq('id', souhaitId).maybeSingle()
+      const remote = (cur?.mission && typeof cur.mission === 'object') ? cur.mission : {}
+      const mission = { ...m }
+      for (const k of MISSION_PREMIERE_PARTIE) {
+        if (remote[k] !== undefined) mission[k] = remote[k]
+      }
+      await supabase.from('souhaits').update({ mission }).eq('id', souhaitId)
+      const cles = clesModifiees(avant, mission)
       if (cles.length) journaliser(souhaitId, 'modification', { cles }, profile)
-      precedent.current = m
+      precedent.current = mission
       setStatus('saved'); setTimeout(() => setStatus(s => s === 'saved' ? '' : s), 1500)
     }, 600)
     return () => clearTimeout(timer.current)
@@ -144,22 +171,7 @@ export default function MissionForm({ souhaitId, souhait: souhaitProp, onSouhait
         extra={<span style={{ fontSize:12, color: status==='saved'?'#3B6D11':'var(--text-faint)' }}>{lectureOnglet ? 'Lecture seule' : status==='saving' ? 'Enregistrement…' : status==='saved' ? 'Enregistré' : 'Enregistrement automatique'}</span>}
       />
 
-      {cur.id === 'sejour' && (
-        <>
-          <DocumentsSejour souhaitId={souhaitId} m={m} setM={programme ? setM : (() => {})} lecture={!programme} />
-          <BlocAdministratif
-            m={m}
-            set={(k, v) => { if (!patient && !programme) return; setM(o => ({ ...o, [k]: v })) }}
-            setM={(fn) => {
-              if (!patient && !programme) return
-              setM(fn)
-            }}
-            lectureProgramme={!programme}
-            lecturePatient={!patient}
-            souhait={souhait}
-          />
-        </>
-      )}
+      {cur.id === 'sejour' && <DocumentsSejour souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} />}
       {cur.id === 'vecteurs' && (
         <Vecteurs souhaitId={souhaitId} m={m} setM={setMSi} lecture={lecture} onJourRetenu={(periode, mission) => {
           const patch = { date_souhaitee: periode.debut, date_fin: periode.fin, dates_possibles: [periode], mission }
@@ -281,91 +293,6 @@ async function chargerInstitutionDemandeuse(s) {
     return { nom: p.nom, adresse, tel: p.tel_general || '', id: p.id }
   }
   return null
-}
-
-function BlocAdministratif({ m, set, setM, lectureProgramme, lecturePatient, souhait }) {
-  const g = grp('administratif')
-  const [fiche, setFiche] = useState(null)
-  useEffect(() => {
-    if (!souhait?.beneficiaire_annuaire_id) { setFiche(null); return }
-    supabase.from('annuaire').select('*').eq('id', souhait.beneficiaire_annuaire_id).maybeSingle()
-      .then(({ data }) => setFiche(data || null))
-  }, [souhait?.beneficiaire_annuaire_id])
-
-  const b = fiche ? ficheVersBeneficiaire(fiche) : {}
-  const prenom = souhait?.beneficiaire_prenom || b.prenom || ''
-  const nom = souhait?.beneficiaire_nom || b.nom || ''
-  const ddn = souhait?.beneficiaire_ddn || b.date_naissance || ''
-  const genre = souhait?.beneficiaire_genre || b.genre || ''
-  const niss = souhait?.beneficiaire_niss || b.niss || m.registre_national || ''
-  const gsm = souhait?.beneficiaire_tel_gsm || b.tel_gsm || ''
-  const fixe = souhait?.beneficiaire_tel_fixe || b.tel_fixe || ''
-  const adresse = (fmtAdresse(souhait?.beneficiaire_adresse) && souhait.beneficiaire_adresse)
-    || (fmtAdresse(b.adresse) && b.adresse)
-    || m.patient_adresse
-  const tels = fmtTelephones({ tel_gsm: gsm, tel_fixe: fixe })
-  const manqueAdresse = adresseVide(adresse)
-  const originLib = souhait?.origine === 'institution' ? 'Institution' : (souhait?.origine ? 'Demande privée' : (m.origine || ''))
-  const lectureFiche = lecturePatient
-  const lectureDates = lectureProgramme
-
-  return (
-    <Card>
-      <div style={{ fontSize:'1rem', fontWeight:700, color:'var(--heading)', marginBottom:12, paddingBottom:8, borderBottom:'1px solid var(--border)' }}>Rencontre & documents</div>
-      {lectureDates ? (
-        <div style={{ margin: '8px 0 12px' }}>
-          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 4 }}>Récolteurs de souhait</div>
-          <div style={{ fontSize: 14, color: 'var(--text)' }}>{nomsRecolteurs(m) || '—'}</div>
-        </div>
-      ) : (
-        <RecolteursPicker m={m} setM={setM} />
-      )}
-
-      <div style={{ background:'var(--bg-alt)', borderRadius:10, padding:'12px 14px', margin:'4px 0 14px' }}>
-        <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:8 }}>Repris de la fiche bénéficiaire</div>
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6 }}>
-          {genre && <GenreIcon genre={genre} size={22} title={libelleGenre(genre)} />}
-          <div style={{ fontWeight:700, fontSize:15, color:'var(--heading)' }}>{prenom} {nom}{!prenom && !nom ? '—' : ''}</div>
-        </div>
-        <div style={{ fontSize:13.5, color:'var(--text-2)', lineHeight:1.55 }}>
-          {ddn && <div>Né(e) le {new Date(ddn).toLocaleDateString('fr-BE')}</div>}
-          {niss && <div>Registre national {formaterNiss(niss)}</div>}
-          {tels && <div>{tels}</div>}
-          {originLib && <div>Origine : {originLib}</div>}
-        </div>
-        {fmtAdresse(adresse)
-          ? <div style={{ marginTop:8 }}><AdresseAffichee label="Adresse légale" value={adresse} wazeMode="planifier" /></div>
-          : <div style={{ marginTop:8, fontSize:13, color:'var(--text-muted)' }}>Aucune adresse sur la fiche — complétez-la ci-dessous.</div>}
-      </div>
-
-      {manqueAdresse && (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize:12.5, color:'var(--text-muted)', marginBottom:4 }}>Adresse du domicile du patient</div>
-          <AddressFields value={m.patient_adresse} set={v => { if (!lectureFiche) set('patient_adresse', v) }} wazeMode="planifier" />
-        </div>
-      )}
-      {!niss && (
-        <Champ f={grp('administratif').fields.find(f => f.k === 'registre_national')} val={m.registre_national} set={v => set('registre_national', v)} lecture={lectureFiche} />
-      )}
-
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'0 24px' }}>
-        {g.fields.filter(f => ADMIN_MISSION.includes(f.k) && f.k !== 'consentement' && f.k !== 'autorisation_photos').map(f => (
-          <Champ key={f.k} f={f} val={m[f.k]} set={v => set(f.k, v)} lecture={lectureDates} />
-        ))}
-      </div>
-      {(commeListe(m.categories?.pathologies).length > 0 || commeListe(m.categories?.activites).length > 0) && (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-          {commeListe(m.categories?.pathologies).length > 0 && (
-            <div>Catégories patho. : {commeListe(m.categories.pathologies).join(' · ')}</div>
-          )}
-          {commeListe(m.categories?.activites).length > 0 && (
-            <div>Activités : {commeListe(m.categories.activites).join(' · ')}</div>
-          )}
-        </div>
-      )}
-      <DocumentsRencontre m={m} setM={setM} lecture={lectureFiche} souhait={souhait} />
-    </Card>
-  )
 }
 
 function BlocBase({ m, set, lecture, souhaitId }) {
