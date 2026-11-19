@@ -166,10 +166,11 @@ const CHAMPS_PROFIL = [
   ['photo', 'Photo'],
   ['naissance', 'Date de naissance'],
   ['lieu', 'Lieu de naissance'],
+  ['registre', 'Registre national'],
   ['adresse', 'Adresse'],
   ['telephone', 'Téléphone'],
   ['email', 'E-mail'],
-  ['engagement', 'Date d’engagement'],
+  ['engagement', 'Date d’adhésion'],
   ['prevenir', 'Personne à prévenir'],
 ]
 
@@ -182,6 +183,7 @@ export function manquesProfil(prof, f) {
     photo: !!f?.photo_url,
     naissance: !!f?.date_naissance,
     lieu: !!String(f?.lieu_naissance || '').trim(),
+    registre: !!String(f?.registre_national || '').trim(),
     adresse: !!String(f?.adresse || '').trim(),
     telephone: !!String(f?.telephone || '').trim(),
     email: !!String(prof?.email || '').trim(),
