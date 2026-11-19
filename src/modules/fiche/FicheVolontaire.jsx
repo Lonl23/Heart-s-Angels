@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Page, Card, Btn, F, Sel, PhoneF, lbl } from '@/components/ui'
+import { Page, Card, Btn, F, Sel, PhoneF, lbl, inp } from '@/components/ui'
+import { lblCleDotation, libelleArticleDotation, fmtDateBe } from '@/modules/stock/dotationIndividuelle'
 import config from '@/app.config'
 import { QUALIFS, ROLES_COMPTE, SPECIALISATIONS_INF, lblRoleCompte, qualifsPourType, qualificationsAvecSelection, qualificationsCompatibles, EQUIPES_ASBL, aRoleAsblParticulier, equipeAsblOuverteParDefaut, libellesRolesAsblPropres, rangsDeLequipe, rolesAsblPourEnregistrement, rolesAsblSpecifiques } from './ficheSchema'
 import {
@@ -15,8 +16,11 @@ import { FormPinFiche } from '@/components/PinArchive'
 import { ReglageDeuxFacteurs } from '@/components/DeuxFacteurs'
 
 const vide = {
-  date_naissance:'', lieu_naissance:'', adresse:'', date_engagement:'', civilite:'',
-  telephone:'', iban:'', type_benevole:'',
+  date_naissance:'', lieu_naissance:'', adresse:'', code_postal:'', ville:'', pays:'Belgique',
+  date_engagement:'', civilite:'',
+  telephone:'', email_perso:'', registre_national:'', iban:'', type_benevole:'',
+  notes_rh:'', fonction_administrative:'',
+  autorisation_photos:false, autorisation_diffusion_interne:false,
   qualifications:[], roles_asbl:[],
   permis:{ B:false, C:false, E:false, selection_medicale:false, selection_validite:'' },
   ambulancier:{ visa_atnup:'', badge_112:'', atnup_validite:'', badge_112_validite:'' },
@@ -278,6 +282,7 @@ export default function FicheVolontaire({ userId, onBack }) {
     { v: 'activite', l: 'Activité' },
     { v: 'competence', l: 'Compétence' },
     { v: 'document', l: 'Document' },
+    { v: 'dotation', l: 'Dotation' },
     { v: 'compte', l: 'Compte' },
   ]
   // Pastille ASBL (président, IT…) ; on n’affiche pas le rôle de compte
@@ -388,19 +393,56 @@ export default function FicheVolontaire({ userId, onBack }) {
       <Card style={{ marginBottom:0 }}>
         <Sec>Profil</Sec>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'0 20px' }}>
-          <Sel label="Civilité" value={f.civilite || ''} set={v => set('civilite', v)} options={[{ v:'', l:'—' }, { v:'madame', l:'Madame' }, { v:'monsieur', l:'Monsieur' }]} />
+          <Sel label="Civilité / titre" value={f.civilite || ''} set={v => set('civilite', v)} options={[{ v:'', l:'—' }, { v:'madame', l:'Madame' }, { v:'monsieur', l:'Monsieur' }]} />
           <F label="Prénom" value={prof.prenom||''} set={v=>setProf(p=>({...p,prenom:v}))} required />
           <F label="Nom" value={prof.nom||''} set={v=>setProf(p=>({...p,nom:v}))} required />
           <F label="Date de naissance" type="date" value={f.date_naissance} set={v=>set('date_naissance',v)} />
           <F label="Lieu de naissance" value={f.lieu_naissance || ''} set={v=>set('lieu_naissance', v)} />
-          <F label="Date d’engagement" type="date" value={f.date_engagement || ''} set={v=>set('date_engagement', v)} />
+          <F label="Registre national" value={f.registre_national || ''} set={v=>set('registre_national', v)} placeholder="XX.XX.XX-XXX.XX" />
+          <F label="Date d’adhésion" type="date" value={f.date_engagement || ''} set={v=>set('date_engagement', v)} />
           <PhoneF label="Téléphone" value={f.telephone} set={v=>set('telephone',v)} />
+          <F label="E-mail perso" value={f.email_perso || ''} set={v=>set('email_perso', v)} placeholder="prenom@exemple.be" />
           <F label="IBAN (défraiements)" value={f.iban||''} set={v=>set('iban', v.toUpperCase())} placeholder="BE00 0000 0000 0000" />
-          <F label="Adresse" value={f.adresse || ''} set={v=>set('adresse', v)} placeholder="Rue, code postal, ville" />
+          <F label="Adresse" value={f.adresse || ''} set={v=>set('adresse', v)} placeholder="Rue et numéro" />
+          <F label="Code postal" value={f.code_postal || ''} set={v=>set('code_postal', v)} />
+          <F label="Ville" value={f.ville || ''} set={v=>set('ville', v)} />
+          <Sel label="Pays" value={f.pays || 'Belgique'} set={v=>set('pays', v)} options={[
+            { v: 'Belgique', l: 'Belgique' },
+            { v: 'France', l: 'France' },
+            { v: 'Luxembourg', l: 'Luxembourg' },
+            { v: 'Allemagne', l: 'Allemagne' },
+            { v: 'Pays-Bas', l: 'Pays-Bas' },
+            { v: 'Autre', l: 'Autre' },
+          ]} />
+          {!seulementCoordonnees && (
+            <F label="Fonction administrative" value={f.fonction_administrative || ''} set={v=>set('fonction_administrative', v)} placeholder="Optionnel" />
+          )}
         </div>
         <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:4 }}>
           E-mail (connexion) : {(prof.email || '').trim() || 'pas encore de compte'} — l’IBAN sert aux notes de frais forfaitaires.
         </div>
+        {!seulementCoordonnees && (
+          <>
+            <label style={{ display:'block', fontSize:12, color:'var(--text-muted)', marginTop:12 }}>Notes</label>
+            <textarea
+              value={f.notes_rh || ''}
+              onChange={e => set('notes_rh', e.target.value)}
+              rows={3}
+              style={{ ...inp, width:'100%', resize:'vertical', marginTop:4 }}
+              placeholder="Remarques internes sur l’adhérent"
+            />
+            <div style={{ display:'grid', gap:8, marginTop:12 }}>
+              <label style={{ display:'flex', gap:8, alignItems:'center', fontSize:13.5 }}>
+                <input type="checkbox" checked={!!f.autorisation_photos} onChange={e => set('autorisation_photos', e.target.checked)} />
+                Autorisation photos
+              </label>
+              <label style={{ display:'flex', gap:8, alignItems:'center', fontSize:13.5 }}>
+                <input type="checkbox" checked={!!f.autorisation_diffusion_interne} onChange={e => set('autorisation_diffusion_interne', e.target.checked)} />
+                Autorisation diffusion des coordonnées en interne
+              </label>
+            </div>
+          </>
+        )}
       </Card>
       )}
         {panneau === 'prevenir' && (
@@ -661,7 +703,7 @@ export default function FicheVolontaire({ userId, onBack }) {
       {onglet === 'document' && (
         <>
           <LivretCarte maFiche={maFiche} onRecuperer={recupererLivret} onImprimer={imprimerLivret} />
-          {gestionQualif && (
+          {(gestionQualif || maFiche) && (
             <DocumentsRh
               uid={uid}
               fiche={f}
@@ -671,6 +713,10 @@ export default function FicheVolontaire({ userId, onBack }) {
             />
           )}
         </>
+      )}
+
+      {onglet === 'dotation' && (
+        <DotationFiche uid={uid} />
       )}
 
       </div>
@@ -708,14 +754,81 @@ function LivretCarte({ maFiche, onRecuperer, onImprimer }) {
 }
 
 const DOCS_RH = [
+  { v: 'fiche_adhesion', l: 'Fiche d’adhésion' },
+  { v: 'convention_benevolat', l: 'Convention de bénévolat' },
   { v: 'carte_identite', l: 'Carte d’identité' },
+  { v: 'casier_judiciaire', l: 'Casier judiciaire' },
   { v: 'permis', l: 'Permis de conduire' },
+  { v: 'diplome', l: 'Diplôme' },
+  { v: 'attestation_recyclage', l: 'Attestation de recyclage' },
+  { v: 'autorisation_photos', l: 'Autorisation photos (signée)' },
   { v: 'visa_atnup', l: 'Visa ATNUP' },
   { v: 'visa_infirmier', l: 'Visa infirmier' },
   { v: 'autre', l: 'Autre document' },
 ]
 const BUCKET_RH = 'rh-documents'
 const MIME_RH = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']
+
+function DotationFiche({ uid }) {
+  const [lignes, setLignes] = useState(null)
+  const [err, setErr] = useState(null)
+
+  useEffect(() => {
+    let stop = false
+    ;(async () => {
+      const { data, error } = await supabase.rpc('dotation_individuelle_de', { p_user: uid })
+      if (stop) return
+      if (error) { setErr(error.message); setLignes([]); return }
+      setLignes(data || [])
+    })()
+    return () => { stop = true }
+  }, [uid])
+
+  if (lignes === null) {
+    return <Card><p style={{ color: 'var(--text-muted)', margin: 0 }}>Chargement de la dotation…</p></Card>
+  }
+
+  const actives = (lignes || []).filter(l => l.actif !== false && !l.rendu_le)
+  const passees = (lignes || []).filter(l => l.actif === false || l.rendu_le)
+
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <Sec>Dotation individuelle</Sec>
+      <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+        Polo, t-shirt, chemise, veste et badges (ASBL, CHC, Solumob). Géré depuis Logistique → Dotation perso.
+      </p>
+      {err && <p style={{ color: '#991B1B', fontSize: 13 }}>{err}</p>}
+      {actives.length === 0 ? (
+        <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Aucun article actuellement attribué.</p>
+      ) : (
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {actives.map(l => (
+            <li key={l.id} style={{ marginBottom: 8, fontSize: 14 }}>
+              <strong>{libelleArticleDotation(l)}</strong>
+              <span style={{ color: 'var(--text-muted)' }}>
+                {' · '}{lblCleDotation(l.cle_dotation)} · qté {Number(l.qte) || 1}
+                {' · '}depuis {fmtDateBe(l.attribue_le)}
+                {l.notes ? ` — ${l.notes}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {passees.length > 0 && (
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>Historique (rendus)</summary>
+          <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)' }}>
+            {passees.map(l => (
+              <li key={l.id}>
+                {libelleArticleDotation(l)} · rendu le {fmtDateBe(l.rendu_le)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </Card>
+  )
+}
 
 function DocumentsRh({ uid, fiche, peutEcrire, onFiche, onMsg }) {
   const [busy, setBusy] = useState(false)
@@ -769,7 +882,7 @@ function DocumentsRh({ uid, fiche, peutEcrire, onFiche, onMsg }) {
     <Card style={{ marginBottom: 14 }}>
       <Sec>Documents du volontaire</Sec>
       <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.45 }}>
-        Carte d’identité, permis, visas, et tout autre document. PDF ou photo, 15 Mo maximum. Ces pièces sont encodées par la gestion des fiches.
+        Adhésion, convention, identité, casier, diplômes, attestations de recyclage, visas… PDF ou photo, 15 Mo maximum.
       </p>
       {!peutEcrire && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Consultation seule.</p>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

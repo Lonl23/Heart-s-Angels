@@ -19,12 +19,15 @@ import { exporterStockExcel, lireInventaireExcel, resumeImport, exporterLieuxPar
 import ARefaire from './stock/ARefaire'
 import OngletMrp from './stock/OngletMrp'
 import OngletInventaireFacile from './stock/OngletInventaireFacile'
+import OngletDotationPersonnel from './stock/OngletDotationPersonnel'
+import { CLES_DOTATION, parentsDotation } from './stock/dotationIndividuelle'
 
 const ACCUEIL = [
   { v: 'unites', l: 'Inventaires' },
   { v: 'transferts', l: 'Ranger' },
   { v: 'reception', l: 'Réception' },
   { v: 'alertes', l: 'Alertes' },
+  { v: 'dotation', l: 'Dotation perso' },
 ]
 
 const PLUS = [
@@ -50,6 +53,7 @@ const LBL_RUBRIQUE = {
   lieux: 'Lieux',
   inventaire: 'Contrôle lieu',
   o2: 'Relevé oxygène',
+  dotation: 'Dotation personnelle',
 }
 
 const RETOUR_INVENTAIRES = new Set(['inventaire', 'o2'])
@@ -368,6 +372,15 @@ export default function Stock() {
                 if (cat) setRecv(cat)
               }} />
           )}
+          {tab === 'dotation' && (
+            <OngletDotationPersonnel
+              cats={cats}
+              gerer={gerer}
+              onReloadCats={() => load(true)}
+              onOk={ok}
+              onErr={setErr}
+            />
+          )}
           {tab === 'fournisseurs' && <OngletFournisseurs fournisseurs={fournisseurs} cats={cats} onChange={load} onRefresh={() => load(true)} onOk={ok} onErr={setErr} />}
           {tab === 'lieux' && <OngletLieux lieux={lieux} unites={unites} cats={cats} dotations={dotations} onChange={load} onOk={ok} onErr={setErr} />}
           {tab === 'inventaire' && inv && (
@@ -670,7 +683,7 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
       <label className="ha-stock-search-lab" htmlFor="stock-recherche-article">Rechercher un article</label>
       <input id="stock-recherche-article" className="ha-search" value={q} onChange={e=>setQ(e.target.value)}
         placeholder="Nom, lot, lieu, référence…" autoComplete="off" style={{ ...inp, marginBottom:12, width:'min(100%, 420px)' }} />
-      {edit && <FormCatalogue item={edit} fournisseurs={fournisseurs} onDone={() => { setEdit(null); onChange() }} onOk={onOk} onErr={onErr} />}
+      {edit && <FormCatalogue item={edit} cats={cats} fournisseurs={fournisseurs} onDone={() => { setEdit(null); onChange() }} onOk={onOk} onErr={onErr} />}
       {lotEdit && (
         <Card style={{ marginBottom:12 }}>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10, gap:8 }}>
@@ -782,13 +795,14 @@ function OngletCatalogue({ cats, lieux, unites, fournisseurs, dotations, onChang
   )
 }
 
-function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
+function FormCatalogue({ item, fournisseurs, cats = [], onDone, onOk, onErr }) {
   const natureInit = natureDepuisMode(item.mode, item.nature)
   const [f, setF] = useState({
     unite: 'pièce', mode: 'piece', stock_minimal: 0, stock_minimal_sacs: 0, fournisseur_id: '', ref_fournisseur: '',
     gestion_lot: gestionLot({ ...item, nature: natureInit }),
     gestion_dlc: gestionDlc({ ...item, nature: natureInit }),
     gestion_qr: gestionQr({ ...item, nature: natureInit }),
+    dotation_personnel: false, cle_dotation: '', parent_id: '', variante: '',
     ...item,
     nature: natureInit,
   })
@@ -816,6 +830,10 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
       gestion_lot: !!f.gestion_lot,
       gestion_dlc: !!f.gestion_dlc,
       gestion_qr: f.mode === 'oxygene' ? true : !!f.gestion_qr,
+      dotation_personnel: !!f.dotation_personnel,
+      cle_dotation: f.dotation_personnel ? (f.cle_dotation || null) : null,
+      parent_id: f.parent_id || null,
+      variante: f.variante?.trim() || null,
     }
     if (f.id) {
       const { error } = await supabase.from('stock_catalogue').update(payload).eq('id', f.id)
@@ -899,7 +917,38 @@ function FormCatalogue({ item, fournisseurs, onDone, onOk, onErr }) {
           <F label="Stock mini sacs" type="number" value={f.stock_minimal_sacs} set={v=>setF(s=>({ ...s, stock_minimal_sacs:v }))} />
         </div>
       )}
-      {f.mode !== 'oxygene' && <F label="Catégorie" value={f.categorie} set={v=>setF(s=>({ ...s, categorie:v }))} placeholder="consommable, logistique…" />}
+      {f.mode !== 'oxygene' && <F label="Catégorie" value={f.categorie} set={v=>setF(s=>({ ...s, categorie:v }))} placeholder="consommable, logistique, vêtement…" />}
+      <div style={{ display:'grid', gap:8, marginBottom:12, padding:'10px 12px', background:'var(--bg-alt)', borderRadius:10 }}>
+        <label style={{ display:'flex', gap:8, alignItems:'flex-start', fontSize:13.5, cursor:'pointer' }}>
+          <input type="checkbox" checked={!!f.dotation_personnel} onChange={e=>setF(s=>({ ...s, dotation_personnel: e.target.checked }))} style={{ marginTop:3 }} />
+          <span>
+            <strong>Dotation personnelle</strong><br />
+            <span style={{ color:'var(--text-muted)', fontSize:12.5 }}>
+              Polo, t-shirt, chemise, veste, badges — visible dans la fiche du volontaire.
+            </span>
+          </span>
+        </label>
+        {!!f.dotation_personnel && (
+          <>
+            <Sel
+              label="Famille de dotation"
+              value={f.cle_dotation || ''}
+              set={v => setF(s => ({ ...s, cle_dotation: v }))}
+              options={[{ v: '', l: '—' }, ...CLES_DOTATION.map(c => ({ v: c.v, l: c.l }))]}
+            />
+            <Sel
+              label="Variante de (parent)"
+              value={f.parent_id || ''}
+              set={v => setF(s => ({ ...s, parent_id: v }))}
+              options={[
+                { v: '', l: '— Article principal —' },
+                ...parentsDotation(cats).filter(p => p.id !== f.id).map(p => ({ v: p.id, l: p.nom })),
+              ]}
+            />
+            <F label="Libellé variante" value={f.variante || ''} set={v => setF(s => ({ ...s, variante: v }))} placeholder="S, M, L, XL, bleu…" />
+          </>
+        )}
+      </div>
       <Sel label="Fournisseur habituel" value={f.fournisseur_id || ''} set={v=>setF(s=>({ ...s, fournisseur_id:v }))} options={optsF} />
       <F label="Référence fournisseur" value={f.ref_fournisseur} set={v=>setF(s=>({ ...s, ref_fournisseur:v }))} placeholder="SKU / n° article" />
       {f.mode === 'oxygene' && (
