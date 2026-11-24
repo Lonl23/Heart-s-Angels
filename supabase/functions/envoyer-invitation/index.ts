@@ -342,6 +342,7 @@ Deno.serve(async (req) => {
       texte?: string
       destinataire_prenom?: string
       destinataire_nom?: string
+      sujet?: string
     }
     const pub = urlPublique()
     const action = String(body?.action || 'invitation').trim()
@@ -523,7 +524,22 @@ Deno.serve(async (req) => {
       const texte = texteBrut.includes('DOCUMENT MÉDICAL STRICTEMENT CONFIDENTIEL')
         ? texteBrut
         : `${alerteTxt}\n\n${texteBrut}`
-      const sujet = '!!! SECRET MEDICAL !!! – INTERVENTION HEART’S ANGELS'
+      const { data: souch } = await admin
+        .from('souhaits')
+        .select('beneficiaire_prenom, beneficiaire_nom, date_souhaitee, date_fin')
+        .eq('id', souhaitId)
+        .maybeSingle()
+      const nomBenef = [souch?.beneficiaire_prenom, souch?.beneficiaire_nom].filter(Boolean).join(' ').trim()
+        || 'Bénéficiaire'
+      const rawDate = String(souch?.date_souhaitee || souch?.date_fin || '').slice(0, 10)
+      let dateLib = 'date non précisée'
+      if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+        const [y, mo, d] = rawDate.split('-').map(Number)
+        dateLib = new Date(Date.UTC(y, mo - 1, d, 12)).toLocaleDateString('fr-BE', { timeZone: 'Europe/Brussels' })
+      }
+      const sujetClient = String(body?.sujet || '').trim()
+      const sujet = sujetClient
+        || `${nomBenef} : Rapport médical du souhait en date du ${dateLib}`
       await envoyer({ smtp, to: dest, sujet, texte, html, bcc: false })
       const { error: traceErr } = await admin.from('envois_rapport_medical').insert({
         souhait_id: souhaitId,

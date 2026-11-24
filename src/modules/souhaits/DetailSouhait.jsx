@@ -37,6 +37,7 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
   const [pinMsg, setPinMsg] = useState(null)
   const [pinSaving, setPinSaving] = useState(false)
   const [dossier, setDossier] = useState(false)
+  const [medsDar, setMedsDar] = useState([])
 
   useEffect(() => { load() }, [id])
   useEffect(() => {
@@ -45,10 +46,20 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
     setArchive(null)
     setManque(false)
     setPinMsg(null)
+    setDossier(false)
+    setMedsDar([])
   }, [id])
   useEffect(() => {
     if (preparer && s && statutFige(s.statut, s) && !estSouhaitFormationPrep(s)) onVoir?.()
   }, [preparer, s?.id, s?.statut])
+  useEffect(() => {
+    if (!dossier || !id) return
+    let stop = false
+    supabase.from('souhait_medicaments').select('*').eq('souhait_id', id).then(({ data }) => {
+      if (!stop) setMedsDar(data || [])
+    })
+    return () => { stop = true }
+  }, [dossier, id])
   async function load() {
     const { data } = await supabase.from('souhaits').select('*').eq('id', id).maybeSingle()
     if (data) { setS(data); setArchive(null); setManque(false); return }
@@ -222,6 +233,8 @@ export default function DetailSouhait({ id, onBack, onPreparer, onVoir, preparer
           peutNoter
           peutExporter={!(s.fictif && s.mission?.demo_cle)}
           souhait={s}
+          meds={medsDar}
+          onMedsChange={setMedsDar}
         />
       )}
 

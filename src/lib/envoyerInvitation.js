@@ -79,8 +79,10 @@ export async function envoyerMailBugHelpdesk(ticketId) {
   return { ok: false, error: await lireErreur(data, error) }
 }
 
-/** Rapport médical uniquement. L’objet est imposé côté serveur, sans copie cachée. */
-export async function envoyerRapportMedical({ souhaitId, email, destinatairePrenom, destinataireNom, html, texte }) {
+/** Rapport médical uniquement. Objet dynamique (bénéficiaire + date), sans copie cachée. */
+export async function envoyerRapportMedical({
+  souhaitId, email, destinatairePrenom, destinataireNom, html, texte, sujet,
+}) {
   const adresse = String(email || '').trim()
   const prenom = String(destinatairePrenom || '').trim()
   const nom = String(destinataireNom || '').trim()
@@ -93,6 +95,7 @@ export async function envoyerRapportMedical({ souhaitId, email, destinatairePren
     email: adresse,
     destinataire_prenom: prenom,
     destinataire_nom: nom,
+    sujet: String(sujet || '').trim() || undefined,
     html,
     texte,
   })

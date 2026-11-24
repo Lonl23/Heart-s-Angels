@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, Loading, Flash, inp, F } from '@/components/ui'
+import { Btn, Loading, Flash } from '@/components/ui'
 import {
   htmlEmailRapportMedical, texteEmailRapportMedical,
-  SUJET_RAPPORT_MEDICAL, ALERTE_CONFIDENTIALITE_MAIL,
+  sujetRapportMedical, ALERTE_CONFIDENTIALITE_MAIL,
 } from './rapportMedicalExport.js'
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
 import { injectionsDetresse } from './missionSchema'
+import DestinataireRapportMedical, { preparerDestinataireAvantEnvoi } from './DestinataireRapportMedical'
 
 const ALERTE_CONFIDENTIALITE = ALERTE_CONFIDENTIALITE_MAIL
 
@@ -27,10 +28,12 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
   const [cibles, setCibles] = useState(null)
   const [notes, setNotes] = useState([])
   const [traces, setTraces] = useState([])
-  const [form, setForm] = useState({ prenom: '', nom: '', email: '' })
+  const [form, setForm] = useState({ prenom: '', nom: '', email: '', sauverAnnuaire: true })
   const [err, setErr] = useState(null)
   const [info, setInfo] = useState(null)
   const [busy, setBusy] = useState(false)
+
+  const sujet = sujetRapportMedical(souhait)
 
   async function charger() {
     const { data, error } = await supabase
@@ -59,7 +62,7 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
 
   useEffect(() => { charger() }, [souhaitId, peutExporter])
 
-  function payloadMail() {
+  function payloadMail(dest) {
     const dar = (notes || []).map(r => ({
       ...r,
       auteur_prenom: r.profiles?.prenom,
@@ -71,8 +74,8 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
       cibles: cibles || [],
       meds,
       injections: injectionsDetresse(souhait?.mission),
-      destinatairePrenom: form.prenom,
-      destinataireNom: form.nom,
+      destinatairePrenom: dest.prenom,
+      destinataireNom: dest.nom,
     }
     return {
       html: htmlEmailRapportMedical(opts),
@@ -86,20 +89,24 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
     setBusy(true)
     setErr(null)
     setInfo(null)
-    const { html, texte } = payloadMail()
+    const prep = await preparerDestinataireAvantEnvoi(form)
+    if (!prep.ok) { setBusy(false); setErr(prep.error); return }
+    const dest = prep.form
+    const { html, texte } = payloadMail(dest)
     const res = await envoyerRapportMedical({
       souhaitId,
-      email: form.email,
-      destinatairePrenom: form.prenom,
-      destinataireNom: form.nom,
+      email: dest.email,
+      destinatairePrenom: dest.prenom,
+      destinataireNom: dest.nom,
+      sujet,
       html,
       texte,
     })
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }
-    const qui = [form.prenom, form.nom].filter(Boolean).join(' ')
-    setInfo(`Rapport envoyé à ${qui} <${form.email.trim()}> depuis app@heartsangels.be.`)
-    setForm({ prenom: '', nom: '', email: '' })
+    const qui = [dest.prenom, dest.nom].filter(Boolean).join(' ')
+    setInfo(`Rapport envoyé à ${qui} <${dest.email.trim()}> depuis app@heartsangels.be.`)
+    setForm({ prenom: '', nom: '', email: '', sauverAnnuaire: true })
     charger()
   }
 
@@ -118,27 +125,21 @@ export default function EnvoiRapportMedical({ souhaitId, souhait, meds = [], peu
       }}>
         {ALERTE_CONFIDENTIALITE}
       </div>
-      <p style={{ color: '#A32D2D', fontWeight: 800, marginTop: 0 }}>{SUJET_RAPPORT_MEDICAL}</p>
+      <p style={{ color: '#A32D2D', fontWeight: 800, marginTop: 0 }}>{sujet}</p>
       {err && <Flash kind="err">{err}</Flash>}
       {info && <Flash>{info}</Flash>}
       {!peutExporter ? (
         <Flash kind="warn">Réservé aux volontaires médicaux du souhait (ou à la coordination médicale). Sur un souhait de test, tout volontaire médical peut s’entraîner à l’envoi.</Flash>
       ) : (
         <form onSubmit={envoyer} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-            <F label="Prénom du destinataire" value={form.prenom} set={v => setForm(s => ({ ...s, prenom: v }))} required />
-            <F label="Nom du destinataire" value={form.nom} set={v => setForm(s => ({ ...s, nom: v }))} required />
-          </div>
-          <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>Adresse e-mail</label>
-          <input
-            type="email"
-            required
-            value={form.email}
-            onChange={e => setForm(s => ({ ...s, email: e.target.value }))}
-            placeholder="ex. medecin@hopital.be"
-            style={{ ...inp, margin: '6px 0 10px' }}
+          <DestinataireRapportMedical
+            souhaitId={souhaitId}
+            souhait={souhait}
+            value={form}
+            onChange={setForm}
+            disabled={busy}
           />
-          <Btn type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Envoyer le rapport'}</Btn>
+          <Btn type="submit" disabled={busy || !form.email}>{busy ? 'Envoi…' : 'Envoyer le rapport'}</Btn>
         </form>
       )}
       {traces.length > 0 && (
