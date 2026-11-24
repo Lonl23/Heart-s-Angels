@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Btn, Loading, Flash, inp, F } from '@/components/ui'
+import { Btn, Loading, Flash, inp } from '@/components/ui'
 import { htmlDocumentA4, telechargerHtml } from './documentA4'
 import {
   htmlRapportMedical, htmlEmailRapportMedical, texteEmailRapportMedical,
-  SUJET_RAPPORT_MEDICAL, ALERTE_CONFIDENTIALITE_MAIL,
+  sujetRapportMedical, ALERTE_CONFIDENTIALITE_MAIL,
+  administrationsDepuisMed,
 } from './rapportMedicalExport.js'
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
 import { injectionsDetresse } from './missionSchema'
+import DestinataireRapportMedical, { preparerDestinataireAvantEnvoi } from './DestinataireRapportMedical'
+import MedicamentsMAR from './MedicamentsMAR'
 
 const LETTRES = [
   { k: 'donnee', l: 'D', mot: 'Données' },
@@ -110,7 +113,8 @@ export default function DossierDar({
   peutNoter,
   peutExporter,
   souhait,
-  meds,
+  meds = [],
+  onMedsChange,
   onBack,
 }) {
   const [cibles, setCibles] = useState(null)
@@ -118,10 +122,11 @@ export default function DossierDar({
   const [traces, setTraces] = useState([])
   const [probleme, setProbleme] = useState('')
   const [note, setNote] = useState('')
-  const [envoi, setEnvoi] = useState({ prenom: '', nom: '', email: '' })
+  const [envoi, setEnvoi] = useState({ prenom: '', nom: '', email: '', sauverAnnuaire: true })
   const [err, setErr] = useState(null)
   const [info, setInfo] = useState(null)
   const [busy, setBusy] = useState(false)
+  const sujet = sujetRapportMedical(souhait)
 
   async function charger() {
     const { data, error } = await supabase
@@ -246,25 +251,35 @@ export default function DossierDar({
     telechargerHtml(nom.replace(/[^\p{L}\p{N}.-]+/gu, '-'), html)
   }
 
+  async function sauverPrises(med, prises) {
+    onMedsChange?.(list => (list || meds).map(x => x.id === med.id ? { ...x, prises } : x))
+    const { error } = await supabase.from('souhait_medicaments').update({ prises }).eq('id', med.id)
+    if (error) setErr(error.message)
+  }
+
   async function envoyer(e) {
     e.preventDefault()
     setBusy(true)
     setErr(null)
     setInfo(null)
-    const opts = payloadRapport(envoi)
+    const prep = await preparerDestinataireAvantEnvoi(envoi)
+    if (!prep.ok) { setBusy(false); setErr(prep.error); return }
+    const dest = prep.form
+    const opts = payloadRapport(dest)
     const res = await envoyerRapportMedical({
       souhaitId,
-      email: envoi.email,
-      destinatairePrenom: envoi.prenom,
-      destinataireNom: envoi.nom,
+      email: dest.email,
+      destinatairePrenom: dest.prenom,
+      destinataireNom: dest.nom,
+      sujet,
       html: htmlEmailRapportMedical(opts),
       texte: texteEmailRapportMedical(opts),
     })
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }
-    const qui = [envoi.prenom, envoi.nom].filter(Boolean).join(' ')
-    setInfo(`Rapport envoyé à ${qui} <${envoi.email.trim()}>.`)
-    setEnvoi({ prenom: '', nom: '', email: '' })
+    const qui = [dest.prenom, dest.nom].filter(Boolean).join(' ')
+    setInfo(`Rapport envoyé à ${qui} <${dest.email.trim()}>.`)
+    setEnvoi({ prenom: '', nom: '', email: '', sauverAnnuaire: true })
     charger()
   }
 
@@ -290,6 +305,33 @@ export default function DossierDar({
               <Btn type="submit">Ajouter le tableau</Btn>
             </form>
           )}
+          {(peutEcrire || (meds || []).length > 0) && (
+            <section style={{ marginTop: 22 }}>
+              <h2 style={{ fontSize: '1rem', color: 'var(--heading)', marginBottom: 8 }}>Traitements prévus et administrés</h2>
+              <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 0 }}>
+                Même grille que pendant la mission : cochez ce qui a été donné et à quelle heure. Ces administrations figurent dans le rapport envoyé.
+              </p>
+              {peutEcrire ? (
+                <MedicamentsMAR meds={meds || []} onSavePrises={sauverPrises} />
+              ) : (
+                <ul style={{ paddingLeft: 18, fontSize: 13.5 }}>
+                  {(meds || []).map(md => {
+                    const acts = administrationsDepuisMed(md)
+                    const base = [md.medicament, md.dosage, md.voie].filter(Boolean).join(' · ')
+                    return (
+                      <li key={md.id} style={{ marginBottom: 6 }}>
+                        {base}
+                        {acts.length
+                          ? ` — administré : ${acts.map(a => a.heure).join(', ')}`
+                          : ' — non administré'}
+                      </li>
+                    )
+                  })}
+                  {(meds || []).length === 0 && <li>Aucun traitement encodé.</li>}
+                </ul>
+              )}
+            </section>
+          )}
           <section style={{ marginTop: 22 }}>
             <h2 style={{ fontSize: '1rem', color: 'var(--heading)' }}>Notes pour l’équipage</h2>
             {notes.length === 0
@@ -314,8 +356,10 @@ export default function DossierDar({
       {peutExporter && (
         <section style={{ marginTop: 22, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
           <h2 style={{ marginTop: 0, fontSize: '1.05rem' }}>Exporter le rapport médical</h2>
-          <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Le fichier ne reprend pas les véhicules. L’objet du message est fixé. Envoi depuis app@heartsangels.be.</p>
-          <p style={{ color: '#A32D2D', fontWeight: 800 }}>{SUJET_RAPPORT_MEDICAL}</p>
+          <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+            Résumé du souhait, traitements prévus et administrés, DAR. Envoi depuis app@heartsangels.be.
+          </p>
+          <p style={{ color: '#A32D2D', fontWeight: 800 }}>{sujet}</p>
           <div style={{
             background: '#FCEBEB', border: '1px solid #A32D2D', borderRadius: 12,
             padding: '10px 12px', color: '#7A1F1F', fontSize: 12.5, marginBottom: 12, whiteSpace: 'pre-wrap',
@@ -324,13 +368,14 @@ export default function DossierDar({
           </div>
           <Btn kind="soft" onClick={telecharger}>Télécharger</Btn>
           <form onSubmit={envoyer} style={{ marginTop: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-              <F label="Prénom du destinataire" value={envoi.prenom} set={v => setEnvoi(s => ({ ...s, prenom: v }))} required />
-              <F label="Nom du destinataire" value={envoi.nom} set={v => setEnvoi(s => ({ ...s, nom: v }))} required />
-            </div>
-            <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>Adresse e-mail</label>
-            <input type="email" required value={envoi.email} onChange={e => setEnvoi(s => ({ ...s, email: e.target.value }))} style={{ ...inp, margin: '6px 0 10px' }} />
-            <Btn type="submit" disabled={busy}>{busy ? 'Envoi…' : 'Envoyer le rapport'}</Btn>
+            <DestinataireRapportMedical
+              souhaitId={souhaitId}
+              souhait={souhait}
+              value={envoi}
+              onChange={setEnvoi}
+              disabled={busy}
+            />
+            <Btn type="submit" disabled={busy || !envoi.email}>{busy ? 'Envoi…' : 'Envoyer le rapport'}</Btn>
           </form>
           {traces.length > 0 && (
             <ul style={{ paddingLeft: 18, fontSize: 13.5 }}>

@@ -38,10 +38,19 @@ export default function MenuMission({ souhaitId, onBack }) {
     setOnglet(VOLETS.includes(volet) ? volet : 'recap')
   }, [souhaitId, volet])
 
+  useEffect(() => {
+    if (onglet !== 'medical' && onglet !== 'envoyer_rapport') return
+    let stop = false
+    supabase.from('souhait_medicaments').select('*').eq('souhait_id', souhaitId).then(({ data }) => {
+      if (!stop) setMeds(data || [])
+    })
+    return () => { stop = true }
+  }, [onglet, souhaitId])
+
   async function charger() {
     setErr(null)
     const { data, error } = await supabase.from('souhaits')
-      .select('id, statut, fictif, date_souhaitee, date_fin, dates_possibles, beneficiaire_prenom, beneficiaire_nom, beneficiaire_ddn, mission')
+      .select('id, statut, fictif, date_souhaitee, date_fin, dates_possibles, beneficiaire_prenom, beneficiaire_nom, beneficiaire_ddn, beneficiaire_genre, description, localisation, besoins_specifiques, notes_medicales, mission')
       .eq('id', souhaitId)
       .maybeSingle()
     if (error || !data) {
@@ -110,6 +119,7 @@ export default function MenuMission({ souhaitId, onBack }) {
           peutExporter={peutExporter}
           souhait={meta}
           meds={meds}
+          onMedsChange={setMeds}
         />
       )}
       {onglet === 'documents' && <DocumentsMission souhaitId={souhaitId} />}

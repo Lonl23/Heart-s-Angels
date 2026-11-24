@@ -417,12 +417,14 @@ export async function upsertContactMedical(f, { created_by } = {}) {
     }
   }
 
+  const email = emptyToNull(f.email) || emptyToNull(f.email_general) || ''
   const dataExtra = {
     ...(existing?.data && typeof existing.data === 'object' ? existing.data : {}),
     type_medical: typeMedical || existing?.data?.type_medical || '',
     organisme,
     telephone: tel || '',
     tel_gsm: tel || existing?.tel_gsm || '',
+    email: email || existing?.data?.email || '',
   }
   const rec = {
     prenom,
