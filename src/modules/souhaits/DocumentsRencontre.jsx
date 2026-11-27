@@ -9,6 +9,8 @@ import {
 import { formaterNiss } from '@/modules/annuaire/annuaireSchema'
 import { telechargerBlob, telechargerFichier } from '@/lib/telechargerFichier'
 import { genererPdfConsentement, genererPdfDroitImage } from './documentsRencontrePdf'
+import { envoyerDocumentRencontre } from '@/lib/envoyerInvitation'
+import { uploadDocSejour, signedDocSejour, TAILLE_MAX_DOC_SEJOUR } from './sejour'
 import pdfConsentementUrl from '@/assets/papier/consentement-libre-eclaire.pdf?url'
 import pdfDroitImageUrl from '@/assets/papier/autorisation-droit-image.pdf?url'
 
@@ -16,6 +18,23 @@ const PDF_CONSENTEMENT = pdfConsentementUrl
 const PDF_DROIT_IMAGE = pdfDroitImageUrl
 const NOM_PDF_CONSENTEMENT = 'Consentement_Libre_et_Eclaire_Hearts_Angels.pdf'
 const NOM_PDF_DROIT_IMAGE = 'Autorisation_droit_a_l_image_Hearts_Angels.pdf'
+
+function bytesToBase64(bytes) {
+  let bin = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(bin)
+}
+
+function champsRemplis(mode, data) {
+  if (!data?.nom?.trim() || !data?.date) return false
+  if (mode === 'consentement') {
+    return !!(data.souhait_texte?.trim() && data.risques?.trim())
+  }
+  return !!data.niveau
+}
 
 function BoutonModelePdf({ url, nom, label = 'Télécharger le modèle PDF' }) {
   const [busy, setBusy] = useState(false)
@@ -36,28 +55,30 @@ function BoutonModelePdf({ url, nom, label = 'Télécharger le modèle PDF' }) {
   )
 }
 
-function BoutonPdfComplete({ mode, data, pret, label = 'Voir le PDF' }) {
+function BoutonPdf({ mode, data, sansSignature, label = 'Voir le PDF', disabled }) {
   const [busy, setBusy] = useState(false)
   async function go() {
-    if (busy) return
-    if (!pret) {
-      alert('Complétez et faites signer le document avant de télécharger le PDF rempli.')
+    if (busy || disabled) return
+    if (!champsRemplis(mode, data)) {
+      alert('Complétez d’abord les champs du document.')
       return
     }
     setBusy(true)
     try {
+      const opts = sansSignature ? { sansSignature: true } : {}
       const bytes = mode === 'consentement'
-        ? await genererPdfConsentement(data)
-        : await genererPdfDroitImage(data)
+        ? await genererPdfConsentement(data, opts)
+        : await genererPdfDroitImage(data, opts)
       const nom = mode === 'consentement' ? NOM_PDF_CONSENTEMENT : NOM_PDF_DROIT_IMAGE
-      telechargerBlob(bytes, nom)
+      const suffix = sansSignature ? nom.replace(/\.pdf$/i, '_a_signer.pdf') : nom
+      telechargerBlob(bytes, suffix)
     } catch (e) {
       alert(e.message || 'Génération du PDF impossible.')
     }
     setBusy(false)
   }
   return (
-    <Btn kind="soft" onClick={go} disabled={busy}>
+    <Btn kind="soft" onClick={go} disabled={busy || disabled}>
       {busy ? '…' : label}
     </Btn>
   )
@@ -94,12 +115,17 @@ function prefills(souhait, m, cle) {
       : (m?.autorisation_photos === 'oui_sauf_presse'
         ? SUPPORTS_DIFFUSION_DEFAUT.filter(s => s !== 'presse')
         : [...SUPPORTS_DIFFUSION_DEFAUT]),
+    document_signe: b.document_signe || null,
   }
 }
 
 /** Consentement libre & éclairé + droit à l’image (PDF officiels). */
 export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
   const [popup, setPopup] = useState(null)
+  const [mail, setMail] = useState(null) // { mode, data }
+  const [mailForm, setMailForm] = useState({ email: '', prenom: '', nom: '' })
+  const [mailBusy, setMailBusy] = useState(false)
+  const [mailMsg, setMailMsg] = useState(null)
 
   function maj(cle, next) {
     if (lecture) return
@@ -120,42 +146,132 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
   const photosOk = !!(photos.signature && (photos.niveau || photos.accepte !== undefined))
   const dataCons = prefills(souhait, m, 'consentement')
   const dataPhotos = prefills(souhait, m, 'photos')
+  const consPretPdf = champsRemplis('consentement', dataCons)
+  const photosPretPdf = champsRemplis('photos', dataPhotos)
+
+  async function envoyerMail() {
+    if (!mail || !souhait?.id) return
+    setMailBusy(true)
+    setMailMsg(null)
+    try {
+      const opts = { sansSignature: true }
+      const bytes = mail.mode === 'consentement'
+        ? await genererPdfConsentement(mail.data, opts)
+        : await genererPdfDroitImage(mail.data, opts)
+      const nom = mail.mode === 'consentement'
+        ? NOM_PDF_CONSENTEMENT.replace(/\.pdf$/i, '_a_signer.pdf')
+        : NOM_PDF_DROIT_IMAGE.replace(/\.pdf$/i, '_a_signer.pdf')
+      const res = await envoyerDocumentRencontre({
+        souhaitId: souhait.id,
+        email: mailForm.email,
+        destinatairePrenom: mailForm.prenom,
+        destinataireNom: mailForm.nom,
+        mode: mail.mode,
+        pdfBase64: bytesToBase64(bytes),
+        nomFichier: nom,
+      })
+      if (!res.ok) { setMailMsg({ ok: false, t: res.error }); setMailBusy(false); return }
+      setMailMsg({ ok: true, t: 'Document envoyé. Le destinataire peut le signer à la main puis vous le renvoyer.' })
+      setMail(null)
+    } catch (e) {
+      setMailMsg({ ok: false, t: e.message || String(e) })
+    }
+    setMailBusy(false)
+  }
+
+  async function joindreSigne(cle, file) {
+    if (!souhait?.id || !file) return
+    if (file.size > TAILLE_MAX_DOC_SEJOUR) {
+      alert('Fichier trop volumineux.')
+      return
+    }
+    try {
+      const doc = await uploadDocSejour(souhait.id, cle === 'consentement' ? 'consentement-signe' : 'droit-image-signe', file)
+      const cur = prefills(souhait, m, cle)
+      maj(cle, { ...cur, document_signe: doc })
+    } catch (e) {
+      alert(e.message || 'Envoi du fichier impossible.')
+    }
+  }
+
+  async function ouvrirSigne(meta) {
+    try {
+      const url = await signedDocSejour(meta?.path)
+      if (url) window.open(url, '_blank', 'noopener')
+    } catch (e) {
+      alert(e.message || 'Ouverture impossible.')
+    }
+  }
+
+  function carte({ titre, ok, data, mode, pretPdf, cle }) {
+    const signe = data.document_signe
+    return (
+      <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>{titre}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
+          {ok
+            ? `Signé tablette${data.nom ? ` · ${data.nom}` : ''}${data.date ? ` · ${String(data.date).slice(0, 10)}` : ''}`
+            : 'Complétez les infos, visualisez le PDF sans signature, envoyez-le par mail pour une signature manuscrite, ou signez sur tablette.'}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <BoutonPdf mode={mode} data={data} sansSignature label="PDF sans signature" disabled={!pretPdf} />
+          {ok && <BoutonPdf mode={mode} data={data} label="PDF signé (tablette)" />}
+          {!lecture && (
+            <>
+              <Btn kind={ok ? 'soft' : 'primary'} onClick={() => setPopup(mode)}>
+                {ok ? 'Revoir / resignature' : 'Compléter / faire signer'}
+              </Btn>
+              <Btn
+                kind="soft"
+                disabled={!pretPdf}
+                onClick={() => {
+                  setMailMsg(null)
+                  setMailForm({ email: '', prenom: '', nom: data.nom || '' })
+                  setMail({ mode, data })
+                }}
+              >Envoyer par mail</Btn>
+              <label className="ha-check-btn" style={{ display: 'inline-flex', cursor: 'pointer', margin: 0 }}>
+                Joindre le PDF signé
+                <input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  hidden
+                  onChange={e => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ''
+                    if (f) joindreSigne(cle, f)
+                  }}
+                />
+              </label>
+            </>
+          )}
+          {signe?.path && (
+            <Btn kind="soft" onClick={() => ouvrirSigne(signe)}>Voir la PJ signée</Btn>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
-      <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>Consentement libre & éclairé</div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-          {consOk
-            ? `Signé${cons.nom ? ` · ${cons.nom}` : ''}${cons.date ? ` · ${String(cons.date).slice(0, 10)}` : ''}`
-            : 'Document officiel à compléter en présence du patient, puis signature tablette.'}
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <BoutonPdfComplete mode="consentement" data={dataCons} pret={consOk} />
-          {!lecture && (
-            <Btn kind={consOk ? 'soft' : 'primary'} onClick={() => setPopup('consentement')}>
-              {consOk ? 'Revoir / resignature' : 'Compléter et faire signer'}
-            </Btn>
-          )}
-        </div>
-      </div>
-
-      <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
-        <div style={{ fontWeight: 700, marginBottom: 4 }}>Autorisation du droit à l’image</div>
-        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-          {photosOk
-            ? `${lblAutorisationPhotos(niveauPhotosPourStockage(photos.niveau, photos.supports) || m.autorisation_photos)}${photos.nom ? ` · ${photos.nom}` : ''}`
-            : 'Document officiel — cases du PDF, supports de diffusion, puis signature.'}
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <BoutonPdfComplete mode="photos" data={dataPhotos} pret={photosOk} />
-          {!lecture && (
-            <Btn kind={photosOk ? 'soft' : 'primary'} onClick={() => setPopup('photos')}>
-              {photosOk ? 'Revoir / resignature' : 'Compléter et faire signer'}
-            </Btn>
-          )}
-        </div>
-      </div>
+      {mailMsg && <Flash kind={mailMsg.ok ? 'ok' : 'err'}>{mailMsg.t}</Flash>}
+      {carte({
+        titre: 'Consentement libre & éclairé',
+        ok: consOk,
+        data: dataCons,
+        mode: 'consentement',
+        pretPdf: consPretPdf,
+        cle: 'consentement',
+      })}
+      {carte({
+        titre: 'Autorisation du droit à l’image',
+        ok: photosOk,
+        data: dataPhotos,
+        mode: 'photos',
+        pretPdf: photosPretPdf,
+        cle: 'photos',
+      })}
 
       {popup === 'consentement' && (
         <PopupDocument
@@ -174,6 +290,30 @@ export default function DocumentsRencontre({ m, setM, lecture, souhait }) {
           onClose={() => setPopup(null)}
           onSave={next => { maj('photos', next); setPopup(null) }}
         />
+      )}
+
+      {mail && (
+        <Modal
+          title="Envoyer le PDF à signer"
+          onClose={() => setMail(null)}
+          footer={(
+            <>
+              <Btn kind="soft" onClick={() => setMail(null)}>Annuler</Btn>
+              <Btn onClick={envoyerMail} disabled={mailBusy || !mailForm.email.includes('@')}>
+                {mailBusy ? 'Envoi…' : 'Envoyer'}
+              </Btn>
+            </>
+          )}
+        >
+          <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 0 }}>
+            Le PDF part prérempli, sans signature numérique — pour une signature manuscrite.
+          </p>
+          <F label="E-mail" type="email" value={mailForm.email} set={v => setMailForm(s => ({ ...s, email: v }))} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <F label="Prénom (optionnel)" value={mailForm.prenom} set={v => setMailForm(s => ({ ...s, prenom: v }))} />
+            <F label="Nom (optionnel)" value={mailForm.nom} set={v => setMailForm(s => ({ ...s, nom: v }))} />
+          </div>
+        </Modal>
       )}
     </div>
   )
@@ -236,20 +376,16 @@ function PopupDocument({ mode, titre, initial, onSave, onClose }) {
       {etape === 1 ? (
         <div>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
-            Complétez le document en présence du patient (comme sur le PDF), puis proposez la signature sur la tablette.
+            Complétez le document, visualisez le PDF sans signature, ou proposez la signature tablette.
           </p>
           <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <BoutonModelePdf
               url={mode === 'consentement' ? PDF_CONSENTEMENT : PDF_DROIT_IMAGE}
               nom={mode === 'consentement' ? NOM_PDF_CONSENTEMENT : NOM_PDF_DROIT_IMAGE}
             />
+            <BoutonPdf mode={mode} data={f} sansSignature label="Aperçu PDF sans signature" disabled={!champsRemplis(mode, f)} />
             {f.signature && (
-              <BoutonPdfComplete
-                mode={mode}
-                data={f}
-                pret
-                label="Aperçu PDF rempli"
-              />
+              <BoutonPdf mode={mode} data={f} label="Aperçu PDF signé" />
             )}
           </div>
 

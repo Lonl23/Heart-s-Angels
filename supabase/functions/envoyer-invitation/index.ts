@@ -343,6 +343,9 @@ Deno.serve(async (req) => {
       destinataire_prenom?: string
       destinataire_nom?: string
       sujet?: string
+      mode?: string
+      pdf_base64?: string
+      nom_fichier?: string
     }
     const pub = urlPublique()
     const action = String(body?.action || 'invitation').trim()
@@ -540,7 +543,27 @@ Deno.serve(async (req) => {
       const sujetClient = String(body?.sujet || '').trim()
       const sujet = sujetClient
         || `${nomBenef} : Rapport médical du souhait en date du ${dateLib}`
-      await envoyer({ smtp, to: dest, sujet, texte, html, bcc: false })
+      const attachments: { filename: string; content: Uint8Array; contentType?: string }[] = []
+      const piecesBrutes = Array.isArray(body?.pieces) ? body.pieces : []
+      for (const pe of piecesBrutes.slice(0, 4)) {
+        const nomFichier = String(pe?.nom_fichier || 'piece.pdf').replace(/[^\w.\- ()àâäéèêëïîôùûüç]+/gi, '_')
+        const b64 = String(pe?.pdf_base64 || '').replace(/^data:application\/pdf;base64,/, '')
+        if (!b64) continue
+        try {
+          const bin = atob(b64)
+          const pdfBytes = new Uint8Array(bin.length)
+          for (let i = 0; i < bin.length; i++) pdfBytes[i] = bin.charCodeAt(i)
+          if (pdfBytes.byteLength < 100 || pdfBytes.byteLength > 8_000_000) continue
+          attachments.push({
+            filename: nomFichier.endsWith('.pdf') ? nomFichier : `${nomFichier}.pdf`,
+            content: pdfBytes,
+            contentType: 'application/pdf',
+          })
+        } catch {
+          /* ignore pièce invalide */
+        }
+      }
+      await envoyer({ smtp, to: dest, sujet, texte, html, bcc: false, attachments })
       const { error: traceErr } = await admin.from('envois_rapport_medical').insert({
         souhait_id: souhaitId,
         expediteur_id: user.id,
@@ -549,7 +572,73 @@ Deno.serve(async (req) => {
         destinataire_nom: destinataireNom,
       })
       if (traceErr) return json({ error: 'Le message est parti, la trace n’a pas pu être enregistrée.' }, 500)
-      return json({ ok: true, action: 'rapport_medical' })
+      return json({ ok: true, action: 'rapport_medical', pieces: attachments.length })
+    }
+
+    // Consentement / droit à l’image — PDF en pièce jointe (souvent sans signature).
+    if (action === 'document_rencontre') {
+      const souhaitId = String(body?.souhait_id || '').trim()
+      const dest = String(body?.email || '').trim()
+      const destinatairePrenom = String(body?.destinataire_prenom || '').trim()
+      const destinataireNom = String(body?.destinataire_nom || '').trim()
+      const mode = String(body?.mode || 'consentement').trim()
+      const nomFichier = String(body?.nom_fichier || 'document.pdf').replace(/[^\w.\- ()àâäéèêëïîôùûüç]+/gi, '_')
+      const b64 = String(body?.pdf_base64 || '').replace(/^data:application\/pdf;base64,/, '')
+      if (!souhaitId) return json({ error: 'Souhait manquant.' }, 400)
+      if (!dest.includes('@')) return json({ error: 'Adresse e-mail manquante.' }, 400)
+      if (!b64) return json({ error: 'PDF manquant.' }, 400)
+      const { data: profDoc } = await admin.from('profiles').select('role,fiche,actif').eq('id', user.id).maybeSingle()
+      if (!profDoc || profDoc.actif === false || profDoc.role === 'partenaire') {
+        return json({ error: 'Envoi non autorisé.' }, 403)
+      }
+      const { data: souchDoc } = await admin
+        .from('souhaits')
+        .select('id, beneficiaire_prenom, beneficiaire_nom')
+        .eq('id', souhaitId)
+        .maybeSingle()
+      if (!souchDoc) return json({ error: 'Souhait introuvable.' }, 404)
+      let pdfBytes: Uint8Array
+      try {
+        const bin = atob(b64)
+        pdfBytes = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) pdfBytes[i] = bin.charCodeAt(i)
+      } catch {
+        return json({ error: 'PDF invalide.' }, 400)
+      }
+      if (pdfBytes.byteLength < 100 || pdfBytes.byteLength > 8_000_000) {
+        return json({ error: 'Taille de PDF invalide.' }, 400)
+      }
+      const nomBenef = [souchDoc.beneficiaire_prenom, souchDoc.beneficiaire_nom].filter(Boolean).join(' ').trim()
+        || 'Bénéficiaire'
+      const libelle = mode === 'photos' ? 'autorisation du droit à l’image' : 'consentement libre et éclairé'
+      const sujet = String(body?.sujet || '').trim()
+        || `${nomBenef} — ${libelle} (à signer)`
+      const qui = [destinatairePrenom, destinataireNom].filter(Boolean).join(' ')
+      const texte =
+        `Bonjour${qui ? ` ${qui}` : ''},\n\n` +
+        `Veuillez trouver ci-joint le document « ${libelle} » pour ${nomBenef}, ` +
+        `prérempli. Vous pouvez le signer manuscritement puis nous le renvoyer.\n\n` +
+        `Heart’s Angels ASBL — app@heartsangels.be`
+      const html =
+        `<p>Bonjour${qui ? ` ${esc(qui)}` : ''},</p>` +
+        `<p>Veuillez trouver ci-joint le document <strong>${esc(libelle)}</strong> pour ` +
+        `<strong>${esc(nomBenef)}</strong>, prérempli. Vous pouvez le signer manuscritement ` +
+        `puis nous le renvoyer (ou le déposer ensuite dans l’application).</p>` +
+        `<p style="color:#666;font-size:13px">Heart’s Angels ASBL — app@heartsangels.be</p>`
+      await envoyer({
+        smtp,
+        to: dest,
+        sujet,
+        texte,
+        html,
+        bcc: false,
+        attachments: [{
+          filename: nomFichier.endsWith('.pdf') ? nomFichier : `${nomFichier}.pdf`,
+          content: pdfBytes,
+          contentType: 'application/pdf',
+        }],
+      })
+      return json({ ok: true, action: 'document_rencontre' })
     }
 
     // Bug helpdesk → mail prioritaire à Laurent, avec captures en PJ.

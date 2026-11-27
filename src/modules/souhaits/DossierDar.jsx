@@ -9,8 +9,19 @@ import {
 } from './rapportMedicalExport.js'
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
 import { injectionsDetresse } from './missionSchema'
+import { stupefiantsMission } from './stupefiantsSchema'
+import { genererPdfStupefiants, NOM_PDF_STUPEFIANTS } from './stupefiantsPdf'
 import DestinataireRapportMedical, { preparerDestinataireAvantEnvoi } from './DestinataireRapportMedical'
 import MedicamentsMAR from './MedicamentsMAR'
+
+function bytesToBase64(bytes) {
+  let bin = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(bin)
+}
 
 const LETTRES = [
   { k: 'donnee', l: 'D', mot: 'Données' },
@@ -266,6 +277,18 @@ export default function DossierDar({
     if (!prep.ok) { setBusy(false); setErr(prep.error); return }
     const dest = prep.form
     const opts = payloadRapport(dest)
+    const pieces = []
+    const stups = stupefiantsMission(souhait?.mission)
+    if (stups.lignes.length) {
+      try {
+        const bytes = await genererPdfStupefiants({ souhait, stups })
+        pieces.push({ nom_fichier: NOM_PDF_STUPEFIANTS, pdf_base64: bytesToBase64(bytes) })
+      } catch (e) {
+        setBusy(false)
+        setErr(`Registre stupéfiants : ${e.message || e}`)
+        return
+      }
+    }
     const res = await envoyerRapportMedical({
       souhaitId,
       email: dest.email,
@@ -274,6 +297,7 @@ export default function DossierDar({
       sujet,
       html: htmlEmailRapportMedical(opts),
       texte: texteEmailRapportMedical(opts),
+      pieces,
     })
     setBusy(false)
     if (!res.ok) { setErr(res.error); return }

@@ -79,9 +79,35 @@ export async function envoyerMailBugHelpdesk(ticketId) {
   return { ok: false, error: await lireErreur(data, error) }
 }
 
-/** Rapport médical uniquement. Objet dynamique (bénéficiaire + date), sans copie cachée. */
+/** Consentement / droit à l’image en PDF (souvent sans signature, pour signature manuscrite). */
+export async function envoyerDocumentRencontre({
+  souhaitId, email, destinatairePrenom, destinataireNom, sujet, pdfBase64, nomFichier, mode,
+}) {
+  const adresse = String(email || '').trim()
+  const prenom = String(destinatairePrenom || '').trim()
+  const nom = String(destinataireNom || '').trim()
+  if (!souhaitId) return { ok: false, error: 'Souhait manquant.' }
+  if (!adresse.includes('@')) return { ok: false, error: 'Adresse e-mail manquante.' }
+  if (!pdfBase64) return { ok: false, error: 'PDF manquant.' }
+  const { data, error } = await invokeEnvoyerInvitation({
+    action: 'document_rencontre',
+    souhait_id: souhaitId,
+    email: adresse,
+    destinataire_prenom: prenom || undefined,
+    destinataire_nom: nom || undefined,
+    sujet: String(sujet || '').trim() || undefined,
+    mode: mode || 'consentement',
+    pdf_base64: pdfBase64,
+    nom_fichier: nomFichier || 'document.pdf',
+  })
+  if (data?.ok) return { ok: true }
+  return { ok: false, error: await lireErreur(data, error) }
+}
+
+/** Rapport médical uniquement. Objet dynamique (bénéficiaire + date), sans copie cachée.
+ *  `pieces` optionnel : [{ nom_fichier, pdf_base64 }] (ex. registre stupéfiants). */
 export async function envoyerRapportMedical({
-  souhaitId, email, destinatairePrenom, destinataireNom, html, texte, sujet,
+  souhaitId, email, destinatairePrenom, destinataireNom, html, texte, sujet, pieces,
 }) {
   const adresse = String(email || '').trim()
   const prenom = String(destinatairePrenom || '').trim()
@@ -98,6 +124,7 @@ export async function envoyerRapportMedical({
     sujet: String(sujet || '').trim() || undefined,
     html,
     texte,
+    pieces: Array.isArray(pieces) && pieces.length ? pieces : undefined,
   })
   if (data?.ok) return { ok: true }
   return { ok: false, error: await lireErreur(data, error) }

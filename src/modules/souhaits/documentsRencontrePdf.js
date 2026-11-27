@@ -168,9 +168,10 @@ async function poserSignature(pdf, page, dataUrl, box) {
   })
 }
 
-/** PDF consentement = modèle officiel + champs + signature. */
-export async function genererPdfConsentement(data = {}) {
+/** PDF consentement = modèle officiel + champs (+ signature si présente / autorisée). */
+export async function genererPdfConsentement(data = {}, opts = {}) {
   const { pdf, page, font, bold } = await chargerModele(pdfConsentementUrl)
+  const avecSignature = opts.sansSignature !== true && !!data.signature
 
   // Identité (coords = PDF officiel, origine haut-gauche)
   ecrire(page, font, data.nom, 166.6, 192.8, 330.8, 204.5, { size: 9.5 })
@@ -232,14 +233,17 @@ export async function genererPdfConsentement(data = {}) {
       color: INK,
     })
   }
-  await poserSignature(pdf, page, data.signature, [58, 744, 180, 772])
+  if (avecSignature) {
+    await poserSignature(pdf, page, data.signature, [58, 744, 180, 772])
+  }
 
   return pdf.save()
 }
 
-/** PDF droit à l'image = modèle officiel + champs + cases + signature. */
-export async function genererPdfDroitImage(data = {}) {
+/** PDF droit à l'image = modèle officiel + champs + cases (+ signature si présente / autorisée). */
+export async function genererPdfDroitImage(data = {}, opts = {}) {
   const { pdf, page, font, bold } = await chargerModele(pdfDroitImageUrl)
+  const avecSignature = opts.sansSignature !== true && !!data.signature
 
   ecrire(page, font, data.nom, 201.1, 208.7, 356.3, 219.9, { size: 9.5 })
   ecrire(page, font, dateBe(data.ddn), 89.4, 220.4, 148.9, 231.7, { size: 8, align: 'center' })
@@ -305,7 +309,9 @@ export async function genererPdfDroitImage(data = {}) {
     })
   }
 
-  await poserSignature(pdf, page, data.signature, [56, 672, 250, 765])
+  if (avecSignature) {
+    await poserSignature(pdf, page, data.signature, [56, 672, 250, 765])
+  }
 
   return pdf.save()
 }
