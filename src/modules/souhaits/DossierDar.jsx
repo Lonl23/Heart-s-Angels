@@ -379,6 +379,7 @@ export default function DossierDar({
                 locked={!peutEcrire}
                 optionnel={!!individuel}
                 souhait={souhait}
+                signaturesActives={false}
               />
             </section>
           )}

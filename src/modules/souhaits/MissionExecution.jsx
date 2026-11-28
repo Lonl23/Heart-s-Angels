@@ -17,6 +17,8 @@ import MedicamentsMAR from './MedicamentsMAR'
 import { COTES, CoinPhotos, PhotoAnnotator, PhotosCotesVue, TicketPhoto, uploadMissionPhoto, aDesPhotosCotes } from './TerrainPhotos'
 import ScanConso from '@/modules/stock/ScanConso'
 import ScanEmport from '@/modules/stock/ScanEmport'
+import StupefiantsMission from './StupefiantsMission'
+import { stupefiantsMission } from './stupefiantsSchema'
 import { PopupDetresse } from './ProtocoleDetresse'
 import { BandeauMedecin } from './EquipePluri'
 import { fusionMissionDemo, fusionRpcDemo } from './formationSession'
@@ -476,6 +478,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
     flash()
   }
 
+  async function saveStupefiants(next) {
+    setM(prev => ({ ...(prev || {}), stupefiants: next }))
+    const { error, data } = await supabase.rpc('patch_mission_cle', {
+      p_souhait: souhaitId, p_cle: 'stupefiants', p_valeur: next, p_mode: 'set',
+    })
+    if (error || data?.ok === false) {
+      setErr(error?.message || data?.error || 'Registre stupéfiants non enregistré.')
+      throw new Error(error?.message || data?.error || 'Enregistrement impossible.')
+    }
+    flash()
+  }
+
   async function injecterDetresse(inj) {
     const medical = medicalDeCetteMission(aff || rpc)
     if (!medical) { setErr('Injection réservée à l’équipage médical.'); return false }
@@ -572,6 +586,9 @@ export default function MissionExecution({ souhaitId, onBack }) {
   /* Matériel consommé : du départ base jusqu’au rentré base. L’emport reste à la base. */
   const showScanConso = userMedical && vecteurMedical && !aLaBase
   const showCloture = etape === 'base_rentre'
+  /* Signatures stups : départ sur place PEC, retour sur place retour. */
+  const showStupsRemise = userMedical && vecteurMedical && complet && etape === 'pec_sur_place'
+  const showStupsRetour = userMedical && vecteurMedical && complet && etape === 'retour_sur_place'
   const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
   const showDetresse = userMedical && complet && vecteur && etapeProtocoleDetresse(etape) && !locked
@@ -788,6 +805,19 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
                 </Section>
               )}
+              {showStupsRemise && (
+                <div style={{ margin: '12px 0' }}>
+                  <StupefiantsMission
+                    mode="remise"
+                    value={stupefiantsMission(m)}
+                    onSave={saveStupefiants}
+                    locked={locked}
+                    optionnel={jouette}
+                    souhait={sh}
+                    signaturesActives
+                  />
+                </div>
+              )}
               {showPecNotes && pecMedicalACharge && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
               )}
@@ -795,6 +825,19 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'À cocher'}>
                   <CheckBlock items={itemsVis.retour_pec} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
                 </Section>
+              )}
+              {showStupsRetour && (
+                <div style={{ margin: '12px 0' }}>
+                  <StupefiantsMission
+                    mode="retour"
+                    value={stupefiantsMission(m)}
+                    onSave={saveStupefiants}
+                    locked={locked}
+                    optionnel={jouette}
+                    souhait={sh}
+                    signaturesActives
+                  />
+                </div>
               )}
               {def.checklist === 'retour_pec' && pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Retour patient : à charge du médical de ce véhicule.</p>

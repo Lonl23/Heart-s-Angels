@@ -76,13 +76,13 @@ export const CHECKLISTS = {
   pec: {
     titre: 'Checklist PEC',
     kind: 'medical',
-    items: ['Consentement', 'Autorisation photos', 'Feuille de traitements', 'Traitements avec surplus sécurité', 'Stups encodés (onglet Rapport médical)', 'Protections, sondes et sachet à diurèse (SN)', 'Divers requis'],
+    items: ['Consentement', 'Autorisation photos', 'Feuille de traitements', 'Traitements avec surplus sécurité', 'Registre stupéfiants signé (départ)', 'Protections, sondes et sachet à diurèse (SN)', 'Divers requis'],
   },
   retour_pec: {
     titre: 'Checklist Retour PEC',
     kind: 'mixte',
-    items: ['Traitements en surplus rendu', 'Stups retour encodés (onglet Rapport médical)', 'Divers patients rendu', 'Si institution, échange draps/matériel', 'Reprise matériels et sacs'],
-    medicalItems: ['Traitements en surplus rendu', 'Stups retour encodés (onglet Rapport médical)', 'Divers patients rendu', 'Si institution, échange draps/matériel'],
+    items: ['Traitements en surplus rendu', 'Registre stupéfiants signé (retour)', 'Divers patients rendu', 'Si institution, échange draps/matériel', 'Reprise matériels et sacs'],
+    medicalItems: ['Traitements en surplus rendu', 'Registre stupéfiants signé (retour)', 'Divers patients rendu', 'Si institution, échange draps/matériel'],
   },
   retour_base: {
     titre: 'Checklist Retour Base',
