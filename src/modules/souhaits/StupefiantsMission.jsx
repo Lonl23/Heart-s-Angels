@@ -12,27 +12,33 @@ import {
 import { analyserDocumentMedical, stupefiantsDepuisAnalyse } from './analyserDocumentMedical'
 
 /**
- * Registre stupéfiants terrain (feuille institutions) :
- * - mode "remise" : à la prise en charge (quantités + signatures)
- * - mode "usages" : durant la mission (administrations)
- * - mode "retour" : rendu patient (quantités + signatures)
+ * Registre stupéfiants (feuille institutions) — onglet Rapport médical.
+ * mode "all" (défaut) : remise PEC + administrations + retour.
+ * modes "remise" | "usages" | "retour" : vues partielles (compat).
  */
 export default function StupefiantsMission({
   value,
   onSave,
-  mode = 'usages',
+  mode = 'all',
   locked,
   optionnel,
   souhait,
 }) {
   const stups = stupefiantsMission(value)
+  const all = mode === 'all'
+  const showRemise = all || mode === 'remise'
+  const showUsages = all || mode === 'usages'
+  const showRetour = all || mode === 'retour'
+
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const [okMsg, setOkMsg] = useState(null)
   const [pick, setPick] = useState(false)
   const [custom, setCustom] = useState({ produit: '', dosage: '' })
-  const [sigOpen, setSigOpen] = useState(null) // remise | retour
-  const [sigForm, setSigForm] = useState({ remettant_nom: '', receveur_nom: '', signature_remettant: '', signature_receveur: '' })
+  const [sigOpen, setSigOpen] = useState(null)
+  const [sigForm, setSigForm] = useState({
+    remettant_nom: '', receveur_nom: '', signature_remettant: '', signature_receveur: '', date: '',
+  })
 
   async function sauver(next) {
     if (locked) return
@@ -51,13 +57,12 @@ export default function StupefiantsMission({
   }
 
   function ajouterDepuisListe(item) {
-    const lignes = [...stups.lignes, nouvelleLigneStup({
+    majLignes([...stups.lignes, nouvelleLigneStup({
       produit: item.produit,
       dosage: item.dosage || '',
       qte_remise: 1,
-    })]
+    })])
     setPick(false)
-    majLignes(lignes)
   }
 
   function ajouterCustom() {
@@ -92,11 +97,10 @@ export default function StupefiantsMission({
         setBusy(false)
         return
       }
-      const lignes = [
-        ...stups.lignes,
-        ...rows.map(r => nouvelleLigneStup(r)),
-      ]
-      await onSave({ ...stups, lignes })
+      await onSave({
+        ...stups,
+        lignes: [...stups.lignes, ...rows.map(r => nouvelleLigneStup(r))],
+      })
       setPick(false)
       setOkMsg(`${rows.length} ligne(s) proposées par l’IA — vérifiez quantités, lots et DLC.`)
     } catch (e) {
@@ -165,11 +169,7 @@ export default function StupefiantsMission({
       date: sigForm.date || new Date().toISOString().slice(0, 10),
       signe_le: new Date().toISOString(),
     }
-    const next = {
-      ...stups,
-      [sigOpen]: bloc,
-    }
-    // À la validation retour : préremplir qte_retour si vide
+    const next = { ...stups, [sigOpen]: bloc }
     if (sigOpen === 'retour') {
       next.lignes = stups.lignes.map(l => {
         if (l.qte_retour != null && l.qte_retour !== '') return l
@@ -181,44 +181,68 @@ export default function StupefiantsMission({
     await sauver(next)
   }
 
-  const titre = mode === 'remise'
-    ? 'Stupéfiants — remise à la prise en charge'
-    : mode === 'retour'
-      ? 'Stupéfiants — retour (rendu patient)'
-      : 'Stupéfiants — administrations'
-
-  const hint = mode === 'remise'
-    ? 'À la prise en charge : comptabilisez tout ce qui est remis (y compris ce qui était déjà dans vos sacs), photo du tableau si besoin, puis double signature.'
-    : mode === 'retour'
-      ? 'Au retour du patient : quantités rendues / non utilisées, puis double signature.'
-      : 'Notez chaque administration durant le souhait (dose et heure).'
+  function blocSignatures(kind) {
+    const bloc = kind === 'remise' ? stups.remise : stups.retour
+    const ok = !!(bloc?.signature_remettant && bloc?.signature_receveur)
+    return (
+      <div style={{ marginTop: 12 }}>
+        {ok ? (
+          <Flash kind="ok">
+            Signé le {String(bloc.date || '').slice(0, 10)}
+            {kind === 'remise'
+              ? ` · institution ${bloc.remettant_nom || ''} · HA ${bloc.receveur_nom || ''}`
+              : ` · HA ${bloc.remettant_nom || ''} · institution ${bloc.receveur_nom || ''}`}
+          </Flash>
+        ) : (
+          <Flash kind="warn">
+            {kind === 'remise'
+              ? 'Signatures départ manquantes (infirmier institution + Heart’s Angels).'
+              : 'Signatures retour manquantes (Heart’s Angels + infirmier institution).'}
+          </Flash>
+        )}
+        {!locked && (
+          <Btn onClick={() => ouvrirSignatures(kind)} disabled={busy || (kind === 'remise' && !stups.lignes.length)}>
+            {ok
+              ? 'Revoir / resignature'
+              : (kind === 'remise' ? 'Faire signer le départ (PEC)' : 'Faire signer le retour')}
+          </Btn>
+        )}
+      </div>
+    )
+  }
 
   return (
     <Card>
-      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--heading)', marginBottom: 6 }}>{titre}</div>
-      <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 0 }}>{hint}{optionnel ? ' (facultatif en formation)' : ''}</p>
+      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--heading)', marginBottom: 6 }}>
+        Stupéfiants — feuille institutions
+      </div>
+      <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 0 }}>
+        Remise à la prise en charge (y compris ce qui était déjà en sacs), administrations pendant le souhait,
+        retour au rendu patient. Complète le PDF officiel « Départs & retours stupéfiants ».
+        {optionnel ? ' (facultatif en formation)' : ''}
+      </p>
       {err && <Flash kind="err">{err}</Flash>}
       {okMsg && <Flash kind="ok">{okMsg}</Flash>}
 
       <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {(mode === 'remise' || mode === 'usages') && !locked && (
-          <Btn kind="soft" onClick={() => setPick(true)} disabled={busy}>+ Ajouter un stupéfiant</Btn>
-        )}
-        {mode === 'remise' && !locked && (
-          <label className="ha-check-btn" style={{ display: 'inline-flex', cursor: busy ? 'wait' : 'pointer', margin: 0, opacity: busy ? 0.7 : 1 }}>
-            {busy ? 'Analyse IA…' : 'Photo / PDF → IA'}
-            <input
-              type="file"
-              accept="application/pdf,image/*"
-              disabled={busy}
-              hidden
-              onChange={e => {
-                const f = e.target.files?.[0]
-                e.target.value = ''
-                if (f) importerScan(f)
-              }}
-            />
-          </label>
+        {showRemise && !locked && (
+          <>
+            <Btn kind="soft" onClick={() => setPick(true)} disabled={busy}>+ Ajouter un stupéfiant</Btn>
+            <label className="ha-check-btn" style={{ display: 'inline-flex', cursor: busy ? 'wait' : 'pointer', margin: 0, opacity: busy ? 0.7 : 1 }}>
+              {busy ? 'Analyse IA…' : 'Photo / PDF → IA'}
+              <input
+                type="file"
+                accept="application/pdf,image/*"
+                disabled={busy}
+                hidden
+                onChange={e => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (f) importerScan(f)
+                }}
+              />
+            </label>
+          </>
         )}
         {stups.lignes.length > 0 && (
           <Btn kind="soft" onClick={voirPdf} disabled={busy}>Feuille institutions (PDF)</Btn>
@@ -237,17 +261,17 @@ export default function StupefiantsMission({
                   <div>
                     <div style={{ fontWeight: 700 }}>{l.produit}{l.dosage ? ` · ${l.dosage}` : ''}</div>
                     <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                      Remis {b.remise} · Utilisé {b.utilisee} · Retour {b.retour}
+                      Départ {b.remise} · Utilisé {b.utilisee} · Retour {b.retour}
                       {b.ecart !== 0 ? ` · écart ${b.ecart}` : ''}
                     </div>
                   </div>
-                  {mode === 'remise' && !locked && (
+                  {showRemise && !locked && (
                     <Btn kind="soft" onClick={() => retirerLigne(l.id)}>Retirer</Btn>
                   )}
                 </div>
 
-                {mode === 'remise' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 8 }}>
+                {showRemise && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 8, marginBottom: showUsages || showRetour ? 10 : 0 }}>
                     <F label="Qté départ" type="number" value={l.qte_remise ?? ''} set={v => majLigne(l.id, { qte_remise: Number(v) || 0 })} disabled={locked} />
                     <F label="Lot" value={l.lot || ''} set={v => majLigne(l.id, { lot: v })} disabled={locked} />
                     <F label="DLC" type="date" value={l.dlc || ''} set={v => majLigne(l.id, { dlc: v })} disabled={locked} />
@@ -255,8 +279,9 @@ export default function StupefiantsMission({
                   </div>
                 )}
 
-                {mode === 'usages' && (
-                  <div>
+                {showUsages && (
+                  <div style={{ marginBottom: showRetour ? 10 : 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6 }}>Administrations</div>
                     {(l.usages || []).map(u => (
                       <div key={u.id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px auto', gap: 8, marginBottom: 6, alignItems: 'end' }}>
                         <F label="Dose administrée" value={u.dose || ''} set={v => majUsage(l.id, u.id, { dose: v })} disabled={locked} />
@@ -268,15 +293,15 @@ export default function StupefiantsMission({
                       <Btn kind="soft" onClick={() => ajouterUsage(l.id)}>+ Administration</Btn>
                     )}
                     <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 6 }}>
-                      {qteUtiliseeLigne(l)} administration(s) · remis {b.remise}
+                      {qteUtiliseeLigne(l)} administration(s) · départ {b.remise}
                     </div>
                   </div>
                 )}
 
-                {mode === 'retour' && (
+                {showRetour && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 8 }}>
                     <div style={{ fontSize: 13 }}>
-                      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Remis</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Départ</div>
                       <strong>{b.remise}</strong>
                     </div>
                     <div style={{ fontSize: 13 }}>
@@ -298,37 +323,8 @@ export default function StupefiantsMission({
         </div>
       )}
 
-      {(mode === 'remise' || mode === 'retour') && (
-        <div style={{ marginTop: 14 }}>
-          {(() => {
-            const bloc = mode === 'remise' ? stups.remise : stups.retour
-            const ok = !!(bloc?.signature_remettant && bloc?.signature_receveur)
-            return (
-              <>
-                {ok ? (
-                  <Flash kind="ok">
-                    Signé le {String(bloc.date || '').slice(0, 10)}
-                    {mode === 'remise'
-                      ? ` · institution ${bloc.remettant_nom || ''} · HA ${bloc.receveur_nom || ''}`
-                      : ` · HA ${bloc.remettant_nom || ''} · institution ${bloc.receveur_nom || ''}`}
-                  </Flash>
-                ) : (
-                  <Flash kind="warn">
-                    {mode === 'remise'
-                      ? 'Signatures départ manquantes (infirmier institution + Heart’s Angels).'
-                      : 'Signatures retour manquantes (Heart’s Angels + infirmier institution).'}
-                  </Flash>
-                )}
-                {!locked && (
-                  <Btn onClick={() => ouvrirSignatures(mode)} disabled={busy || (mode === 'remise' && !stups.lignes.length)}>
-                    {ok ? 'Revoir / resignature' : (mode === 'remise' ? 'Faire signer le départ' : 'Faire signer le retour')}
-                  </Btn>
-                )}
-              </>
-            )
-          })()}
-        </div>
-      )}
+      {showRemise && blocSignatures('remise')}
+      {showRetour && blocSignatures('retour')}
 
       {pick && (
         <Modal title="Choisir un stupéfiant" onClose={() => setPick(false)} footer={<Btn kind="soft" onClick={() => setPick(false)}>Fermer</Btn>}>

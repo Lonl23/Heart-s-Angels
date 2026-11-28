@@ -120,6 +120,7 @@ export default function MenuMission({ souhaitId, onBack }) {
           souhait={meta}
           meds={meds}
           onMedsChange={setMeds}
+          onSouhaitMission={mission => setMeta(prev => prev ? { ...prev, mission } : prev)}
         />
       )}
       {onglet === 'documents' && <DocumentsMission souhaitId={souhaitId} />}
