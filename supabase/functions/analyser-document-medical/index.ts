@@ -88,18 +88,30 @@ Deno.serve(async (req) => {
   const auth = req.headers.get('Authorization') || ''
   if (!auth.startsWith('Bearer ')) return json({ error: 'Non authentifié' }, 401)
 
-  const supabase = createClient(
-    Deno.env.get('SUPABASE_URL') || '',
-    Deno.env.get('SUPABASE_ANON_KEY') || '',
-    { global: { headers: { Authorization: auth } } },
-  )
+  const urlSb = Deno.env.get('SUPABASE_URL') || ''
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+
+  const supabase = createClient(urlSb, anonKey, {
+    global: { headers: { Authorization: auth } },
+  })
   const { data: userData, error: userErr } = await supabase.auth.getUser()
   if (userErr || !userData?.user) return json({ error: 'Session invalide' }, 401)
 
-  const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY') || ''
+  // Clé : secret Edge en priorité, sinon Vault (comme SMTP).
+  let geminiKey = (Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY') || '').trim()
+  let keySource: 'env' | 'vault' | 'none' = geminiKey ? 'env' : 'none'
+  if (!geminiKey && serviceKey) {
+    const admin = createClient(urlSb, serviceKey)
+    const { data: cfg } = await admin.rpc('gemini_api_config')
+    if (cfg?.ok && cfg.key) {
+      geminiKey = String(cfg.key).trim()
+      keySource = 'vault'
+    }
+  }
   if (!geminiKey) {
     return json({
-      error: 'Analyse IA non configurée (secret GEMINI_API_KEY manquant sur Supabase).',
+      error: 'Analyse IA non configurée (secret GEMINI_API_KEY / Vault ha_gemini_api_key manquant).',
       code: 'no_gemini',
     }, 503)
   }
@@ -172,5 +184,5 @@ Pour stupefiants: ne garde que les médicaments stupéfiants / psychotropes cont
     }
   }
 
-  return json({ ok: true, mode, model, data: parsed })
+  return json({ ok: true, mode, model, key_source: keySource, data: parsed })
 })

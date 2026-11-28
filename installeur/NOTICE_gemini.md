@@ -3,14 +3,16 @@
 L’app appelle l’Edge Function Supabase `analyser-document-medical`.
 La clé API **ne doit jamais** être dans le front.
 
-## Secret à poser (une fois)
+## Secret (côté serveur uniquement)
 
-1. Ouvrir [Supabase → Project Settings → Edge Functions → Secrets](https://supabase.com/dashboard/project/vppmvjqbzdeftrhdoert/settings/functions)
-2. Ajouter :
-   - `GEMINI_API_KEY` = clé [Google AI Studio](https://aistudio.google.com/apikey) (Gemini Developer API)
-3. Optionnel : `GEMINI_MODEL` (défaut `gemini-3.5-flash-lite`)
+Préféré (comme le SMTP) : **Vault** `ha_gemini_api_key` + RPC `gemini_api_config()`  
+(voir `147_gemini_vault.sql`). L’Edge lit d’abord `GEMINI_API_KEY` (secret Edge), sinon le Vault.
 
-Sans ce secret, l’analyse locale PDF texte continue de marcher ; les scans / photos / stups IA renvoient un message clair.
+Alternative : [Edge Functions → Secrets](https://supabase.com/dashboard/project/vppmvjqbzdeftrhdoert/settings/functions) → `GEMINI_API_KEY`.
+
+Optionnel : `GEMINI_MODEL` (défaut `gemini-3.5-flash-lite`).
+
+**Ne jamais** coller la clé dans le front, le dépôt git, ou un ticket. Si elle a fuité, régénérer sur [AI Studio](https://aistudio.google.com/apikey) puis mettre à jour le Vault.
 
 ## Comportement app
 
