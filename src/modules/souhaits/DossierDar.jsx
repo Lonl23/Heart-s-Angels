@@ -10,9 +10,10 @@ import {
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
 import { injectionsDetresse } from './missionSchema'
 import { stupefiantsMission } from './stupefiantsSchema'
-import { genererPdfStupefiants, NOM_PDF_STUPEFIANTS } from './stupefiantsPdf'
+import { genererPdfStupefiantsInstitutions, NOM_PDF_STUPS_INSTITUTIONS } from './stupefiantsInstitutionsPdf'
 import DestinataireRapportMedical, { preparerDestinataireAvantEnvoi } from './DestinataireRapportMedical'
 import MedicamentsMAR from './MedicamentsMAR'
+import StupefiantsMission from './StupefiantsMission'
 
 function bytesToBase64(bytes) {
   let bin = ''
@@ -126,6 +127,7 @@ export default function DossierDar({
   souhait,
   meds = [],
   onMedsChange,
+  onSouhaitMission,
   onBack,
 }) {
   const [cibles, setCibles] = useState(null)
@@ -137,7 +139,20 @@ export default function DossierDar({
   const [err, setErr] = useState(null)
   const [info, setInfo] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [stupsLocal, setStupsLocal] = useState(null)
   const sujet = sujetRapportMedical(souhait)
+  const stups = stupsLocal || stupefiantsMission(souhait?.mission)
+
+  async function saveStupefiants(next) {
+    const { error, data } = await supabase.rpc('patch_mission_cle', {
+      p_souhait: souhaitId, p_cle: 'stupefiants', p_valeur: next, p_mode: 'set',
+    })
+    if (error || data?.ok === false) {
+      throw new Error(error?.message || data?.error || 'Registre stupéfiants non enregistré.')
+    }
+    setStupsLocal(next)
+    onSouhaitMission?.({ ...(souhait?.mission || {}), stupefiants: next })
+  }
 
   async function charger() {
     const { data, error } = await supabase
@@ -278,11 +293,10 @@ export default function DossierDar({
     const dest = prep.form
     const opts = payloadRapport(dest)
     const pieces = []
-    const stups = stupefiantsMission(souhait?.mission)
     if (stups.lignes.length) {
       try {
-        const bytes = await genererPdfStupefiants({ souhait, stups })
-        pieces.push({ nom_fichier: NOM_PDF_STUPEFIANTS, pdf_base64: bytesToBase64(bytes) })
+        const bytes = await genererPdfStupefiantsInstitutions({ souhait, stups })
+        pieces.push({ nom_fichier: NOM_PDF_STUPS_INSTITUTIONS, pdf_base64: bytesToBase64(bytes) })
       } catch (e) {
         setBusy(false)
         setErr(`Registre stupéfiants : ${e.message || e}`)
@@ -354,6 +368,19 @@ export default function DossierDar({
                   {(meds || []).length === 0 && <li>Aucun traitement encodé.</li>}
                 </ul>
               )}
+            </section>
+          )}
+          {(peutEcrire || stups.lignes.length > 0) && (
+            <section style={{ marginTop: 22 }}>
+              <StupefiantsMission
+                mode="all"
+                value={stups}
+                onSave={saveStupefiants}
+                locked={!peutEcrire}
+                optionnel={!!individuel}
+                souhait={souhait}
+                signaturesActives={false}
+              />
             </section>
           )}
           <section style={{ marginTop: 22 }}>

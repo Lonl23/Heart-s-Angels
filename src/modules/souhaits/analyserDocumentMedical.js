@@ -207,16 +207,88 @@ async function texteDepuisFichier(file) {
   if (mime === 'application/pdf' || nom.endsWith('.pdf')) {
     const texte = await texteDepuisPdf(file)
     if ((texte || '').replace(/\s/g, '').length < 20) {
-      throw new Error('PDF sans texte extractible (scan). Réencodez en PDF texte ou saisissez à la main.')
+      const err = new Error('PDF sans texte extractible (scan).')
+      err.code = 'pdf_scan'
+      throw err
     }
     return texte
   }
   if (mime.startsWith('image/')) {
-    throw new Error('Les images scannées ne sont pas lues en local. Utilisez un PDF texte, ou encodez à la main.')
+    const err = new Error('Image : analyse locale impossible.')
+    err.code = 'image'
+    throw err
   }
   const raw = await file.text().catch(() => '')
   if ((raw || '').trim().length > 20) return raw
   throw new Error('Format non pris en charge pour l’analyse locale.')
+}
+
+function mimeFichier(file) {
+  const mime = String(file?.type || '').trim()
+  if (mime) return mime
+  const nom = String(file?.name || '').toLowerCase()
+  if (nom.endsWith('.pdf')) return 'application/pdf'
+  if (nom.endsWith('.png')) return 'image/png'
+  if (nom.endsWith('.jpg') || nom.endsWith('.jpeg')) return 'image/jpeg'
+  if (nom.endsWith('.webp')) return 'image/webp'
+  return 'application/octet-stream'
+}
+
+async function fichierEnBase64(file) {
+  const buf = new Uint8Array(await file.arrayBuffer())
+  let bin = ''
+  const chunk = 0x8000
+  for (let i = 0; i < buf.length; i += chunk) {
+    bin += String.fromCharCode(...buf.subarray(i, i + chunk))
+  }
+  return btoa(bin)
+}
+
+function resultatLocalVide(data, mode) {
+  if (mode === 'traitements') return !(data?.medicaments || []).length
+  if (mode === 'infos_medicales') {
+    return !(data?.pathologies_noms || []).length
+      && !(data?.allergies || []).length
+      && !data?.notes_medicales
+      && !data?.antecedents
+  }
+  if (mode === 'stupefiants') return !(data?.lignes || []).length
+  return !(data?.lignes || []).length
+}
+
+/** Appel Edge Function Gemini (clé côté Supabase). */
+export async function analyserDocumentGemini(file, mode = 'protocole_detresse') {
+  if (!file) throw new Error('Aucun fichier.')
+  const { supabase } = await import('@/lib/supabase')
+  const config = (await import('@/app.config')).default
+  const { data: refreshed } = await supabase.auth.refreshSession()
+  const token = refreshed?.session?.access_token
+    || (await supabase.auth.getSession()).data?.session?.access_token
+  if (!token) throw new Error('Session expirée. Reconnectez-vous puis réessayez.')
+
+  const base64 = await fichierEnBase64(file)
+  const url = `${String(config.supabase.url).replace(/\/$/, '')}/functions/v1/analyser-document-medical`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: config.supabase.anonKey,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      mode,
+      mime: mimeFichier(file),
+      base64,
+      nom: file.name || 'document',
+    }),
+  })
+  const payload = await res.json().catch(() => ({}))
+  if (!res.ok || !payload?.ok) {
+    const err = new Error(payload?.error || payload?.message || 'Analyse IA impossible.')
+    err.code = payload?.code || 'gemini_error'
+    throw err
+  }
+  return { ...payload.data, _source: 'gemini', _model: payload.model }
 }
 
 function analyserTexteLocal(texte, mode) {
@@ -246,22 +318,49 @@ function analyserTexteLocal(texte, mode) {
 }
 
 /**
- * Analyse gratuite en local (extraction texte PDF + heuristiques).
- * Aucune clé Gemini / aucun coût cloud.
- * @param {'protocole_detresse'|'traitements'|'infos_medicales'} mode
+ * Analyse d’un PDF / image :
+ * 1) heuristiques locales (PDF texte, gratuit)
+ * 2) sinon Gemini via Edge Function (scans, photos, stups)
+ * @param {'protocole_detresse'|'traitements'|'infos_medicales'|'stupefiants'} mode
+ * @param {{ forcerGemini?: boolean }} [opts]
  */
-export async function analyserDocumentMedical(file, mode = 'protocole_detresse') {
+export async function analyserDocumentMedical(file, mode = 'protocole_detresse', opts = {}) {
   if (!file) throw new Error('Aucun fichier.')
-  const texte = await texteDepuisFichier(file)
-  const data = analyserTexteLocal(texte, mode)
 
-  if (mode === 'traitements' && !(data.medicaments || []).length) {
-    throw new Error('Aucun médicament détecté dans le texte du PDF. Vérifiez le document ou encodez à la main.')
+  if (mode === 'stupefiants' || opts.forcerGemini) {
+    return analyserDocumentGemini(file, mode)
   }
-  if (mode === 'protocole_detresse' && !(data.lignes || []).length) {
-    throw new Error('Aucune ligne de protocole détectée dans le texte du PDF. Encodez à la main si besoin.')
+
+  let localErr = null
+  try {
+    const texte = await texteDepuisFichier(file)
+    const data = analyserTexteLocal(texte, mode)
+    if (!resultatLocalVide(data, mode)) {
+      return { ...data, _source: 'local' }
+    }
+    localErr = new Error('Analyse locale sans résultat utile.')
+  } catch (e) {
+    localErr = e
   }
-  return data
+
+  try {
+    return await analyserDocumentGemini(file, mode)
+  } catch (e) {
+    if (e?.code === 'no_gemini') {
+      throw new Error(
+        (localErr?.message ? `${localErr.message} ` : '') +
+        'L’analyse IA n’est pas encore configurée (clé Gemini manquante sur Supabase). Encodez à la main ou ajoutez GEMINI_API_KEY.',
+      )
+    }
+    if (localErr?.code === 'pdf_scan' || localErr?.code === 'image') {
+      throw new Error(e.message || 'Analyse IA impossible sur ce scan.')
+    }
+    throw new Error(
+      e.message
+      || localErr?.message
+      || 'Aucun médicament détecté. Vérifiez le document ou encodez à la main.',
+    )
+  }
 }
 
 export function lignesDepuisAnalyseProtocole(data) {
@@ -295,4 +394,19 @@ export function medicamentsDepuisAnalyse(data) {
       perfusion: {},
     }))
     .filter(r => r.medicament)
+}
+
+/** Lignes stups depuis Gemini (ou local). */
+export function stupefiantsDepuisAnalyse(data) {
+  const rows = Array.isArray(data?.lignes) ? data.lignes : []
+  return rows
+    .map(r => ({
+      produit: String(r.produit || r.medicament || '').trim(),
+      dosage: String(r.dosage || '').trim(),
+      lot: r.lot ? String(r.lot).trim() : '',
+      dlc: r.dlc ? String(r.dlc).slice(0, 10) : '',
+      justification: r.justification ? String(r.justification).trim() : '',
+      qte_remise: Number(r.qte_remise) > 0 ? Number(r.qte_remise) : 1,
+    }))
+    .filter(r => r.produit)
 }
