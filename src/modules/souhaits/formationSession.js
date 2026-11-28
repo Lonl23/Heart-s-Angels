@@ -48,6 +48,7 @@ export function fusionRpcDemo(rpc, etat) {
     check_retour_base: e.checks?.retour_base || {},
     rapport_observations: e.observations || '',
     statut_base: e.statut_base || '',
+    stupefiants: e.stupefiants && typeof e.stupefiants === 'object' ? e.stupefiants : (rpc?.stupefiants || null),
     vecteur,
   }
 }

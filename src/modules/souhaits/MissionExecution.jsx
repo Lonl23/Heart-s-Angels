@@ -41,7 +41,7 @@ function estAvance(depuis, vers) {
 }
 
 export default function MissionExecution({ souhaitId, onBack }) {
-  const { user, profile } = useAuth()
+  const { user, profile, accesTotal } = useAuth()
   const [sh, setSh] = useState(null)
   const [m, setM] = useState(null)
   const [rpc, setRpc] = useState(null)
@@ -67,6 +67,13 @@ export default function MissionExecution({ souhaitId, onBack }) {
     })
   }
 
+  /** Formation : même accès que l’onglet Rapport médical (staff / médical). */
+  function staffFormation(fictifOuDemo) {
+    if (!fictifOuDemo) return false
+    const role = profile?.role
+    return !!(accesTotal?.() || role === 'coordinateur' || role === 'admin' || role === 'president')
+  }
+
   useEffect(() => { load() }, [souhaitId, user?.id, profile?.role, profile?.fiche])
   useEffect(() => { window.scrollTo(0, 0) }, [etape])
 
@@ -76,7 +83,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
     let { data: me } = await supabase.from('souhait_personnel')
       .select('*').eq('souhait_id', souhaitId).eq('user_id', user.id).maybeSingle()
 
-    const voirComplet = medicalDeCetteMission(me)
+    const { data: apercu } = await supabase.from('souhaits')
+      .select('fictif, mission').eq('id', souhaitId).maybeSingle()
+    const jouetteApercu = !!(apercu?.fictif || apercu?.mission?.demo_cle)
+    const voirComplet = medicalDeCetteMission(me) || staffFormation(jouetteApercu)
     setComplet(voirComplet)
 
     if (voirComplet) {
@@ -586,9 +596,16 @@ export default function MissionExecution({ souhaitId, onBack }) {
   /* Matériel consommé : du départ base jusqu’au rentré base. L’emport reste à la base. */
   const showScanConso = userMedical && vecteurMedical && !aLaBase
   const showCloture = etape === 'base_rentre'
-  /* Stups tant que le patient est à bord : encodage + administrations.
-     Signatures : départ sur place PEC, retour sur place retour. */
-  const showStups = userMedical && vecteurMedical && complet && !!def.patient
+  /* Stups : dès le départ PEC jusqu’au retour patient (encodage + administrations).
+     Signatures : départ sur place PEC, retour sur place retour.
+     Formation : visible aussi pour le staff (comme Rapport médical). */
+  const peutGererStups = complet && (userMedical || (jouette && staffFormation(true))) && (vecteurMedical || jouette)
+  const idxCourant = idxEtape(etape)
+  const showStups = peutGererStups && (
+    !!def.patient
+    || etape === 'depart_pec'
+    || (idxCourant >= idxEtape('pec_sur_place') && idxCourant <= idxEtape('retour_sur_place'))
+  )
   const stupsSignatures = etape === 'pec_sur_place' ? 'remise'
     : etape === 'retour_sur_place' ? 'retour'
       : false
@@ -741,6 +758,19 @@ export default function MissionExecution({ souhaitId, onBack }) {
           )}
 
           {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
+          {showStups && (
+            <Section titre="Stupéfiants">
+              <StupefiantsMission
+                mode="all"
+                value={stupefiantsMission(m || rpc)}
+                onSave={saveStupefiants}
+                locked={locked}
+                optionnel={jouette}
+                souhait={sh}
+                signaturesActives={stupsSignatures}
+              />
+            </Section>
+          )}
           {showScanConso && (
             <Section titre="Matériel utilisé">
               <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} optionnel={jouette} />
@@ -807,19 +837,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <Section titre="À cocher">
                   <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
                 </Section>
-              )}
-              {showStups && (
-                <div style={{ margin: '12px 0' }}>
-                  <StupefiantsMission
-                    mode="all"
-                    value={stupefiantsMission(m)}
-                    onSave={saveStupefiants}
-                    locked={locked}
-                    optionnel={jouette}
-                    souhait={sh}
-                    signaturesActives={stupsSignatures}
-                  />
-                </div>
               )}
               {showPecNotes && pecMedicalACharge && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
