@@ -7,6 +7,7 @@ import {
   bilanLigne, qteUtiliseeLigne,
 } from './stupefiantsSchema'
 import { genererPdfStupefiants, NOM_PDF_STUPEFIANTS } from './stupefiantsPdf'
+import { analyserDocumentMedical, stupefiantsDepuisAnalyse } from './analyserDocumentMedical'
 
 /**
  * Registre stupéfiants terrain :
@@ -25,22 +26,11 @@ export default function StupefiantsMission({
   const stups = stupefiantsMission(value)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [okMsg, setOkMsg] = useState(null)
   const [pick, setPick] = useState(false)
   const [custom, setCustom] = useState({ produit: '', dosage: '' })
   const [sigOpen, setSigOpen] = useState(null) // remise | retour
   const [sigForm, setSigForm] = useState({ remettant_nom: '', receveur_nom: '', signature_remettant: '', signature_receveur: '' })
-
-  async function voirPdf() {
-    setBusy(true)
-    setErr(null)
-    try {
-      const bytes = await genererPdfStupefiants({ souhait, stups })
-      telechargerBlob(new Blob([bytes], { type: 'application/pdf' }), NOM_PDF_STUPEFIANTS)
-    } catch (e) {
-      setErr(e.message || String(e))
-    }
-    setBusy(false)
-  }
 
   async function sauver(next) {
     if (locked) return
@@ -73,6 +63,44 @@ export default function StupefiantsMission({
     if (!produit) { setErr('Indiquez le nom du médicament.'); return }
     ajouterDepuisListe({ produit, dosage: custom.dosage.trim() })
     setCustom({ produit: '', dosage: '' })
+  }
+
+  async function voirPdf() {
+    setBusy(true)
+    setErr(null)
+    try {
+      const bytes = await genererPdfStupefiants({ souhait, stups })
+      telechargerBlob(new Blob([bytes], { type: 'application/pdf' }), NOM_PDF_STUPEFIANTS)
+    } catch (e) {
+      setErr(e.message || String(e))
+    }
+    setBusy(false)
+  }
+
+  async function importerScan(file) {
+    if (!file || locked) return
+    setBusy(true)
+    setErr(null)
+    setOkMsg(null)
+    try {
+      const data = await analyserDocumentMedical(file, 'stupefiants')
+      const rows = stupefiantsDepuisAnalyse(data)
+      if (!rows.length) {
+        setErr('Aucun stupéfiant détecté. Ajoutez-les depuis la liste ou à la main.')
+        setBusy(false)
+        return
+      }
+      const lignes = [
+        ...stups.lignes,
+        ...rows.map(r => nouvelleLigneStup(r)),
+      ]
+      await onSave({ ...stups, lignes })
+      setPick(false)
+      setOkMsg(`${rows.length} ligne(s) proposées par l’IA — vérifiez quantités, lots et DLC.`)
+    } catch (e) {
+      setErr(e.message || 'Analyse impossible.')
+    }
+    setBusy(false)
   }
 
   function majLigne(id, patch) {
@@ -168,10 +196,27 @@ export default function StupefiantsMission({
       <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--heading)', marginBottom: 6 }}>{titre}</div>
       <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 0 }}>{hint}{optionnel ? ' (facultatif en formation)' : ''}</p>
       {err && <Flash kind="err">{err}</Flash>}
+      {okMsg && <Flash kind="ok">{okMsg}</Flash>}
 
-      <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {(mode === 'remise' || mode === 'usages') && !locked && (
           <Btn kind="soft" onClick={() => setPick(true)} disabled={busy}>+ Ajouter un stupéfiant</Btn>
+        )}
+        {mode === 'remise' && !locked && (
+          <label className="ha-check-btn" style={{ display: 'inline-flex', cursor: busy ? 'wait' : 'pointer', margin: 0, opacity: busy ? 0.7 : 1 }}>
+            {busy ? 'Analyse IA…' : 'Photo / PDF → IA'}
+            <input
+              type="file"
+              accept="application/pdf,image/*"
+              disabled={busy}
+              hidden
+              onChange={e => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (f) importerScan(f)
+              }}
+            />
+          </label>
         )}
         {stups.lignes.length > 0 && (
           <Btn kind="soft" onClick={voirPdf} disabled={busy}>Voir le PDF</Btn>

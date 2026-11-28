@@ -91,7 +91,7 @@ export default function Traitements({ souhaitId, readOnly=false }) {
         {!readOnly && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <label style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-              Importer une feuille
+              Importer une feuille (PDF ou photo — IA si besoin)
               <input
                 type="file"
                 accept="application/pdf,image/*"

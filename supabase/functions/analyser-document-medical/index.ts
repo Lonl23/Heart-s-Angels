@@ -1,4 +1,4 @@
-// Analyse PDF / image médical (protocole détresse ou traitements) via Gemini.
+// Analyse PDF / image médical via Gemini (traitements, protocole, infos, stups).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
@@ -10,7 +10,76 @@ const CORS = {
 const json = (o: unknown, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
-type Mode = 'protocole_detresse' | 'traitements' | 'infos_medicales'
+type Mode = 'protocole_detresse' | 'traitements' | 'infos_medicales' | 'stupefiants'
+
+const MAX_B64 = 12_000_000 // ~9 Mo binaire
+
+function schemaPour(mode: Mode): string {
+  if (mode === 'traitements') {
+    return `{
+  "medicaments": [
+    {
+      "medicament": "string",
+      "dosage": "string",
+      "voie": "string",
+      "type_admin": "programme|si_necessaire",
+      "horaires": ["08:00","20:00"],
+      "posologie_max": "string|null",
+      "notes": "string|null"
+    }
+  ],
+  "notes": "string|null"
+}`
+  }
+  if (mode === 'infos_medicales') {
+    return `{
+  "pathologies_noms": ["string"],
+  "antecedents": "string|null",
+  "douleurs": "string|null",
+  "allergies": ["string"],
+  "notes_medicales": "string|null",
+  "cible_saturation_o2": "string|null",
+  "debit_o2": "string|null",
+  "interface_o2": ["string"],
+  "cible_ta": "string|null",
+  "cible_fc": "string|null",
+  "continence_urinaire": ["string"],
+  "continence_fecale": ["string"],
+  "precisions_continences": "string|null",
+  "alimentation": ["string"],
+  "deglutition": ["string"],
+  "voie_acces": ["string"],
+  "mobilisations": ["string"],
+  "communication": ["string"]
+}`
+  }
+  if (mode === 'stupefiants') {
+    return `{
+  "lignes": [
+    {
+      "produit": "string",
+      "dosage": "string",
+      "lot": "string|null",
+      "dlc": "YYYY-MM-DD|null",
+      "qte_remise": 0
+    }
+  ],
+  "notes": "string|null"
+}`
+  }
+  return `{
+  "lignes": [
+    {
+      "medicament": "string",
+      "contexte": "string",
+      "voie": "IV|IM|SC|PO|SL|Autre|",
+      "dosage_max": "string",
+      "doses": [{ "ordre": 1, "dosage": "string" }]
+    }
+  ],
+  "notes": "string|null"
+}`
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -48,66 +117,26 @@ Deno.serve(async (req) => {
   }
 
   const mode = (body.mode || 'protocole_detresse') as Mode
-  const mime = body.mime || 'application/pdf'
+  if (!['protocole_detresse', 'traitements', 'infos_medicales', 'stupefiants'].includes(mode)) {
+    return json({ error: 'Mode inconnu.' }, 400)
+  }
+  const mime = String(body.mime || 'application/pdf').trim() || 'application/pdf'
   const base64 = String(body.base64 || '').replace(/^data:[^;]+;base64,/, '')
   if (!base64) return json({ error: 'Fichier manquant' }, 400)
+  if (base64.length > MAX_B64) {
+    return json({ error: 'Fichier trop volumineux pour l’analyse IA (max ~9 Mo).' }, 413)
+  }
 
-  const schemaHint = mode === 'traitements'
-    ? `{
-  "medicaments": [
-    {
-      "medicament": "string",
-      "dosage": "string",
-      "voie": "string",
-      "type_admin": "programme|si_necessaire",
-      "horaires": ["08:00","20:00"],
-      "posologie_max": "string|null",
-      "notes": "string|null"
-    }
-  ],
-  "notes": "string|null"
-}`
-    : mode === 'infos_medicales'
-      ? `{
-  "pathologies_noms": ["string"],
-  "antecedents": "string|null",
-  "douleurs": "string|null",
-  "allergies": ["string"],
-  "notes_medicales": "string|null",
-  "cible_saturation_o2": "string|null",
-  "debit_o2": "string|null",
-  "interface_o2": ["string"],
-  "cible_ta": "string|null",
-  "cible_fc": "string|null",
-  "continence_urinaire": ["string"],
-  "continence_fecale": ["string"],
-  "precisions_continences": "string|null",
-  "alimentation": ["string"],
-  "deglutition": ["string"],
-  "voie_acces": ["string"],
-  "mobilisations": ["string"],
-  "communication": ["string"]
-}`
-      : `{
-  "lignes": [
-    {
-      "medicament": "string",
-      "contexte": "string",
-      "voie": "IV|IM|SC|PO|SL|Autre|",
-      "dosage_max": "string",
-      "doses": [{ "ordre": 1, "dosage": "string" }]
-    }
-  ],
-  "notes": "string|null"
-}`
-
+  const schemaHint = schemaPour(mode)
   const prompt = `Tu es un assistant clinique pour Heart's Angels (soins palliatifs, Belgique).
 Analyse le document joint (${body.nom || 'sans nom'}) et renvoie UNIQUEMENT un JSON valide, sans markdown, au schéma :
 ${schemaHint}
 Mode: ${mode}.
-Règles: français, dosages tels qu'écrits, n'invente rien. Si une info manque, utilise null ou [].`
+Règles: français, dosages tels qu'écrits, n'invente rien. Si une info manque, utilise null ou [].
+Pour stupefiants: ne garde que les médicaments stupéfiants / psychotropes contrôlés (morphine, fentanyl, midazolam, kétamine, etc.). qte_remise = quantité visible ou 1 si non précisée.`
 
-  const model = Deno.env.get('GEMINI_MODEL') || 'gemini-2.0-flash'
+  // gemini-2.0-flash retiré ; 3.5-flash-lite = stable + multimodal (PDF/images).
+  const model = Deno.env.get('GEMINI_MODEL') || 'gemini-3.5-flash-lite'
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`
 
   const geminiRes = await fetch(url, {
@@ -128,7 +157,7 @@ Règles: français, dosages tels qu'écrits, n'invente rien. Si une info manque,
   const geminiJson = await geminiRes.json().catch(() => ({}))
   if (!geminiRes.ok) {
     const msg = geminiJson?.error?.message || `Gemini HTTP ${geminiRes.status}`
-    return json({ error: msg }, 502)
+    return json({ error: msg, model }, 502)
   }
 
   const text = geminiJson?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || '').join('') || ''
@@ -143,5 +172,5 @@ Règles: français, dosages tels qu'écrits, n'invente rien. Si une info manque,
     }
   }
 
-  return json({ ok: true, mode, data: parsed })
+  return json({ ok: true, mode, model, data: parsed })
 })
