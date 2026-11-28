@@ -586,9 +586,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
   /* Matériel consommé : du départ base jusqu’au rentré base. L’emport reste à la base. */
   const showScanConso = userMedical && vecteurMedical && !aLaBase
   const showCloture = etape === 'base_rentre'
-  const showStupsRemise = userMedical && vecteurMedical && complet && aLaBase && !showCloture
-  const showStupsUsages = userMedical && vecteurMedical && complet && !!def.patient
-  const showStupsRetour = userMedical && vecteurMedical && complet && showCloture
+  /* Stups : remis / comptés à la prise en charge (même si déjà en sacs), usages en mission, retour au rendu patient. */
+  const showStupsRemise = userMedical && vecteurMedical && complet && def.checklist === 'pec'
+  const showStupsUsages = userMedical && vecteurMedical && complet && !!def.patient && def.checklist !== 'pec'
+  const showStupsRetour = userMedical && vecteurMedical && complet && def.checklist === 'retour_pec'
   const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
   const showDetresse = userMedical && complet && vecteur && etapeProtocoleDetresse(etape) && !locked
@@ -712,18 +713,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
                     checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} optionnel={jouette} />
                 )}
-                {showStupsRemise && (
-                  <div style={{ marginTop: 12 }}>
-                    <StupefiantsMission
-                      mode="remise"
-                      value={stupefiantsMission(m)}
-                      onSave={saveStupefiants}
-                      locked={locked}
-                      optionnel={jouette}
-                      souhait={sh}
-                    />
-                  </div>
-                )}
                 {itemsVis.base.length > 0 && (
                   <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
                 )}
@@ -829,6 +818,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   <CheckBlock items={itemsVis.pec} etat={checks.pec} onToggle={(it,on)=>toggleCheck('pec', it, on)} />
                 </Section>
               )}
+              {showStupsRemise && (
+                <div style={{ margin: '12px 0' }}>
+                  <StupefiantsMission
+                    mode="remise"
+                    value={stupefiantsMission(m)}
+                    onSave={saveStupefiants}
+                    locked={locked}
+                    optionnel={jouette}
+                    souhait={sh}
+                  />
+                </div>
+              )}
               {showPecNotes && pecMedicalACharge && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Checklist patient : à charge du médical de ce véhicule.</p>
               )}
@@ -836,6 +837,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 <Section titre={vecteurMedical && userMedical ? 'Checklist retour patient' : 'À cocher'}>
                   <CheckBlock items={itemsVis.retour_pec} etat={checks.retour_pec} onToggle={(it,on)=>toggleCheck('retour_pec', it, on)} />
                 </Section>
+              )}
+              {showStupsRetour && (
+                <div style={{ margin: '12px 0' }}>
+                  <StupefiantsMission
+                    mode="retour"
+                    value={stupefiantsMission(m)}
+                    onSave={saveStupefiants}
+                    locked={locked}
+                    optionnel={jouette}
+                    souhait={sh}
+                  />
+                </div>
               )}
               {def.checklist === 'retour_pec' && pecMedicalACharge && itemsVis.retour_pec.length === 0 && (
                 <p style={{ fontSize:13.5, color:'var(--text-muted)', margin:'12px 0 0' }}>Retour patient : à charge du médical de ce véhicule.</p>
@@ -881,18 +894,6 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 )}
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
-              {showStupsRetour && (
-                <div style={{ margin: '12px 0' }}>
-                  <StupefiantsMission
-                    mode="retour"
-                    value={stupefiantsMission(m)}
-                    onSave={saveStupefiants}
-                    locked={locked}
-                    optionnel={jouette}
-                    souhait={sh}
-                  />
-                </div>
-              )}
               {showRapportMedical && <RapportMedical m={m} onSave={saveRapportMedical} />}
               <RapportLogistique value={complet ? (m?.rapport_observations || '') : (rpc?.rapport_observations || '')} onSave={saveObs} />
             </>

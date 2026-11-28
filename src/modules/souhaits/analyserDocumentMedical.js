@@ -405,6 +405,7 @@ export function stupefiantsDepuisAnalyse(data) {
       dosage: String(r.dosage || '').trim(),
       lot: r.lot ? String(r.lot).trim() : '',
       dlc: r.dlc ? String(r.dlc).slice(0, 10) : '',
+      justification: r.justification ? String(r.justification).trim() : '',
       qte_remise: Number(r.qte_remise) > 0 ? Number(r.qte_remise) : 1,
     }))
     .filter(r => r.produit)

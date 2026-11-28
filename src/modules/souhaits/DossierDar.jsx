@@ -10,7 +10,7 @@ import {
 import { envoyerRapportMedical } from '@/lib/envoyerInvitation'
 import { injectionsDetresse } from './missionSchema'
 import { stupefiantsMission } from './stupefiantsSchema'
-import { genererPdfStupefiants, NOM_PDF_STUPEFIANTS } from './stupefiantsPdf'
+import { genererPdfStupefiantsInstitutions, NOM_PDF_STUPS_INSTITUTIONS } from './stupefiantsInstitutionsPdf'
 import DestinataireRapportMedical, { preparerDestinataireAvantEnvoi } from './DestinataireRapportMedical'
 import MedicamentsMAR from './MedicamentsMAR'
 
@@ -281,8 +281,8 @@ export default function DossierDar({
     const stups = stupefiantsMission(souhait?.mission)
     if (stups.lignes.length) {
       try {
-        const bytes = await genererPdfStupefiants({ souhait, stups })
-        pieces.push({ nom_fichier: NOM_PDF_STUPEFIANTS, pdf_base64: bytesToBase64(bytes) })
+        const bytes = await genererPdfStupefiantsInstitutions({ souhait, stups })
+        pieces.push({ nom_fichier: NOM_PDF_STUPS_INSTITUTIONS, pdf_base64: bytesToBase64(bytes) })
       } catch (e) {
         setBusy(false)
         setErr(`Registre stupéfiants : ${e.message || e}`)

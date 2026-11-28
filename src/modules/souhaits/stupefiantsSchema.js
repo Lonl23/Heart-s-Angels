@@ -38,6 +38,7 @@ export function nouvelleLigneStup(partial = {}) {
     dosage: '',
     lot: '',
     dlc: '',
+    justification: '',
     qte_remise: 0,
     qte_retour: 0,
     usages: [],

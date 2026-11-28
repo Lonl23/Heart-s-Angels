@@ -175,11 +175,11 @@ export function htmlRapportMedical({ souhait, dar, cibles, meds, injections }) {
       </div>`
     }
     return `<h2>Registre stupéfiants</h2>
-      <p style="font-size:13px;color:#555">Document joint également en PDF (remise départ, administrations, retour base).</p>
+      <p style="font-size:13px;color:#555">Feuille officielle « Départs &amp; retours stupéfiants » jointe en PDF.</p>
       <table><thead><tr><th>Produit</th><th>Remis</th><th>Administré</th><th>Retour</th><th>Lot / DLC</th></tr></thead>
       <tbody>${rows}</tbody></table>
-      ${sig(stups.remise, 'Remise départ')}
-      ${sig(stups.retour, 'Retour base')}`
+      ${sig(stups.remise, 'Remise à la prise en charge')}
+      ${sig(stups.retour, 'Retour (rendu patient)')}`
   })()
   return `<article class="ha-rapport-medical">
     <p class="secret">${escHtml(sujetRapportMedical(s))}</p>

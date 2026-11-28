@@ -61,6 +61,7 @@ function schemaPour(mode: Mode): string {
       "dosage": "string",
       "lot": "string|null",
       "dlc": "YYYY-MM-DD|null",
+      "justification": "string|null",
       "qte_remise": 0
     }
   ],

@@ -114,8 +114,8 @@ export async function genererPdfStupefiants({ souhait, stups: stupsIn } = {}) {
     else y -= 8
   }
 
-  await blocSig('Signatures — remise depart', stups.remise)
-  await blocSig('Signatures — retour base', stups.retour)
+  await blocSig('Signatures — remise prise en charge', stups.remise)
+  await blocSig('Signatures — retour (rendu patient)', stups.retour)
 
   return pdf.save()
 }

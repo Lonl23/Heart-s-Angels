@@ -6,14 +6,16 @@ import {
   STUPS_COURANTS, stupefiantsMission, nouvelleLigneStup, nouvelUsageStup,
   bilanLigne, qteUtiliseeLigne,
 } from './stupefiantsSchema'
-import { genererPdfStupefiants, NOM_PDF_STUPEFIANTS } from './stupefiantsPdf'
+import {
+  genererPdfStupefiantsInstitutions, NOM_PDF_STUPS_INSTITUTIONS,
+} from './stupefiantsInstitutionsPdf'
 import { analyserDocumentMedical, stupefiantsDepuisAnalyse } from './analyserDocumentMedical'
 
 /**
- * Registre stupéfiants terrain :
- * - mode "remise" : départ base (quantités + double signature)
+ * Registre stupéfiants terrain (feuille institutions) :
+ * - mode "remise" : à la prise en charge (quantités + signatures)
  * - mode "usages" : durant la mission (administrations)
- * - mode "retour" : fin de mission (quantités rendues + double signature)
+ * - mode "retour" : rendu patient (quantités + signatures)
  */
 export default function StupefiantsMission({
   value,
@@ -69,8 +71,8 @@ export default function StupefiantsMission({
     setBusy(true)
     setErr(null)
     try {
-      const bytes = await genererPdfStupefiants({ souhait, stups })
-      telechargerBlob(new Blob([bytes], { type: 'application/pdf' }), NOM_PDF_STUPEFIANTS)
+      const bytes = await genererPdfStupefiantsInstitutions({ souhait, stups })
+      telechargerBlob(new Blob([bytes], { type: 'application/pdf' }), NOM_PDF_STUPS_INSTITUTIONS)
     } catch (e) {
       setErr(e.message || String(e))
     }
@@ -180,15 +182,15 @@ export default function StupefiantsMission({
   }
 
   const titre = mode === 'remise'
-    ? 'Stupéfiants — remise départ'
+    ? 'Stupéfiants — remise à la prise en charge'
     : mode === 'retour'
-      ? 'Stupéfiants — retour base'
+      ? 'Stupéfiants — retour (rendu patient)'
       : 'Stupéfiants — administrations'
 
   const hint = mode === 'remise'
-    ? 'Encodez les quantités remises au départ, puis faites signer remettant et receveur.'
+    ? 'À la prise en charge : comptabilisez tout ce qui est remis (y compris ce qui était déjà dans vos sacs), photo du tableau si besoin, puis double signature.'
     : mode === 'retour'
-      ? 'Indiquez les quantités rendues et faites signer remettant (équipage) et receveur (base).'
+      ? 'Au retour du patient : quantités rendues / non utilisées, puis double signature.'
       : 'Notez chaque administration durant le souhait (dose et heure).'
 
   return (
@@ -219,7 +221,7 @@ export default function StupefiantsMission({
           </label>
         )}
         {stups.lignes.length > 0 && (
-          <Btn kind="soft" onClick={voirPdf} disabled={busy}>Voir le PDF</Btn>
+          <Btn kind="soft" onClick={voirPdf} disabled={busy}>Feuille institutions (PDF)</Btn>
         )}
       </div>
 
@@ -246,9 +248,10 @@ export default function StupefiantsMission({
 
                 {mode === 'remise' && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 8 }}>
-                    <F label="Qté remise" type="number" value={l.qte_remise ?? ''} set={v => majLigne(l.id, { qte_remise: Number(v) || 0 })} disabled={locked} />
+                    <F label="Qté départ" type="number" value={l.qte_remise ?? ''} set={v => majLigne(l.id, { qte_remise: Number(v) || 0 })} disabled={locked} />
                     <F label="Lot" value={l.lot || ''} set={v => majLigne(l.id, { lot: v })} disabled={locked} />
                     <F label="DLC" type="date" value={l.dlc || ''} set={v => majLigne(l.id, { dlc: v })} disabled={locked} />
+                    <F label="Justification" value={l.justification || ''} set={v => majLigne(l.id, { justification: v })} disabled={locked} />
                   </div>
                 )}
 
@@ -305,15 +308,20 @@ export default function StupefiantsMission({
                 {ok ? (
                   <Flash kind="ok">
                     Signé le {String(bloc.date || '').slice(0, 10)}
-                    {bloc.remettant_nom ? ` · remettant ${bloc.remettant_nom}` : ''}
-                    {bloc.receveur_nom ? ` · receveur ${bloc.receveur_nom}` : ''}
+                    {mode === 'remise'
+                      ? ` · institution ${bloc.remettant_nom || ''} · HA ${bloc.receveur_nom || ''}`
+                      : ` · HA ${bloc.remettant_nom || ''} · institution ${bloc.receveur_nom || ''}`}
                   </Flash>
                 ) : (
-                  <Flash kind="warn">Signatures de remise / retour encore manquantes.</Flash>
+                  <Flash kind="warn">
+                    {mode === 'remise'
+                      ? 'Signatures départ manquantes (infirmier institution + Heart’s Angels).'
+                      : 'Signatures retour manquantes (Heart’s Angels + infirmier institution).'}
+                  </Flash>
                 )}
                 {!locked && (
                   <Btn onClick={() => ouvrirSignatures(mode)} disabled={busy || (mode === 'remise' && !stups.lignes.length)}>
-                    {ok ? 'Revoir / resignature' : 'Faire signer la remise / le retour'}
+                    {ok ? 'Revoir / resignature' : (mode === 'remise' ? 'Faire signer le départ' : 'Faire signer le retour')}
                   </Btn>
                 )}
               </>
@@ -345,7 +353,7 @@ export default function StupefiantsMission({
 
       {sigOpen && (
         <Modal
-          title={sigOpen === 'remise' ? 'Signatures — remise départ' : 'Signatures — retour base'}
+          title={sigOpen === 'remise' ? 'Signatures — départ (PEC)' : 'Signatures — retour patient'}
           onClose={() => setSigOpen(null)}
           wide
           footer={(
@@ -356,11 +364,24 @@ export default function StupefiantsMission({
           )}
         >
           {err && <Flash kind="err">{err}</Flash>}
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
+            {sigOpen === 'remise'
+              ? 'Départ : l’infirmier institution remet, Heart’s Angels reçoit (feuille officielle).'
+              : 'Retour : Heart’s Angels remet le non utilisé, l’infirmier institution reçoit.'}
+          </p>
           <F label="Date" type="date" value={sigForm.date || ''} set={v => setSigForm(s => ({ ...s, date: v }))} />
-          <F label="Nom du remettant" value={sigForm.remettant_nom} set={v => setSigForm(s => ({ ...s, remettant_nom: v }))} />
+          <F
+            label={sigOpen === 'remise' ? 'Infirmier institution (remettant)' : 'Infirmier Heart’s Angels (remettant)'}
+            value={sigForm.remettant_nom}
+            set={v => setSigForm(s => ({ ...s, remettant_nom: v }))}
+          />
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '4px 0 8px' }}>Signature remettant</div>
           <SignaturePad value={sigForm.signature_remettant} onChange={v => setSigForm(s => ({ ...s, signature_remettant: v }))} />
-          <F label="Nom du receveur" value={sigForm.receveur_nom} set={v => setSigForm(s => ({ ...s, receveur_nom: v }))} />
+          <F
+            label={sigOpen === 'remise' ? 'Infirmier Heart’s Angels (receveur)' : 'Infirmier institution (receveur)'}
+            value={sigForm.receveur_nom}
+            set={v => setSigForm(s => ({ ...s, receveur_nom: v }))}
+          />
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '4px 0 8px' }}>Signature receveur</div>
           <SignaturePad value={sigForm.signature_receveur} onChange={v => setSigForm(s => ({ ...s, signature_receveur: v }))} />
         </Modal>
