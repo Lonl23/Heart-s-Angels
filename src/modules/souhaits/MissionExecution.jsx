@@ -596,16 +596,14 @@ export default function MissionExecution({ souhaitId, onBack }) {
   /* Matériel consommé : du départ base jusqu’au rentré base. L’emport reste à la base. */
   const showScanConso = userMedical && vecteurMedical && !aLaBase
   const showCloture = etape === 'base_rentre'
-  /* Stups : dès le départ PEC jusqu’au retour patient (encodage + administrations).
+  /* Stups : uniquement de sur place PEC → sur place retour.
      Signatures : départ sur place PEC, retour sur place retour.
      Formation : visible aussi pour le staff (comme Rapport médical). */
   const peutGererStups = complet && (userMedical || (jouette && staffFormation(true))) && (vecteurMedical || jouette)
   const idxCourant = idxEtape(etape)
-  const showStups = peutGererStups && (
-    !!def.patient
-    || etape === 'depart_pec'
-    || (idxCourant >= idxEtape('pec_sur_place') && idxCourant <= idxEtape('retour_sur_place'))
-  )
+  const showStups = peutGererStups
+    && idxCourant >= idxEtape('pec_sur_place')
+    && idxCourant <= idxEtape('retour_sur_place')
   const stupsSignatures = etape === 'pec_sur_place' ? 'remise'
     : etape === 'retour_sur_place' ? 'retour'
       : false
