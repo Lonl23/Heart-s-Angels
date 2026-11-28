@@ -1,8 +1,21 @@
-import { fmtAdresse, texteGps, urlGoogleMaps, hrefWaze } from '@/components/ui'
+/** Helpers trajet terrain — sans import UI (évite cycle Vite / écran noir). */
+
+function fmtAdresseLocal(a) {
+  if (!a || typeof a !== 'object') return typeof a === 'string' ? a : ''
+  const l1 = [a.rue, a.numero].filter(Boolean).join(' ')
+  const l2 = [a.cp, a.localite].filter(Boolean).join(' ')
+  return [l1, l2, a.pays].filter(Boolean).join(', ')
+}
+
+function texteGpsLocal(a) {
+  if (!a) return ''
+  if (typeof a === 'string') return a.trim()
+  return fmtAdresseLocal(a)
+}
 
 /** Clé normalisée pour comparer deux adresses. */
 export function cleAdresse(a) {
-  return texteGps(a).toLowerCase().replace(/\s+/g, ' ').trim()
+  return texteGpsLocal(a).toLowerCase().replace(/\s+/g, ' ').trim()
 }
 
 export function memeAdresse(a, b) {
@@ -24,7 +37,7 @@ export function adressePecMission(mission) {
 export function arretsVehicule(mission) {
   const stops = []
   const destAdr = mission?.dest_adresse
-  if (fmtAdresse(destAdr) || (mission?.dest_nom || '').trim()) {
+  if (fmtAdresseLocal(destAdr) || (mission?.dest_nom || '').trim()) {
     stops.push({
       key: 'dest',
       nom: (mission.dest_nom || '').trim() || 'Destination',
@@ -38,7 +51,7 @@ export function arretsVehicule(mission) {
   for (const a of (Array.isArray(mission?.activites_sur_place) ? mission.activites_sur_place : [])) {
     if (!a) continue
     const last = stops[stops.length - 1]
-    const hasAdr = !!fmtAdresse(a.adresse)
+    const hasAdr = !!fmtAdresseLocal(a.adresse)
     if (!hasAdr || (last && memeAdresse(a.adresse, last.adresse))) {
       if (last) last.activitesSurPlace.push(a)
       else {
@@ -108,7 +121,6 @@ export function navCibleTerrain(etape, mission) {
   const base = mission?.base_adresse
   const stops = arretsVehicule(mission)
   const first = stops[0] || null
-  const last = stops[stops.length - 1] || null
 
   if (id === 'a_la_base' || id === 'depart_plein' || id === 'depart_pec') {
     return {
@@ -220,15 +232,6 @@ export function navCibleTerrain(etape, mission) {
   return null
 }
 
-export function liensNav(adresse) {
-  const q = texteGps(adresse)
-  if (!q) return { maps: '', waze: '' }
-  return {
-    maps: urlGoogleMaps(adresse),
-    waze: hrefWaze(adresse, 'naviguer'),
-  }
-}
-
 /** Peut-on sauter le reste des destinations pour un retour d’urgence ? */
 export function peutRetourUrgence(etape, mission) {
   const id = String(etape || '')
@@ -236,7 +239,6 @@ export function peutRetourUrgence(etape, mission) {
   if (id === 'a_la_base' || id === 'depart_plein' || id === 'depart_pec') return false
   const stops = arretsVehicule(mission)
   const i = indexArretCourant(etape, mission)
-  /* Saut utile dès qu’il reste au moins une destination véhicule après le point actuel. */
   if (id === 'pec_sur_place' || id === 'depart_dest') return stops.length > 1
   if (i >= 0) return (i < stops.length - 1) || stops.length > 1
   return id.startsWith('depart_lieu:') || id.startsWith('lieu_sur_place:')

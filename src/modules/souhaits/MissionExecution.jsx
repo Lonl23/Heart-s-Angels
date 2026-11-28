@@ -557,13 +557,22 @@ export default function MissionExecution({ souhaitId, onBack }) {
     : (sh?.beneficiaire_prenom || 'Mission')
   const itin = complet ? itineraryFromMission(m) : rpc
   const missionNav = complet ? (m || {}) : (rpc || {})
-  const nav = navCibleTerrain(etape, { ...missionNav, ...missionCtx })
-  const arrets = arretsVehicule(missionNav)
-  const actEtape = parseEtapeActivite(etape)
-  const arretCourant = etape === 'dest_sur_place'
-    ? arrets[0]
-    : (actEtape ? arretParKey(missionNav, actEtape.activiteId) : null)
-  const showRetourUrgence = !locked && peutRetourUrgence(etape, missionNav)
+  let nav = null
+  let arrets = []
+  let actEtape = null
+  let arretCourant = null
+  let showRetourUrgence = false
+  try {
+    nav = navCibleTerrain(etape, { ...missionNav, ...missionCtx })
+    arrets = arretsVehicule(missionNav)
+    actEtape = parseEtapeActivite(etape)
+    arretCourant = etape === 'dest_sur_place'
+      ? arrets[0]
+      : (actEtape ? arretParKey(missionNav, actEtape.activiteId) : null)
+    showRetourUrgence = peutRetourUrgence(etape, missionNav)
+  } catch (e) {
+    console.error('trajet terrain', e)
+  }
   const vc = complet ? (m?.vecteur_checklists?.[vecteurId] || {}) : {}
   const cl = m?.checklists || {}
   const checks = {
@@ -581,12 +590,20 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const pecMedicalACharge = vecteurMedical && !userMedical
   const def = etapeParId(etape, missionCtx)
   const aLaBase = estALaBase(etape)
-  const suivant = etapeSuivante(etape, missionCtx)
-  const precedent = etapePrecedente(etape, missionCtx)
-  const choixTransports = prochainsTransports(etape, missionCtx)
+  let suivant = null
+  let precedent = null
+  let choixTransports = []
+  try {
+    suivant = etapeSuivante(etape, missionCtx)
+    precedent = etapePrecedente(etape, missionCtx)
+    choixTransports = prochainsTransports(etape, missionCtx)
+  } catch (e) {
+    console.error('parcours terrain', e)
+  }
   const docsSejour = documentsSejourVisibles(etape, missionCtx)
   const lieuCourant = def.lieuId ? lieuxAnnexes(missionCtx).find(l => l.id === def.lieuId) : null
   const locked = statut === 'realise' || statut === 'terminee_terrain' || vecteurStatut === 'realise' || vecteurStatut === 'terminee_terrain'
+  showRetourUrgence = showRetourUrgence && !locked
   const monStatut = aff?.statut_base || m?.personnel_statuts?.[user?.id] || rpc?.statut_base || ''
   const jeSuisSurPlace = estSurPlace(monStatut)
   const roleAff = aff?.role_mission || rpc?.role_mission

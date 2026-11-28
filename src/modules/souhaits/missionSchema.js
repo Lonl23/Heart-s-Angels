@@ -4,7 +4,7 @@
 
 import {
   arretsVehicule, arretParKey, idDepartArret, idSurPlaceArret,
-} from './trajetTerrain.js'
+} from './trajetTerrain'
 
 export const GROUPES = [
   { id:'administratif', label:'Administratif', fields:[
