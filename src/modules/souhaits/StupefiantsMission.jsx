@@ -23,7 +23,10 @@ export default function StupefiantsMission({
   locked,
   optionnel,
   souhait,
-  /** true = on peut faire signer (sur place PEC / sur place retour). */
+  /**
+   * Signatures : false | true | 'remise' | 'retour'
+   * (true = les deux ; 'remise'/'retour' = une seule, selon l’étape terrain).
+   */
   signaturesActives = false,
 }) {
   const stups = stupefiantsMission(value)
@@ -31,7 +34,8 @@ export default function StupefiantsMission({
   const showRemise = all || mode === 'remise'
   const showUsages = all || mode === 'usages'
   const showRetour = all || mode === 'retour'
-  const peutSigner = !!signaturesActives && !locked
+  const peutSignerRemise = !locked && (signaturesActives === true || signaturesActives === 'remise')
+  const peutSignerRetour = !locked && (signaturesActives === true || signaturesActives === 'retour')
 
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -187,6 +191,7 @@ export default function StupefiantsMission({
   function blocSignatures(kind) {
     const bloc = kind === 'remise' ? stups.remise : stups.retour
     const ok = !!(bloc?.signature_remettant && bloc?.signature_receveur)
+    const peut = kind === 'remise' ? peutSignerRemise : peutSignerRetour
     return (
       <div style={{ marginTop: 12 }}>
         {ok ? (
@@ -199,15 +204,15 @@ export default function StupefiantsMission({
         ) : (
           <Flash kind="warn">
             {kind === 'remise'
-              ? (peutSigner
+              ? (peut
                 ? 'Signatures départ manquantes (infirmier institution + Heart’s Angels).'
                 : 'Signatures départ : à faire sur place prise en charge (Statuts).')
-              : (peutSigner
+              : (peut
                 ? 'Signatures retour manquantes (Heart’s Angels + infirmier institution).'
                 : 'Signatures retour : à faire sur place retour (Statuts).')}
           </Flash>
         )}
-        {peutSigner && (
+        {peut && (
           <Btn onClick={() => ouvrirSignatures(kind)} disabled={busy || (kind === 'remise' && !stups.lignes.length)}>
             {ok
               ? 'Revoir / resignature'
@@ -224,11 +229,11 @@ export default function StupefiantsMission({
         Stupéfiants — feuille institutions
       </div>
       <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 0 }}>
-        {mode === 'remise'
-          ? 'Sur place prise en charge : encodez les quantités remises (y compris sacs) et faites signer le départ.'
-          : mode === 'retour'
-            ? 'Sur place retour : quantités rendues et signatures de retour.'
-            : 'Registre + feuille institutions. Les signatures se font sur place PEC (départ) et sur place retour.'}
+        {peutSignerRemise
+          ? 'Sur place prise en charge : encodez (y compris sacs), administrez si besoin, et faites signer le départ.'
+          : peutSignerRetour
+            ? 'Sur place retour : quantités rendues, administrations éventuelles, et signatures de retour.'
+            : 'Encodage et administrations (avec justification) ici ou dans Rapport médical. Signatures : sur place PEC / sur place retour.'}
         {optionnel ? ' (facultatif en formation)' : ''}
       </p>
       {err && <Flash kind="err">{err}</Flash>}
@@ -297,6 +302,14 @@ export default function StupefiantsMission({
                         <F label="Dose administrée" value={u.dose || ''} set={v => majUsage(l.id, u.id, { dose: v })} disabled={locked} />
                         <F label="Heure" value={u.heure || ''} set={v => majUsage(l.id, u.id, { heure: v })} disabled={locked} />
                         {!locked && <Btn kind="soft" onClick={() => retirerUsage(l.id, u.id)}>✕</Btn>}
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <F
+                            label="Justification / indication"
+                            value={u.notes || ''}
+                            set={v => majUsage(l.id, u.id, { notes: v })}
+                            disabled={locked}
+                          />
+                        </div>
                       </div>
                     ))}
                     {!locked && (
