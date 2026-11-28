@@ -636,6 +636,79 @@ main:has(.ha-dept-onglets) > .ha-fondu-page {
 .ha-wizard-title { font-size: 1.5rem; font-weight: 800; color: var(--heading); margin: 10px 0 2px; line-height: 1.2; }
 .ha-wizard-sub { font-size: 13.5px; color: var(--text-muted); margin: 0 0 4px; }
 
+/* Terrain : carte navigation + usage doigt (téléphone / tablette) */
+.ha-terrain-touch { max-width: 720px; margin: 0 auto; }
+.ha-terrain-topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px;
+}
+.ha-nav-mission {
+  margin: 10px 0 12px;
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  border: 1.5px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+.ha-nav-mission-kicker {
+  font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 4px;
+}
+.ha-nav-mission-title {
+  font-size: 1.2rem; font-weight: 800; color: var(--heading); line-height: 1.25; margin-bottom: 4px;
+}
+.ha-nav-mission-sub { font-size: 13.5px; color: var(--text-muted); margin-bottom: 6px; line-height: 1.4; }
+.ha-nav-mission-addr {
+  font-size: 15.5px; font-weight: 650; color: var(--text); line-height: 1.35; margin: 4px 0 8px;
+}
+.ha-nav-mission-meta { font-size: 14px; font-weight: 700; color: var(--heading); margin-bottom: 6px; }
+.ha-nav-mission-tel {
+  display: inline-block; font-size: 15px; font-weight: 800; color: #A32D2D;
+  text-decoration: none; margin-bottom: 8px;
+}
+.ha-nav-mission-actions .ha-gps {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;
+}
+.ha-nav-mission-actions .ha-gps-btn {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 48px; padding: 12px 10px; border-radius: 12px;
+  font-size: 15px; font-weight: 800; text-decoration: none;
+  background: var(--card); border: 1.5px solid var(--border); color: var(--heading);
+}
+.ha-nav-mission-actions .ha-gps-btn.is-waze { color: #1A73E8; border-color: color-mix(in srgb, #1A73E8 40%, var(--border)); }
+.ha-terrain-urgence {
+  width: 100%; min-height: 44px; margin: 0 0 10px; padding: 10px 12px;
+  border-radius: 12px; border: 1.5px solid #A32D2D; background: color-mix(in srgb, #A32D2D 12%, var(--card));
+  color: #A32D2D; font-weight: 800; font-size: 14.5px; cursor: pointer; font-family: inherit;
+}
+.ha-activites-place { margin-top: 12px; }
+.ha-activites-place-titre {
+  font-size: 13px; font-weight: 800; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: .04em; margin-bottom: 8px;
+}
+.ha-activite-row {
+  padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--card); margin-bottom: 8px;
+}
+.ha-activite-nom { font-size: 15.5px; font-weight: 750; color: var(--heading); }
+.ha-activite-meta {
+  display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px;
+  font-size: 14.5px; font-weight: 650;
+}
+.ha-activite-meta a { color: #A32D2D; text-decoration: none; font-weight: 800; }
+.ha-activite-notes { margin-top: 6px; font-size: 13.5px; color: var(--text-muted); line-height: 1.4; }
+
+@media (min-width: 900px) {
+  .ha-terrain-touch { padding-left: 24px; padding-right: 24px; }
+  .ha-nav-mission { padding: 18px; }
+  .ha-nav-mission-title { font-size: 1.35rem; }
+  .ha-nav-mission-actions .ha-gps-btn { min-height: 52px; font-size: 16px; }
+}
+@media (max-width: 520px) {
+  .ha-wizard-title { font-size: 1.35rem; }
+  .ha-terrain-cta { min-height: 56px; font-size: 17px; border-radius: 14px; }
+  .ha-terrain-cta.back { min-width: 88px; }
+  .ha-check-btn { min-height: 48px; font-size: 15.5px; }
+}
+
 .ha-rappel-asbl { color: #A32D2D; font-weight: 800; margin: 8px 0; }
 .ha-detresse-btn {
   width: 100%; min-height: 48px; margin: 10px 0 4px; padding: 12px 14px;

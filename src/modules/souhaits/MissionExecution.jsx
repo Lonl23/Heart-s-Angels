@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
-import { Btn, F, Sel, inp, fmtAdresse, Loading, Flash, AdresseAffichee, LiensTrajet, Modal } from '@/components/ui'
+import { Btn, F, Sel, inp, fmtAdresse, Loading, Flash, AdresseAffichee, LiensTrajet, LiensGps, Modal } from '@/components/ui'
 import {
   STATUT_SUR_PLACE, estSurPlace, itemsChecklistVisibles, itemsChecklistManquants,
   normaliserEtape, etapeParId, idxEtape, etapeSuivante, etapePrecedente,
@@ -9,6 +9,7 @@ import {
   marquerHeureEtape, marquerHeurePersonnel, injectionsDetresse,
   medecinPluri, nomPluri, telPluri, etapeProtocoleDetresse, etapeDuVecteur,
   lieuxAnnexes, prochainsTransports, documentsSejourVisibles, lblTypeLieu,
+  parseEtapeActivite,
 } from './missionSchema'
 import { signedDocSejour } from './sejour'
 import { personneEstMedicale, vecteurAEquipageMedical, lblRoleMission } from '@/modules/fiche/ficheSchema'
@@ -23,6 +24,9 @@ import { PopupDetresse } from './ProtocoleDetresse'
 import { BandeauMedecin } from './EquipePluri'
 import { fusionMissionDemo, fusionRpcDemo } from './formationSession'
 import RappelAsbl from './RappelAsbl'
+import {
+  navCibleTerrain, arretsVehicule, arretParKey, peutRetourUrgence,
+} from './trajetTerrain'
 
 const fmtDt = v => v ? new Date(v).toLocaleString('fr-BE', { dateStyle:'short', timeStyle:'short' }) : '—'
 
@@ -552,6 +556,14 @@ export default function MissionExecution({ souhaitId, onBack }) {
     ? `${sh?.beneficiaire_prenom || ''} ${sh?.beneficiaire_nom || ''}`.trim()
     : (sh?.beneficiaire_prenom || 'Mission')
   const itin = complet ? itineraryFromMission(m) : rpc
+  const missionNav = complet ? (m || {}) : (rpc || {})
+  const nav = navCibleTerrain(etape, { ...missionNav, ...missionCtx })
+  const arrets = arretsVehicule(missionNav)
+  const actEtape = parseEtapeActivite(etape)
+  const arretCourant = etape === 'dest_sur_place'
+    ? arrets[0]
+    : (actEtape ? arretParKey(missionNav, actEtape.activiteId) : null)
+  const showRetourUrgence = !locked && peutRetourUrgence(etape, missionNav)
   const vc = complet ? (m?.vecteur_checklists?.[vecteurId] || {}) : {}
   const cl = m?.checklists || {}
   const checks = {
@@ -616,8 +628,8 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const medNom = nomPluri(med) || rpc?.medecin_nom || appel?.medecin_nom || ''
 
   return (
-    <div className="ha-terrain" style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px 110px' }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:4 }}>
+    <div className="ha-terrain ha-terrain-touch" style={{ width:'100%', boxSizing:'border-box', padding:'12px 14px 110px' }}>
+      <div className="ha-terrain-topbar">
         <Btn kind="soft" onClick={onBack}>← Mes souhaits</Btn>
         <span style={{ fontSize:12.5, color: saved ? '#3B6D11' : 'var(--text-faint)' }}>{saved ? '✓ Enregistré' : ''}</span>
       </div>
@@ -636,7 +648,21 @@ export default function MissionExecution({ souhaitId, onBack }) {
             {titre || 'Mission'}
             {roleAff ? ` · ${lblRoleMission(roleAff) || roleAff}` : ''}
             {sh && fmtDatesSouhait(sh) !== 'Date à définir' ? ` · ${fmtDatesSouhait(sh)}` : ''}
+            {vecteur?.nom ? ` · ${vecteur.nom}` : ''}
           </p>
+          {nav && <NavMission nav={nav} />}
+          {showRetourUrgence && (
+            <button
+              type="button"
+              className="ha-terrain-urgence"
+              onClick={() => {
+                if (!confirm('Passer directement au retour prise en charge (sauter le reste des destinations) ?')) return
+                aller('depart_retour')
+              }}
+            >
+              Retour d’urgence → prise en charge
+            </button>
+          )}
           {appel?.tel && (
             <p style={{ fontSize: 14.5, margin: '2px 0 10px' }}>
               <a href={`tel:${String(appel.tel).replace(/\s/g, '')}`} style={{ color: '#A32D2D', fontWeight: 800, textDecoration: 'none' }}>📞 {appel.tel}</a>
@@ -712,7 +738,7 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   setRpc(x => x?.vecteur ? { ...x, vecteur: { ...x.vecteur, plaque } } : x)
                   if (complet) setM(prev => ({ ...(prev || {}), vecteurs: (prev?.vecteurs || []).map(v => v.id === vecteurId ? { ...v, plaque } : v) }))
                 }} />
-                <Itineraire d={itin} only="base" />
+                <Itineraire d={itin} only="base" sansGps />
               </Section>
               <Section titre="Photos des 4 côtés">
                 <CoinPhotos coins={photos.coins || {}} onCapture={(slot, f)=>captureCoin(slot, f, 'coins')} onAnnotate={(slot, meta)=>setAnnot({ slot, meta, extra:false, groupe:'coins' })} onDelete={slot=>removeCoin(slot, 'coins')} disabled={locked || !vecteurId} />
@@ -807,7 +833,10 @@ export default function MissionExecution({ souhaitId, onBack }) {
               <Section titre={def.itin === 'pec' ? 'Prise en charge' : def.itin === 'destination' ? 'Destination' : def.itin === 'retour' ? 'Retour' : def.itin === 'annexe' ? (lieuCourant?.nom || lblTypeLieu(def.typeLieu) || 'Lieu') : 'Base'}>
                 {def.itin === 'annexe'
                   ? <LieuAnnexeBloc lieu={lieuCourant} />
-                  : <Itineraire d={itin} only={def.itin} />}
+                  : <Itineraire d={itin} only={def.itin} sansGps />}
+                {(etape === 'dest_sur_place' || actEtape?.phase === 'sur_place') && (
+                  <ActivitesSurPlace arret={arretCourant} />
+                )}
               </Section>
               {docsSejour.length > 0 && !showCloture && (
                 <Section titre="Documents (hôtel, parking…)">
@@ -1067,64 +1096,109 @@ function itineraryFromMission(m) {
   }
 }
 
-function Itineraire({ d, compact, only }) {
+function fmtHeureNav(v) {
+  if (!v) return ''
+  const s = String(v)
+  if (/^\d{1,2}:\d{2}/.test(s)) return s.slice(0, 5)
+  const full = fmtDt(s)
+  return full === '—' ? s.slice(0, 16) : full
+}
+
+function NavMission({ nav }) {
+  if (!nav?.titre) return null
+  const adr = nav.adresse
+  const txt = fmtAdresse(adr)
+  return (
+    <div className="ha-nav-mission">
+      <div className="ha-nav-mission-kicker">Navigation</div>
+      <div className="ha-nav-mission-title">{nav.titre}</div>
+      {nav.sousTitre ? <div className="ha-nav-mission-sub">{nav.sousTitre}</div> : null}
+      {txt ? <div className="ha-nav-mission-addr">{txt}</div> : (
+        <div className="ha-nav-mission-sub">Adresse non renseignée</div>
+      )}
+      {nav.heure ? <div className="ha-nav-mission-meta">⏰ {fmtHeureNav(nav.heure)}</div> : null}
+      {nav.telephone ? (
+        <a className="ha-nav-mission-tel" href={`tel:${String(nav.telephone).replace(/\s/g, '')}`}>📞 {nav.telephone}</a>
+      ) : null}
+      {txt ? (
+        <div className="ha-nav-mission-actions">
+          <LiensGps adresse={adr} />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ActivitesSurPlace({ arret }) {
+  const acts = arret?.activitesSurPlace || []
+  if (!acts.length && !arret) return null
+  return (
+    <div className="ha-activites-place">
+      <div className="ha-activites-place-titre">Sur place — activités</div>
+      {!acts.length ? (
+        <div style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+          Pas d’autre activité sur place (même adresse). Les déplacements véhicule apparaissent dans « Où allez-vous ? ».
+        </div>
+      ) : acts.map(a => (
+        <div key={a.id || a.nom} className="ha-activite-row">
+          <div className="ha-activite-nom">{a.nom || 'Activité'}</div>
+          <div className="ha-activite-meta">
+            {a.heure ? <span>⏰ {(a.heure || '').slice(0, 5)}</span> : null}
+            {a.telephone ? (
+              <a href={`tel:${String(a.telephone).replace(/\s/g, '')}`}>📞 {a.telephone}</a>
+            ) : null}
+          </div>
+          {a.notes ? <div className="ha-activite-notes">{a.notes}</div> : null}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Itineraire({ d, compact, only, sansGps }) {
   if (!d) return <div style={{ fontSize:13.5, color:'var(--text-muted)' }}>Trajet non renseigné.</div>
   const show = k => !only || only === k
+  const liens = !sansGps
   return (
     <div style={{ display:'flex', flexDirection:'column', gap: compact ? 8 : 12 }}>
       {show('base') && <Bloc titre="Base">
         <Ligne k="Base" v={d.base?.nom} />
-        {fmtAdresse(d.base?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.base.adresse} />} /> : null}
+        {fmtAdresse(d.base?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.base.adresse} liens={liens} />} /> : null}
         <Ligne k="Rendez-vous" v={fmtDt(d.base?.rdv)} />
         <Ligne k="Départ" v={fmtDt(d.base?.depart)} />
         {d.consignes_equipage && <Ligne k="Consignes" v={d.consignes_equipage} />}
       </Bloc>}
-      {show('pec') && <Bloc titre="Prise en charge">
+      {show('pec') && <Bloc titre="Détails prise en charge">
         <Ligne k="Lieu" v={d.pec?.type} />
         {d.pec?.institution && <Ligne k="Institution" v={d.pec.institution} />}
-        {fmtAdresse(d.pec?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.pec.adresse} />} /> : null}
+        {fmtAdresse(d.pec?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.pec.adresse} liens={liens} />} /> : null}
         {(d.pec?.service || d.pec?.etage || d.pec?.aile || d.pec?.chambre) &&
           <Ligne k="Localisation" v={[d.pec?.service && `Service ${d.pec.service}`, d.pec?.etage && `Étage ${d.pec.etage}`, d.pec?.aile && `Aile ${d.pec.aile}`, d.pec?.chambre && `Ch. ${d.pec.chambre}`].filter(Boolean).join(' · ')} />}
         <Ligne k="Heure souhaitée" v={fmtDt(d.pec?.heure)} />
         <Ligne k="Départ souhaité" v={fmtDt(d.pec?.depart)} />
         {d.pec?.precisions && <Ligne k="Précisions" v={d.pec.precisions} />}
-        <LiensTrajet etapes={[
-          { label: 'Base', adresse: d.base?.adresse },
-          { label: 'Prise en charge', adresse: d.pec?.adresse },
-        ]} />
+        {!sansGps && (
+          <LiensTrajet etapes={[
+            { label: 'Base', adresse: d.base?.adresse },
+            { label: 'Prise en charge', adresse: d.pec?.adresse },
+          ]} />
+        )}
       </Bloc>}
-      {show('destination') && <Bloc titre="Destination">
-        {fmtAdresse(d.destination?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.destination.adresse} />} /> : null}
+      {show('destination') && <Bloc titre="Détails destination">
+        {fmtAdresse(d.destination?.adresse) ? <Ligne k="Adresse" v={<AdresseAffichee value={d.destination.adresse} liens={liens} />} /> : null}
         {d.destination?.precisions && <Ligne k="Précisions" v={d.destination.precisions} />}
         <Ligne k="Heure souhaitée" v={fmtDt(d.destination?.heure)} />
-        <LiensTrajet etapes={[
-          { label: 'Prise en charge', adresse: d.pec?.adresse },
-          { label: 'Destination', adresse: d.destination?.adresse },
-        ]} />
-        {(d.activites || []).map((a, i) => {
-          const prev = i === 0
-            ? { label: 'Destination', adresse: d.destination?.adresse }
-            : { label: d.activites[i - 1].nom || 'Activité', adresse: d.activites[i - 1].adresse }
-          return (
-            <div key={a.id} style={{ marginTop: 8 }}>
-              <Ligne k={a.nom || 'Activité'} v={[a.heure, a.telephone, a.notes].filter(Boolean).join(' · ')} />
-              {fmtAdresse(a.adresse) ? <AdresseAffichee value={a.adresse} compact /> : null}
-              <LiensTrajet etapes={[prev, { label: a.nom || 'Activité', adresse: a.adresse }]} />
-            </div>
-          )
-        })}
+        {!sansGps && (
+          <LiensTrajet etapes={[
+            { label: 'Prise en charge', adresse: d.pec?.adresse },
+            { label: 'Destination', adresse: d.destination?.adresse },
+          ]} />
+        )}
       </Bloc>}
-      {show('retour') && <Bloc titre="Retour">
+      {show('retour') && <Bloc titre="Détails retour">
         <Ligne k="Type" v={d.retour?.type} />
         {d.retour?.heure && <Ligne k="Heure attendue" v={fmtDt(d.retour.heure)} />}
         {d.retour?.precisions && <Ligne k="Précisions" v={d.retour.precisions} />}
-        <LiensTrajet etapes={[
-          (d.activites || []).length
-            ? { label: d.activites[d.activites.length - 1].nom || 'Dernière activité', adresse: d.activites[d.activites.length - 1].adresse }
-            : { label: 'Destination', adresse: d.destination?.adresse },
-          { label: 'Prise en charge', adresse: d.pec?.adresse },
-          { label: 'Base', adresse: d.base?.adresse },
-        ]} />
       </Bloc>}
     </div>
   )

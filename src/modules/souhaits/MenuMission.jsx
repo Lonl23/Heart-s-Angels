@@ -104,21 +104,25 @@ export default function MenuMission({ souhaitId, onBack }) {
   // Vrais souhaits : médicaux de l’équipage. Test/formation : médical, coordination, ou staff (pas d’équipage à poser).
   const peutExporter = coordination || staffTest || (medical && (!!meta.sur_equipage || jouette))
 
+  const terrainPleinEcran = onglet === 'statuts' && fenetre.ouvert
+
   return (
-    <div>
-      <div style={{ padding: '12px 14px 0' }}>
-        <Btn kind="soft" onClick={onBack}>← Mes souhaits</Btn>
-        <h1 style={{ fontSize: '1.45rem', color: 'var(--heading)', margin: '12px 0 8px' }}>
-          {meta.beneficiaire_prenom || 'Mission'}
-        </h1>
-        <div className="ha-tabs" style={{ marginBottom: 4 }}>
-          {ONGLETS.map(o => (
-            <button key={o.v} type="button" className={'ha-tab' + (onglet === o.v ? ' is-on' : '')} onClick={() => setOnglet(o.v)}>
-              {o.l}
-            </button>
-          ))}
+    <div className={terrainPleinEcran ? 'ha-mission-terrain-shell' : undefined}>
+      {!terrainPleinEcran && (
+        <div style={{ padding: '12px 14px 0' }}>
+          <Btn kind="soft" onClick={onBack}>← Mes souhaits</Btn>
+          <h1 style={{ fontSize: '1.45rem', color: 'var(--heading)', margin: '12px 0 8px' }}>
+            {meta.beneficiaire_prenom || 'Mission'}
+          </h1>
+          <div className="ha-tabs" style={{ marginBottom: 4 }}>
+            {ONGLETS.map(o => (
+              <button key={o.v} type="button" className={'ha-tab' + (onglet === o.v ? ' is-on' : '')} onClick={() => setOnglet(o.v)}>
+                {o.l}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       {onglet === 'recap' && <RecapMission souhaitId={souhaitId} />}
       {onglet === 'medical' && (
         <DossierDar
@@ -148,18 +152,24 @@ export default function MenuMission({ souhaitId, onBack }) {
           ? (
             <>
               {jouette && (
-                <div style={{ padding: '0 16px 8px' }}>
+                <div style={{ padding: '8px 16px 0' }}>
                   <Flash kind="ok">
-                    Formation Camille — vos statuts sont personnels et disponibles à tout moment (indépendants des autres volontaires).
+                    Formation Camille — progression personnelle par véhicule / volontaire (sur place base).
                   </Flash>
                 </div>
               )}
-              <MissionExecution souhaitId={souhaitId} onBack={() => setOnglet('recap')} />
+              <MissionExecution
+                souhaitId={souhaitId}
+                onBack={() => setOnglet('recap')}
+              />
             </>
           )
           : (
             <div style={{ padding: 16 }}>
               <Flash kind="warn">{fenetre.raison}</Flash>
+              <div style={{ marginTop: 12 }}>
+                <Btn kind="soft" onClick={() => setOnglet('recap')}>← Retour</Btn>
+              </div>
             </div>
           )
       )}

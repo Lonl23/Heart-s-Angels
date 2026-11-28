@@ -355,14 +355,14 @@ export function LiensGps({ adresse, texte, onClick, wazeMode = 'naviguer' }) {
   )
 }
 
-export function AdresseAffichee({ value, texte, label, compact, wazeMode = 'naviguer' }) {
+export function AdresseAffichee({ value, texte, label, compact, wazeMode = 'naviguer', liens = true }) {
   const t = texte || texteGps(value)
   if (!t) return null
   return (
     <div className={'ha-addr' + (compact ? ' is-compact' : '')}>
       {label && <div className="ha-addr-lab">{label}</div>}
       <div className="ha-addr-txt">{t}</div>
-      <LiensGps adresse={value} texte={t} wazeMode={wazeMode} />
+      {liens !== false && <LiensGps adresse={value} texte={t} wazeMode={wazeMode} />}
     </div>
   )
 }

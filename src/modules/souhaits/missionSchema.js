@@ -2,6 +2,10 @@
 // Chaque groupe = un sous-onglet. Types de champ : text, textarea, toggle,
 // number, date, datetime, time, select.
 
+import {
+  arretsVehicule, arretParKey, idDepartArret, idSurPlaceArret,
+} from './trajetTerrain.js'
+
 export const GROUPES = [
   { id:'administratif', label:'Administratif', fields:[
     { k:'registre_national', l:'Registre national', t:'text' },
@@ -203,6 +207,17 @@ export const TYPES_LIEU_ANNEXE = [
 export const lblTypeLieu = v => TYPES_LIEU_ANNEXE.find(t => t.v === v)?.l || 'Lieu'
 
 const RE_ETAPE_LIEU = /^(depart_lieu|lieu_sur_place):(hotel|parking|restaurant|autre):([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/
+const RE_ETAPE_ACTIVITE = /^(depart_activite|activite_sur_place):(.+)$/
+
+export function parseEtapeActivite(etape) {
+  const m = String(etape || '').match(RE_ETAPE_ACTIVITE)
+  if (!m) return null
+  return {
+    phase: m[1] === 'depart_activite' ? 'depart' : 'sur_place',
+    activiteId: m[2],
+    id: etape,
+  }
+}
 
 export function parseEtapeLieu(etape) {
   const m = String(etape || '').match(RE_ETAPE_LIEU)
@@ -258,15 +273,43 @@ export function defEtapeLieu(etape, mission) {
   }
 }
 
+export function defEtapeActivite(etape, mission) {
+  const extra = parseEtapeActivite(etape)
+  if (!extra) return null
+  const stop = arretParKey(mission, extra.activiteId)
+  const nom = (stop?.nom || '').trim() || 'destination'
+  return {
+    id: extra.id,
+    l: extra.phase === 'depart' ? `Départ vers ${nom}` : `Sur place ${nom}`,
+    chip: extra.phase === 'depart' ? 'Vers destination' : 'Destination',
+    lieu: 'dest',
+    itin: 'destination',
+    checklist: null,
+    patient: true,
+    activiteId: extra.activiteId,
+    phase: extra.phase,
+    arretKey: extra.activiteId,
+  }
+}
+
 export function prochainsTransports(etape, mission) {
   const id = normaliserEtape(etape)
   const extra = parseEtapeLieu(id)
+  const act = parseEtapeActivite(id)
   const waypoints = lieuxAnnexes(mission).filter(lieuEstWaypoint)
-  const atDest = id === 'dest_sur_place'
+  const stops = arretsVehicule(mission)
+  const atDest = id === 'dest_sur_place' || act?.phase === 'sur_place'
   const atPec = id === 'pec_sur_place'
   const atLieu = extra?.phase === 'sur_place'
   if (!atDest && !atPec && !atLieu) return []
-  if (!waypoints.length && !atLieu) return []
+
+  const idxStop = id === 'dest_sur_place'
+    ? 0
+    : (act?.phase === 'sur_place' ? stops.findIndex(s => s.key === act.activiteId) : -1)
+  const nextStop = idxStop >= 0 ? stops[idxStop + 1] : null
+  const hasWaypoints = waypoints.some(l => l.id !== extra?.lieuId)
+  const besoinChoix = hasWaypoints || !!nextStop || atLieu
+  if (!besoinChoix) return []
 
   const opts = []
   const seen = new Set()
@@ -276,8 +319,15 @@ export function prochainsTransports(etape, mission) {
     opts.push(o)
   }
 
-  if (!atDest) {
-    add({ id: 'depart_dest', l: 'Départ vers destination', hint: 'Lieu de réalisation du souhait' })
+  if (nextStop) {
+    add({
+      id: idDepartArret(nextStop),
+      l: `Départ vers ${nextStop.nom}`,
+      hint: 'Autre destination — reprise du véhicule',
+    })
+  }
+  if (atPec && stops.length) {
+    add({ id: 'depart_dest', l: `Départ vers ${stops[0].nom}`, hint: 'Lieu de réalisation du souhait' })
   }
   for (const l of waypoints) {
     if (l.id === extra?.lieuId) continue
@@ -289,7 +339,11 @@ export function prochainsTransports(etape, mission) {
     })
   }
   if (!atPec) {
-    add({ id: 'depart_retour', l: 'Départ vers prise en charge', hint: 'Retour du patient' })
+    add({
+      id: 'depart_retour',
+      l: nextStop || stops.length > 1 ? 'Retour d’urgence (prise en charge)' : 'Départ vers prise en charge',
+      hint: nextStop || stops.length > 1 ? 'Sauter le reste des destinations' : 'Retour du patient',
+    })
     add({ id: 'depart_base', l: 'Départ retour base', hint: 'Fin de mission' })
   }
   return opts
@@ -343,6 +397,7 @@ export function normaliserEtape(etape) {
   if (!etape || etape === 'vehicule' || etape === 'base_sur_place' || etape === 'a_la_base') return 'a_la_base'
   if (ETAPE_LEGACY[etape]) return ETAPE_LEGACY[etape]
   if (parseEtapeLieu(etape)) return etape
+  if (parseEtapeActivite(etape)) return etape
   if (PARCOURS_TERRAIN.some(e => e.id === etape)) return etape
   return 'a_la_base'
 }
@@ -352,6 +407,8 @@ export function estALaBase(etape) {
 }
 
 export function etapeParId(etape, mission) {
+  const act = defEtapeActivite(etape, mission)
+  if (act) return act
   const extra = defEtapeLieu(etape, mission)
   if (extra) return extra
   const id = normaliserEtape(etape)
@@ -361,6 +418,8 @@ export function etapeParId(etape, mission) {
 }
 
 export function idxEtape(etape) {
+  const act = parseEtapeActivite(etape)
+  if (act) return act.phase === 'depart' ? idxEtape('depart_dest') : idxEtape('dest_sur_place')
   const extra = parseEtapeLieu(etape)
   if (extra) return extra.phase === 'depart' ? idxEtape('depart_dest') : idxEtape('dest_sur_place')
   const id = normaliserEtape(etape)
@@ -370,14 +429,39 @@ export function idxEtape(etape) {
 
 export function etapeSuivante(etape, mission) {
   if (normaliserEtape(etape) === 'depart_plein') return etapeParId('depart_pec', mission)
+  const act = parseEtapeActivite(etape)
+  if (act?.phase === 'depart') return etapeParId(idSurPlaceArret(arretParKey(mission, act.activiteId) || { key: act.activiteId }), mission)
+  if (act?.phase === 'sur_place') {
+    if (besoinChoixTransport(etape, mission)) return null
+    const stops = arretsVehicule(mission)
+    const idx = stops.findIndex(s => s.key === act.activiteId)
+    const next = idx >= 0 ? stops[idx + 1] : null
+    if (next) return etapeParId(idDepartArret(next), mission)
+    return etapeParId('depart_retour', mission)
+  }
   const extra = parseEtapeLieu(etape)
   if (extra?.phase === 'depart') return etapeParId(idEtapeLieu('sur_place', extra.type, extra.lieuId), mission)
   if (besoinChoixTransport(etape, mission)) return null
+  if (normaliserEtape(etape) === 'dest_sur_place') {
+    const stops = arretsVehicule(mission)
+    if (stops.length > 1) return etapeParId(idDepartArret(stops[1]), mission)
+  }
+  if (normaliserEtape(etape) === 'depart_dest') {
+    return etapeParId('dest_sur_place', mission)
+  }
   return PARCOURS_TERRAIN[idxEtape(etape) + 1] || null
 }
 
 export function etapePrecedente(etape, mission) {
   if (normaliserEtape(etape) === 'depart_plein') return ETAPE_A_LA_BASE
+  const act = parseEtapeActivite(etape)
+  if (act?.phase === 'sur_place') return etapeParId(idDepartArret(arretParKey(mission, act.activiteId) || { key: act.activiteId }), mission)
+  if (act?.phase === 'depart') {
+    const stops = arretsVehicule(mission)
+    const idx = stops.findIndex(s => s.key === act.activiteId)
+    if (idx > 0) return etapeParId(idSurPlaceArret(stops[idx - 1]), mission)
+    return etapeParId('dest_sur_place', mission)
+  }
   const extra = parseEtapeLieu(etape)
   if (extra?.phase === 'sur_place') return etapeParId(idEtapeLieu('depart', extra.type, extra.lieuId), mission)
   if (extra?.phase === 'depart') return etapeParId('dest_sur_place', mission)
