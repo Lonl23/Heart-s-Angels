@@ -11,6 +11,7 @@ import DossierDar from './DossierDar'
 import MissionExecution from './MissionExecution'
 import DocumentsMission from './DocumentsMission'
 import EnvoiRapportMedical from './EnvoiRapportMedical'
+import { fusionMissionDemo } from './formationSession'
 
 const ROLES_COORD = ['coord_medical', 'coord_medical_adjoint', 'coordinateur_medical']
 const VOLETS = ['recap', 'medical', 'documents', 'contacts', 'envoyer_rapport', 'statuts']
@@ -62,8 +63,17 @@ export default function MenuMission({ souhaitId, onBack }) {
       .eq('souhait_id', souhaitId)
       .eq('user_id', user.id)
       .maybeSingle()
+    let mission = data.mission || {}
+    const jouetteCharge = !!(data.fictif || mission?.demo_cle)
+    if (jouetteCharge) {
+      const { data: sess } = await supabase.rpc('lire_session_formation', { p_souhait: souhaitId })
+      if (sess?.ok && sess.etat) {
+        mission = fusionMissionDemo(mission, sess.etat, null, user?.id)
+      }
+    }
     setMeta({
       ...data,
+      mission,
       role_mission: me?.role_mission || null,
       sur_equipage: !!me,
     })

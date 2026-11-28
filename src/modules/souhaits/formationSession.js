@@ -12,6 +12,9 @@ export function fusionMissionDemo(mission, etat, vecteurId, userId) {
   next.rapport_observations = e.observations || ''
   next.rapport_medical = e.rapport_medical || ''
   next.injections_detresse = Array.isArray(e.injections) ? e.injections : []
+  if (e.stupefiants && typeof e.stupefiants === 'object') {
+    next.stupefiants = e.stupefiants
+  }
   if (vecteurId) {
     next.vecteur_etapes = { ...(next.vecteur_etapes || {}), [vecteurId]: etape }
     next.vecteur_statuts = { ...(next.vecteur_statuts || {}), [vecteurId]: e.vecteur_statut || null }
