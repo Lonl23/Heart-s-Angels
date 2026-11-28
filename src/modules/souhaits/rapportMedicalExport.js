@@ -1,4 +1,5 @@
 import { escHtml } from './documentA4.js'
+import { stupefiantsMission, bilanLigne } from './stupefiantsSchema.js'
 
 /** Ancien libellé (bannières / compat). Préférer sujetRapportMedical(souhait). */
 export const SUJET_RAPPORT_MEDICAL = '!!! SECRET MEDICAL !!! – INTERVENTION HEART’S ANGELS'
@@ -142,6 +143,44 @@ export function htmlRapportMedical({ souhait, dar, cibles, meds, injections }) {
     }
   }
   const detresse = lignesInjections(injections).map(x => `<li>${escHtml(x)}</li>`).join('')
+  const stups = stupefiantsMission(m)
+  const stupsHtml = (() => {
+    if (!stups.lignes.length) return ''
+    const rows = stups.lignes.map(l => {
+      const b = bilanLigne(l)
+      const usages = (l.usages || []).map(u => [u.heure, u.dose, u.notes].filter(Boolean).join(' · ')).filter(Boolean)
+      return `<tr>
+        <td>${escHtml([l.produit, l.dosage].filter(Boolean).join(' · '))}</td>
+        <td>${escHtml(String(b.remise))}</td>
+        <td>${escHtml(usages.length ? usages.join(' ; ') : String(b.utilisee))}</td>
+        <td>${escHtml(String(b.retour))}</td>
+        <td>${escHtml([l.lot && `lot ${l.lot}`, l.dlc && `DLC ${l.dlc}`].filter(Boolean).join(' · '))}</td>
+      </tr>`
+    }).join('')
+    const sig = (bloc, label) => {
+      if (!bloc?.signature_remettant && !bloc?.signature_receveur) return ''
+      const img = (dataUrl, nom) => {
+        if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) return ''
+        return `<div style="display:inline-block;margin:6px 16px 0 0;vertical-align:top">
+          <div style="font-size:12px;color:#555">${escHtml(nom)}</div>
+          <img src="${dataUrl}" alt="signature" style="max-height:64px;max-width:180px;border:1px solid #ddd;background:#fff" />
+        </div>`
+      }
+      return `<div style="margin:10px 0 14px">
+        <p style="margin:0 0 4px"><strong>${escHtml(label)}</strong> — ${escHtml(String(bloc.date || '').slice(0, 10))}
+        · remettant ${escHtml(bloc.remettant_nom || '')}
+        · receveur ${escHtml(bloc.receveur_nom || '')}</p>
+        ${img(bloc.signature_remettant, 'Signature remettant')}
+        ${img(bloc.signature_receveur, 'Signature receveur')}
+      </div>`
+    }
+    return `<h2>Registre stupéfiants</h2>
+      <p style="font-size:13px;color:#555">Document joint également en PDF (remise départ, administrations, retour base).</p>
+      <table><thead><tr><th>Produit</th><th>Remis</th><th>Administré</th><th>Retour</th><th>Lot / DLC</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      ${sig(stups.remise, 'Remise départ')}
+      ${sig(stups.retour, 'Retour base')}`
+  })()
   return `<article class="ha-rapport-medical">
     <p class="secret">${escHtml(sujetRapportMedical(s))}</p>
     <h1>Rapport médical — ${escHtml(nom)}</h1>
@@ -152,6 +191,7 @@ export function htmlRapportMedical({ souhait, dar, cibles, meds, injections }) {
     ${s.notes_medicales ? `<h2>Notes médicales</h2><p>${escHtml(s.notes_medicales)}</p>` : ''}
     ${soins ? `<h2>Traitements prévus</h2><ul>${soins}</ul>` : ''}
     ${adminLignes.length ? `<h2>Traitements administrés</h2><ul>${adminLignes.join('')}</ul>` : '<h2>Traitements administrés</h2><p>Aucune administration enregistrée.</p>'}
+    ${stupsHtml}
     <h2>Transmissions ciblées</h2>
     ${blocs || (lignesDar ? `<table><thead><tr><th>Quand</th><th>Type</th><th>Auteur</th><th>Texte</th></tr></thead><tbody>${lignesDar}</tbody></table>` : '<p>Aucun problème noté.</p>')}
     ${notes ? `<h2>Notes pour l’équipage</h2><ul>${notes}</ul>` : ''}

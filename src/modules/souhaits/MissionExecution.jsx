@@ -17,6 +17,8 @@ import MedicamentsMAR from './MedicamentsMAR'
 import { COTES, CoinPhotos, PhotoAnnotator, PhotosCotesVue, TicketPhoto, uploadMissionPhoto, aDesPhotosCotes } from './TerrainPhotos'
 import ScanConso from '@/modules/stock/ScanConso'
 import ScanEmport from '@/modules/stock/ScanEmport'
+import StupefiantsMission from './StupefiantsMission'
+import { stupefiantsMission } from './stupefiantsSchema'
 import { PopupDetresse } from './ProtocoleDetresse'
 import { BandeauMedecin } from './EquipePluri'
 import { fusionMissionDemo, fusionRpcDemo } from './formationSession'
@@ -476,6 +478,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
     flash()
   }
 
+  async function saveStupefiants(next) {
+    setM(prev => ({ ...(prev || {}), stupefiants: next }))
+    const { error, data } = await supabase.rpc('patch_mission_cle', {
+      p_souhait: souhaitId, p_cle: 'stupefiants', p_valeur: next, p_mode: 'set',
+    })
+    if (error || data?.ok === false) {
+      setErr(error?.message || data?.error || 'Registre stupéfiants non enregistré.')
+      throw new Error(error?.message || data?.error || 'Enregistrement impossible.')
+    }
+    flash()
+  }
+
   async function injecterDetresse(inj) {
     const medical = medicalDeCetteMission(aff || rpc)
     if (!medical) { setErr('Injection réservée à l’équipage médical.'); return false }
@@ -569,9 +583,12 @@ export default function MissionExecution({ souhaitId, onBack }) {
   const manquantsHint = jouette ? null : ([...miss, ...extrasManquants].join(', ') || null)
   /* Traitements : tant que le patient est à bord (PEC → retour inclus, y compris en route). */
   const showMAR = userMedical && vecteurMedical && complet && !!def.patient
-  /* Matériel utilisé : du départ base jusqu’au rentré base. L’emport reste à la base. */
+  /* Matériel consommé : du départ base jusqu’au rentré base. L’emport reste à la base. */
   const showScanConso = userMedical && vecteurMedical && !aLaBase
   const showCloture = etape === 'base_rentre'
+  const showStupsRemise = userMedical && vecteurMedical && complet && aLaBase && !showCloture
+  const showStupsUsages = userMedical && vecteurMedical && complet && !!def.patient
+  const showStupsRetour = userMedical && vecteurMedical && complet && showCloture
   const showRapportMedical = userMedical && vecteurMedical && complet && idxEtape(etape) >= idxEtape('depart_base')
   const showPecNotes = def.checklist === 'pec'
   const showDetresse = userMedical && complet && vecteur && etapeProtocoleDetresse(etape) && !locked
@@ -695,6 +712,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
                   <ScanEmport souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr}
                     checksBase={checks.base} onToggleLibre={(it,on)=>toggleCheck('base', it, on)} optionnel={jouette} />
                 )}
+                {showStupsRemise && (
+                  <div style={{ marginTop: 12 }}>
+                    <StupefiantsMission
+                      mode="remise"
+                      value={stupefiantsMission(m)}
+                      onSave={saveStupefiants}
+                      locked={locked}
+                      optionnel={jouette}
+                      souhait={sh}
+                    />
+                  </div>
+                )}
                 {itemsVis.base.length > 0 && (
                   <CheckBlock items={itemsVis.base} etat={checks.base} onToggle={(it,on)=>toggleCheck('base', it, on)} />
                 )}
@@ -721,6 +750,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
           )}
 
           {showMAR && <MedicamentsMAR meds={meds} onSavePrises={saveMed} />}
+          {showStupsUsages && (
+            <div style={{ margin: '12px 0' }}>
+              <StupefiantsMission
+                mode="usages"
+                value={stupefiantsMission(m)}
+                onSave={saveStupefiants}
+                locked={locked}
+                optionnel={jouette}
+                souhait={sh}
+              />
+            </div>
+          )}
           {showScanConso && (
             <Section titre="Matériel utilisé">
               <ScanConso souhaitId={souhaitId} locked={locked} onFlash={flash} onErr={setErr} optionnel={jouette} />
@@ -840,6 +881,18 @@ export default function MissionExecution({ souhaitId, onBack }) {
                 )}
                 <MiniNum l="KMs retour" v={vecteur.kms_retour} set={val=>saveKms({ kms_retour: val })} />
               </Section>
+              {showStupsRetour && (
+                <div style={{ margin: '12px 0' }}>
+                  <StupefiantsMission
+                    mode="retour"
+                    value={stupefiantsMission(m)}
+                    onSave={saveStupefiants}
+                    locked={locked}
+                    optionnel={jouette}
+                    souhait={sh}
+                  />
+                </div>
+              )}
               {showRapportMedical && <RapportMedical m={m} onSave={saveRapportMedical} />}
               <RapportLogistique value={complet ? (m?.rapport_observations || '') : (rpc?.rapport_observations || '')} onSave={saveObs} />
             </>
